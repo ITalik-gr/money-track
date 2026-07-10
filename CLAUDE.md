@@ -1,0 +1,67 @@
+# CLAUDE.md — Money Track (головний довідник проєкту)
+
+> **Цей файл = єдина точка входу.** Claude Code вантажить його автоматично щосесії.
+> Тут — усе глобальне, що треба знати ЗАВЖДИ: стек, інваріанти, як працює статистика,
+> категоризація, AI-модель, ops. Історія «раунд-за-раундом» тут НЕ живе (вона в git/пам'яті).
+> Оновлено 2026-07-10.
+
+## 📁 Система документів (як усе влаштовано)
+- **`CLAUDE.md`** (цей файл) — durable-довідник = колишній PROJECT.md. Глобальні налаштування, інваріанти, «як усе працює зараз». Сюди **виписуй важливе, коли доробив фічу** (див. робочий процес).
+- **`DESIGN.md`** — дизайн-система (живий документ). **Читай ПЕРШИМ перед будь-якою роботою над UI/UX.** Токени, патерни, референси, «Журнал рішень». Код токенів — `src/index.css`.
+- **`ROADMAP.md`** — жива черга задач/фіч (що зробити й доробити). **Завжди існує.** Додавай сюди нові таски; коли **доробив — викреслюй** (видаляй пункт); якщо результат важливий довгостроково — переноси стислий підсумок у `CLAUDE.md`.
+
+### 🔁 Робочий процес (тримати завжди)
+1. **UI/UX** → спершу `DESIGN.md`, потім код. Кожну дизайн-зміну фіксуй у «Журналі рішень» DESIGN.md.
+2. **Нова задача/ідея/баг** → одразу в `ROADMAP.md` (щоб не загубити).
+3. **Доробив задачу** → (а) видали пункт з `ROADMAP.md`; (б) якщо це змінює «як усе працює» (новий інваріант, нове канонічне визначення, новий ops-крок) — онови відповідний розділ `CLAUDE.md`.
+4. **Гроші/статистика** → будь-яка нова аналітика рахується ТІЛЬКИ через `worker/lib/stats.ts` (єдине джерело). Не дублюй SQL-фільтри в ендпоінтах.
+5. **Green-бар перед «готово»:** `npm run check` (tsc app+worker) + `npm run build`. Канонічний SQL — валідуй на локальному D1.
+6. **Деплой/жива перевірка — рутина КОРИСТУВАЧА** (див. §Ops). Секрети й реальний API-ключ — не в мене.
+
+## Стек
+PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook + бекфіл). React 19 + Redux Toolkit + React Router 7 + Recharts, Vite + vite-plugin-pwa, `@cloudflare/vite-plugin`. AI = гібрид **Haiku 4.5** (масово: enrich/OCR/parse/insight/batch) / **Sonnet 5** (розумний user-facing: порадник, репорти, txChat, бюджет-план, рев'ю). Telegram-бот (каркас). Мова UI — українська. Шрифти: Geist Sans (герой-суми) / Geist Mono (колонки, `tabular-nums`).
+
+### Скрипти
+`npm run dev` · `npm run build` (tsc -b + vite build) · `npm run check` (tsc) · `npm run deploy` (build + wrangler deploy) · `npm run db:migrate:local` / `:remote` · `npm run db:seed:local`.
+
+### Мапа коду
+- `worker/index.ts` — Hono-застосунок; `worker/routes/*` (api, setup, telegram, webhook, ingest); `worker/lib/*` — уся логіка (**`stats.ts`** канонічні розрахунки, `categorize`, `subscriptions`, `ai`, `advisor`, `report`, `insight`, `finance`, `transfers`, `mono`, `enrich`, `receipt`, `repo`, `auth`, `alert`, `proactive`, `backfill`, `telegram`).
+- `src/` — React: `App.tsx`, `components/*` (BalanceCard, EnvelopeGrid, TransactionList, CategoryModal, GroupModal, GoalModal, TransferReviewModal, KpiRow, CashflowChart, Gauge, Select…), `lib/` (brands, markdown).
+- `migrations/*` — 0001→0015. `shared/types.ts` — спільні типи. `wrangler.jsonc`, `.dev.vars` (локальні секрети, у .gitignore).
+
+## 🔒 Інваріанти (тримати ЗАВЖДИ)
+- Гроші — **INTEGER-копійки** скрізь; ділимо на 100 лише в показі.
+- Агрегація по `COALESCE(parent_id, id)` (рол-ап підкатегорій у батька).
+- Кредитний ліміт НІКОЛИ не зливати з власними: власні = `balance − credit_limit`, борг окремо.
+- Мультивалюта: `transactions.currency_code` = валюта РАХУНКУ (mono `amount` у ній); `original_amount`/`original_currency` = валюта операції. Зведення в ₴ — лише через `toUAHMinor`/курси (`app_state.rates`).
+- Секрети лише у Worker secrets, ніколи в git/на клієнті. Вебхуки — секретний сегмент шляху.
+- `Select` замість native `<select>`. Тема світла/темна рівноправні. Дизайн свідомо НЕ «аішний» (див. DESIGN.md).
+
+## 🧮 Канонічне визначення статистики — `worker/lib/stats.ts` (ЄДИНЕ джерело)
+Використовується УСІМА `/analytics`-ендпоінтами + AI-контекстом (порадник, інсайт, репорти) → **цифри UI = цифри AI**.
+- **Витрата:** `amount<0`, `transfer_pair_id IS NULL`, НЕ (`is_transfer=1 AND real_category_id IS NULL`), ефективна категорія `IS NOT 13` («Перекази і зняття»). **Holds рахуються** (mono надсилає лише виконані; коли hold закривається — той самий `id` перезаписується, тож без подвійного рахунку). Прапорець `hold` лишається на рядку для UI-бейджа «в обробці». *(Раніше `hold=0` різав свіжий тиждень у репорті — виправлено 2026-07-10.)*
+- **Ефективна категорія** = рол-ап `real_category_id` (готівка/зняття за реальною суттю), інакше рол-ап `category_id`. Хелпери: `EFF_CAT_*`, `SPEND_WHERE`, `INCOME_WHERE`, `STATS_JOINS`, `spendSum/incomeSum/amountSum`, `uahMult` (₴-зведення inline-CASE з курсів), `valueMode` (₴ або «чиста» валюта), `periodBounds/currentPeriodToDate/lastCompletePeriod`.
+- **Вагомість (§6):** `EFF_IMPORTANCE` = `COALESCE(t.importance, рол-ап importance ефективної категорії, 'discretionary')`. Рівні `essential|discretionary|optional`. Задається на категорії (дефолт) + override на транзакції. Міграція 0016.
+- **Період:** `app_state.period_mode` (`calendar`|`rolling`), перемикач у Статистиці; Головна й Статистика рахують ОДИН період.
+
+## 🧠 Категоризація (детермін.-first, AI-last)
+Порядок у `categorize()`/`enrich()`: 1) навчений `merchant_alias` (точний опис) → 2) активна підписка (мерчант+сума+валюта, `subscriptions.ts`) → 3) консенсус мерчанта (корінь назви ≥3× ≥80% в одну кат.) → 4) `mcc`/`text` rules → 5) AI-enrich (Haiku, з `known_subscriptions`-нюджем).
+- **Alias source (0014):** колонка `source` (`manual`|`ai`). `learn`→manual; enrich→`writeAiAlias` НІКОЛИ не перетирає manual; авто-ре-світ пропускає manual; консенсус важить ручні ×3.
+
+## 💸 AI-модель і вартість
+- Ціни за MTok: **Haiku $1/$5, Sonnet $3/$15, Opus 4.8 $5/$25.** Cache read ≈0.1× input, write ≈1.25–2×.
+- **Лічильник** (`app_state.ai_usage`, міграція 0010): `recordUsage` акумулює usage+вартість у `callHaiku`/`callHaikuMessages`; `GET /ai-usage`; картка «💸 Витрати на AI» в Налаштуваннях.
+- Реалістично ~$1–2/міс на Sonnet-гібриді; user-facing на Opus ≈ $1.5–3/міс. Модель-за-задачею через `MODEL_SMART` в `ai.ts`.
+
+## ✅ Зроблено (компактно)
+Мультивалюта-база; гібрид AI; профіль «про мене» в усіх викликах; детермінована категоризація (5 ланок); пари-перекази 1 рядком (`transfer_pair_id`); підписки (каденція/категорія/note, факт vs план, ознака подорожчання); TxDetail (ai_note+user_note, тег-пікер, інлайн-чат); порадник (структурований, runway); календарне порівняння+MTD; **Аналітика 2.0** (канонічні розрахунки, таби Статистики, дрил Витрати/Надходження, ₴-зведення, period_mode); **AI-репорти** (Sonnet 5, cron тиждень+місяць, історія, ручна генерація, вагомість §6); лічильник витрат AI; **пошук/фільтр транзакцій** (комбіновані фільтри в URL: q/тип/рахунок/сума-діапазон/період/категорії); **тренд капіталу** (`/analytics/capital-trend` — реконструкція власних коштів назад від `computeSummary`, картка на Головній).
+
+## 🔴 Ops / деплой (рутина КОРИСТУВАЧА)
+1. **Міграції на remote:** застосовано по **0016** (вагомість). ⚠️ **0017** (`budgets.rollover`) — застосувати перед деплоєм: `npm run db:migrate:remote`.
+2. **Деплой:** `npm run deploy` (потрібен `wrangler login`).
+3. **Секрети** (`npx wrangler secret put`): `MONO_TOKEN`, `ANTHROPIC_API_KEY`, `WEBHOOK_SECRET`, `APP_PASSWORD`; бот — `TG_BOT_TOKEN`, `TG_SECRET`, `TG_CHAT_ID`.
+4. **Перший запуск даних** (Налаштування): рахунки → вебхук → бекфіл ~90 дн (1 req/60с) → курси → перекази.
+5. **Git-репозиторій НЕ ініціалізовано.** **Нічого не перевірено вживу** з реальним `ANTHROPIC_API_KEY`.
+
+## ➡️ Що далі
+Уся форвард-робота (P0-баг, редизайн Бюджетів/Репортів/Головної, вагомість витрат, більше аналітики, TG-бот, Opus) — у **`ROADMAP.md`**.

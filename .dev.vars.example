@@ -1,0 +1,10 @@
+# Copy to .dev.vars for local dev. Real secrets go via `wrangler secret put` in prod.
+# .dev.vars is gitignored — never commit real tokens.
+
+MONO_TOKEN=
+ANTHROPIC_API_KEY=
+# Secret path segment for the mono webhook, e.g. a random uuid. The webhook URL
+# becomes https://<worker>/webhook/<WEBHOOK_SECRET>
+WEBHOOK_SECRET=
+# Пароль для входу в застосунок (гейт у воркері)
+APP_PASSWORD=

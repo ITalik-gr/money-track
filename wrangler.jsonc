@@ -1,0 +1,46 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "money-track",
+	"main": "./worker/index.ts",
+	"compatibility_date": "2026-07-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	// SPA served from the Vite build output, worker handles API/webhook/ingest.
+	"assets": {
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application"
+	},
+	"observability": {
+		"enabled": true
+	},
+	// D1: fill database_id after `wrangler d1 create finance`.
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "finance",
+			"database_id": "843a4f84-a5f5-4a6d-83c7-48b35c521c4b",
+			"migrations_dir": "./migrations"
+		}
+	],
+	// R2: bucket created via `wrangler r2 bucket create finance-receipts`.
+	"r2_buckets": [
+		{
+			"binding": "RECEIPTS",
+			"bucket_name": "finance-receipts"
+		}
+	],
+	// Weekly insight + weekly AI report (Mon 09:00), monthly AI report (1st 09:00),
+	// and a minute-cron that advances an in-progress backfill one paced step at a
+	// time (mono limit 1 req/60s). The minute-cron no-ops when no backfill is active.
+	"triggers": {
+		"crons": [
+			"0 9 * * 1",
+			"0 9 1 * *",
+			"* * * * *"
+		]
+	},
+	"vars": {
+		"APP_TZ": "Europe/Kyiv"
+	}
+}
