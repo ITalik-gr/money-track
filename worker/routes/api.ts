@@ -6,6 +6,7 @@ import { computeSummary, createCashTx, getRates } from "../lib/finance.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE,
   SPEND_COUNT, valueMode, uahMult, spendSum, incomeSum, amountSum, periodBounds,
+  recurringOneoffSplit, defaultRefFrom,
   type PeriodMode, type Preset,
 } from "../lib/stats.ts";
 
@@ -857,15 +858,26 @@ api.put("/settings/period-mode", async (c) => {
   return c.json({ ok: true, mode });
 });
 
-// Розумна AI-модель (порадник/репорти/чат/бюджет): sonnet (дефолт) | opus. Enrich завжди Haiku.
-api.get("/settings/ai-model", async (c) => {
-  const model = (await getState(c.env.DB, "ai_smart_model")) === "opus" ? "opus" : "sonnet";
-  return c.json({ model });
+// AI-моделі ОКРЕМО НА ЗАДАЧУ (report/advisor/insight/…): токен haiku|sonnet|opus на кожну.
+// UI редагує три головні (report/advisor/insight); решта — дефолти. Enrich/OCR завжди Haiku.
+const AI_MODEL_TASKS = ["report", "advisor", "insight", "chat", "budget", "group"] as const;
+api.get("/settings/ai-models", async (c) => {
+  const { AI_TASK_DEFAULTS, TOKEN_BY_MODEL, MODEL_BY_TOKEN } = await import("../lib/ai.ts");
+  const out: Record<string, string> = {};
+  for (const t of AI_MODEL_TASKS) {
+    const saved = await getState(c.env.DB, `ai_model_${t}`);
+    out[t] = saved && MODEL_BY_TOKEN[saved] ? saved : TOKEN_BY_MODEL[AI_TASK_DEFAULTS[t]];
+  }
+  return c.json({ models: out });
 });
-api.put("/settings/ai-model", async (c) => {
-  const { model } = await c.req.json<{ model: "sonnet" | "opus" }>();
-  await setState(c.env.DB, "ai_smart_model", model === "opus" ? "opus" : "sonnet");
-  return c.json({ ok: true, model: model === "opus" ? "opus" : "sonnet" });
+api.put("/settings/ai-models", async (c) => {
+  const { MODEL_BY_TOKEN } = await import("../lib/ai.ts");
+  const { task, model } = await c.req.json<{ task: string; model: string }>();
+  if (!AI_MODEL_TASKS.includes(task as typeof AI_MODEL_TASKS[number]) || !MODEL_BY_TOKEN[model]) {
+    return c.json({ error: "invalid task or model" }, 400);
+  }
+  await setState(c.env.DB, `ai_model_${task}`, model);
+  return c.json({ ok: true, task, model });
 });
 
 // Порівняння двох періодів side-by-side (беклог): вибраний період A проти попереднього
@@ -1055,6 +1067,152 @@ api.get("/planned/upcoming", async (c) => {
     .sort((a, b) => a.at - b.at);
 
   return c.json({ days, total: items.reduce((s, p) => s + p.amount, 0), items });
+});
+
+// Аналітика позицій чека (receipt_items з OCR): топ товарів за сумою за період.
+// price — копійки за рядок; групуємо за нормалізованою назвою. Показуємо, лише якщо є чеки.
+api.get("/analytics/receipt-items", async (c) => {
+  const url = new URL(c.req.url);
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const from = Number(url.searchParams.get("from") ?? to - 90 * 86400);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 15), 1), 50);
+
+  // Дата позиції = purchased_at чека (fallback created_at). Тільки чеки в періоді.
+  const rows = await c.env.DB.prepare(
+    `SELECT LOWER(TRIM(ri.name)) AS name, CAST(COALESCE(SUM(ri.price), 0) AS INTEGER) AS total,
+            ROUND(COALESCE(SUM(COALESCE(ri.qty, 1)), 0), 2) AS qty, COUNT(*) AS n
+     FROM receipt_items ri
+     JOIN receipts r ON r.id = ri.receipt_id
+     WHERE ri.name IS NOT NULL AND ri.name <> '' AND ri.price > 0
+       AND COALESCE(r.purchased_at, r.created_at) >= ? AND COALESCE(r.purchased_at, r.created_at) <= ?
+     GROUP BY LOWER(TRIM(ri.name)) ORDER BY total DESC LIMIT ?`,
+  ).bind(from, to, limit).all<{ name: string; total: number; qty: number; n: number }>();
+
+  const meta = await c.env.DB.prepare(
+    `SELECT COUNT(*) AS receipts, COALESCE(SUM(cnt), 0) AS items FROM (
+       SELECT r.id, COUNT(ri.id) AS cnt FROM receipts r JOIN receipt_items ri ON ri.receipt_id = r.id
+       WHERE COALESCE(r.purchased_at, r.created_at) >= ? AND COALESCE(r.purchased_at, r.created_at) <= ?
+       GROUP BY r.id)`,
+  ).bind(from, to).first<{ receipts: number; items: number }>();
+
+  return c.json({ items: rows.results ?? [], receipts: meta?.receipts ?? 0, total_items: meta?.items ?? 0 });
+});
+
+// §E4: дрейф цін / персональна інфляція. Для кожної позиції чека (нормалізована назва)
+// беремо ЮНІТ-ціну (price/qty) в кожній покупці; якщо позиція трапилась ≥3 разів із
+// достатнім розкидом у часі — порівнюємо середню юніт-ціну ранньої половини покупок із
+// пізньою → % зміни. Індекс кошика = медіана змін по позиціях. Детерміновано, без AI.
+api.get("/analytics/price-drift", async (c) => {
+  const url = new URL(c.req.url);
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const from = Number(url.searchParams.get("from") ?? to - 180 * 86400);
+  const MIN_N = 3, MIN_SPAN = 21 * 86400, NOISE = 5;
+
+  const rows = await c.env.DB.prepare(
+    `SELECT LOWER(TRIM(ri.name)) AS name, COALESCE(r.purchased_at, r.created_at) AS at,
+            ri.price AS price, COALESCE(ri.qty, 1) AS qty
+     FROM receipt_items ri JOIN receipts r ON r.id = ri.receipt_id
+     WHERE ri.name IS NOT NULL AND ri.name <> '' AND ri.price > 0 AND COALESCE(ri.qty, 1) > 0
+       AND COALESCE(r.purchased_at, r.created_at) >= ? AND COALESCE(r.purchased_at, r.created_at) <= ?
+     ORDER BY at ASC`,
+  ).bind(from, to).all<{ name: string; at: number; price: number; qty: number }>();
+
+  const byName = new Map<string, { at: number; unit: number }[]>();
+  for (const r of rows.results ?? []) {
+    const unit = r.price / r.qty;
+    (byName.get(r.name) ?? byName.set(r.name, []).get(r.name)!).push({ at: r.at, unit });
+  }
+
+  const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+  const items: { name: string; first_unit: number; last_unit: number; change_pct: number; n: number; first_at: number; last_at: number }[] = [];
+  for (const [name, occ] of byName) {
+    if (occ.length < MIN_N) continue;
+    const span = occ[occ.length - 1].at - occ[0].at;
+    if (span < MIN_SPAN) continue;
+    const half = Math.ceil(occ.length / 2);
+    const early = mean(occ.slice(0, half).map((o) => o.unit));
+    const late = mean(occ.slice(half).map((o) => o.unit));
+    if (early <= 0) continue;
+    const change = ((late - early) / early) * 100;
+    items.push({
+      name, first_unit: Math.round(early), last_unit: Math.round(occ[occ.length - 1].unit),
+      change_pct: Math.round(change * 10) / 10, n: occ.length, first_at: occ[0].at, last_at: occ[occ.length - 1].at,
+    });
+  }
+
+  // Індекс кошика — медіана змін (стійка до викидів).
+  const changes = items.map((i) => i.change_pct).sort((a, b) => a - b);
+  const basket = changes.length ? (changes.length % 2 ? changes[(changes.length - 1) / 2] : (changes[changes.length / 2 - 1] + changes[changes.length / 2]) / 2) : null;
+
+  // Топ рухів (лишаємо лише помітні), за модулем зміни.
+  const movers = items.filter((i) => Math.abs(i.change_pct) >= NOISE).sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 12);
+
+  return c.json({ window: { from, to }, basket_change_pct: basket != null ? Math.round(basket * 10) / 10 : null, tracked: items.length, items: movers });
+});
+
+// §E1/E2/E3: патерни витрат ЦЬОГО МІСЯЦЯ — усе детерміновано, без AI.
+//  • recurring: разові vs регулярні (канон stats.ts) + топ разових;
+//  • anomalies: категорії, чий прогноз на кінець місяця значно вищий за звичний (трейлінг 6 міс);
+//  • pace: темп по топ-категоріях — факт (MTD) vs звичний місяць vs лінійний прогноз.
+api.get("/analytics/patterns", async (c) => {
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const now = Math.floor(Date.now() / 1000);
+  const d = new Date(now * 1000);
+  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+  const nextMonthStart = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() / 1000);
+  const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
+  const curKey = new Date(now * 1000).toISOString().slice(0, 7);
+  // Трейлінг-вікно: 6 повних місяців перед поточним.
+  const refStart = Math.floor(new Date(d.getFullYear(), d.getMonth() - 6, 1).getTime() / 1000);
+  const trailingKeys: string[] = [];
+  for (let i = 6; i >= 1; i--) trailingKeys.push(new Date(d.getFullYear(), d.getMonth() - i, 1).toISOString().slice(0, 7));
+
+  const [matrix, split] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${EFF_CAT_COLOR} AS color,
+              strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
+       GROUP BY ${EFF_CAT_ID}, m`,
+    ).bind(refStart, now).all<{ id: number | null; name: string | null; color: string | null; m: string; spent: number }>(),
+    recurringOneoffSplit(c.env, monthStart, now, mult, defaultRefFrom(now)),
+  ]);
+
+  interface Cat { id: number | null; name: string; color: string | null; months: Map<string, number> }
+  const cats = new Map<string, Cat>();
+  for (const r of matrix.results ?? []) {
+    const key = String(r.id ?? "null");
+    let cat = cats.get(key);
+    if (!cat) { cat = { id: r.id, name: r.name ?? "без категорії", color: r.color, months: new Map() }; cats.set(key, cat); }
+    cat.months.set(r.m, r.spent);
+  }
+
+  const MIN_DELTA = 20000; // 200₴ — нижче не шумимо
+  const anomalies: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number }[] = [];
+  const pace: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number | null }[] = [];
+  for (const cat of cats.values()) {
+    const cur = cat.months.get(curKey) ?? 0;
+    const trailing = trailingKeys.map((k) => cat.months.get(k) ?? 0);
+    const usual = Math.round(trailing.reduce((s, v) => s + v, 0) / trailingKeys.length);
+    const projected = Math.round(cur / elapsedFrac);
+    if (cur > 0 || usual > 0) {
+      pace.push({ category: cat.name, color: cat.color, spent: cur, projected, usual, pct: usual > 0 ? Math.round((projected / usual) * 100) : null });
+    }
+    // Аномалія: прогноз ≥1.5× звичного і абсолютна різниця вагома.
+    if (cur > 0 && projected >= usual * 1.5 && projected - usual >= MIN_DELTA) {
+      anomalies.push({ category: cat.name, color: cat.color, spent: cur, projected, usual, pct: usual > 0 ? Math.round((projected / usual) * 100) : 0 });
+    }
+  }
+  anomalies.sort((a, b) => (b.projected - b.usual) - (a.projected - a.usual));
+  pace.sort((a, b) => b.projected - a.projected);
+
+  return c.json({
+    period: { from: monthStart, to: now, elapsed_frac: Math.round(elapsedFrac * 100) / 100 },
+    recurring: split,
+    anomalies: anomalies.slice(0, 6),
+    pace: pace.slice(0, 8),
+  });
 });
 
 // Drill-down однієї (батьківської) категорії за період: розбивка по підкатегоріях +

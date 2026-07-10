@@ -1,6 +1,7 @@
 import { useGetOverviewQuery, useGetPeriodModeQuery } from "../store/api.ts";
 import { Icon } from "./Icon.tsx";
 import { formatMinor, currencySign } from "../lib/format.ts";
+import { InfoTip } from "./InfoTip.tsx";
 
 function pct(cur: number, prev: number): number | null {
   if (!prev) return null;
@@ -8,7 +9,7 @@ function pct(cur: number, prev: number): number | null {
 }
 
 function KpiTile({
-  title, kind, valueMinor, prevMinor, deltaPct, prevLabel,
+  title, kind, valueMinor, prevMinor, deltaPct, prevLabel, info,
 }: {
   title: string;
   kind: "spend" | "income";
@@ -16,6 +17,7 @@ function KpiTile({
   prevMinor: number;
   deltaPct: number | null;
   prevLabel: string;
+  info: string;
 }) {
   // spend: зростання — погано (черв.); income: зростання — добре (зел.)
   const goodWhenUp = kind === "income";
@@ -24,11 +26,14 @@ function KpiTile({
 
   return (
     <div className="card kpi-tile">
-      <div className="kpi-head">
-        <span className={`kpi-ic ${kind}`}>
-          <Icon name="arrowUpRight" size={17} />
-        </span>
-        <span className="kpi-title">{title}</span>
+      <div className="kpi-head-row">
+        <div className="kpi-head">
+          <span className={`kpi-ic ${kind}`}>
+            <Icon name="arrowUpRight" size={17} />
+          </span>
+          <span className="kpi-title">{title}</span>
+        </div>
+        <span className="kpi-info"><InfoTip>{info}</InfoTip></span>
       </div>
       <div className="kpi-num num-hero">
         {formatMinor(valueMinor, { decimals: false })}
@@ -61,8 +66,10 @@ export function KpiRow() {
 
   return (
     <div className="kpi-row">
-      <KpiTile title={rolling ? "Витрачено (30 дн)" : "Витрачено за місяць"} kind="spend" valueMinor={spend} prevMinor={prevSpend} deltaPct={pct(spend, prevSpend)} prevLabel={prevLabel} />
-      <KpiTile title={rolling ? "Надходження (30 дн)" : "Надходження за місяць"} kind="income" valueMinor={income} prevMinor={prevIncome} deltaPct={pct(income, prevIncome)} prevLabel={prevLabel} />
+      <KpiTile title={rolling ? "Витрачено (30 дн)" : "Витрачено за місяць"} kind="spend" valueMinor={spend} prevMinor={prevSpend} deltaPct={pct(spend, prevSpend)} prevLabel={prevLabel}
+        info="Сума всіх витрат за період: без переказів між своїми рахунками і без зняття готівки (готівка рахується за реальною категорією)." />
+      <KpiTile title={rolling ? "Надходження (30 дн)" : "Надходження за місяць"} kind="income" valueMinor={income} prevMinor={prevIncome} deltaPct={pct(income, prevIncome)} prevLabel={prevLabel}
+        info="Сума всіх надходжень за період, без переказів між своїми рахунками." />
     </div>
   );
 }

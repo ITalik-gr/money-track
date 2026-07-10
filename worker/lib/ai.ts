@@ -12,10 +12,27 @@ export const MODEL_SMART = "claude-sonnet-5";
 export const MODEL_OPUS = "claude-opus-4-8";
 const API = "https://api.anthropic.com/v1/messages";
 
-// Розумна модель для user-facing (порадник/репорти/чат/бюджет) — перемикач у Налаштуваннях
-// (app_state.ai_smart_model = "opus"|"sonnet", дефолт sonnet). Enrich/OCR завжди Haiku.
-export async function getSmartModel(env: Env): Promise<string> {
-  return (await getState(env.DB, "ai_smart_model")) === "opus" ? MODEL_OPUS : MODEL_SMART;
+// Моделі окремо НА ЗАДАЧУ (рішення 2026-07-11). Кожна user-facing задача має свій ключ
+// app_state.ai_model_<task> зі значенням-токеном (haiku|sonnet|opus). Дефолти нижче:
+// репорти — Opus (найглибший розбір), порадник/чат/бюджет — Sonnet, AI-огляд — Haiku (масово/дешево).
+// Enrich/OCR/categorize НЕ конфігуруються — завжди Haiku.
+export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group";
+export const AI_TASK_DEFAULTS: Record<AiTask, string> = {
+  report: MODEL_OPUS,
+  advisor: MODEL_SMART,
+  insight: MODEL_FAST,
+  chat: MODEL_SMART,
+  budget: MODEL_SMART,
+  group: MODEL_SMART,
+};
+export const MODEL_BY_TOKEN: Record<string, string> = { haiku: MODEL_FAST, sonnet: MODEL_SMART, opus: MODEL_OPUS };
+export const TOKEN_BY_MODEL: Record<string, string> = { [MODEL_FAST]: "haiku", [MODEL_SMART]: "sonnet", [MODEL_OPUS]: "opus" };
+
+// Модель для задачі: збережений токен (якщо валідний) інакше дефолт задачі.
+export async function getTaskModel(env: Env, task: AiTask): Promise<string> {
+  const saved = await getState(env.DB, `ai_model_${task}`);
+  if (saved && MODEL_BY_TOKEN[saved]) return MODEL_BY_TOKEN[saved];
+  return AI_TASK_DEFAULTS[task];
 }
 
 // Sonnet/Opus вмикають adaptive-thinking, коли поле thinking відсутнє — для наших легких
@@ -63,7 +80,7 @@ const PRICES: Record<string, { in: number; out: number }> = {
   [MODEL_OPUS]: { in: 5.0, out: 25.0 },  // Opus 4.8
 };
 
-function callCostUsd(model: string, u: AnthropicUsage): number {
+export function callCostUsd(model: string, u: AnthropicUsage): number {
   const p = PRICES[model] ?? PRICES[MODEL_FAST];
   const cacheRead = u.cache_read_input_tokens ?? 0;
   const cacheWrite = u.cache_creation_input_tokens ?? 0;
@@ -235,7 +252,7 @@ export async function chatAdvice(
     },
   ];
   // §R6: детальніші відповіді порадника (Sonnet 5) — більший ліміт виводу.
-  const { text, usage } = await callHaikuMessages(env, system, messages, 1300, await getSmartModel(env));
+  const { text, usage } = await callHaikuMessages(env, system, messages, 1300, await getTaskModel(env, "chat"));
   return { text: text.trim(), usage };
 }
 
@@ -288,7 +305,7 @@ export async function txChat(
     ...base,
     { type: "text", text: "Контекст операції (суми в її валюті): " + JSON.stringify(ctx) },
   ];
-  return callHaikuMessagesJson<TxChatResult>(env, system, messages, 700, await getSmartModel(env));
+  return callHaikuMessagesJson<TxChatResult>(env, system, messages, 700, await getTaskModel(env, "chat"));
 }
 
 function extractBalanced(text: string): string | null {
@@ -647,7 +664,7 @@ export async function proposeBudgetLimits(
         "(укр.), overall — 1-2 речення про логіку плану. Без markdown.",
     },
   ];
-  return callHaikuJson<BudgetPlan>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 1500, await getSmartModel(env));
+  return callHaikuJson<BudgetPlan>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 1500, await getTaskModel(env, "budget"));
 }
 
 // Спільний структурований «факт» для стилізованого рендеру (гроші/категорії/дельти).
@@ -689,7 +706,13 @@ export async function generateAdvice(
         "українською. ⚠️ ПЕРІОДИ: monthly_burn_uah вже усереднений НА МІСЯЦЬ; суми top_categories/top_merchants/by_event " +
         "подано і за 90 днів (spent_90d_uah), і на місяць (avg_month_uah). Для порад і порівнянь із доходом/burn " +
         "спирайся на avg_month_uah, а НЕ на 90-денну суму — не називай накопичене за 3 місяці місячним. " +
-        "Врахуй контекст (напр. без роботи → пріоритет економія і подовження runway). " +
+        "🚫 НЕ «ПО КНИЖЦІ»: ПОВАЖАЙ situation як тверде обмеження. Якщо користувач без роботи / між роботами / шукає — " +
+        "НЕ радь абстрактно «збільшити дохід», «додати джерело доходу», «закласти дохід у бюджет». Замість цього: " +
+        "подовження runway, ріж optional/discretionary, використання ліквідної подушки. Не давай generic-порад, які " +
+        "пасують будь-кому — кожна порада має спиратись на КОНКРЕТНІ його числа/категорії. " +
+        "💰 КОШТИ ЧЕСНО: liquid_cushion_uah — реальний запас (заощадження/плюсові рахунки); debt_uah — борг по кредитці. " +
+        "own_funds_uah (нетто) може бути ВІД'ЄМНИМ через борг — це НЕ «мінус запас», реальна подушка окремо. Runway рахуй/трактуй " +
+        "від подушки. recent_oneoff — разові витрати місяця (податки, лікар): НЕ вважай їх регулярними й не проектуй у майбутнє. " +
         "У payload є citable_operations:[{id,label}] — коли згадуєш конкретну операцію в summary чи suggestions.detail, " +
         "встав після назви токен [tx:ID] з відповідним id (напр. «Rozetka [tx:abc]»). Лише наявні id, не вигадуй, 1-2 доречні. " +
         "Будь конкретним і емпатичним, без води й без markdown. Відповідай ВИКЛЮЧНО валідним JSON: " +
@@ -700,7 +723,7 @@ export async function generateAdvice(
         "коли доречно запропонувати ліміт-конверт на категорію. Суми — у гривнях.",
     },
   ];
-  return callHaikuJson<AdviceResult>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 1600, await getSmartModel(env));
+  return callHaikuJson<AdviceResult>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 1600, await getTaskModel(env, "advisor"));
 }
 
 // §Аналітика 2.0: розгорнутий періодичний репорт (Sonnet 5). Детальний розбір по
@@ -741,7 +764,7 @@ export async function budgetChat(
     },
     { type: "text", text: "Контекст: " + JSON.stringify(ctx) },
   ];
-  return callHaikuMessagesJson<BudgetChatResult>(env, system, messages, 900, await getSmartModel(env));
+  return callHaikuMessagesJson<BudgetChatResult>(env, system, messages, 900, await getTaskModel(env, "budget"));
 }
 
 export async function generateFinancialReport(
@@ -773,7 +796,7 @@ export async function generateFinancialReport(
         "{type:'create_budget', label, category_id, category_name, amount_uah})}. Суми — цілі числа гривень.",
     },
   ];
-  return callHaikuJson<FinancialReport>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 3000, await getSmartModel(env));
+  return callHaikuJson<FinancialReport>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 3000, await getTaskModel(env, "report"));
 }
 
 // Структурований інсайт для стилізованого рендеру (headline + факти + порада).
@@ -800,7 +823,7 @@ export async function generateInsight(
         "зміни, аномалії), note (1 коротка порада або null)}. Суми — у гривнях.",
     },
   ];
-  return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 700);
+  return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "insight"));
 }
 
 // §GR2: оцінка групи/події — вплив на бюджет, чи дорого, чи варте. Структурований JSON,
@@ -822,5 +845,5 @@ export async function evaluateGroup(
         "tone ('pos'|'neg'|'neutral')}] (2-5), note (1 коротка порада або висновок «дорого/норм» або null)}.",
     },
   ];
-  return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 800, await getSmartModel(env));
+  return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 800, await getTaskModel(env, "group"));
 }

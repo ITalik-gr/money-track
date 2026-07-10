@@ -1,5 +1,6 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useGetCapitalTrendQuery } from "../store/api.ts";
+import { InfoTip } from "./InfoTip.tsx";
 
 // §4 Тренд капіталу: динаміка власних коштів (₴) за 6 місяців (реконструкція від поточного тоталу).
 const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
@@ -32,7 +33,10 @@ export function CapitalTrendCard() {
     <div className="card cashflow">
       <div className="cashflow-head">
         <div>
-          <span className="label">капітал · 6 міс</span>
+          <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            капітал · 6 міс
+            <InfoTip>Власні кошти (без кредитного ліміту) на кожен момент — реконструйовано назад від поточного балансу за історією операцій. Показує, чи росте чи тане «подушка».</InfoTip>
+          </span>
           <div className="cf-total num-hero">{fmt0.format(last)}<span className="cur">₴</span></div>
         </div>
         <div className={`cap-delta ${delta >= 0 ? "pos" : "neg"}`}>

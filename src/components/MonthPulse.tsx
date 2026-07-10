@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useGetOverviewQuery } from "../store/api.ts";
 import { formatMinor } from "../lib/format.ts";
+import { InfoTip } from "./InfoTip.tsx";
 
 // §4 Пульс місяця для Головної: норма заощаджень + топ-категорії міні (календарний місяць,
 // зведено в ₴). Одна вибірка overview → обидва блоки. Клік по категорії → дриль у Статистиці.
@@ -30,7 +31,10 @@ export function MonthPulse() {
 
       <div className="pulse-save">
         <div className="pulse-save-main">
-          <span className="label">Норма заощаджень</span>
+          <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            Норма заощаджень
+            <InfoTip>Скільки з надходжень цього місяця лишається після витрат: (надходження − витрати) ÷ надходження. Від'ємне — витратив більше, ніж отримав.</InfoTip>
+          </span>
           <div className={`pulse-rate num-hero ${rateTone}`}>
             {rate == null ? "—" : <>{rate > 0 ? "+" : ""}{rate}<span className="cur">%</span></>}
           </div>

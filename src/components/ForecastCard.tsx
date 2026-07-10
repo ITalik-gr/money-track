@@ -1,6 +1,7 @@
 import { useGetForecastQuery } from "../store/api.ts";
 import { Money } from "./Money.tsx";
 import { formatMinor } from "../lib/format.ts";
+import { InfoTip } from "./InfoTip.tsx";
 
 // Прогноз кінця місяця (§7): скільки витратимо за поточним темпом + майбутні планові
 // платежі. Сильна фіча для runway — видно ще до кінця місяця, чи вкладаєшся.
@@ -15,7 +16,10 @@ export function ForecastCard() {
     <section>
       <div className="section-head">
         <h2>Прогноз місяця</h2>
-        <span className="label">лишилось {f.daysRemaining} дн</span>
+        <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          лишилось {f.daysRemaining} дн
+          <InfoTip>Оцінка витрат до кінця місяця за поточним темпом (середні витрати/день × дні, що лишились) + вже заплановані підписки. Прогноз-нетто — це прогноз витрат мінус дохід поки що за місяць.</InfoTip>
+        </span>
       </div>
       <div className="card forecast-card">
         <div className="fc-main">

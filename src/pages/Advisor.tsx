@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  useChatAdviceMutation,
   useGenerateAdviceMutation,
   useGetAdviceQuery,
   useGetAdviceHistoryQuery,
@@ -13,7 +12,7 @@ import { Gauge } from "../components/Gauge.tsx";
 import { AiInsightCard } from "../components/AiInsightCard.tsx";
 import { RichFacts } from "../components/RichFacts.tsx";
 import { UsageCost } from "../components/UsageCost.tsx";
-import { renderMarkdown } from "../lib/markdown.tsx";
+import { InfoTip } from "../components/InfoTip.tsx";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { renderRich } from "../lib/citations.tsx";
 import { toast } from "../lib/toast.ts";
@@ -41,7 +40,10 @@ export function Advisor() {
       <div className="page-head">
         <div>
           <div className="greet">Порадник</div>
-          <div className="sub">AI дивиться на твої числа й радить. Запитай або опиши, що тобі треба.</div>
+          <div className="sub">AI дивиться на твої числа й радить конкретні кроки під твою ситуацію.</div>
+        </div>
+        <div className="page-head-actions">
+          <Link to="/chat" className="btn ghost">Запитати в чаті →</Link>
         </div>
       </div>
 
@@ -49,25 +51,28 @@ export function Advisor() {
         {advice && (
           <div className="card runway-card">
             <Gauge
-              ratio={months != null ? months / 12 : 0}
-              center={months != null ? String(months) : "—"}
+              ratio={months != null ? Math.max(0, months) / 12 : 0}
+              center={months != null ? String(Math.max(0, months)) : "—"}
               sub={months != null ? "місяців" : "нема даних"}
               tone={tone}
             />
-            <div className="runway-metrics">
-              <Metric label="Власні кошти" v={<Money minor={advice.own_funds} decimals={false} />} />
+            <div className="runway-metrics situation-metrics">
+              <Metric label="Реальна подушка" v={<Money minor={advice.cushion} decimals={false} />} tone="pos"
+                info="Скільки реально є: заощадження й плюсові рахунки (у ₴, USD зведено за курсом). Це не нетто — борг по кредитці рахується окремо." />
+              {advice.debt > 0 && (
+                <Metric label="Борг по кредитці" v={<Money minor={advice.debt} decimals={false} />} tone="neg"
+                  info="Використаний кредитний ліміт. Це борг, а не «мінус запас» — не змішується з подушкою." />
+              )}
               <Metric label="Витрати / міс" v={<Money minor={advice.monthly_burn} decimals={false} />} />
-              <Metric label="Вистачить на" v={months != null ? `${months} міс` : "—"} tone={tone} />
-              {advice.runway_comment && <p className="runway-comment">{highlightAmounts(advice.runway_comment)}</p>}
+              <Metric label="Подушки вистачить на" v={months != null ? `${Math.max(0, months)} міс` : "—"} tone={tone}
+                info="Ліквідна подушка ÷ середні місячні витрати. Скільки протягнеш на реальні кошти за поточного темпу." />
             </div>
+            {advice.runway_comment && <p className="runway-comment" style={{ gridColumn: "1 / -1" }}>{highlightAmounts(advice.runway_comment)}</p>}
           </div>
         )}
 
-        <div className="advisor-grid">
-          {/* Ліва колонка: інтерактивний радник (питай / описуй) */}
-          <AdvisorAsk />
-
-          {/* Права колонка: структуровані поради + інсайт */}
+        <div className="advisor-grid single">
+          {/* Структуровані поради + інсайт */}
           <div className="stack" style={{ gap: 18 }}>
             <section>
               <div className="section-head">
@@ -140,94 +145,6 @@ function AdviceHistory() {
   );
 }
 
-type Msg = { role: "user" | "assistant"; content: string };
-const ASK_KEY = "mt-advisor-ask";
-const ASK_SUGGESTIONS = [
-  "Розбери, куди в мене втікають гроші, і що з цим робити",
-  "Скільки я реально можу відкладати щомісяця?",
-  "Проаналізуй мої підписки — що зайве?",
-  "Я хочу зібрати на відпустку 40 000 ₴ за пів року. Реально?",
-];
-
-function loadAsk(): Msg[] {
-  try { const raw = localStorage.getItem(ASK_KEY); return raw ? (JSON.parse(raw) as Msg[]) : []; } catch { return []; }
-}
-
-// Інлайн-порадник: питай своїми словами або опиши задачу — детальна відповідь (Sonnet 5).
-// Історія локально; профіль і числа AI бачить сам (сервер підмішує). Це не дублює профіль.
-function AdvisorAsk() {
-  const [chat, { isLoading }] = useChatAdviceMutation();
-  const [messages, setMessages] = useState<Msg[]>(loadAsk);
-  const [input, setInput] = useState("");
-  const logRef = useRef<HTMLDivElement>(null);
-  const sending = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-
-  useEffect(() => {
-    try { localStorage.setItem(ASK_KEY, JSON.stringify(messages.slice(-60))); } catch { /* ignore */ }
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, isLoading]);
-
-  async function send(text?: string) {
-    const q = (text ?? input).trim();
-    if (!q || isLoading || sending.current) return;
-    sending.current = true;
-    const next: Msg[] = [...messages, { role: "user", content: q }];
-    setMessages(next);
-    setInput("");
-    try {
-      const res = await chat({ messages: next, attachedTxIds: [] }).unwrap();
-      if (mounted.current) setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
-    } catch {
-      if (mounted.current) setMessages((m) => [...m, { role: "assistant", content: "Не вдалося відповісти. Спробуй ще раз." }]);
-    } finally { sending.current = false; }
-  }
-
-  return (
-    <section className="advisor-ask">
-      <div className="section-head">
-        <h2>Запитай або опиши, що треба</h2>
-        {messages.length > 0 && (
-          <button className="btn ghost" style={{ padding: "4px 10px" }}
-            onClick={() => { setMessages([]); try { localStorage.removeItem(ASK_KEY); } catch { /* ignore */ } }}>
-            Очистити
-          </button>
-        )}
-      </div>
-      <div className="card advisor-ask-card">
-        <div className="advisor-ask-log" ref={logRef}>
-          {messages.length === 0 ? (
-            <div className="advisor-ask-empty">
-              <p>Опиши задачу своїми словами — AI бачить твої числа й профіль, і відповість детально.</p>
-              <div className="chat-suggest">
-                {ASK_SUGGESTIONS.map((s) => (
-                  <button key={s} className="chat-chip" onClick={() => send(s)}>{s}</button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            messages.map((m, i) => (
-              <div key={i} className={`chat-msg ${m.role}`}>{renderMarkdown(m.content)}</div>
-            ))
-          )}
-          {isLoading && <div className="chat-msg assistant chat-typing"><span></span><span></span><span></span></div>}
-        </div>
-        <div className="advisor-ask-input">
-          <input
-            placeholder="напр. «як мені за 3 місяці зменшити витрати на 20%?»"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") send(); }}
-          />
-          <button className="btn primary" onClick={() => send()} disabled={isLoading || !input.trim()} aria-label="Надіслати">➤</button>
-        </div>
-      </div>
-      <Link to="/chat" className="advisor-ask-more">Відкрити повний чат (з прикріпленням операцій) →</Link>
-    </section>
-  );
-}
-
 // Дієва порада: створити конверт-ліміт прямо з поради (§дієві поради).
 function AdviceActionButton({ action }: { action: AdviceAction }) {
   const [setBudget, { isLoading }] = useSetBudgetMutation();
@@ -247,10 +164,10 @@ function AdviceActionButton({ action }: { action: AdviceAction }) {
   );
 }
 
-function Metric({ label, v, tone }: { label: string; v: React.ReactNode; tone?: string }) {
+function Metric({ label, v, tone, info }: { label: string; v: React.ReactNode; tone?: string; info?: string }) {
   return (
     <div className="runway-metric">
-      <div className="label">{label}</div>
+      <div className="label" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{label}{info && <InfoTip>{info}</InfoTip>}</div>
       <div className={`runway-val num-hero ${tone === "pos" ? "pos" : tone === "neg" ? "neg" : tone === "warn" ? "" : ""}`}>{v}</div>
     </div>
   );

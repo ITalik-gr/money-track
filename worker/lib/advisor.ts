@@ -4,7 +4,7 @@ import type { Env } from "../env.ts";
 import { type AdviceResult, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
 import { getState, setState } from "./repo.ts";
 import { getRates, toUAHMinor } from "./finance.ts";
-import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum } from "./stats.ts";
+import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit } from "./stats.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -26,24 +26,35 @@ async function notableTransactions(env: Env, days = 45, limit = 15): Promise<{ i
 }
 
 export interface StoredAdvice extends AdviceResult {
-  own_funds: number;      // копійки, UAH
+  own_funds: number;      // копійки, UAH — нетто (подушка − борг)
+  cushion: number;        // копійки, UAH — ліквідна подушка (позитивні власні)
+  debt: number;           // копійки, UAH — борг по кредитці (від'ємні власні)
   monthly_burn: number;   // копійки, UAH/міс
-  runway_months: number | null;
+  runway_months: number | null;  // ЧЕСНИЙ: подушка / burn
   usage?: AiUsageBrief;
   generated_at: number;
 }
 
-async function ownFundsUAH(env: Env): Promise<number> {
+// §C: чесна розбивка коштів. Ліквідна ПОДУШКА = сума ПОЗИТИВНИХ власних залишків (те, що
+// реально є: заощадження в ₴/USD, плюсові картки). БОРГ = сума ВІД'ЄМНИХ власних (використаний
+// кредитний ліміт). Нетто = подушка − борг. Раніше показували лише нетто, і від'ємний нетто
+// (борг по кредитці) виглядав як «мінус запас», хоч реальна подушка сиділа окремо.
+export interface FundsBreakdown { cushion: number; debt: number; net: number }
+export async function fundsBreakdown(env: Env): Promise<FundsBreakdown> {
   const accounts = await env.DB.prepare(
     "SELECT balance, credit_limit, currency_code FROM accounts WHERE is_active = 1",
   ).all<{ balance: number; credit_limit: number; currency_code: number }>();
   const rates = await getRates(env.DB);
-  let total = 0;
+  let cushion = 0, debt = 0;
   for (const a of accounts.results ?? []) {
-    const own = (a.balance ?? 0) - (a.credit_limit ?? 0);
-    total += toUAHMinor(own, a.currency_code, rates);
+    const own = toUAHMinor((a.balance ?? 0) - (a.credit_limit ?? 0), a.currency_code, rates);
+    if (own >= 0) cushion += own; else debt += -own;
   }
-  return Math.round(total);
+  return { cushion: Math.round(cushion), debt: Math.round(debt), net: Math.round(cushion - debt) };
+}
+
+async function ownFundsUAH(env: Env): Promise<number> {
+  return (await fundsBreakdown(env)).net;
 }
 
 export async function getProfile(env: Env): Promise<string> {
@@ -62,8 +73,8 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
 
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null); // канонічно, зведено в ₴
-  const [ownFunds, burnRow, cats, merchants, events, importance, trend, budgetRows, monthByCat, subsAgg] = await Promise.all([
-    ownFundsUAH(env),
+  const [funds, burnRow, cats, merchants, events, importance, trend, budgetRows, monthByCat, subsAgg, split] = await Promise.all([
+    fundsBreakdown(env),
     env.DB.prepare(
       `SELECT ${spendSum(mult)} AS spent FROM transactions t ${STATS_JOINS} WHERE t.time >= ?`,
     ).bind(from90).first<{ spent: number }>(),
@@ -110,10 +121,14 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     env.DB.prepare(
       `SELECT COALESCE(SUM(period_amount), 0) AS planned, COUNT(*) AS n FROM planned_payments WHERE is_active = 1`,
     ).first<{ planned: number; n: number }>(),
+    // §E1/C: разові vs регулярні за поточний місяць — щоб AI не проектував разове як норму.
+    recurringOneoffSplit(env, monthStart, now, mult),
   ]);
 
+  const ownFunds = funds.net;
   const monthlyBurn = Math.round((burnRow?.spent ?? 0) / 3); // 90 днів → місяць
-  const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
+  // §C: ЧЕСНИЙ runway — від ліквідної подушки, не від нетто (нетто може бути від'ємним через борг).
+  const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
   const profile = await getProfile(env);
 
   // §2: бюджети — ліміт vs факт за поточний місяць.
@@ -127,12 +142,21 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
   const citable = await notableTransactions(env, 90, 12);
 
   const payload = {
-    period_note: "top_categories/top_merchants/by_event — суми за ОСТАННІ 90 ДНІВ (3 місяці); avg_month_uah — усереднене на місяць. monthly_burn_uah — середні витрати/міс. НЕ плутай 90д із місячною; спирайся на avg_month_uah. by_importance: essential=обов'язкові (не ріж), discretionary=бажані, optional=необов'язкові (найбезпечніше скорочувати). monthly_trend: spend/income по місяцях (6 міс) — дивись динаміку/сезонність, а не лише середнє. budgets: ліміт vs факт цього місяця (used_pct>100 = перевитрата — підсвіти). subscriptions_monthly_uah: фіксовані підписки/міс (майже незмінні). Цитуй конкретику: категорії, підписки, бюджети.",
+    period_note: "top_categories/top_merchants/by_event — суми за ОСТАННІ 90 ДНІВ (3 місяці); avg_month_uah — усереднене на місяць. monthly_burn_uah — середні витрати/міс. НЕ плутай 90д із місячною; спирайся на avg_month_uah. by_importance: essential=обов'язкові (не ріж), discretionary=бажані, optional=необов'язкові (найбезпечніше скорочувати). monthly_trend: spend/income по місяцях (6 міс) — дивись динаміку/сезонність, а не лише середнє. budgets: ліміт vs факт цього місяця (used_pct>100 = перевитрата — підсвіти). subscriptions_monthly_uah: фіксовані підписки/міс (майже незмінні). recent_oneoff — РАЗОВІ витрати цього місяця (податки, лікар, велика покупка): НЕ проектуй їх як регулярні. Цитуй конкретику: категорії, підписки, бюджети.",
     period_days: 90,
     situation: profile || "(не вказано)",
+    // §C: реальна картина коштів. liquid_cushion — те, що справді є (заощадження/плюсові рахунки);
+    // debt — використаний кредитний ліміт (це БОРГ, не «мінус запас»); own_funds = подушка − борг.
+    liquid_cushion_uah: Math.round(funds.cushion / 100),
+    debt_uah: Math.round(funds.debt / 100),
     own_funds_uah: Math.round(ownFunds / 100),
+    runway_note: "runway_months = ліквідна подушка / місячний burn (скільки протягнеш на реальні кошти). Спирайся на подушку, а не на нетто.",
     monthly_burn_uah: Math.round(monthlyBurn / 100),
     runway_months: runwayMonths,
+    recent_oneoff: {
+      total_uah: Math.round(split.oneoff.spent / 100),
+      items: split.oneoff_items.map((o) => ({ merchant: o.merchant, category: o.category, amount_uah: Math.round(o.amount / 100) })),
+    },
     subscriptions_monthly_uah: subsMonthly,
     subscriptions_count: subsAgg?.n ?? 0,
     top_categories: (cats.results ?? []).map((c) => ({ id: c.id, name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: Math.round(c.spent / 3 / 100) })),
@@ -149,6 +173,8 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
   const stored: StoredAdvice = {
     ...result,
     own_funds: ownFunds,
+    cushion: funds.cushion,
+    debt: funds.debt,
     monthly_burn: monthlyBurn,
     runway_months: runwayMonths,
     usage: briefUsage(usage),

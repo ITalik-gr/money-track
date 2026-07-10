@@ -879,7 +879,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   padding: 3px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
-  margin-bottom: 6px;
 }
 .seg-btn {
   border: none;
@@ -1077,6 +1076,29 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .cashflow { padding: 18px 20px 10px; }
 .cashflow-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
 .cashflow-head .cf-total { font-size: 26px; line-height: 1.1; margin-top: 4px; }
+/* §1: Календар списань — компактна сітка з датою в кутку (як справжній календар), а не
+   квадратні великі плитки по центру; хто/скільки видно прямо в клітинці, без ховеру. */
+.subs-cal { padding: 14px 16px; }
+.sc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.sc-head { margin-bottom: 5px; }
+.sc-wd { font-size: 10.5px; color: var(--muted); text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+.sc-cell {
+  min-height: 48px; border-radius: 8px; border: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  gap: 3px; padding: 5px 6px; background: var(--surface); overflow: hidden;
+}
+.sc-cell.weekend { background: var(--surface-2); }
+.sc-cell.past { opacity: 0.45; }
+.sc-cell.has { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 35%, transparent); cursor: default; }
+.sc-cell.today { border-color: var(--accent); border-width: 1.5px; }
+.sc-day { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.sc-cell.today .sc-day { color: var(--accent); font-weight: 700; }
+.sc-cell.has .sc-day { color: var(--ink-2); font-weight: 600; }
+.sc-hit { display: flex; flex-direction: column; gap: 1px; margin-top: auto; min-width: 0; }
+.sc-title { font-size: 10px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-amt { font-size: 10.5px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.2; }
+@media (max-width: 560px) { .sc-title { display: none; } }
+
 /* §4 Командний рядок — швидкі дії + швидкі інсайти */
 .quickbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
 .qb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -1091,7 +1113,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §1 Аналітика доходу — джерела + стабільність */
 .inc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .inc-sources { display: flex; flex-direction: column; gap: 8px; }
-.inc-src { display: grid; grid-template-columns: 1fr 60px auto; align-items: center; gap: 10px; }
+/* §1: значення — ФІКСОВАНА ширина (не auto): кожен рядок — окремий grid-контекст, тож
+   auto-колонка рахується per-row і зсуває трек бару відносно сусідніх рядків. */
+.inc-src { display: grid; grid-template-columns: 1fr 60px 112px; align-items: center; gap: 10px; }
 .inc-src .is-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inc-src .is-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
 .inc-src .is-track { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
@@ -1131,13 +1155,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .pulse-save-detail b { font-variant-numeric: tabular-nums; margin-left: 5px; }
 .pulse-save-detail .pos { color: var(--pos); }
 .pulse-save-detail .neg { color: var(--neg); }
-.pulse-cat { display: grid; grid-template-columns: 1fr 70px auto; align-items: center; gap: 10px; padding: 5px 0; color: inherit; text-decoration: none; }
+.pulse-cat { display: grid; grid-template-columns: 1fr 70px 84px; align-items: center; gap: 10px; padding: 5px 0; color: inherit; text-decoration: none; }
 .pulse-cat:hover .pc-name { color: var(--accent); }
 .pulse-cat .pc-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pulse-cat .pc-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
 .pulse-cat .pc-track { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .pulse-cat .pc-track > span { display: block; height: 100%; border-radius: 999px; }
-.pulse-cat .pc-val { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; }
+.pulse-cat .pc-val { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; white-space: nowrap; }
 /* §4 тренд капіталу — дельта-бейдж справа у шапці */
 .cap-delta { display: flex; flex-direction: column; align-items: flex-end; font-size: 13.5px; font-weight: 600; }
 .cap-delta.pos { color: var(--pos); }
@@ -1334,7 +1358,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .fact.fact-click:disabled { cursor: default; opacity: 0.65; }
 .stat-facts .fact-label-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .stat-facts .fact-label { font-size: 12px; color: var(--muted); }
-.stat-facts .fact-label-row .info-tip { width: 17px; height: 17px; margin: -3px -4px -3px 0; }
+/* §1: без від'ємних side-margin — інакше іконка тулиться до правого краю картки (без падінгу) */
+.stat-facts .fact-label-row .info-tip { width: 17px; height: 17px; margin: -3px 0; flex-shrink: 0; }
 .stat-facts .fact-val { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 7px; min-width: 0; }
 .stat-facts .fact-val.pos { color: var(--pos); }
 .stat-facts .fact-val.neg { color: var(--neg); }
@@ -1393,6 +1418,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .cat-ai-title { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
 .cat-ai-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 .cat-ai-btn { white-space: nowrap; flex-shrink: 0; }
+/* §1: «голий» .card, що розкривається під KPI/фактом (embedded SliceDrillPanel) — .card сам
+   по собі без падінгу, тож без цього класу контент прилипає впритул до країв картки. */
+.drill-open-card { padding: 14px 16px 16px; }
 /* панель деталізації категорії — виділена як вкладений блок, щоб розкриття було помітним */
 .cat-drill {
   display: flex; flex-direction: column; gap: 14px;
@@ -1422,12 +1450,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .drill-tx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drill-tx-date { color: var(--muted); font-size: 11.5px; }
 .drill-tx-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); }
-.drill-row { display: grid; grid-template-columns: 1fr 50px auto; align-items: center; gap: 8px; font-size: 12.5px; }
+.drill-row { display: grid; grid-template-columns: 1fr 50px 72px; align-items: center; gap: 8px; font-size: 12.5px; }
 .drill-name { display: inline-flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drill-name .d { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
 .drill-track { height: 5px; border-radius: 999px; background: var(--surface); overflow: hidden; }
 .drill-track span { display: block; height: 100%; border-radius: 999px; }
-.drill-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); }
+.drill-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); white-space: nowrap; }
 
 /* категорії — горизонтальні бари (Finexa R3) */
 .catbars { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
@@ -1437,7 +1465,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .catbar .cb-track { display: block; flex: 1; height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; min-width: 40px; }
 .catbar .cb-fill { display: block; height: 100%; border-radius: 999px; min-width: 4px; }
 .catbar .cb-val { width: 92px; text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13px; }
-.catbar .cb-pct { width: 40px; text-align: right; color: var(--muted); font-size: 12.5px; }
+/* §1: min-width, не фіксована — дельта-пігулка (+4862% буває в репортах) не вміщається
+   у 40px і вилазила за межі картки; flex-shrink:0 не дає їй стиснутись/накластись. */
+.catbar .cb-pct { min-width: 40px; flex-shrink: 0; text-align: right; color: var(--muted); font-size: 12.5px; }
 @media (max-width: 520px) { .catbar .cb-name { width: 110px; } .catbar .cb-val { width: 74px; } }
 
 /* топ-мерчанти з лого */
@@ -1564,7 +1594,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .bch-prop-name { font-size: 13.5px; }
 .bch-prop-name b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .bch-prop-reason { font-size: 12px; color: var(--muted); line-height: 1.4; margin-top: 2px; }
-.bch-input { display: flex; gap: 8px; }
+/* §1: рамка-роздільник зверху — інакше інпут «висить» у порожнечі без візуального зв'язку
+   з підказкою/чипами чи історією повідомлень вище (нема жодного розділювача). */
+.bch-input { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .bch-input input { flex: 1; }
 
 /* §3 бюджет-конверти: картки з прогрес-баром (ліміт/факт/залишок/стан) */
@@ -1659,6 +1691,46 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .imp-legend .lg .d { width: 9px; height: 9px; border-radius: 3px; }
 .imp-legend .lg b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
+/* §E5 — збільшений блок Вагомості: вищий бар з підписами + картки-рівні */
+.imp-bar-lg { height: 26px; border-radius: 8px; }
+.imp-bar-lg span { display: flex; align-items: center; justify-content: center; }
+.imp-seg-lbl { font-size: 11.5px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+.imp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.imp-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-width: 0; }
+.imp-card-top { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+.imp-card-top .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.imp-card-amt { font-size: 18px; }
+.imp-card-pct { font-size: 11.5px; }
+@media (max-width: 560px) { .imp-cards { grid-template-columns: 1fr; } }
+
+/* §E1 — разові vs регулярні */
+.split-bar { display: flex; height: 26px; border-radius: 8px; overflow: hidden; background: var(--surface-2); margin-bottom: 4px; }
+.split-bar span { display: block; height: 100%; }
+.oneoff-list { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.oneoff-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; padding: 6px 0; font-size: 13px; }
+.oneoff-row + .oneoff-row { border-top: 1px solid var(--line); }
+.oor-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.oor-cat { font-size: 12px; }
+.oor-date { font-size: 12px; }
+.oor-amt { font-weight: 600; white-space: nowrap; }
+
+/* §E3 — темп по категоріях */
+.pace-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 8px 4px; font-size: 13px; }
+.pace-row + .pace-row { border-top: 1px solid var(--line); }
+.pace-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pace-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.pace-nums { white-space: nowrap; font-size: 12.5px; }
+.num-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+/* §E4 — дрейф цін / персональна інфляція */
+.drift-index { display: flex; align-items: baseline; gap: 10px; padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.drift-index-val { font-size: 22px; }
+.drift-list { margin-top: 10px; }
+.drift-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 7px 0; font-size: 13px; }
+.drift-row + .drift-row { border-top: 1px solid var(--line); }
+.drift-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-transform: capitalize; }
+.drift-units { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+
 /* §5/§2 — цитата операції в тексті AI (клікабельний чип → /tx/:id) */
 .tx-cite {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1686,7 +1758,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .rc-foot { display: flex; align-items: baseline; justify-content: space-between; margin-top: auto; font-size: 11.5px; color: var(--muted); }
 .rc-open { color: var(--accent); font-weight: 500; }
 
-.anomaly { display: flex; gap: 10px; align-items: flex-start; padding: 9px 10px; border-radius: 10px; }
+/* §1: без border-radius на самому рядку — з border-top-роздільником це давало дивний
+   «зрізаний» кут біля округлених країв зовнішньої картки, коли її padding замалий. */
+.anomaly { display: flex; gap: 10px; align-items: flex-start; padding: 10px 4px; }
 .anomaly + .anomaly { border-top: 1px solid var(--line); }
 .anomaly .an-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; background: var(--muted); }
 .anomaly.warn .an-dot { background: var(--warn, #c9871a); }

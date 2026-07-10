@@ -8,7 +8,7 @@ import {
   useGetProfileQuery,
   useSetProfileMutation,
   useGetAiUsageQuery,
-  useGetAiModelQuery,
+  useGetAiModelsQuery,
   useSetAiModelMutation,
   useGetSetupStatusQuery,
   useLogoutMutation,
@@ -19,6 +19,7 @@ import {
   useScanAlertsMutation,
   useSyncAccountsMutation,
 } from "../store/api.ts";
+import type { AiTask, AiModelToken } from "../store/api.ts";
 
 // Крок бекфілу раз на 60с (ліміт моно 1/60с), клієнт веде таймінг і показує прогрес (§5).
 const STEP_INTERVAL_MS = 60_000;
@@ -225,30 +226,49 @@ function AiUsageCard() {
       </div>
       <AiModelToggle />
       <p className="ai-block-hint" style={{ marginTop: 8, marginBottom: 0 }}>
-        Орієнтовна вартість запитів до Claude (Haiku масово, розумна модель для порадника/репортів/чату). Оцінка за токенами, не рахунок.
+        Модель окремо на задачу. Категоризація/OCR завжди на Haiku. Вартість — оцінка за токенами, не рахунок.
       </p>
     </div>
   );
 }
 
-// Перемикач розумної моделі (порадник/репорти/чат/бюджет). Enrich/OCR завжди на Haiku.
+// Моделі ОКРЕМО НА ЗАДАЧУ. Три головні задачі змінні; enrich/OCR завжди на Haiku.
+const MODEL_META: Record<AiModelToken, { name: string; price: string }> = {
+  haiku: { name: "Haiku 4.5", price: "$1/$5" },
+  sonnet: { name: "Sonnet 5", price: "$3/$15" },
+  opus: { name: "Opus 4.8", price: "$5/$25" },
+};
+const AI_MODEL_ROWS: { task: AiTask; label: string; hint: string; options: AiModelToken[] }[] = [
+  { task: "report", label: "Репорти", hint: "глибокий розбір періоду — варто найкращої моделі", options: ["sonnet", "opus"] },
+  { task: "advisor", label: "Порадник", hint: "поради на твоїх числах і чат", options: ["haiku", "sonnet", "opus"] },
+  { task: "insight", label: "AI-огляд у Статистиці", hint: "короткий коментар — масово, дешево", options: ["haiku", "sonnet"] },
+];
+
 function AiModelToggle() {
-  const { data } = useGetAiModelQuery();
+  const { data } = useGetAiModelsQuery();
   const [setModel, { isLoading }] = useSetAiModelMutation();
-  const model = data?.model ?? "sonnet";
+  const models = data?.models;
   return (
-    <div className="ai-model-row">
-      <div className="ai-model-info">
-        <span className="ai-model-label">Розумна модель</span>
-        <span className="ai-model-hint">{model === "opus" ? "Opus 4.8 — найкраща якість (~$5/$25 за MTok)" : "Sonnet 5 — баланс якість/ціна (~$3/$15)"}</span>
-      </div>
-      <div className="seg">
-        {(["sonnet", "opus"] as const).map((m) => (
-          <button key={m} className={`seg-btn ${model === m ? "active" : ""}`} disabled={isLoading} onClick={() => setModel(m)}>
-            {m === "sonnet" ? "Sonnet 5" : "Opus 4.8"}
-          </button>
-        ))}
-      </div>
+    <div className="ai-model-list">
+      {AI_MODEL_ROWS.map((row) => {
+        const cur = models?.[row.task] ?? "sonnet";
+        return (
+          <div key={row.task} className="ai-model-row">
+            <div className="ai-model-info">
+              <span className="ai-model-label">{row.label}</span>
+              <span className="ai-model-hint">{row.hint} · {MODEL_META[cur].price} за MTok</span>
+            </div>
+            <div className="seg">
+              {row.options.map((m) => (
+                <button key={m} className={`seg-btn ${cur === m ? "active" : ""}`} disabled={isLoading}
+                  onClick={() => setModel({ task: row.task, model: m })}>
+                  {MODEL_META[m].name}
+                </button>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { useGetReportsQuery, useGetReportQuery, useGenerateReportMutation } from "../store/api.ts";
 import type { ReportListItem, FinancialReport } from "../store/api.ts";
 import { toast } from "../lib/toast.ts";
-import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { formatMinor } from "../lib/format.ts";
 import { renderRich } from "../lib/citations.tsx";
 import { CashflowChart } from "../components/CashflowChart.tsx";
@@ -173,7 +173,7 @@ export function ReportDetail() {
         {r.anomalies?.length > 0 && (
           <section>
             <div className="section-head"><h2>Аномалії</h2></div>
-            <div className="card" style={{ padding: 8 }}>
+            <div className="card" style={{ padding: "6px 14px" }}>
               {r.anomalies.map((a, i) => (
                 <div key={i} className={`anomaly ${sevClass(a.severity)}`}>
                   <span className="an-dot" />
@@ -263,6 +263,20 @@ function barColor(i: number): string { return CAT_COLORS[i % CAT_COLORS.length];
 const MONTHS = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
 function monthLabel(m: string): string { const p = m.split("-"); return MONTHS[Number(p[1]) - 1] ?? m; }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function DonutTooltip(props: any) {
+  const { active, payload } = props;
+  if (!active || !payload?.length) return null;
+  const d = payload[0];
+  return (
+    <div className="chart-tip">
+      <div className="tip-lbl">{d.name}</div>
+      <div className="r"><span className="d" style={{ background: d.payload.color }} />{formatMinor(d.value * 100, { decimals: false })} ₴</div>
+      <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{d.payload.pct}% від суми</div>
+    </div>
+  );
+}
+
 // §5: донат розподілу витрат по категоріях (топ-8 + «інші»).
 function CategoryDonut({ cats }: { cats: FinancialReport["category_breakdown"] }) {
   const top = cats.slice(0, 8).map((c, i) => ({ name: c.name, value: Math.abs(c.amount_uah), color: barColor(i) }));
@@ -270,13 +284,15 @@ function CategoryDonut({ cats }: { cats: FinancialReport["category_breakdown"] }
   if (restSum > 0) top.push({ name: "інші", value: restSum, color: "#9aa5a0" });
   const total = top.reduce((s, d) => s + d.value, 0);
   if (!total) return null;
+  const withPct = top.map((d) => ({ ...d, pct: Math.round((d.value / total) * 100) }));
   return (
     <div className="report-donut">
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
-          <Pie data={top} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={82} paddingAngle={1.5} strokeWidth={0}>
-            {top.map((d, i) => <Cell key={i} fill={d.color} />)}
+          <Pie data={withPct} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={82} paddingAngle={1.5} strokeWidth={0}>
+            {withPct.map((d, i) => <Cell key={i} fill={d.color} />)}
           </Pie>
+          <Tooltip content={<DonutTooltip />} />
         </PieChart>
       </ResponsiveContainer>
       <div className="donut-center">

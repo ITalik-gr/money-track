@@ -1,5 +1,6 @@
 import { useGetOverviewQuery } from "../store/api.ts";
 import { CashflowChart } from "./CashflowChart.tsx";
+import { InfoTip } from "./InfoTip.tsx";
 
 // Огляд: грошовий потік за 6 місяців (DESIGN.md §7 F1, DeliFin R1).
 const MONTHS = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
@@ -22,7 +23,10 @@ export function CashflowCard() {
     <div className="card cashflow">
       <div className="cashflow-head">
         <div>
-          <span className="label">грошовий потік · 6 міс</span>
+          <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            грошовий потік · 6 міс
+            <InfoTip>Надходження мінус витрати щомісяця за останні 6 місяців (зведено в ₴). Сума над стовпцями — чистий підсумок за весь період.</InfoTip>
+          </span>
           <div className={`cf-total num-hero ${net < 0 ? "neg" : "pos"}`}>
             {net >= 0 ? "+" : "−"}{fmt0.format(Math.abs(net) / 100)}<span className="cur">₴</span>
           </div>

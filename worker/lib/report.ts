@@ -9,7 +9,7 @@ import {
   lastCompletePeriod, currentPeriodToDate,
 } from "./stats.ts";
 import { plannedActuals } from "./subscriptions.ts";
-import { generateFinancialReport, logUsage } from "./ai.ts";
+import { generateFinancialReport, logUsage, getTaskModel, callCostUsd } from "./ai.ts";
 
 export type ReportType = "week" | "month";
 // last = завершений період (крон); current = поточний до сьогодні (ручна генерація/тест).
@@ -155,13 +155,6 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
   return { period: { type, scope, from, to }, context, trend, importance: importanceBreakdown };
 }
 
-// Ціна одного виклику Sonnet 5 (орієнтир для cost_usd у рядку репорту).
-function reportCostUsd(u: { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }): number {
-  const cacheRead = u.cache_read_input_tokens ?? 0;
-  const cacheWrite = u.cache_creation_input_tokens ?? 0;
-  return (u.input_tokens * 3 + u.output_tokens * 15 + cacheRead * 0.3 + cacheWrite * 3.75) / 1_000_000;
-}
-
 // Згенерувати й зберегти репорт. force=false → пропускає, якщо для періоду вже є (крон).
 export async function generateAndStoreReport(
   env: Env,
@@ -180,9 +173,10 @@ export async function generateAndStoreReport(
   ).bind(type).all<{ summary: string | null }>();
   const priorSummaries = (prior.results ?? []).map((r) => r.summary).filter(Boolean);
 
+  const model = await getTaskModel(env, "report");
   const { result, usage } = await generateFinancialReport(env, { ...(context as object), prior_reports: priorSummaries });
   logUsage("report", usage);
-  const cost = reportCostUsd(usage);
+  const cost = callCostUsd(model, usage);
   const now = Math.floor(Date.now() / 1000);
   const summary = result.summary || result.headline || "";
   // Зберігаємо AI-результат + детерміновані дані (тренд, вагомість) для графіків на сторінці.
@@ -191,12 +185,12 @@ export async function generateAndStoreReport(
   if (existing) {
     await env.DB.prepare(
       "UPDATE ai_reports SET created_at = ?, model = ?, cost_usd = ?, summary = ?, data_json = ? WHERE id = ?",
-    ).bind(now, "claude-sonnet-5", cost, summary, stored, existing.id).run();
+    ).bind(now, model, cost, summary, stored, existing.id).run();
     return { id: existing.id, created: false };
   }
   const ins = await env.DB.prepare(
     `INSERT INTO ai_reports (period_type, period_from, period_to, created_at, model, cost_usd, summary, data_json)
-     VALUES (?, ?, ?, ?, 'claude-sonnet-5', ?, ?, ?)`,
-  ).bind(type, period.from, period.to, now, cost, summary, stored).run();
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(type, period.from, period.to, now, model, cost, summary, stored).run();
   return { id: Number(ins.meta.last_row_id), created: true };
 }

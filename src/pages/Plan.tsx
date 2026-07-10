@@ -81,7 +81,7 @@ function BudgetChat() {
       <div className="section-head"><h2>💬 Бюджет-діалог</h2><span className="label">опиши — AI підбере ліміти</span></div>
       <div className="card" style={{ padding: 16 }}>
         {msgs.length === 0 && (
-          <div className="stack" style={{ gap: 8 }}>
+          <div className="stack" style={{ gap: 10, marginBottom: 16 }}>
             <p className="ai-block-hint" style={{ margin: 0 }}>Опиши, який бюджет хочеш — AI запропонує ліміти по категоріях і пояснить чому. Можна обговорювати й коригувати.</p>
             <div className="bch-starters">
               {starters.map((s) => <button key={s} className="bch-starter" onClick={() => send(s)}>{s}</button>)}

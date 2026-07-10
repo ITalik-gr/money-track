@@ -1,12 +1,14 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { useGetCurrenciesQuery, useGetOverviewQuery, useGetCategoryDrillQuery, useGetSliceDrillQuery, useGetTransfersStatusQuery, useGetCompareQuery, useGetPeriodModeQuery, useSetPeriodModeMutation } from "../store/api.ts";
+import { useGetCurrenciesQuery, useGetOverviewQuery, useGetCategoryDrillQuery, useGetSliceDrillQuery, useGetTransfersStatusQuery, useGetCompareQuery, useGetPatternsQuery, useGetPeriodModeQuery, useSetPeriodModeMutation } from "../store/api.ts";
 import type { Overview, DrillTx } from "../store/api.ts";
 import { TransferReviewModal } from "../components/TransferReviewModal.tsx";
 import { currencySign, formatMinor, formatDate } from "../lib/format.ts";
 import { CashflowChart } from "../components/CashflowChart.tsx";
 import { CumulativeChart } from "../components/CumulativeChart.tsx";
 import { IncomeBreakdown } from "../components/IncomeBreakdown.tsx";
+import { ReceiptItems } from "../components/ReceiptItems.tsx";
+import { PriceDrift } from "../components/PriceDrift.tsx";
 import { AiInsightCard } from "../components/AiInsightCard.tsx";
 import { MerchantLogo } from "../components/MerchantLogo.tsx";
 import { TxItem } from "../components/TxItem.tsx";
@@ -197,6 +199,7 @@ export function Stats() {
                   )}
                 </div>
                 <ImportanceBreakdown data={data} sign={sign} />
+                <SpendingPatterns />
                 <section>
                   <div className="section-head"><h2>Грошовий потік</h2><span className="label">витрати й надходження</span></div>
                   <div className="card cashflow">
@@ -218,6 +221,8 @@ export function Stats() {
                     <CategoryBreakdown rows={data.byCategory} from={from} to={to} currency={currency} sign={sign} />
                   ) : <div className="card empty">Немає витрат за період.</div>}
                 </section>
+                <ReceiptItems from={from} to={to} sign={sign} />
+                <PriceDrift />
                 <PeriodCompare range={range} mode={mode} currency={currency} sign={sign} />
               </>
             )}
@@ -284,7 +289,7 @@ function ClickableKpis({ data, sign, net, avgDay, from, to, currency }: {
         </div>
       </div>
       {open && (
-        <div className="card">
+        <div className="card drill-open-card">
           <div className="label" style={{ marginBottom: 6 }}>
             {open === "expense" ? "Усі витрати, що рахуються" : "Усі надходження"} за період
           </div>
@@ -317,7 +322,7 @@ function CategoryBreakdown({ rows, from, to, currency, sign }: {
         <HoverTip content={
           <><div className="tip-lbl">{e.category_name ?? "без категорії"}</div>
           <div className="r"><span className="d" style={{ background: color }} />{formatMinor(e.spent, { decimals: false })} {sign}</div>
-          <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{p.toFixed(0)}% · {e.n} оп.</div></>
+          <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{p.toFixed(0)}% · {e.n} оп. · сер. {formatMinor(Math.round(e.spent / Math.max(1, e.n)), { decimals: false })} {sign}</div></>
         }>
           <button type="button" className={`catbar catbar-btn ${open ? "open" : ""}`}
             onClick={() => id != null && setOpenId(open ? null : id)}>
@@ -469,7 +474,7 @@ function MerchantsBlock({ data, from, to, currency, sign, merchMax }: {
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div className="m-val">{formatMinor(m.spent, { decimals: false })} {sign}</div>
-                    <div className="m-sub">{m.n} оп.</div>
+                    <div className="m-sub">{m.n} оп. · сер. {formatMinor(Math.round(m.spent / m.n), { decimals: false })} {sign}</div>
                   </div>
                 </button>
                 {isOpen && <SliceDrillPanel dim="merchant" value={m.merchant} from={from} to={to} currency={currency} sign={sign} />}
@@ -785,7 +790,7 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
         </div>
       </div>
       {openPriciest && priciest && priciest.spend > 0 && (
-        <div className="card" style={{ marginBottom: 14 }}>
+        <div className="card drill-open-card" style={{ marginBottom: 14 }}>
           <div className="label" style={{ marginBottom: 6 }}>{labelFor(priciest.bucket)} — операції за день</div>
           <SliceDrillPanel dim="day" value={priciest.bucket} from={from} to={to} currency={currency} sign={sign} embedded />
         </div>
@@ -858,6 +863,107 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
 }
 
 // §6: смуга частки витрат за вагомістю (обов'язкові / бажані / необов'язкові).
+// §E1/E2/E3: детерміновані патерни витрат цього місяця (без AI).
+function SpendingPatterns() {
+  const { data } = useGetPatternsQuery();
+  if (!data) return null;
+  const { recurring, anomalies, pace } = data;
+  const reg = recurring.recurring.spent;
+  const one = recurring.oneoff.spent;
+  const tot = reg + one;
+  const dfmt = new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short" });
+  const hasAny = tot > 0 || anomalies.length > 0 || pace.length > 0;
+  if (!hasAny) return null;
+
+  return (
+    <>
+      {tot > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>Разові vs регулярні</h2>
+            <HoverTip content={<>Регулярні — витрати в мерчантів, що повторюються з місяця в місяць (продукти, транспорт, підписки). Разові — все інше (податки, стоматолог, велика покупка). Так видно «нормальний» місяць без викидів. <b>Цей місяць.</b></>}>
+              <span className="label">цей місяць · що це?</span>
+            </HoverTip>
+          </div>
+          <div className="card" style={{ padding: 16 }}>
+            <div className="split-bar">
+              {reg > 0 && <span style={{ width: `${(reg / tot) * 100}%`, background: "#1f6e4c" }} title={`Регулярні: ${Math.round((reg / tot) * 100)}%`} />}
+              {one > 0 && <span style={{ width: `${(one / tot) * 100}%`, background: "#c9871a" }} title={`Разові: ${Math.round((one / tot) * 100)}%`} />}
+            </div>
+            <div className="imp-legend">
+              <span className="lg"><span className="d" style={{ background: "#1f6e4c" }} />Регулярні · <b>{formatMinor(reg, { decimals: false })} ₴</b> <span className="muted">({recurring.recurring.n} оп)</span></span>
+              <span className="lg"><span className="d" style={{ background: "#c9871a" }} />Разові · <b>{formatMinor(one, { decimals: false })} ₴</b> <span className="muted">({recurring.oneoff.n} оп)</span></span>
+            </div>
+            {recurring.oneoff_items.length > 0 && (
+              <div className="oneoff-list">
+                <div className="label" style={{ marginBottom: 6 }}>Найбільші разові</div>
+                {recurring.oneoff_items.map((it, i) => (
+                  <div key={i} className="oneoff-row">
+                    <span className="oor-name">{it.merchant ?? it.category ?? "операція"}</span>
+                    <span className="oor-cat muted">{it.category ?? "—"}</span>
+                    <span className="oor-date muted">{dfmt.format(it.time * 1000)}</span>
+                    <span className="oor-amt num-mono">{formatMinor(it.amount, { decimals: false })} ₴</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {anomalies.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>Радар аномалій</h2>
+            <HoverTip content={<>Категорії, чий прогноз на кінець місяця (за поточним темпом) помітно вищий за твій звичний місяць (середнє за 6 міс). Ранній сигнал, що витрати десь розігналися.</>}>
+              <span className="label">що це?</span>
+            </HoverTip>
+          </div>
+          <div className="card" style={{ padding: 8 }}>
+            {anomalies.map((a, i) => (
+              <div key={i} className="anomaly warn">
+                <span className="an-dot" style={{ background: a.color ?? undefined }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b>{a.category}</b>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    прогноз ≈{formatMinor(a.projected, { decimals: false })} ₴ проти звичних {formatMinor(a.usual, { decimals: false })} ₴
+                  </div>
+                </div>
+                <span className="cmp-delta up">+{a.pct - 100}%</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {pace.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>Темп по категоріях</h2>
+            <HoverTip content={<>Скільки вже витрачено цього місяця (факт), лінійний прогноз на кінець місяця й твій звичний місяць. Бейдж — прогноз відносно звичного: &lt;100% нижче норми, &gt;100% вище.</>}>
+              <span className="label">факт · прогноз · звичне</span>
+            </HoverTip>
+          </div>
+          <div className="card" style={{ padding: 8 }}>
+            {pace.map((p, i) => (
+              <div key={i} className="pace-row">
+                <span className="pace-name"><span className="d" style={{ background: p.color ?? "var(--accent)" }} />{p.category}</span>
+                <span className="pace-nums num-mono">
+                  {formatMinor(p.spent, { decimals: false })} → <b>≈{formatMinor(p.projected, { decimals: false })}</b> ₴
+                  <span className="muted"> / {formatMinor(p.usual, { decimals: false })}</span>
+                </span>
+                {p.pct != null && (
+                  <span className={`cmp-delta ${p.pct > 115 ? "up" : p.pct < 85 ? "down" : "flat"}`}>{p.pct}%</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </>
+  );
+}
+
 function ImportanceBreakdown({ data, sign }: { data: Overview; sign: string }) {
   const rows = data.byImportance ?? [];
   const total = rows.reduce((s, r) => s + Math.abs(r.spent), 0);
@@ -871,23 +977,29 @@ function ImportanceBreakdown({ data, sign }: { data: Overview; sign: string }) {
           <span className="label">що це?</span>
         </HoverTip>
       </div>
-      <div className="card" style={{ padding: 16 }}>
-        <div className="imp-bar">
+      <div className="card" style={{ padding: 18 }}>
+        <div className="imp-bar imp-bar-lg">
           {IMPORTANCE_LEVELS.map((lv) => {
             const v = byLevel(lv);
             if (!v) return null;
-            return <span key={lv} style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }} title={`${IMPORTANCE_META[lv].label}: ${Math.round((v / total) * 100)}%`} />;
+            const pct = Math.round((v / total) * 100);
+            return (
+              <span key={lv} style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }} title={`${IMPORTANCE_META[lv].label}: ${pct}%`}>
+                {pct >= 8 && <span className="imp-seg-lbl">{pct}%</span>}
+              </span>
+            );
           })}
         </div>
-        <div className="imp-legend">
+        <div className="imp-cards">
           {IMPORTANCE_LEVELS.map((lv) => {
             const v = byLevel(lv);
             const pct = Math.round((v / total) * 100);
             return (
-              <span key={lv} className="lg">
-                <span className="d" style={{ background: IMPORTANCE_META[lv].color }} />
-                {IMPORTANCE_META[lv].label} · <b>{pct}%</b> <span className="muted">({formatMinor(v, { decimals: false })} {sign})</span>
-              </span>
+              <div key={lv} className="imp-card">
+                <span className="imp-card-top"><span className="d" style={{ background: IMPORTANCE_META[lv].color }} />{IMPORTANCE_META[lv].label}</span>
+                <span className="imp-card-amt num-hero">{formatMinor(v, { decimals: false })} {sign}</span>
+                <span className="imp-card-pct muted">{pct}% витрат</span>
+              </div>
             );
           })}
         </div>

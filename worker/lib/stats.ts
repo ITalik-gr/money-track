@@ -7,6 +7,7 @@
 //     інакше рол-ап звичайної category_id;
 //   • зведення валют у ₴ через курси (inline CASE), опційно — «чиста» валюта.
 import type { Rates } from "./finance.ts";
+import type { Env } from "../env.ts";
 
 export const TRANSFER_CAT = 13; // «Перекази і зняття» (+ діти через рол-ап)
 
@@ -74,6 +75,71 @@ export const INCOME_COUNT = `SUM(CASE WHEN ${INCOME_WHERE} THEN 1 ELSE 0 END)`;
 // Сума однієї канонічної гілки (byCategory/byMerchant — SPEND_WHERE уже у WHERE рядка).
 export function amountSum(mult: string): string {
   return `CAST(ROUND(COALESCE(SUM((-t.amount) * ${mult}), 0)) AS INTEGER)`;
+}
+
+// ---- §E1: Разові vs регулярні (канонічно) -----------------------------------
+// «Регулярний» мерчант = має витрати у ≥RECUR_MIN_MONTHS РІЗНИХ календарних місяцях у
+// трейлінг-референс-вікні. Це відділяє звичні щомісячні витрати (продукти, транспорт,
+// підписки) від разових (податки, стоматолог, велика покупка), щоб «нормальний» місячний
+// burn не спотворювався викидами. Детерміновано, без AI. Мерчант NULL → разове.
+export const RECUR_MIN_MONTHS = 3;
+
+// Підзапит мерчантів, що кваліфікуються як регулярні (легкий фільтр — рекуренція евристична).
+function recurringMerchantsSubquery(refFrom: number, to: number): string {
+  return `SELECT merchant FROM transactions
+    WHERE time >= ${Math.trunc(refFrom)} AND time <= ${Math.trunc(to)}
+      AND amount < 0 AND transfer_pair_id IS NULL AND is_transfer = 0
+      AND merchant IS NOT NULL AND merchant <> ''
+    GROUP BY merchant
+    HAVING COUNT(DISTINCT strftime('%Y-%m', time, 'unixepoch')) >= ${RECUR_MIN_MONTHS}`;
+}
+// Булевий вираз «поточний рядок t — регулярний» (для CASE/фільтрів). Потребує alias `t`.
+export function isRecurringExpr(refFrom: number, to: number): string {
+  return `(t.merchant IS NOT NULL AND t.merchant IN (${recurringMerchantsSubquery(refFrom, to)}))`;
+}
+
+export interface SplitBucket { spent: number; n: number }
+export interface OneoffItem { merchant: string | null; category: string | null; amount: number; time: number }
+export interface RecurringSplit {
+  ref_from: number;
+  recurring: SplitBucket;
+  oneoff: SplitBucket;
+  oneoff_items: OneoffItem[];  // найбільші разові витрати періоду
+}
+
+// Референс-вікно за замовчуванням — 6 календарних місяців назад від `to` (щоб було з чого
+// рахувати «≥3 місяці»).
+export function defaultRefFrom(to: number): number {
+  const d = new Date(to * 1000);
+  return Math.floor(new Date(d.getFullYear(), d.getMonth() - 5, 1).getTime() / 1000);
+}
+
+// Канонічний split витрат періоду на регулярні/разові + топ разових. Зведено в ₴ (mult).
+export async function recurringOneoffSplit(
+  env: Env, from: number, to: number, mult: string, refFrom = defaultRefFrom(to),
+): Promise<RecurringSplit> {
+  const recur = isRecurringExpr(refFrom, to);
+  const [split, items] = await Promise.all([
+    env.DB.prepare(
+      `SELECT CASE WHEN ${recur} THEN 'recurring' ELSE 'oneoff' END AS kind,
+              ${amountSum(mult)} AS spent, COUNT(*) AS n
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
+       GROUP BY kind`,
+    ).bind(from, to).all<{ kind: string; spent: number; n: number }>(),
+    env.DB.prepare(
+      `SELECT t.merchant AS merchant, ${EFF_CAT_NAME} AS category,
+              CAST(ROUND((-t.amount) * ${mult}) AS INTEGER) AS amount, t.time AS time
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND NOT ${recur}
+       ORDER BY amount DESC LIMIT 6`,
+    ).bind(from, to).all<OneoffItem>(),
+  ]);
+  const get = (k: string): SplitBucket => {
+    const r = (split.results ?? []).find((x) => x.kind === k);
+    return { spent: r?.spent ?? 0, n: r?.n ?? 0 };
+  };
+  return { ref_from: refFrom, recurring: get("recurring"), oneoff: get("oneoff"), oneoff_items: items.results ?? [] };
 }
 
 // ---- Періоди (календарний ⇄ ковзний) ----------------------------------------

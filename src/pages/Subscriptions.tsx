@@ -13,6 +13,7 @@ import {
 } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
 import { MerchantLogo } from "../components/MerchantLogo.tsx";
+import { SubsCalendar } from "../components/SubsCalendar.tsx";
 import { toast } from "../lib/toast.ts";
 import { Select } from "../components/Select.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
@@ -207,6 +208,8 @@ export function Subscriptions() {
             })}
           </div>
         )}
+
+        <SubsCalendar />
 
         <AiDetect />
         <Detected />

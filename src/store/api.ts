@@ -85,6 +85,8 @@ export interface Advice {
   facts?: AiFact[];
   suggestions: { title: string; detail: string; action?: AdviceAction | null }[];
   own_funds: number;
+  cushion: number;
+  debt: number;
   monthly_burn: number;
   runway_months: number | null;
   usage?: AiUsageBrief;
@@ -140,6 +142,8 @@ export interface Overview {
   byImportance: { importance: string; spent: number; n: number }[];
 }
 export type PeriodMode = "calendar" | "rolling";
+export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group";
+export type AiModelToken = "haiku" | "sonnet" | "opus";
 export type Preset = "week" | "month" | "quarter" | "year";
 
 export interface CompareBucket {
@@ -247,6 +251,32 @@ export interface IncomeAnalytics {
 export interface UpcomingSubs {
   days: number; total: number;
   items: { id: number; title: string; amount: number; at: number; days_until: number }[];
+}
+
+export interface ReceiptItemsAnalytics {
+  items: { name: string; total: number; qty: number; n: number }[];
+  receipts: number; total_items: number;
+}
+
+// §E4: дрейф цін / персональна інфляція по позиціях чеків.
+export interface PriceDrift {
+  window: { from: number; to: number };
+  basket_change_pct: number | null;
+  tracked: number;
+  items: { name: string; first_unit: number; last_unit: number; change_pct: number; n: number; first_at: number; last_at: number }[];
+}
+
+// §E1/E2/E3: детерміновані патерни витрат цього місяця.
+export interface SpendPatterns {
+  period: { from: number; to: number; elapsed_frac: number };
+  recurring: {
+    ref_from: number;
+    recurring: { spent: number; n: number };
+    oneoff: { spent: number; n: number };
+    oneoff_items: { merchant: string | null; category: string | null; amount: number; time: number }[];
+  };
+  anomalies: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number }[];
+  pace: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number | null }[];
 }
 
 export interface SetupStatus {
@@ -379,9 +409,9 @@ export const api = createApi({
       query: (mode) => ({ url: "/settings/period-mode", method: "PUT", body: { mode } }),
       invalidatesTags: ["Setup", "Tx"],
     }),
-    getAiModel: b.query<{ model: "sonnet" | "opus" }, void>({ query: () => "/settings/ai-model", providesTags: ["Setup"] }),
-    setAiModel: b.mutation<{ ok: boolean; model: "sonnet" | "opus" }, "sonnet" | "opus">({
-      query: (model) => ({ url: "/settings/ai-model", method: "PUT", body: { model } }),
+    getAiModels: b.query<{ models: Record<AiTask, AiModelToken> }, void>({ query: () => "/settings/ai-models", providesTags: ["Setup"] }),
+    setAiModel: b.mutation<{ ok: boolean; task: AiTask; model: AiModelToken }, { task: AiTask; model: AiModelToken }>({
+      query: (body) => ({ url: "/settings/ai-models", method: "PUT", body }),
       invalidatesTags: ["Setup"],
     }),
     getCurrencies: b.query<number[], void>({ query: () => "/analytics/currencies" }),
@@ -391,6 +421,12 @@ export const api = createApi({
       providesTags: ["Tx"],
     }),
     getUpcomingSubs: b.query<UpcomingSubs, number | void>({ query: (days) => `/planned/upcoming?days=${days ?? 30}`, providesTags: ["Tx", "Planned"] }),
+    getReceiptItems: b.query<ReceiptItemsAnalytics, { from: number; to: number; limit?: number }>({
+      query: ({ from, to, limit }) => `/analytics/receipt-items?from=${from}&to=${to}${limit ? `&limit=${limit}` : ""}`,
+      providesTags: ["Tx"],
+    }),
+    getPatterns: b.query<SpendPatterns, void>({ query: () => "/analytics/patterns", providesTags: ["Tx"] }),
+    getPriceDrift: b.query<PriceDrift, void>({ query: () => "/analytics/price-drift", providesTags: ["Tx"] }),
     getCompare: b.query<Compare, { from: number; to: number; currency?: number | null; bfrom?: number; bto?: number }>({
       query: ({ from, to, currency, bfrom, bto }) =>
         `/analytics/compare?from=${from}&to=${to}${currency ? `&currency=${currency}` : ""}` +
@@ -599,7 +635,7 @@ export const {
   useGetPlannedActualsQuery,
   useGetPeriodModeQuery,
   useSetPeriodModeMutation,
-  useGetAiModelQuery,
+  useGetAiModelsQuery,
   useSetAiModelMutation,
   useGetReportsQuery,
   useGetReportQuery,
@@ -614,6 +650,9 @@ export const {
   useGetForecastQuery,
   useGetIncomeAnalyticsQuery,
   useGetUpcomingSubsQuery,
+  useGetReceiptItemsQuery,
+  useGetPatternsQuery,
+  useGetPriceDriftQuery,
   useGetCompareQuery,
   useGetCategoryDrillQuery,
   useGetSliceDrillQuery,
