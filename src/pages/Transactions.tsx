@@ -169,14 +169,14 @@ export function Transactions() {
           <div className="filt-label">Сума, ₴</div>
           <div className="filt-range" style={{ marginBottom: 14 }}>
             <input type="number" inputMode="decimal" min="0" placeholder="від" value={amin} onChange={(e) => patch({ amin: e.target.value || null })} />
-            <span style={{width: "16px", maxWidth: "16px"}} className="dash">–</span>
+            <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
             <input type="number" inputMode="decimal" min="0" placeholder="до" value={amax} onChange={(e) => patch({ amax: e.target.value || null })} />
           </div>
 
           <div className="filt-label">Період</div>
           <div className="filt-range" style={{ marginBottom: 14 }}>
             <input type="date" value={dfrom} max={dto || undefined} onChange={(e) => patch({ dfrom: e.target.value || null })} />
-            <span style={{width: "16px", maxWidth: "16px"}} className="dash">–</span>
+            <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
             <input type="date" value={dto} min={dfrom || undefined} onChange={(e) => patch({ dto: e.target.value || null })} />
           </div>
 
