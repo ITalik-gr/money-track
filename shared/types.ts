@@ -13,6 +13,10 @@ export type AccountType =
 
 export type TxSource = "mono" | "cash" | "manual";
 
+// §R3: роль рахунку для логіки подушки. NULL/liquid → у ліквідну подушку; investment
+// (крипта, брокер) → інвест-резерв, не подушка за замовчуванням.
+export type AccountRole = "liquid" | "investment";
+
 export interface Account {
   id: string;
   type: AccountType | null;
@@ -24,6 +28,8 @@ export interface Account {
   iban: string | null;
   is_active: number;
   updated_at: number | null;
+  role: AccountRole | null;
+  ai_note: string | null;
 }
 
 export interface Category {

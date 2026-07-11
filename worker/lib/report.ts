@@ -3,7 +3,8 @@
 // періодом, тягне аномалії (подорожчання підписок, викиди) і описи операцій (user_note),
 // кличе Sonnet 5, зберігає структурований репорт у ai_reports. Ідемпотентно по періоду.
 import type { Env } from "../env.ts";
-import { getRates, computeSummary, toUAHMinor } from "./finance.ts";
+import { getRates } from "./finance.ts";
+import { fundsBreakdown } from "./advisor.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum,
   lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit,
@@ -66,7 +67,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
   const { from, to, prevFrom, prevTo } = scope === "current" ? currentPeriodToDate(type) : lastCompletePeriod(type);
   const periodDays = Math.max(1, Math.round((to - from) / 86400));
 
-  const [cur, prev, curCats, prevCats, merchants, notable, big, summary, actuals, imp, split, profile] = await Promise.all([
+  const [cur, prev, curCats, prevCats, merchants, notable, big, funds, actuals, imp, split, profile] = await Promise.all([
     totals(env, from, to, mult),
     totals(env, prevFrom, prevTo, mult),
     cats(env, from, to, mult),
@@ -93,7 +94,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
        ORDER BY amount DESC LIMIT 6`,
     ).bind(from, to).all<{ id: string; merchant: string | null; category: string | null; amount: number }>(),
-    computeSummary(env),
+    fundsBreakdown(env),
     plannedActuals(env.DB),
     importance(env, from, to, mult),
     recurringOneoffSplit(env, from, to, mult),
@@ -128,13 +129,9 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
   const net = cur.income - cur.spend;
   const savingsRate = cur.income > 0 ? Math.round((net / cur.income) * 100) : null;
 
-  // §B чесна подушка: ліквідна = сума ПОЗИТИВНИХ власних залишків (₴+USD за курсом),
-  // борг = сума ВІД'ЄМНИХ (використаний кредит). НЕ мішаємо їх у «нетто».
-  let cushion = 0, debt = 0;
-  for (const { currency_code, own } of summary.byCurrency) {
-    const uah = toUAHMinor(own, currency_code, rates);
-    if (uah > 0) cushion += uah; else debt += -uah;
-  }
+  // §B/§R3 чесна подушка через канонічний fundsBreakdown: ліквідна = позитивні власні
+  // ЛІКВІДНИХ рахунків; борг окремо; інвест-резерв (крипта/брокер) — НЕ подушка.
+  const cushion = funds.cushion, debt = funds.debt, investment = funds.investment;
 
   // §B прогноз не «burn×30»: беремо середнє за 3 ЗАВЕРШЕНІ місяці з тренду (стабільніше й
   // враховує сезонність), fallback — витрати періоду, масштабовані до 30 днів.
@@ -174,11 +171,15 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
     biggest_expenses: (big.results ?? []).map((b) => ({ tx_id: b.id, merchant: b.merchant, category: b.category, amount_uah: money(b.amount) })),
     anomalies_hint: anomaliesHint,
     // §B прогноз спирається на ЧЕСНУ подушку (позитивні власні), борг окремо; burn — середнє за 3 завершені міс (не burn×30).
+    // §R3 investment_reserve_uah — крипта/брокер: НЕ подушка й НЕ входить у runway, окрема остання лінія.
     forecast: {
-      cushion_uah: cushionMajor, debt_uah: money(debt),
+      cushion_uah: cushionMajor, debt_uah: money(debt), investment_reserve_uah: money(investment),
       monthly_burn_uah: burnMonthly, burn_method: last3.length ? "середнє за 3 завершені місяці" : "витрати періоду ×30",
       runway_months: runwayMonths,
     },
+    // §R3: рахунки з роллю та описом (note) — контекст для AI (не пропонуй продавати інвестиції без потреби).
+    accounts: funds.accounts.filter((a) => a.own_uah !== 0 || a.note)
+      .map((a) => ({ title: a.title, type: a.type, role: a.role, balance_uah: a.own_uah, note: a.note })),
     // §6: обов'язкові (essential) не варто радити різати; optional — найбезпечніше.
     by_importance: importanceBreakdown,
   };

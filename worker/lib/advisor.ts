@@ -29,6 +29,7 @@ export interface StoredAdvice extends AdviceResult {
   own_funds: number;      // копійки, UAH — нетто (подушка − борг)
   cushion: number;        // копійки, UAH — ліквідна подушка (позитивні власні)
   debt: number;           // копійки, UAH — борг по кредитці (від'ємні власні)
+  investment: number;     // копійки, UAH — інвест-резерв (крипта/брокер), не подушка
   monthly_burn: number;   // копійки, UAH/міс
   runway_months: number | null;  // ЧЕСНИЙ: подушка / burn
   usage?: AiUsageBrief;
@@ -39,18 +40,30 @@ export interface StoredAdvice extends AdviceResult {
 // реально є: заощадження в ₴/USD, плюсові картки). БОРГ = сума ВІД'ЄМНИХ власних (використаний
 // кредитний ліміт). Нетто = подушка − борг. Раніше показували лише нетто, і від'ємний нетто
 // (борг по кредитці) виглядав як «мінус запас», хоч реальна подушка сиділа окремо.
-export interface FundsBreakdown { cushion: number; debt: number; net: number }
+// §R3: один рахунок у розкладі коштів — для контексту AI (роль + опис користувача).
+export interface AccountFunds { title: string | null; type: string | null; role: "liquid" | "investment"; own_uah: number; note: string | null }
+// cushion — ЛІКВІДНА подушка (позитивні власні ліквідних рахунків); debt — борг (кредит);
+// investment — інвест-резерв (позитивні власні інвест-рахунків, напр. крипта): НЕ подушка,
+// але остання лінія; net = cushion − debt (без інвестицій — консервативний runway).
+export interface FundsBreakdown { cushion: number; debt: number; investment: number; net: number; accounts: AccountFunds[] }
 export async function fundsBreakdown(env: Env): Promise<FundsBreakdown> {
   const accounts = await env.DB.prepare(
-    "SELECT balance, credit_limit, currency_code FROM accounts WHERE is_active = 1",
-  ).all<{ balance: number; credit_limit: number; currency_code: number }>();
+    "SELECT title, type, role, ai_note, balance, credit_limit, currency_code FROM accounts WHERE is_active = 1",
+  ).all<{ title: string | null; type: string | null; role: string | null; ai_note: string | null; balance: number; credit_limit: number; currency_code: number }>();
   const rates = await getRates(env.DB);
-  let cushion = 0, debt = 0;
+  let cushion = 0, debt = 0, investment = 0;
+  const list: AccountFunds[] = [];
   for (const a of accounts.results ?? []) {
     const own = toUAHMinor((a.balance ?? 0) - (a.credit_limit ?? 0), a.currency_code, rates);
-    if (own >= 0) cushion += own; else debt += -own;
+    const role: "liquid" | "investment" = a.role === "investment" ? "investment" : "liquid";
+    if (role === "investment") { if (own > 0) investment += own; else debt += -own; }
+    else { if (own >= 0) cushion += own; else debt += -own; }
+    list.push({ title: a.title, type: a.type, role, own_uah: Math.round(own / 100), note: a.ai_note });
   }
-  return { cushion: Math.round(cushion), debt: Math.round(debt), net: Math.round(cushion - debt) };
+  return {
+    cushion: Math.round(cushion), debt: Math.round(debt), investment: Math.round(investment),
+    net: Math.round(cushion - debt), accounts: list,
+  };
 }
 
 async function ownFundsUAH(env: Env): Promise<number> {
@@ -150,7 +163,14 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     liquid_cushion_uah: Math.round(funds.cushion / 100),
     debt_uah: Math.round(funds.debt / 100),
     own_funds_uah: Math.round(ownFunds / 100),
-    runway_note: "runway_months = ліквідна подушка / місячний burn (скільки протягнеш на реальні кошти). Спирайся на подушку, а не на нетто.",
+    // §R3: інвест-резерв (крипта/брокер) — НЕ ліквідна подушка й НЕ входить у runway за
+    // замовчуванням; але це остання лінія, якщо все закінчиться. Не радь одразу «продати».
+    investment_reserve_uah: Math.round(funds.investment / 100),
+    accounts: funds.accounts
+      .filter((a) => a.own_uah !== 0 || a.note)
+      .map((a) => ({ title: a.title, type: a.type, role: a.role, balance_uah: a.own_uah, note: a.note })),
+    accounts_note: "accounts — рахунки користувача з роллю та ОПИСОМ (note). role='investment' (крипта/брокер) — НЕ подушка за замовчуванням (не входить у liquid_cushion/runway), але остання лінія на крайній випадок. Враховуй note кожного рахунку. Не пропонуй продавати інвестиції, поки ситуація не критична.",
+    runway_note: "runway_months = ліквідна подушка / місячний burn (скільки протягнеш на реальні кошти БЕЗ інвестицій). Спирайся на подушку, а не на нетто.",
     monthly_burn_uah: Math.round(monthlyBurn / 100),
     runway_months: runwayMonths,
     recent_oneoff: {
@@ -175,6 +195,7 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     own_funds: ownFunds,
     cushion: funds.cushion,
     debt: funds.debt,
+    investment: funds.investment,
     monthly_burn: monthlyBurn,
     runway_months: runwayMonths,
     usage: briefUsage(usage),

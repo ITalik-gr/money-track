@@ -23,6 +23,18 @@ async function activeSubs(db: D1Database): Promise<SubRow[]> {
   return rows.results ?? [];
 }
 
+// §SUB4 канонічне «наступне списання»: від start_date крокуємо періодом × period_count
+// у майбутнє. ЄДИНЕ джерело для воркера (ендпоінти/proactive) — дзеркалиться фронтовим
+// Subscriptions.nextCharge. Раніше частина ендпоінтів ігнорувала period_count, тож
+// квартальна підписка помилково «спливала» щомісяця.
+export function nextChargeUnix(startDate: number, period: string, count = 1, now = Math.floor(Date.now() / 1000)): number {
+  const n = Math.max(1, Math.round(count || 1));
+  if (period === "week") { let t = startDate; while (t <= now) t += 7 * 86400 * n; return t; }
+  const d = new Date(startDate * 1000);
+  while (Math.floor(d.getTime() / 1000) <= now) d.setMonth(d.getMonth() + n);
+  return Math.floor(d.getTime() / 1000);
+}
+
 // Нормалізація для нечіткого порівняння назв: латиниця+кирилиця+цифри, решта — пробіл.
 function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-zа-яїієґ0-9]+/gi, " ").trim();

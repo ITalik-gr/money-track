@@ -915,7 +915,7 @@ function SpendingPatterns() {
         <section>
           <div className="section-head">
             <h2>Радар аномалій</h2>
-            <HoverTip content={<>Категорії, чий прогноз на кінець місяця (за поточним темпом) помітно вищий за твій звичний місяць (середнє за 6 міс). Ранній сигнал, що витрати десь розігналися.</>}>
+            <HoverTip content={<>Категорії, де <b>регулярний</b> темп цього місяця помітно вищий за звичний (середнє за 6 міс). Разові витрати (податки, лікування) сюди не потрапляють — вони вже сталися й не проєктуються.</>}>
               <span className="label">що це?</span>
             </HoverTip>
           </div>
@@ -929,7 +929,7 @@ function SpendingPatterns() {
                     прогноз ≈{formatMinor(a.projected, { decimals: false })} ₴ проти звичних {formatMinor(a.usual, { decimals: false })} ₴
                   </div>
                 </div>
-                <span className="cmp-delta up">+{a.pct - 100}%</span>
+                {a.pct != null && <span className="cmp-delta up">+{a.pct - 100}%</span>}
               </div>
             ))}
           </div>
@@ -940,14 +940,17 @@ function SpendingPatterns() {
         <section>
           <div className="section-head">
             <h2>Темп по категоріях</h2>
-            <HoverTip content={<>Скільки вже витрачено цього місяця (факт), лінійний прогноз на кінець місяця й твій звичний місяць. Бейдж — прогноз відносно звичного: &lt;100% нижче норми, &gt;100% вище.</>}>
+            <HoverTip content={<>Скільки вже витрачено цього місяця (факт), прогноз на кінець місяця й твій звичний місяць. Прогноз множить лише регулярну частину; разові витрати додаються як є. Бейдж — прогноз відносно звичного: &lt;100% нижче норми, &gt;100% вище.</>}>
               <span className="label">факт · прогноз · звичне</span>
             </HoverTip>
           </div>
           <div className="card" style={{ padding: 8 }}>
             {pace.map((p, i) => (
               <div key={i} className="pace-row">
-                <span className="pace-name"><span className="d" style={{ background: p.color ?? "var(--accent)" }} />{p.category}</span>
+                <span className="pace-name">
+                  <span className="d" style={{ background: p.color ?? "var(--accent)" }} />{p.category}
+                  {p.mostly_oneoff && <span className="pace-tag" title="Витрати цього місяця тут переважно разові — прогноз не розганяється">разове</span>}
+                </span>
                 <span className="pace-nums num-mono">
                   {formatMinor(p.spent, { decimals: false })} → <b>≈{formatMinor(p.projected, { decimals: false })}</b> ₴
                   <span className="muted"> / {formatMinor(p.usual, { decimals: false })}</span>

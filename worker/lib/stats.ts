@@ -78,10 +78,11 @@ export function amountSum(mult: string): string {
 }
 
 // ---- §E1: Разові vs регулярні (канонічно) -----------------------------------
-// «Регулярний» мерчант = має витрати у ≥RECUR_MIN_MONTHS РІЗНИХ календарних місяцях у
-// трейлінг-референс-вікні. Це відділяє звичні щомісячні витрати (продукти, транспорт,
-// підписки) від разових (податки, стоматолог, велика покупка), щоб «нормальний» місячний
-// burn не спотворювався викидами. Детерміновано, без AI. Мерчант NULL → разове.
+// Операція «регулярна», якщо: (а) прив'язана до планового платежу/підписки (planned_id) —
+// напр. квартальна PS Plus, яку інакше не зловиш повторюваністю; АБО (б) її мерчант має
+// витрати у ≥RECUR_MIN_MONTHS РІЗНИХ календарних місяцях у трейлінг-референс-вікні. Це
+// відділяє звичні витрати (продукти, транспорт, підписки) від разових (податки, стоматолог,
+// велика покупка), щоб «нормальний» місячний burn не спотворювався викидами. Без AI.
 export const RECUR_MIN_MONTHS = 3;
 
 // Підзапит мерчантів, що кваліфікуються як регулярні (легкий фільтр — рекуренція евристична).
@@ -94,8 +95,9 @@ function recurringMerchantsSubquery(refFrom: number, to: number): string {
     HAVING COUNT(DISTINCT strftime('%Y-%m', time, 'unixepoch')) >= ${RECUR_MIN_MONTHS}`;
 }
 // Булевий вираз «поточний рядок t — регулярний» (для CASE/фільтрів). Потребує alias `t`.
+// planned_id → підписка/розстрочка (регулярне за визначенням); або мерчант із рекуренцією.
 export function isRecurringExpr(refFrom: number, to: number): string {
-  return `(t.merchant IS NOT NULL AND t.merchant IN (${recurringMerchantsSubquery(refFrom, to)}))`;
+  return `(t.planned_id IS NOT NULL OR (t.merchant IS NOT NULL AND t.merchant IN (${recurringMerchantsSubquery(refFrom, to)})))`;
 }
 
 export interface SplitBucket { spent: number; n: number }

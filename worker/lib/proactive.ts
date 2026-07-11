@@ -4,6 +4,7 @@
 import type { Env } from "../env.ts";
 import { sendMessage } from "./telegram.ts";
 import { getStoredInsight, buildAndStoreInsight, type StoredInsight } from "./insight.ts";
+import { nextChargeUnix } from "./subscriptions.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const uah = (minor: number) => Math.round(minor / 100).toLocaleString("uk-UA");
@@ -49,17 +50,6 @@ async function overBudget(env: Env): Promise<{ name: string; spent: number; budg
     .sort((a, b) => b.ratio - a.ratio);
 }
 
-// Наступне списання планового платежу: від start_date крокуємо періодом у майбутнє
-// (дзеркалить фронтові Subscriptions.nextCharge — тримати синхронними).
-function nextCharge(startDate: number, period: string, count = 1): number {
-  const now = Math.floor(Date.now() / 1000);
-  const n = Math.max(1, count);
-  if (period === "week") { let t = startDate; while (t <= now) t += 7 * 86400 * n; return t; }
-  const d = new Date(startDate * 1000);
-  while (d.getTime() / 1000 <= now) d.setMonth(d.getMonth() + n);
-  return Math.floor(d.getTime() / 1000);
-}
-
 interface PlannedRow {
   title: string; period: string; period_count: number | null; period_amount: number | null; start_date: number;
   end_date: number | null; currency_code: number;
@@ -74,7 +64,7 @@ async function upcomingPlanned(env: Env, days = 7): Promise<{ title: string; amo
   const horizon = now + days * 86400;
   const out: { title: string; amount: number | null; currency_code: number; when: number }[] = [];
   for (const p of rows.results ?? []) {
-    const when = nextCharge(p.start_date, p.period, p.period_count ?? 1);
+    const when = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now);
     if (when > horizon) continue;                    // ще не скоро
     if (p.end_date != null && when > p.end_date) continue; // розстрочку вже завершено
     out.push({ title: p.title, amount: p.period_amount, currency_code: p.currency_code, when });

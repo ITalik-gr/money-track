@@ -386,6 +386,10 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .acct2-sublabel { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
 .acct2-bal { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 29px; letter-spacing: -0.02em; line-height: 1.05; }
 .acct2-fx { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+/* §R3: бейдж інвест-рахунку + опис для AI на картці */
+.acct2-role { flex-shrink: 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-plum, #7a3e9d) 16%, transparent); color: var(--c-plum, #7a3e9d); }
+.acct2-note { margin-top: 8px; font-size: 12px; line-height: 1.4; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.acct2 .acct-note-input { resize: vertical; min-height: 44px; font: inherit; font-size: 13px; line-height: 1.4; }
 .acct2-credit { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .acct2-credit-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); }
 .acct2-credit-row b { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -1719,6 +1723,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .pace-row + .pace-row { border-top: 1px solid var(--line); }
 .pace-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pace-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.pace-tag { flex-shrink: 0; font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, #c9871a 16%, transparent); color: #a9720f; }
+@media (prefers-color-scheme: dark) { .pace-tag { color: #e0a53f; } }
+:root[data-theme="dark"] .pace-tag { color: #e0a53f; }
+:root[data-theme="light"] .pace-tag { color: #a9720f; }
 .pace-nums { white-space: nowrap; font-size: 12.5px; }
 .num-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 

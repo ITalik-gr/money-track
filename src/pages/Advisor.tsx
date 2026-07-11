@@ -63,6 +63,10 @@ export function Advisor() {
                 <Metric label="Борг по кредитці" v={<Money minor={advice.debt} decimals={false} />} tone="neg"
                   info="Використаний кредитний ліміт. Це борг, а не «мінус запас» — не змішується з подушкою." />
               )}
+              {advice.investment != null && advice.investment > 0 && (
+                <Metric label="Інвест-резерв" v={<Money minor={advice.investment} decimals={false} />}
+                  info="Крипта/брокер та інші інвестиційні рахунки. Це не ліквідна подушка й не входить у runway — остання лінія на крайній випадок." />
+              )}
               <Metric label="Витрати / міс" v={<Money minor={advice.monthly_burn} decimals={false} />} />
               <Metric label="Подушки вистачить на" v={months != null ? `${Math.max(0, months)} міс` : "—"} tone={tone}
                 info="Ліквідна подушка ÷ середні місячні витрати. Скільки протягнеш на реальні кошти за поточного темпу." />

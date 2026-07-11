@@ -6,9 +6,11 @@ import {
   useAddManualAccountMutation,
   useEditManualAccountMutation,
   useSetAccountTitleMutation,
+  useSetAccountMetaMutation,
 } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { Select } from "../components/Select.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
 import type { Account } from "../../shared/types.ts";
 
@@ -124,24 +126,25 @@ function AccountCard({ a, rates, muted, editable, renameable }: {
     : a.is_manual ? "баланс (вручну)"
     : "на рахунку";
 
-  if (editing && editable) return <EditManualAccount a={a} onClose={() => setEditing(false)} cls={cls} />;
-  if (editing && renameable) return <RenameAccount a={a} onClose={() => setEditing(false)} cls={cls} />;
+  const isInvestment = a.role === "investment";
+
+  if (editing) return <AccountEditor a={a} onClose={() => setEditing(false)} cls={cls} manual={!!editable} renameable={!!renameable} />;
 
   return (
     <div className={cls} style={{ "--acct-color": color } as React.CSSProperties}>
       <div className="acct2-head">
         <span className="acct2-badge" style={{ background: color }} />
         <span className="acct2-title">{title}</span>
+        {isInvestment && <span className="acct2-role" title="Інвестиційний рахунок — не входить у ліквідну подушку">інвест</span>}
         {pan && a.type !== "jar" && <span className="acct2-pan">·· {pan}</span>}
-        {(editable || renameable) && (
-          <button className="acct2-edit" onClick={() => setEditing(true)} aria-label={renameable ? "Перейменувати" : "Змінити"}>
-            <Icon name="edit" size={14} />
-          </button>
-        )}
+        <button className="acct2-edit" onClick={() => setEditing(true)} aria-label="Налаштування рахунку">
+          <Icon name="edit" size={14} />
+        </button>
       </div>
       <div className="acct2-sublabel">{subLabel}</div>
       <div className="acct2-bal"><Money minor={shown} currency={code} /></div>
       {uah != null && <div className="acct2-fx">≈ {formatMinor(uah, { decimals: false })} ₴</div>}
+      {a.ai_note && <div className="acct2-note" title={a.ai_note}>{a.ai_note}</div>}
       {credit && (
         <div className="acct2-credit">
           <div className="acct2-credit-row">
@@ -155,51 +158,43 @@ function AccountCard({ a, rates, muted, editable, renameable }: {
   );
 }
 
-// Перейменувати банку/рахунок (тільки назва) — синк банок цю назву вже не перезапише.
-function RenameAccount({ a, onClose, cls }: { a: Account; onClose: () => void; cls: string }) {
-  const [setTitle, { isLoading }] = useSetAccountTitleMutation();
+// §R3: єдиний редактор рахунку — роль (ліквідний/інвестиційний) + опис для AI для БУДЬ-ЯКОГО
+// рахунку; додатково назва (банки/ручні) й баланс (ручні). Опис читає порадник/репорти.
+const ROLE_OPTIONS = [
+  { value: "liquid", label: "Ліквідний (подушка)" },
+  { value: "investment", label: "Інвестиційний (не подушка)" },
+];
+function AccountEditor({ a, onClose, cls, manual, renameable }: {
+  a: Account; onClose: () => void; cls: string; manual: boolean; renameable: boolean;
+}) {
+  const [editAccount] = useEditManualAccountMutation();
+  const [setTitle] = useSetAccountTitleMutation();
+  const [setMeta, { isLoading }] = useSetAccountMetaMutation();
+  const canTitle = manual || renameable;
   const [title, setTitleVal] = useState(a.title ?? "");
-  async function save() {
-    if (!title.trim()) return;
-    await setTitle({ id: a.id, title: title.trim() }).unwrap();
-    onClose();
-  }
-  return (
-    <div className={cls} style={{ padding: 14 }}>
-      <div className="acct-edit-form">
-        <input autoFocus value={title} onChange={(e) => setTitleVal(e.target.value)} placeholder="Назва банки"
-          onKeyDown={(e) => e.key === "Enter" && save()} />
-        <div className="row" style={{ gap: 6 }}>
-          <button className="btn primary" onClick={save} disabled={isLoading || !title.trim()}>Зберегти</button>
-          <button className="btn ghost" onClick={onClose}>Скасувати</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EditManualAccount({ a, onClose, cls }: { a: Account; onClose: () => void; cls: string }) {
-  const [editAccount, { isLoading }] = useEditManualAccountMutation();
   const [balance, setBalance] = useState(((a.balance ?? 0) / 100).toString());
-  const [title, setTitle] = useState(a.title ?? "");
+  const [role, setRole] = useState<"liquid" | "investment">(a.role === "investment" ? "investment" : "liquid");
+  const [note, setNote] = useState(a.ai_note ?? "");
 
   async function save() {
-    await editAccount({
-      id: a.id,
-      title: title.trim() || undefined,
-      balance: Math.round(Number(balance.replace(",", ".")) * 100),
-    }).unwrap();
+    await setMeta({ id: a.id, role, ai_note: note }).unwrap();
+    if (manual) {
+      await editAccount({ id: a.id, title: title.trim() || undefined, balance: Math.round(Number(balance.replace(",", ".")) * 100) }).unwrap();
+    } else if (renameable && title.trim() && title.trim() !== (a.title ?? "")) {
+      await setTitle({ id: a.id, title: title.trim() }).unwrap();
+    }
     onClose();
   }
 
   return (
     <div className={cls} style={{ padding: 14 }}>
       <div className="acct-edit-form">
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Назва" />
-        <input
-          type="number" inputMode="decimal" value={balance}
-          onChange={(e) => setBalance(e.target.value)} placeholder="Баланс"
-        />
+        {canTitle && <input value={title} onChange={(e) => setTitleVal(e.target.value)} placeholder="Назва" />}
+        {manual && <input type="number" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="Баланс" />}
+        <Select value={role} options={ROLE_OPTIONS} onChange={(v) => setRole(v as "liquid" | "investment")} />
+        <textarea className="acct-note-input" value={note} rows={2} maxLength={280}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Опис для AI (напр. «USDT — інвестиції, чіпати лише в крайньому разі»)" />
         <div className="row" style={{ gap: 6 }}>
           <button className="btn primary" onClick={save} disabled={isLoading}>Зберегти</button>
           <button className="btn ghost" onClick={onClose}>Скасувати</button>

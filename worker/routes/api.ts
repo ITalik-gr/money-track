@@ -6,7 +6,7 @@ import { computeSummary, createCashTx, getRates } from "../lib/finance.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE,
   SPEND_COUNT, valueMode, uahMult, spendSum, incomeSum, amountSum, periodBounds,
-  recurringOneoffSplit, defaultRefFrom,
+  recurringOneoffSplit, defaultRefFrom, isRecurringExpr,
   type PeriodMode, type Preset,
 } from "../lib/stats.ts";
 
@@ -942,20 +942,15 @@ api.get("/analytics/forecast", async (c) => {
   const projectedSpend = Math.round(pace * daysInMonth);
 
   // Майбутні планові платежі, що спишуться до кінця місяця (інформативно).
+  const { nextChargeUnix } = await import("../lib/subscriptions.ts");
   const planned = await c.env.DB.prepare(
-    "SELECT id, title, kind, period_amount, period, start_date, end_date FROM planned_payments WHERE is_active = 1",
-  ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; start_date: number; end_date: number | null }>();
+    "SELECT id, title, kind, period_amount, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
+  ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null }>();
 
   const monthEnd = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() / 1000);
-  const nextCharge = (p: { period: string; start_date: number }): number => {
-    if (p.period === "week") { let t = p.start_date; while (t <= now) t += 7 * 86400; return t; }
-    const dd = new Date(p.start_date * 1000);
-    while (dd.getTime() / 1000 <= now) dd.setMonth(dd.getMonth() + 1);
-    return Math.floor(dd.getTime() / 1000);
-  };
   const upcomingItems = (planned.results ?? [])
     .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
-    .map((p) => ({ title: p.title, amount: p.period_amount ?? 0, at: nextCharge(p) }))
+    .map((p) => ({ title: p.title, amount: p.period_amount ?? 0, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now) }))
     .filter((p) => p.amount > 0 && p.at < monthEnd)
     .sort((a, b) => a.at - b.at);
   const upcomingPlanned = upcomingItems.reduce((s, p) => s + p.amount, 0);
@@ -1049,19 +1044,14 @@ api.get("/planned/upcoming", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const horizon = now + days * 86400;
 
+  const { nextChargeUnix } = await import("../lib/subscriptions.ts");
   const planned = await c.env.DB.prepare(
-    "SELECT id, title, kind, period_amount, period, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
-  ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; start_date: number; end_date: number | null; category_id: number | null }>();
+    "SELECT id, title, kind, period_amount, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
+  ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>();
 
-  const nextCharge = (p: { period: string; start_date: number }): number => {
-    if (p.period === "week") { let t = p.start_date; while (t <= now) t += 7 * 86400; return t; }
-    const dd = new Date(p.start_date * 1000);
-    while (dd.getTime() / 1000 <= now) dd.setMonth(dd.getMonth() + 1);
-    return Math.floor(dd.getTime() / 1000);
-  };
   const items = (planned.results ?? [])
     .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
-    .map((p) => ({ id: p.id, title: p.title, amount: p.period_amount ?? 0, at: nextCharge(p), days_until: 0 }))
+    .map((p) => ({ id: p.id, title: p.title, amount: p.period_amount ?? 0, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now), days_until: 0 }))
     .filter((p) => p.amount > 0 && p.at <= horizon)
     .map((p) => ({ ...p, days_until: Math.max(0, Math.round((p.at - now) / 86400)) }))
     .sort((a, b) => a.at - b.at);
@@ -1168,7 +1158,8 @@ api.get("/analytics/patterns", async (c) => {
   const trailingKeys: string[] = [];
   for (let i = 6; i >= 1; i--) trailingKeys.push(new Date(d.getFullYear(), d.getMonth() - i, 1).toISOString().slice(0, 7));
 
-  const [matrix, split] = await Promise.all([
+  const recurExpr = isRecurringExpr(defaultRefFrom(now), now);
+  const [matrix, split, curSplit] = await Promise.all([
     c.env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${EFF_CAT_COLOR} AS color,
               strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
@@ -1177,7 +1168,19 @@ api.get("/analytics/patterns", async (c) => {
        GROUP BY ${EFF_CAT_ID}, m`,
     ).bind(refStart, now).all<{ id: number | null; name: string | null; color: string | null; m: string; spent: number }>(),
     recurringOneoffSplit(c.env, monthStart, now, mult, defaultRefFrom(now)),
+    // Поточний місяць по категоріях, розділений на регулярне/разове — щоб проєктувати
+    // ЛИШЕ регулярну частину (разові вже сталися, їх не множимо elapsedFrac).
+    c.env.DB.prepare(
+      `SELECT ${EFF_CAT_ID} AS id,
+              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS recurring,
+              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN 0 ELSE (-t.amount) * ${mult} END), 0)) AS INTEGER) AS oneoff
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
+       GROUP BY ${EFF_CAT_ID}`,
+    ).bind(monthStart, now).all<{ id: number | null; recurring: number; oneoff: number }>(),
   ]);
+  const curSplitMap = new Map<string, { recurring: number; oneoff: number }>();
+  for (const r of curSplit.results ?? []) curSplitMap.set(String(r.id ?? "null"), { recurring: r.recurring, oneoff: r.oneoff });
 
   interface Cat { id: number | null; name: string; color: string | null; months: Map<string, number> }
   const cats = new Map<string, Cat>();
@@ -1189,19 +1192,24 @@ api.get("/analytics/patterns", async (c) => {
   }
 
   const MIN_DELTA = 20000; // 200₴ — нижче не шумимо
-  const anomalies: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number }[] = [];
-  const pace: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number | null }[] = [];
+  interface PaceItem { category: string; color: string | null; spent: number; oneoff: number; mostly_oneoff: boolean; projected: number; usual: number; pct: number | null }
+  const anomalies: PaceItem[] = [];
+  const pace: PaceItem[] = [];
   for (const cat of cats.values()) {
     const cur = cat.months.get(curKey) ?? 0;
     const trailing = trailingKeys.map((k) => cat.months.get(k) ?? 0);
     const usual = Math.round(trailing.reduce((s, v) => s + v, 0) / trailingKeys.length);
-    const projected = Math.round(cur / elapsedFrac);
-    if (cur > 0 || usual > 0) {
-      pace.push({ category: cat.name, color: cat.color, spent: cur, projected, usual, pct: usual > 0 ? Math.round((projected / usual) * 100) : null });
-    }
-    // Аномалія: прогноз ≥1.5× звичного і абсолютна різниця вагома.
-    if (cur > 0 && projected >= usual * 1.5 && projected - usual >= MIN_DELTA) {
-      anomalies.push({ category: cat.name, color: cat.color, spent: cur, projected, usual, pct: usual > 0 ? Math.round((projected / usual) * 100) : 0 });
+    const cs = curSplitMap.get(String(cat.id ?? "null")) ?? { recurring: cur, oneoff: 0 };
+    const mostlyOneoff = cs.oneoff > cs.recurring;
+    // Проєктуємо лише РЕГУЛЯРНУ частину; разове (податки/лікування) додаємо як є — воно
+    // вже сталося й не помножиться до кінця місяця. Прибирає «бредові» 26к прогнозу.
+    const projected = Math.round(cs.recurring / elapsedFrac) + cs.oneoff;
+    const item: PaceItem = { category: cat.name, color: cat.color, spent: cur, oneoff: cs.oneoff, mostly_oneoff: mostlyOneoff, projected, usual, pct: usual > 0 ? Math.round((projected / usual) * 100) : null };
+    if (cur > 0 || usual > 0) pace.push(item);
+    // Аномалія темпу: прогноз ≥1.5× звичного і різниця вагома. Категорії, де витрата цього
+    // місяця — переважно разова, НЕ вважаємо аномалією темпу (це не «розганяється», а факт).
+    if (cur > 0 && !mostlyOneoff && projected >= usual * 1.5 && projected - usual >= MIN_DELTA) {
+      anomalies.push(item);
     }
   }
   anomalies.sort((a, b) => (b.projected - b.usual) - (a.projected - a.usual));
@@ -1648,6 +1656,18 @@ api.patch("/accounts/:id/title", async (c) => {
   const { title } = await c.req.json<{ title?: string }>();
   if (!title?.trim()) return c.json({ error: "title required" }, 400);
   await c.env.DB.prepare("UPDATE accounts SET title = ? WHERE id = ?").bind(title.trim(), c.req.param("id")).run();
+  return c.json({ ok: true });
+});
+
+// §R3: роль рахунку (ліквідний/інвестиційний) + опис для AI. Для будь-якого рахунку.
+api.patch("/accounts/:id/meta", async (c) => {
+  const b = await c.req.json<{ role?: "liquid" | "investment"; ai_note?: string }>();
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  if (b.role !== undefined) { sets.push("role = ?"); binds.push(b.role === "investment" ? "investment" : "liquid"); }
+  if (b.ai_note !== undefined) { sets.push("ai_note = ?"); binds.push(b.ai_note.trim() || null); }
+  if (!sets.length) return c.json({ ok: true });
+  await c.env.DB.prepare(`UPDATE accounts SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, c.req.param("id")).run();
   return c.json({ ok: true });
 });
 

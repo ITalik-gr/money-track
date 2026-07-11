@@ -87,6 +87,7 @@ export interface Advice {
   own_funds: number;
   cushion: number;
   debt: number;
+  investment?: number;
   monthly_burn: number;
   runway_months: number | null;
   usage?: AiUsageBrief;
@@ -275,8 +276,13 @@ export interface SpendPatterns {
     oneoff: { spent: number; n: number };
     oneoff_items: { merchant: string | null; category: string | null; amount: number; time: number }[];
   };
-  anomalies: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number }[];
-  pace: { category: string; color: string | null; spent: number; projected: number; usual: number; pct: number | null }[];
+  anomalies: PaceItem[];
+  pace: PaceItem[];
+}
+export interface PaceItem {
+  category: string; color: string | null; spent: number;
+  oneoff: number; mostly_oneoff: boolean;
+  projected: number; usual: number; pct: number | null;
 }
 
 export interface SetupStatus {
@@ -313,6 +319,11 @@ export const api = createApi({
     setAccountTitle: b.mutation<unknown, { id: string; title: string }>({
       query: ({ id, title }) => ({ url: `/accounts/${id}/title`, method: "PATCH", body: { title } }),
       invalidatesTags: ["Account"],
+    }),
+    // §R3: роль рахунку (ліквідний/інвестиційний) + опис для AI.
+    setAccountMeta: b.mutation<unknown, { id: string; role?: "liquid" | "investment"; ai_note?: string }>({
+      query: ({ id, ...body }) => ({ url: `/accounts/${id}/meta`, method: "PATCH", body }),
+      invalidatesTags: ["Account", "Summary"],
     }),
     getRates: b.query<{ rates: Record<string, number>; updated: number | null }, void>({
       query: () => "/rates", providesTags: ["Summary"],
@@ -619,6 +630,7 @@ export const {
   useAddManualAccountMutation,
   useEditManualAccountMutation,
   useSetAccountTitleMutation,
+  useSetAccountMetaMutation,
   useGetRatesQuery,
   useGetCategoriesQuery,
   useCreateCategoryMutation,
