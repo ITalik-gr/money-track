@@ -14,6 +14,26 @@ import {
 } from "../store/api.ts";
 import type { Category } from "../../shared/types.ts";
 
+// §11.4: згортувана секція фільтра. Заголовок-кнопка + шеврон; активний фільтр
+// у згорнутій секції позначається крапкою, щоб не загубився.
+function FilterSection({ id, title, open, active, onToggle, children }: {
+  id: string; title: string; open: boolean; active?: boolean;
+  onToggle: (id: string) => void; children: React.ReactNode;
+}) {
+  return (
+    <div className={`filt-sec ${open ? "open" : ""}`}>
+      <button type="button" className="filt-sec-head" onClick={() => onToggle(id)} aria-expanded={open}>
+        <span className="filt-sec-title">{title}</span>
+        <span className="filt-sec-right">
+          {active && !open && <span className="filt-sec-dot" title="Активний фільтр" />}
+          <Icon name="chevron" size={15} className="filt-sec-chev" />
+        </span>
+      </button>
+      {open && <div className="filt-sec-body">{children}</div>}
+    </div>
+  );
+}
+
 // yyyy-mm-dd (для <input type=date>) ↔ unix-секунди.
 function dateToUnix(s: string, endOfDay = false): number | undefined {
   if (!s) return undefined;
@@ -121,6 +141,12 @@ export function Transactions() {
   function pickParent(c: Category) { patch({ catp: String(c.id), cat: null }); }
   function pickChild(c: Category) { patch({ cat: String(c.id), catp: null }); }
 
+  // §11.4: секції фільтрів згортаються. За замовч. відкриті лише Категорії.
+  const [openSecs, setOpenSecs] = useState<Set<string>>(new Set(["cat"]));
+  function toggleSec(k: string) {
+    setOpenSecs((p) => { const n = new Set(p); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  }
+
   return (
     <>
       <div className="page-head">
@@ -159,59 +185,61 @@ export function Transactions() {
           </div>
 
           {accOptions.length > 1 && (
-            <div style={{ marginBottom: 14 }}>
-              <div className="filt-label">Рахунок</div>
+            <FilterSection id="acc" title="Рахунок" open={openSecs.has("acc")} active={!!acc} onToggle={toggleSec}>
               <Select value={acc || null} clearable clearLabel="усі рахунки" placeholder="Усі рахунки"
                 options={accOptions} onChange={(v) => patch({ acc: v == null ? null : String(v) })} />
-            </div>
+            </FilterSection>
           )}
 
-          <div className="filt-label">Сума, ₴</div>
-          <div className="filt-range" style={{ marginBottom: 14 }}>
-            <input type="number" inputMode="decimal" min="0" placeholder="від" value={amin} onChange={(e) => patch({ amin: e.target.value || null })} />
-            <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
-            <input type="number" inputMode="decimal" min="0" placeholder="до" value={amax} onChange={(e) => patch({ amax: e.target.value || null })} />
-          </div>
+          <FilterSection id="amount" title="Сума, ₴" open={openSecs.has("amount")} active={!!(amin || amax)} onToggle={toggleSec}>
+            <div className="filt-range">
+              <input type="number" inputMode="decimal" min="0" placeholder="від" value={amin} onChange={(e) => patch({ amin: e.target.value || null })} />
+              <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
+              <input type="number" inputMode="decimal" min="0" placeholder="до" value={amax} onChange={(e) => patch({ amax: e.target.value || null })} />
+            </div>
+          </FilterSection>
 
-          <div className="filt-label">Період</div>
-          <div className="filt-range" style={{ marginBottom: 14 }}>
-            <input type="date" value={dfrom} max={dto || undefined} onChange={(e) => patch({ dfrom: e.target.value || null })} />
-            <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
-            <input type="date" value={dto} min={dfrom || undefined} onChange={(e) => patch({ dto: e.target.value || null })} />
-          </div>
+          <FilterSection id="period" title="Період" open={openSecs.has("period")} active={!!(dfrom || dto)} onToggle={toggleSec}>
+            <div className="filt-range">
+              <input type="date" value={dfrom} max={dto || undefined} onChange={(e) => patch({ dfrom: e.target.value || null })} />
+              <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
+              <input type="date" value={dto} min={dfrom || undefined} onChange={(e) => patch({ dto: e.target.value || null })} />
+            </div>
+          </FilterSection>
 
-          <div className="filt-label">Категорії</div>
-          <div className="cat-tree">
-            <button className={`cat-tree-row ${!cat && !catp ? "on" : ""}`} onClick={() => patch({ cat: null, catp: null })}>
-              <span className="ctr-name">Усі категорії</span>
-            </button>
-            {tops.map((c) => {
-              const kids = childrenOf(c.id);
-              const open = expanded.has(c.id);
-              const active = catp === String(c.id);
-              return (
-                <div key={c.id}>
-                  <div className={`cat-tree-row ${active ? "on" : ""}`}>
-                    <button className="ctr-main" onClick={() => pickParent(c)}>
-                      <span className="ctr-ico" style={{ background: c.color ?? "var(--muted)" }}><CategoryIcon slug={c.icon} size={13} /></span>
-                      <span className="ctr-name">{c.name}</span>
-                    </button>
-                    {kids.length > 0 && (
-                      <button className="ctr-caret" onClick={() => toggleExpand(c.id)} aria-label="Розгорнути">
-                        <Icon name="chevron" size={15} />{open ? "" : ""}
+          <FilterSection id="cat" title="Категорії" open={openSecs.has("cat")} active={!!(cat || catp)} onToggle={toggleSec}>
+            <div className="cat-tree">
+              <button className={`cat-tree-row ${!cat && !catp ? "on" : ""}`} onClick={() => patch({ cat: null, catp: null })}>
+                <span className="ctr-name">Усі категорії</span>
+              </button>
+              {tops.map((c) => {
+                const kids = childrenOf(c.id);
+                const open = expanded.has(c.id);
+                const active = catp === String(c.id);
+                return (
+                  <div key={c.id}>
+                    <div className={`cat-tree-row ${active ? "on" : ""}`}>
+                      <button className="ctr-main" onClick={() => pickParent(c)}>
+                        <span className="ctr-ico" style={{ background: c.color ?? "var(--muted)" }}><CategoryIcon slug={c.icon} size={13} /></span>
+                        <span className="ctr-name">{c.name}</span>
                       </button>
-                    )}
+                      {kids.length > 0 && (
+                        <button className="ctr-caret" onClick={() => toggleExpand(c.id)} aria-label="Розгорнути">
+                          <Icon name="chevron" size={15} />
+                        </button>
+                      )}
+                    </div>
+                    {open && kids.map((ch) => (
+                      <button key={ch.id} className={`cat-tree-row sub ${cat === String(ch.id) ? "on" : ""}`} onClick={() => pickChild(ch)}>
+                        <span className="ctr-dot" style={{ background: ch.color ?? c.color ?? "var(--muted)" }} />
+                        <span className="ctr-name">{ch.name}</span>
+                      </button>
+                    ))}
                   </div>
-                  {open && kids.map((ch) => (
-                    <button key={ch.id} className={`cat-tree-row sub ${cat === String(ch.id) ? "on" : ""}`} onClick={() => pickChild(ch)}>
-                      <span className="ctr-dot" style={{ background: ch.color ?? c.color ?? "var(--muted)" }} />
-                      <span className="ctr-name">{ch.name}</span>
-                    </button>
-                  ))}
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </FilterSection>
 
           {anyFilter && <button className="btn ghost filt-clear" onClick={clearAll}>Скинути фільтри</button>}
         </aside>

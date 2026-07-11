@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { formatDate } from "../lib/format.ts";
-import { cardKind, cardLast4 } from "../lib/merchant.ts";
 import { Money } from "./Money.tsx";
 import { MerchantLogo } from "./MerchantLogo.tsx";
 
@@ -35,12 +34,13 @@ interface Props {
 }
 
 export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
-  const last4 = cardLast4(t.account_title);
-  const kind = cardKind(t.account_title ?? null);
   const transfer = !!t.is_transfer;
   const groupColor = t.event_id ? (t.event_color ?? "var(--accent)") : null;
   const isSel = selected ?? false;
 
+  // Клітинки-осередки (logo · who · cat · date · amt) розкладаються сіткою:
+  // stacked у 2 рядки (вузько) або вирівняні колонки (широко) — керує CSS-контейнер (§11.3).
+  // Повтор ··4932 прибрано як шум; спосіб оплати видно в деталях операції.
   const inner = (
     <>
       {selectable && (
@@ -51,29 +51,24 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
         </span>
       )}
       <MerchantLogo merchant={t.merchant ?? null} catIcon={t.category_icon ?? null} color={t.category_color ?? null} transfer={transfer} fallbackLabel={t.category_name ?? null} />
-      <div style={{ minWidth: 0 }}>
-        <div className="who">{t.merchant ?? t.comment ?? "—"}</div>
-        <div className="meta">
-          <span>{formatDate(t.time)}</span>
-          <span className="sep">·</span>
-          <span className="m-cat">
-            {!transfer && <span className="d" style={{ background: t.category_color ?? "var(--muted)" }} />}
-            {transfer ? "переказ" : (t.category_name ?? "без категорії")}
-          </span>
+      <div className="tx-body">
+        <div className="tx-line1">
+          <span className="who-name">{t.merchant ?? t.comment ?? "—"}</span>
           {t.planned_id != null && !transfer && (
-            <span className="m-sub" title="Списання підписки">🔁 підписка</span>
+            <span className="m-sub" title="Списання підписки">🔁</span>
           )}
           {t.event_name && (
-            <span className="m-group" style={{ color: groupColor ?? undefined }}>
+            <span className="m-group" style={{ color: groupColor ?? undefined }} title={t.event_name}>
               <span className="d" style={{ background: groupColor ?? "var(--accent)" }} />{t.event_name}
             </span>
           )}
-          {last4 && (
-            <>
-              <span className="sep">·</span>
-              <span className={`card-badge ${kind}`}><span className="sq" />{last4}</span>
-            </>
-          )}
+        </div>
+        <div className="tx-line2">
+          <span className="tx-cat">
+            {!transfer && <span className="d" style={{ background: t.category_color ?? "var(--muted)" }} />}
+            <span className="tx-cat-name">{transfer ? "переказ" : (t.category_name ?? "без категорії")}</span>
+          </span>
+          <span className="tx-date">{formatDate(t.time)}</span>
         </div>
       </div>
       <div className="amt">

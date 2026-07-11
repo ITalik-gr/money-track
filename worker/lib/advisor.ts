@@ -4,7 +4,7 @@ import type { Env } from "../env.ts";
 import { type AdviceResult, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
 import { getState, setState } from "./repo.ts";
 import { getRates, toUAHMinor } from "./finance.ts";
-import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit } from "./stats.ts";
+import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels } from "./stats.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -151,6 +151,10 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     return { category: b.name, limit_uah: Math.round(b.lim / 100), spent_uah: Math.round(spent / 100), used_pct: b.lim > 0 ? Math.round((spent / b.lim) * 100) : null };
   });
   const subsMonthly = Math.round((subsAgg?.planned ?? 0) / 100);
+  // Канонічний «місячний рівень» категорії (fixed=останній платіж, змінні=середнє) —
+  // щоб avg_month збігався з рештою екранів (рента 12500, не 8к із 90д÷3).
+  const levels = await categoryMonthlyLevels(env, mult, { now });
+  const catAvgMonth = (id: number, spent90: number) => Math.round((levels.get(id)?.level ?? spent90 / 3) / 100);
   // §2/§5: найбільші операції з id — щоб AI цитував конкретику токеном [tx:ID].
   const citable = await notableTransactions(env, 90, 12);
 
@@ -179,7 +183,7 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     },
     subscriptions_monthly_uah: subsMonthly,
     subscriptions_count: subsAgg?.n ?? 0,
-    top_categories: (cats.results ?? []).map((c) => ({ id: c.id, name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: Math.round(c.spent / 3 / 100) })),
+    top_categories: (cats.results ?? []).map((c) => ({ id: c.id, name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: catAvgMonth(c.id, c.spent) })),
     top_merchants: (merchants.results ?? []).map((m) => ({ merchant: m.merchant, spent_90d_uah: Math.round(m.spent / 100), avg_month_uah: Math.round(m.spent / 3 / 100) })),
     by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), avg_month_uah: Math.round(e.spent / 3 / 100) })),
     by_importance: (importance.results ?? []).map((x) => ({ level: x.importance, spent_90d_uah: Math.round(x.spent / 100) })),
@@ -213,8 +217,9 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
       runway_months: runwayMonths,
       monthly_burn: monthlyBurn,
       own_funds: ownFunds,
+      cushion: funds.cushion, // §+1: ліквідна подушка окремо (для тренду/дельт)
     });
-    await setState(env.DB, "advisor_history", JSON.stringify(hist.slice(0, 12)));
+    await setState(env.DB, "advisor_history", JSON.stringify(hist.slice(0, 24)));
   } catch { /* історія не критична */ }
 
   return stored;
@@ -222,10 +227,14 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
 
 export interface AdviceHistoryItem {
   generated_at: number; summary: string; runway_months: number | null; monthly_burn: number; own_funds: number;
+  cushion?: number; // §+1: додано пізніше — старі записи можуть не мати
 }
 export async function getAdviceHistory(env: Env): Promise<AdviceHistoryItem[]> {
   const raw = await getState(env.DB, "advisor_history");
   return raw ? (JSON.parse(raw) as AdviceHistoryItem[]) : [];
+}
+export async function clearAdviceHistory(env: Env): Promise<void> {
+  await setState(env.DB, "advisor_history", JSON.stringify([]));
 }
 
 export async function getStoredAdvice(env: Env): Promise<StoredAdvice | null> {
@@ -272,6 +281,10 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
   const currentLimit = new Map<number, number>();
   for (const b of budgetRows.results ?? []) if (b.category_id != null) currentLimit.set(b.category_id, b.amount);
 
+  // Канонічний місячний рівень (fixed=останній платіж, змінні=середнє) — узгоджено з рештою.
+  const levels = await categoryMonthlyLevels(env, mult, { now });
+  const catLevel = (id: number, spent90: number) => levels.get(id)?.level ?? Math.round(spent90 / 3);
+
   const totalSpent90 = cats.reduce((s, c) => s + c.spent, 0);
   const monthlyBurn = Math.round(totalSpent90 / 3);
   const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
@@ -284,7 +297,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
     categories: cats.map((c) => ({
       id: c.category_id,
       name: c.name,
-      avg_month_uah: Math.round(c.spent / 3 / 100),
+      avg_month_uah: Math.round(catLevel(c.category_id, c.spent) / 100),
       current_limit_uah: Math.round((currentLimit.get(c.category_id) ?? 0) / 100),
     })),
   };
@@ -295,7 +308,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
 
   const rows: BudgetProposalRow[] = cats.map((c) => {
     const p = byId.get(c.category_id);
-    const avgMonth = Math.round(c.spent / 3);
+    const avgMonth = catLevel(c.category_id, c.spent);
     return {
       category_id: c.category_id,
       name: c.name,
@@ -330,6 +343,8 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
   for (const b of budgetRows.results ?? []) if (b.category_id != null) limit.set(b.category_id, b.amount);
   const cats = spendRows.results ?? [];
   const monthlyBurn = Math.round(cats.reduce((s, c) => s + c.spent, 0) / 3);
+  const levels = await categoryMonthlyLevels(env, mult, { now });
+  const catLevel = (id: number, spent90: number) => levels.get(id)?.level ?? Math.round(spent90 / 3);
 
   const ctx = {
     situation: (await getProfile(env)) || "(не вказано)",
@@ -337,7 +352,7 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
     monthly_burn_uah: Math.round(monthlyBurn / 100),
     categories: cats.map((c) => ({
       id: c.id, name: c.name, importance: c.importance,
-      avg_month_uah: Math.round(c.spent / 3 / 100),
+      avg_month_uah: Math.round(catLevel(c.id, c.spent) / 100),
       current_limit_uah: Math.round((limit.get(c.id) ?? 0) / 100),
     })),
   };

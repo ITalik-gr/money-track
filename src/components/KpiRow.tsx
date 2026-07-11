@@ -1,6 +1,7 @@
 import { useGetOverviewQuery, useGetPeriodModeQuery } from "../store/api.ts";
 import { Icon } from "./Icon.tsx";
 import { formatMinor, currencySign } from "../lib/format.ts";
+import { useCountUp } from "../lib/useCountUp.ts";
 import { InfoTip } from "./InfoTip.tsx";
 
 function pct(cur: number, prev: number): number | null {
@@ -23,6 +24,7 @@ function KpiTile({
   const goodWhenUp = kind === "income";
   const up = (deltaPct ?? 0) >= 0;
   const good = up === goodWhenUp;
+  const animVal = useCountUp(valueMinor); // §10.4
 
   return (
     <div className="card kpi-tile">
@@ -36,7 +38,7 @@ function KpiTile({
         <span className="kpi-info"><InfoTip>{info}</InfoTip></span>
       </div>
       <div className="kpi-num num-hero">
-        {formatMinor(valueMinor, { decimals: false })}
+        {formatMinor(Math.round(animVal), { decimals: false })}
         <span className="cur">{currencySign(980)}</span>
       </div>
       <div className="kpi-foot">

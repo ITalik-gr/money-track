@@ -144,6 +144,87 @@ export async function recurringOneoffSplit(
   return { ref_from: refFrom, recurring: get("recurring"), oneoff: get("oneoff"), oneoff_items: items.results ?? [] };
 }
 
+// ---- Канонічний «місячний рівень» категорії (ЄДИНЕ джерело) -----------------
+// Проблема (розходження 8к/12500): різні екрани рахували «місячну» суму по різних
+// вікнах — 6-міс середнє / 90д÷3 / останній платіж. Після стрибка (рента 8к→12500)
+// вони не збігались. Тут — один рівень на категорію, узгоджений скрізь:
+//   • fixed-кост (регулярний, СТАБІЛЬНИЙ — низький CV, як рента/підписка): рівень = ОСТАННІЙ
+//     повний місяць (ловить стрибок ціни, бо середнє відстає);
+//   • змінна категорія (продукти/розваги — високий CV): рівень = середнє за вікно (згладжене).
+// Рахуємо лише по ПОВНИХ місяцях (поточний частковий виключено). Зведено в ₴ (mult).
+export interface MonthLevel { level: number; mean: number; last: number; active_months: number; cv: number; fixed: boolean }
+export async function categoryMonthlyLevels(
+  env: Env, mult: string, opts: { months?: number; now?: number } = {},
+): Promise<Map<number, MonthLevel>> {
+  const K = opts.months ?? 6;
+  const now = opts.now ?? Math.floor(Date.now() / 1000);
+  const d = new Date(now * 1000);
+  const from = Math.floor(new Date(d.getFullYear(), d.getMonth() - K, 1).getTime() / 1000);
+  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+  const keys: string[] = [];
+  for (let i = K; i >= 1; i--) keys.push(new Date(d.getFullYear(), d.getMonth() - i, 1).toISOString().slice(0, 7));
+
+  const rows = await env.DB.prepare(
+    `SELECT ${EFF_CAT_ID} AS id, strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE}
+     GROUP BY ${EFF_CAT_ID}, m`,
+  ).bind(from, monthStart).all<{ id: number | null; m: string; spent: number }>();
+
+  const byCat = new Map<number, Map<string, number>>();
+  for (const r of rows.results ?? []) {
+    if (r.id == null) continue;
+    (byCat.get(r.id) ?? byCat.set(r.id, new Map()).get(r.id)!).set(r.m, r.spent);
+  }
+
+  const cvOf = (arr: number[]): number => {
+    if (!arr.length) return 0;
+    const m = arr.reduce((s, v) => s + v, 0) / arr.length;
+    if (m <= 0) return 0;
+    const v = arr.reduce((s, x) => s + (x - m) ** 2, 0) / arr.length;
+    return Math.sqrt(v) / m;
+  };
+
+  const out = new Map<number, MonthLevel>();
+  for (const [id, months] of byCat) {
+    const series = keys.map((k) => months.get(k) ?? 0);
+    const mean = Math.round(series.reduce((s, v) => s + v, 0) / K);
+    const last = series[series.length - 1] ?? 0;
+    const activeMonths = series.filter((v) => v > 0).length;
+    // Fixed-кост розпізнаємо за СТАБІЛЬНІСТЮ ОСТАННІХ місяців, а не всього вікна: рента/підписка —
+    // останні платежі майже однакові (CV≈0), тож рівень = їх середнє (ловить стрибок ціни). Змінні
+    // категорії (продукти/розваги) мають розкид навіть недавно → рівень = середнє за все вікно
+    // (не хапаємо випадковий пік останнього місяця). Крок ренти визнається за 2-3 міс нового рівня.
+    const recentNz = series.slice(-3).filter((v) => v > 0);
+    const fixed = recentNz.length >= 2 && cvOf(recentNz) <= 0.12;
+    const level = fixed ? Math.round(recentNz.reduce((s, v) => s + v, 0) / recentNz.length) : mean;
+    out.set(id, { level, mean, last, active_months: activeMonths, cv: Math.round(cvOf(series.filter((v) => v > 0)) * 100) / 100, fixed });
+  }
+  return out;
+}
+
+// ---- Прогноз витрати «зі здоровим глуздом» ----------------------------------
+// Проблема наївного темпу (`spent / elapsedFrac`): рано в місяці або для «лумпів»
+// (податки, оренда, одна заправка) він роздуває прогноз у рази — 3000₴ податку на 9-й
+// день → 10000₴; одна заправка 900₴ → 2500₴. Замість цього: прогноз = «вже витрачено +
+// історичний залишок», а лумпи (домінує одна велика операція) НЕ екстраполюємо взагалі.
+//   • cur         — витрачено цього періоду (₴-мінор, додатне);
+//   • usual        — історичне середнє за трейлінг-місяці (₴-мінор);
+//   • elapsedFrac — частка періоду, що минула (0..1);
+//   • lumpy       — витрата зосереджена в 1-2 великих операціях (не «капає» щодня).
+// Континуальні категорії блендуємо: рано довіряємо історії, пізно — фактичному темпу;
+// із запобіжником-кепом (не вище 3× звичного, поки факт сам не перевищив) проти «бреду».
+export function projectSpend(cur: number, usual: number, elapsedFrac: number, lumpy: boolean): number {
+  const ef = Math.min(1, Math.max(0.05, elapsedFrac));
+  if (lumpy || usual <= 0) return Math.round(Math.max(cur, usual)); // лумп уже стався — не множимо
+  const remHist = usual * (1 - ef);                 // скільки історія каже ще витратити
+  const remPace = (cur / ef) * (1 - ef);            // якщо тримати поточний темп
+  const remaining = remHist * (1 - ef) + remPace * ef; // рано→історія, пізно→темп
+  const projected = cur + remaining;
+  const cap = Math.max(cur, usual * 3);             // антибред: не вище 3× звичного (поки факт не перевищив)
+  return Math.round(Math.min(projected, cap));
+}
+
 // ---- Періоди (календарний ⇄ ковзний) ----------------------------------------
 export type PeriodMode = "calendar" | "rolling";
 export type Preset = "week" | "month" | "quarter" | "year";

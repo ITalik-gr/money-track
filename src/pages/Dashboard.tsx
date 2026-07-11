@@ -23,7 +23,7 @@ export function Dashboard() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Вітаю, Віталій 👋</div>
+          <div className="greet">Вітаю, Віталій</div>
           <div className="sub">Твої гроші, рахунки й бюджети — в одному місці.</div>
         </div>
         <div className="page-head-actions">
@@ -33,27 +33,25 @@ export function Dashboard() {
 
       <QuickBar />
 
-      <div className="dash">
-        <div className="dash-col">
-          <BalanceCard />
-          <CreditBanner />
-          <CapitalTrendCard />
-          <section>
-            <div className="section-head">
-              <h2>Останні</h2>
-              <Link to="/tx" className="label">усі →</Link>
-            </div>
-            <TransactionList rows={rows} />
-          </section>
-        </div>
+      {/* Hero band: власні кошти (акцентована картка) + два ключові KPI */}
+      <div className="dash-hero">
+        <BalanceCard />
+        <KpiRow />
+      </div>
 
-        <div className="dash-col">
-          <KpiRow />
-          <SafeToSpend />
-          <MonthPulse />
-          <ForecastCard />
-          <UpcomingSubs />
+      {/* Основна аналітика (широка колонка) + рейл швидкого погляду (вузька) */}
+      <div className="dash">
+        <div className="dash-main">
           <CashflowCard />
+          <div className="dash-pair">
+            <SafeToSpend />
+            <MonthPulse />
+          </div>
+          <div className="dash-pair">
+            <ForecastCard />
+            <UpcomingSubs />
+          </div>
+          <CapitalTrendCard />
           <section>
             <div className="section-head">
               <h2>Бюджети-конверти</h2>
@@ -62,6 +60,17 @@ export function Dashboard() {
             <EnvelopeGrid />
           </section>
         </div>
+
+        <aside className="dash-rail">
+          <CreditBanner />
+          <section>
+            <div className="section-head">
+              <h2>Останні</h2>
+              <Link to="/tx" className="label">усі →</Link>
+            </div>
+            <TransactionList rows={rows} />
+          </section>
+        </aside>
       </div>
     </>
   );

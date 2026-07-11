@@ -1,4 +1,5 @@
 import { AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { CHART_ANIM } from "../lib/motion.ts";
 
 // §1: кумулятивний потік (running balance) — накопичена чиста різниця (надходження − витрати)
 // по днях періоду. Показує траєкторію: пішов період у плюс чи в мінус і коли.
@@ -39,21 +40,21 @@ export function CumulativeChart({ rows, sign, height = 220 }: { rows: CumRow[]; 
         <AreaChart data={rows} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
           <defs>
             <linearGradient id="gCum" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={stroke} stopOpacity={0.2} />
+              <stop offset="0%" stopColor={stroke} stopOpacity={0.08} />
               <stop offset="100%" stopColor={stroke} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid vertical={false} stroke="var(--line)" strokeDasharray="4 4" />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={20}
-            tick={{ fontSize: 12, fill: "var(--muted)" }} />
-          <YAxis tickLine={false} axisLine={false} width={46}
+          <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={24}
+            tick={{ fontSize: 11, fill: "var(--muted)" }} />
+          <YAxis tickLine={false} axisLine={false} width={46} tickCount={4}
             tick={{ fontSize: 11, fill: "var(--muted)" }}
             tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
           <ReferenceLine y={0} stroke="var(--line-strong)" strokeWidth={1} />
           <Tooltip content={<CumTooltip sign={sign} />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />
-          <Area type="monotone" dataKey="cum" stroke={stroke} strokeWidth={2.4} fill="url(#gCum)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+          <Area type="monotone" dataKey="cum" stroke={stroke} strokeWidth={2} strokeLinecap="round" fill="url(#gCum)" dot={false} activeDot={{ r: 3.5 }} connectNulls={false} {...CHART_ANIM} />
           {hasProj && (
-            <Line type="monotone" dataKey="proj" stroke={stroke} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={{ r: 3 }} connectNulls opacity={0.7} />
+            <Line type="monotone" dataKey="proj" stroke={stroke} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={{ r: 3 }} connectNulls opacity={0.7} {...CHART_ANIM} />
           )}
         </AreaChart>
       </ResponsiveContainer>

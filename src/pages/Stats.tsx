@@ -118,7 +118,10 @@ export function Stats() {
   // §1b: середній чек + прогноз витрат на кінець періоду (лише календарний, поки період не завершено).
   const avgCheck = data && data.summary.n ? Math.round(data.summary.spend / data.summary.n) : 0;
   const periodLen = periodLength(range, mode, from);
-  const projected = data && mode === "calendar" && days < periodLen ? Math.round(avgDay * periodLen) : null;
+  // Прогноз показуємо лише коли минуло ≥40% періоду — інакше лінійна екстраполяція темпу
+  // рано в періоді роздуває цифру в рази (детальний, історично-якірний прогноз — на Головній/у Патернах).
+  const projected = data && mode === "calendar" && days < periodLen && days >= periodLen * 0.4
+    ? Math.round(avgDay * periodLen) : null;
   const periodNote = mode === "calendar"
     ? { week: "цей тиждень", month: "цей місяць", quarter: "цей квартал", year: "цей рік" }[range]
     : `останні ${RANGES[range].days} дн`;
@@ -140,7 +143,8 @@ export function Stats() {
           </div>
           <button className="pill-toggle" title="Календарний = природний цикл (цей тиждень/місяць). Ковзний = останні N днів."
             onClick={() => setPeriodMode(mode === "calendar" ? "rolling" : "calendar")}>
-            {mode === "calendar" ? "📅 календарний" : "↔ ковзний"}
+            <Icon name={mode === "calendar" ? "calendar" : "repeat"} size={14} />
+            {mode === "calendar" ? "Календарний" : "Ковзний"}
           </button>
           {currencies && currencies.length > 1 && (
             <Select
@@ -153,9 +157,9 @@ export function Stats() {
         </div>
       </div>
 
-      <div className="seg" style={{ marginBottom: 16, flexWrap: "wrap" }}>
+      <div className="stat-tabs" role="tablist">
         {(Object.keys(TABS) as TabKey[]).map((k) => (
-          <button key={k} className={`seg-btn ${tab === k ? "active" : ""}`} onClick={() => setParam("tab", k)}>
+          <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setParam("tab", k)}>
             {TABS[k]}
           </button>
         ))}
@@ -360,7 +364,7 @@ function SecondaryHeader() {
     <>
       <div className="cat-ai-callout">
         <div className="cat-ai-body">
-          <div className="cat-ai-title">✨ AI визначає реальну категорію переказів</div>
+          <div className="cat-ai-title"><Icon name="spark" size={15} /> AI визначає реальну категорію переказів</div>
           <div className="cat-ai-sub">
             {pending > 0
               ? `${pending} переказів/знять без реальної категорії. Відкрий рев'ю — AI підкаже, на що кошти пішли (зняв готівку → «Продукти»), а ти перевіриш і виправиш кожен рядок.`
@@ -368,7 +372,8 @@ function SecondaryHeader() {
           </div>
         </div>
         <button type="button" className="btn primary cat-ai-btn" onClick={() => setShowReview(true)}>
-          {pending > 0 ? "✨ Рев'ю переказів" : "Перевірити"}
+          {pending > 0 && <Icon name="spark" size={15} />}
+          {pending > 0 ? "Рев'ю переказів" : "Перевірити"}
         </button>
       </div>
       {showReview && <TransferReviewModal onClose={() => setShowReview(false)} />}
@@ -829,12 +834,12 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
               <div className="split-seg" style={{ width: `${100 - weekendPct}%`, background: "var(--c-cobalt, var(--accent))" }}>{100 - weekendPct}%</div>
             </HoverTip>
             <HoverTip content={<><div className="tip-lbl">Вихідні</div><div className="r">{formatMinor(weekendSum, { decimals: false })} {sign} · {weekendPct}%</div></>}>
-              <div className="split-seg alt" style={{ width: `${weekendPct}%`, background: "var(--c-ochre, #c9871a)" }}>{weekendPct}%</div>
+              <div className="split-seg alt" style={{ width: `${weekendPct}%`, background: "var(--c-teal)" }}>{weekendPct}%</div>
             </HoverTip>
           </div>
           <div className="split-legend">
             <span><span className="d" style={{ background: "var(--accent)" }} />Будні · {formatMinor(weekdaySum, { decimals: false })} {sign}</span>
-            <span><span className="d" style={{ background: "#c9871a" }} />Вихідні · {formatMinor(weekendSum, { decimals: false })} {sign}</span>
+            <span><span className="d" style={{ background: "var(--c-teal)" }} />Вихідні · {formatMinor(weekendSum, { decimals: false })} {sign}</span>
           </div>
           <p className="deep-desc">{weekendPct >= 40 ? "Вихідні зʼїдають помітну частку — там найлегше зекономити." : "Основні витрати в будні — вихідні під контролем."}</p>
         </div>
@@ -887,12 +892,12 @@ function SpendingPatterns() {
           </div>
           <div className="card" style={{ padding: 16 }}>
             <div className="split-bar">
-              {reg > 0 && <span style={{ width: `${(reg / tot) * 100}%`, background: "#1f6e4c" }} title={`Регулярні: ${Math.round((reg / tot) * 100)}%`} />}
-              {one > 0 && <span style={{ width: `${(one / tot) * 100}%`, background: "#c9871a" }} title={`Разові: ${Math.round((one / tot) * 100)}%`} />}
+              {reg > 0 && <span style={{ width: `${(reg / tot) * 100}%`, background: "var(--accent)" }} title={`Регулярні: ${Math.round((reg / tot) * 100)}%`} />}
+              {one > 0 && <span style={{ width: `${(one / tot) * 100}%`, background: "var(--c-teal)" }} title={`Разові: ${Math.round((one / tot) * 100)}%`} />}
             </div>
             <div className="imp-legend">
-              <span className="lg"><span className="d" style={{ background: "#1f6e4c" }} />Регулярні · <b>{formatMinor(reg, { decimals: false })} ₴</b> <span className="muted">({recurring.recurring.n} оп)</span></span>
-              <span className="lg"><span className="d" style={{ background: "#c9871a" }} />Разові · <b>{formatMinor(one, { decimals: false })} ₴</b> <span className="muted">({recurring.oneoff.n} оп)</span></span>
+              <span className="lg"><span className="d" style={{ background: "var(--accent)" }} />Регулярні · <b>{formatMinor(reg, { decimals: false })} ₴</b> <span className="muted">({recurring.recurring.n} оп)</span></span>
+              <span className="lg"><span className="d" style={{ background: "var(--c-teal)" }} />Разові · <b>{formatMinor(one, { decimals: false })} ₴</b> <span className="muted">({recurring.oneoff.n} оп)</span></span>
             </div>
             {recurring.oneoff_items.length > 0 && (
               <div className="oneoff-list">
@@ -940,7 +945,7 @@ function SpendingPatterns() {
         <section>
           <div className="section-head">
             <h2>Темп по категоріях</h2>
-            <HoverTip content={<>Скільки вже витрачено цього місяця (факт), прогноз на кінець місяця й твій звичний місяць. Прогноз множить лише регулярну частину; разові витрати додаються як є. Бейдж — прогноз відносно звичного: &lt;100% нижче норми, &gt;100% вище.</>}>
+            <HoverTip content={<>Скільки вже витрачено цього місяця (факт), прогноз на кінець місяця й твій звичний місяць. Прогноз = вже витрачене + історичний залишок; разові й лумпи (податки, оренда, заправка) не розганяються. Бейдж — прогноз відносно звичного: &lt;100% нижче норми, &gt;100% вище.</>}>
               <span className="label">факт · прогноз · звичне</span>
             </HoverTip>
           </div>
@@ -949,7 +954,7 @@ function SpendingPatterns() {
               <div key={i} className="pace-row">
                 <span className="pace-name">
                   <span className="d" style={{ background: p.color ?? "var(--accent)" }} />{p.category}
-                  {p.mostly_oneoff && <span className="pace-tag" title="Витрати цього місяця тут переважно разові — прогноз не розганяється">разове</span>}
+                  {(p.mostly_oneoff || p.lumpy) && <span className="pace-tag" title="Витрата тут — разова або зосереджена в 1-2 великих платежах (податок, оренда, заправка); прогноз її не множить">не щоденне</span>}
                 </span>
                 <span className="pace-nums num-mono">
                   {formatMinor(p.spent, { decimals: false })} → <b>≈{formatMinor(p.projected, { decimals: false })}</b> ₴

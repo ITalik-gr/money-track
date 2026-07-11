@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "../lib/toast.ts";
+import { Icon } from "../components/Icon.tsx";
 import {
   useBackfillStartMutation,
   useBackfillStepMutation,
@@ -60,97 +61,122 @@ export function Setup() {
 
   return (
     <>
-      <div className="section-head"><h2>Налаштування та синхронізація</h2></div>
-
-      <ProfileCard />
-
-      <AiUsageCard />
-
-      <div className="card" style={{ padding: 16, marginBottom: 12 }}>
-        <div className="stack">
-          <Status label="Рахунків у базі" value={status?.accounts ?? "…"} />
-          <Status label="Транзакцій" value={status?.transactions ?? "…"} />
-          <Status label="Вебхук моно" value={status?.webhookRegistered ? "зареєстровано" : "ні"} />
+      <div className="page-head">
+        <div>
+          <div className="greet">Налаштування</div>
+          <div className="sub">Профіль, синхронізація Monobank, AI-моделі та інтеграції.</div>
         </div>
       </div>
 
-      <div className="stack">
-        <button className="btn" onClick={() => syncAccounts()} disabled={syncState.isLoading}>
-          1. Підтягнути рахунки та банки з Monobank
-        </button>
-        <button className="btn" onClick={() => registerWebhook()} disabled={whState.isLoading}>
-          2. Зареєструвати вебхук (онлайн-оновлення)
-        </button>
-        <button className="btn" onClick={runBackfill} disabled={running}>
-          3. Бекфіл за ~90 днів {running && progress ? `— ${progress.progress}/${progress.total}` : ""}
-        </button>
-        <button className="btn" onClick={() => refreshRates()} disabled={ratesState.isLoading}>
-          Оновити курси валют
-        </button>
-        <button
-          className="btn"
-          disabled={transfersState.isLoading}
-          onClick={async () => {
-            const r = await detectTransfers().unwrap();
-            toast.success(`Позначено переказами: ${r.marked}`);
-          }}
-        >
-          Знайти перекази між своїми картками
-        </button>
-        <button
-          className="btn"
-          disabled={subCatsState.isLoading}
-          onClick={async () => {
-            const r = await applySubCats().unwrap();
-            toast.success(`Категорію підписки застосовано до ${r.fixed} операцій`);
-          }}
-        >
-          Застосувати категорії підписок
-        </button>
+      {/* Профіль і AI-блоки — на всю ширину (текстове поле / перемикачі моделей потребують місця);
+          решта — картки-групи дій у 2-колонковій сітці (§налаштування-layout). */}
+      <div className="settings-grid">
+        <ProfileCard />
+        <AiUsageCard />
 
-        <button
-          className="btn"
-          disabled={tgState.isLoading}
-          onClick={async () => {
-            const r = await registerTelegram().unwrap();
-            if (r.error) toast.error(`Помилка: ${r.error}`); else toast.success("Telegram-бот підключено");
-          }}
-        >
-          Підключити Telegram-бота
-        </button>
-        <button
-          className="btn"
-          disabled={tgPushState.isLoading}
-          onClick={async () => {
-            const r = await tgProactive().unwrap();
-            if (r.sent) toast.success("Проактивний пуш надіслано (глянь у Telegram)");
-            else toast.info(`Пуш не надіслано: ${r.reason ?? "TG не налаштовано"}`);
-          }}
-        >
-          Тест: надіслати підсумок + бюджети в TG
-        </button>
-        <button
-          className="btn"
-          disabled={scanState.isLoading}
-          onClick={async () => {
-            const r = await scanAlerts().unwrap();
-            if (r.sent > 0) toast.success(`Надіслано алертів: ${r.sent} (глянь у Telegram)`);
-            else toast.info("Вагомих непояснених операцій за 14 днів не знайдено.");
-          }}
-        >
-          Тест: сканувати вагомі операції → алерти в TG
-        </button>
+        <div className="card set-card">
+          <div className="set-card-h"><Icon name="stats" size={16} />Стан бази</div>
+          <div className="stack" style={{ marginTop: 12 }}>
+            <Status label="Рахунків у базі" value={status?.accounts ?? "…"} />
+            <Status label="Транзакцій" value={status?.transactions ?? "…"} />
+            <Status label="Вебхук моно" value={status?.webhookRegistered ? "зареєстровано" : "ні"} />
+          </div>
+        </div>
+
+        <div className="card set-card">
+          <div className="set-card-h"><Icon name="repeat" size={16} />Перший запуск</div>
+          <p className="set-card-sub">Одноразово, у цьому порядку.</p>
+          <div className="stack">
+            <button className="btn" onClick={() => syncAccounts()} disabled={syncState.isLoading}>
+              1. Підтягнути рахунки та банки з Monobank
+            </button>
+            <button className="btn" onClick={() => registerWebhook()} disabled={whState.isLoading}>
+              2. Зареєструвати вебхук (онлайн-оновлення)
+            </button>
+            <button className="btn" onClick={runBackfill} disabled={running}>
+              3. Бекфіл за ~90 днів {running && progress ? `— ${progress.progress}/${progress.total}` : ""}
+            </button>
+            <button className="btn" onClick={() => refreshRates()} disabled={ratesState.isLoading}>
+              Оновити курси валют
+            </button>
+          </div>
+          {running && (
+            <p className="set-card-sub" style={{ marginTop: 10, marginBottom: 0 }}>
+              Бекфіл іде по одному запиту раз на 60 секунд (обмеження Monobank). Можна лишити вкладку відкритою.
+            </p>
+          )}
+        </div>
+
+        <div className="card set-card">
+          <div className="set-card-h"><Icon name="settings" size={16} />Обслуговування</div>
+          <p className="set-card-sub">Періодично, за потреби.</p>
+          <div className="stack">
+            <button
+              className="btn"
+              disabled={transfersState.isLoading}
+              onClick={async () => {
+                const r = await detectTransfers().unwrap();
+                toast.success(`Позначено переказами: ${r.marked}`);
+              }}
+            >
+              Знайти перекази між своїми картками
+            </button>
+            <button
+              className="btn"
+              disabled={subCatsState.isLoading}
+              onClick={async () => {
+                const r = await applySubCats().unwrap();
+                toast.success(`Категорію підписки застосовано до ${r.fixed} операцій`);
+              }}
+            >
+              Застосувати категорії підписок
+            </button>
+          </div>
+        </div>
+
+        <div className="card set-card">
+          <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
+          <p className="set-card-sub">Бот для пушів і швидкого запису.</p>
+          <div className="stack">
+            <button
+              className="btn"
+              disabled={tgState.isLoading}
+              onClick={async () => {
+                const r = await registerTelegram().unwrap();
+                if (r.error) toast.error(`Помилка: ${r.error}`); else toast.success("Telegram-бот підключено");
+              }}
+            >
+              Підключити Telegram-бота
+            </button>
+            <button
+              className="btn"
+              disabled={tgPushState.isLoading}
+              onClick={async () => {
+                const r = await tgProactive().unwrap();
+                if (r.sent) toast.success("Проактивний пуш надіслано (глянь у Telegram)");
+                else toast.info(`Пуш не надіслано: ${r.reason ?? "TG не налаштовано"}`);
+              }}
+            >
+              Тест: надіслати підсумок + бюджети в TG
+            </button>
+            <button
+              className="btn"
+              disabled={scanState.isLoading}
+              onClick={async () => {
+                const r = await scanAlerts().unwrap();
+                if (r.sent > 0) toast.success(`Надіслано алертів: ${r.sent} (глянь у Telegram)`);
+                else toast.info("Вагомих непояснених операцій за 14 днів не знайдено.");
+              }}
+            >
+              Тест: сканувати вагомі операції → алерти в TG
+            </button>
+          </div>
+        </div>
       </div>
 
-      {running && (
-        <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-          Бекфіл іде по одному запиту раз на 60 секунд (обмеження Monobank). Можна лишити вкладку відкритою.
-        </p>
-      )}
-
-      <button className="btn" style={{ marginTop: 24 }} onClick={() => logout()}>
-        Вийти
-      </button>
+      <div className="set-footer">
+        <button className="btn ghost" onClick={() => logout()}>Вийти з акаунта</button>
+      </div>
     </>
   );
 }
@@ -173,9 +199,9 @@ function ProfileCard() {
   useEffect(() => { if (profile) setText(profile.text); }, [profile]);
 
   return (
-    <div className="card ai-block" style={{ marginBottom: 12 }}>
+    <div className="card ai-block set-full">
       <div className="ai-block-head">
-        <span className="ai-block-title">✨ Про мене — щоб AI мене розумів</span>
+        <span className="ai-block-title"><Icon name="spark" size={16} />Про мене — щоб AI мене розумів</span>
       </div>
       <p className="ai-block-hint">
         Коротко опиши себе й свою ситуацію: чим займаєшся, дохід/робота, цілі, звички витрат, що для тебе «податки» чи
@@ -211,21 +237,19 @@ function AiUsageCard() {
     { label: "За весь час", cost: data.total.cost_usd, calls: data.total.calls },
   ];
   return (
-    <div className="card" style={{ padding: 16, marginBottom: 12 }}>
-      <div className="ai-block-head" style={{ marginBottom: 8 }}>
-        <span className="ai-block-title">💸 Витрати на AI</span>
-      </div>
-      <div className="stack">
+    <div className="card set-full">
+      <div className="set-card-h"><Icon name="spark" size={16} />AI: витрати й моделі</div>
+      <div className="ai-usage-row">
         {rows.map((r) => (
-          <Status
-            key={r.label}
-            label={r.label}
-            value={`${money(r.cost)} · ${r.calls} викл.`}
-          />
+          <div key={r.label} className="ai-usage-tile">
+            <span className="label">{r.label}</span>
+            <span className="ai-usage-cost num-hero">{money(r.cost)}</span>
+            <span className="ai-usage-calls muted">{r.calls} викл.</span>
+          </div>
         ))}
       </div>
       <AiModelToggle />
-      <p className="ai-block-hint" style={{ marginTop: 8, marginBottom: 0 }}>
+      <p className="ai-block-hint" style={{ marginTop: 12, marginBottom: 0 }}>
         Модель окремо на задачу. Категоризація/OCR завжди на Haiku. Вартість — оцінка за токенами, не рахунок.
       </p>
     </div>

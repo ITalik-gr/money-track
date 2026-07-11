@@ -1,6 +1,7 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useGetCapitalTrendQuery } from "../store/api.ts";
 import { InfoTip } from "./InfoTip.tsx";
+import { CHART_ANIM } from "../lib/motion.ts";
 
 // §4 Тренд капіталу: динаміка власних коштів (₴) за 6 місяців (реконструкція від поточного тоталу).
 const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
@@ -49,18 +50,18 @@ export function CapitalTrendCard() {
           <AreaChart data={rows} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
             <defs>
               <linearGradient id="gCap" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.22} />
+                <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.08} />
                 <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid vertical={false} stroke="var(--line)" strokeDasharray="4 4" />
+            <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={28}
-              tick={{ fontSize: 12, fill: "var(--muted)" }} />
-            <YAxis tickLine={false} axisLine={false} width={46}
+              tick={{ fontSize: 11, fill: "var(--muted)" }} />
+            <YAxis tickLine={false} axisLine={false} width={46} tickCount={4}
               tick={{ fontSize: 11, fill: "var(--muted)" }}
               tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
             <Tooltip content={<CapTooltip />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />
-            <Area type="monotone" dataKey="capital_uah" stroke="var(--accent)" strokeWidth={2.4} fill="url(#gCap)" dot={false} activeDot={{ r: 4 }} />
+            <Area type="monotone" dataKey="capital_uah" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round" fill="url(#gCap)" dot={false} activeDot={{ r: 3.5 }} {...CHART_ANIM} />
           </AreaChart>
         </ResponsiveContainer>
       </div>

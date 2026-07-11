@@ -4,10 +4,12 @@ import { useGetReportsQuery, useGetReportQuery, useGenerateReportMutation } from
 import type { ReportListItem, FinancialReport } from "../store/api.ts";
 import { toast } from "../lib/toast.ts";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { CHART_ANIM } from "../lib/motion.ts";
 import { formatMinor } from "../lib/format.ts";
 import { renderRich } from "../lib/citations.tsx";
 import { CashflowChart } from "../components/CashflowChart.tsx";
 import { InfoTip } from "../components/InfoTip.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 
 const rDate = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short" });
@@ -54,13 +56,13 @@ export function Reports() {
       </div>
 
       <div className="card ai-block" style={{ marginBottom: 16 }}>
-        <div className="ai-block-head"><span className="ai-block-title">🧠 Згенерувати</span></div>
+        <div className="ai-block-head"><span className="ai-block-title"><Icon name="spark" size={16} />Згенерувати</span></div>
         <p className="ai-block-hint">
           Авто щотижня + щомісяця (за завершений період). Кнопки нижче — <b>за поточний період до сьогодні</b>.
         </p>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn primary" disabled={isLoading} onClick={() => run("week")}>
-            {busy === "week" ? "Генерую…" : "✨ За тиждень"}
+            <Icon name="spark" size={15} />{busy === "week" ? "Генерую…" : "За тиждень"}
           </button>
           <button className="btn" disabled={isLoading} onClick={() => run("month")}>
             {busy === "month" ? "Генерую…" : "За місяць"}
@@ -309,7 +311,7 @@ function CategoryDonut({ cats }: { cats: { name: string; amount_uah: number }[] 
     <div className="report-donut">
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
-          <Pie data={withPct} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={82} paddingAngle={1.5} strokeWidth={0}>
+          <Pie data={withPct} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={82} paddingAngle={1.5} strokeWidth={0} {...CHART_ANIM}>
             {withPct.map((d, i) => <Cell key={i} fill={d.color} />)}
           </Pie>
           <Tooltip content={<DonutTooltip />} />

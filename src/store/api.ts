@@ -96,6 +96,7 @@ export interface Advice {
 }
 export interface AdviceHistoryItem {
   generated_at: number; summary: string; runway_months: number | null; monthly_burn: number; own_funds: number;
+  cushion?: number;
 }
 
 export interface Summary {
@@ -284,7 +285,7 @@ export interface SpendPatterns {
 }
 export interface PaceItem {
   category: string; color: string | null; spent: number;
-  oneoff: number; mostly_oneoff: boolean;
+  oneoff: number; mostly_oneoff: boolean; lumpy: boolean;
   projected: number; usual: number; pct: number | null;
 }
 
@@ -604,6 +605,10 @@ export const api = createApi({
       query: () => ({ url: "/advisor/generate", method: "POST" }),
       invalidatesTags: ["Advice"],
     }),
+    clearAdviceHistory: b.mutation<{ ok: boolean }, void>({
+      query: () => ({ url: "/advisor/history", method: "DELETE" }),
+      invalidatesTags: ["Advice"],
+    }),
     chatAdvice: b.mutation<{ reply: string }, { messages: { role: "user" | "assistant"; content: string }[]; attachedTxIds?: string[] }>({
       query: (body) => ({ url: "/advisor/chat", method: "POST", body }),
     }),
@@ -713,6 +718,7 @@ export const {
   useGetAdviceQuery,
   useGetAdviceHistoryQuery,
   useGenerateAdviceMutation,
+  useClearAdviceHistoryMutation,
   useChatAdviceMutation,
   useEvaluateGroupMutation,
   useChatGroupMutation,

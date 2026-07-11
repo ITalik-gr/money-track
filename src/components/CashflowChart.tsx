@@ -1,4 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { CHART_ANIM } from "../lib/motion.ts";
 
 // Спільний dual-line графік: витрати + надходження (DESIGN.md §7 F1).
 export interface CfRow { label: string; spend: number; income: number }
@@ -31,26 +32,26 @@ export function CashflowChart({ rows, height = 230 }: { rows: CfRow[]; height?: 
   return (
     <div className="chart-wrap" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
+        {/* DESIGN.md §10.3: система-тони (cobalt-витрата дом. + green-дохід тихий),
+            без пунктир-сітки, 2px round-лінії без крапок, одна делікатна area. */}
         <AreaChart data={rows} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
           <defs>
-            <linearGradient id="gInc" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--chart-income)" stopOpacity={0.22} />
-              <stop offset="100%" stopColor="var(--chart-income)" stopOpacity={0} />
-            </linearGradient>
             <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--chart-expense)" stopOpacity={0.22} />
+              <stop offset="0%" stopColor="var(--chart-expense)" stopOpacity={0.08} />
               <stop offset="100%" stopColor="var(--chart-expense)" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid vertical={false} stroke="var(--line)" strokeDasharray="4 4" />
-          <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={16}
-            tick={{ fontSize: 12, fill: "var(--muted)" }} />
-          <YAxis tickLine={false} axisLine={false} width={46}
+          <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={24}
+            tick={{ fontSize: 11, fill: "var(--muted)" }} />
+          <YAxis tickLine={false} axisLine={false} width={46} tickCount={4}
             tick={{ fontSize: 11, fill: "var(--muted)" }}
             tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
           <Tooltip content={<CfTooltip />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />
-          <Area type="monotone" dataKey="income" stroke="var(--chart-income)" strokeWidth={2.4} fill="url(#gInc)" dot={false} activeDot={{ r: 4 }} />
-          <Area type="monotone" dataKey="spend" stroke="var(--chart-expense)" strokeWidth={2.4} fill="url(#gExp)" dot={false} activeDot={{ r: 4 }} />
+          {/* дохід — тиха лінія без заливки */}
+          <Area type="monotone" dataKey="income" stroke="var(--chart-income)" strokeWidth={2} strokeLinecap="round" fill="none" dot={false} activeDot={{ r: 3.5 }} {...CHART_ANIM} />
+          {/* витрата — домінантна: делікатна area + лінія */}
+          <Area type="monotone" dataKey="spend" stroke="var(--chart-expense)" strokeWidth={2} strokeLinecap="round" fill="url(#gExp)" dot={false} activeDot={{ r: 3.5 }} {...CHART_ANIM} />
         </AreaChart>
       </ResponsiveContainer>
     </div>

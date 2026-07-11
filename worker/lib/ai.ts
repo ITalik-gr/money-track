@@ -172,7 +172,7 @@ async function callHaiku(
   userContent: unknown[],
   maxTokens = 1024,
   model: string = MODEL_FAST,
-): Promise<{ text: string; usage: AnthropicUsage }> {
+): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -192,10 +192,11 @@ async function callHaiku(
   const data = (await res.json()) as {
     content: { type: string; text?: string }[];
     usage: AnthropicUsage;
+    stop_reason?: string | null;
   };
   const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   await recordUsage(env, model, data.usage); // §Хвіст C: акумулюємо вартість усіх викликів
-  return { text, usage: data.usage };
+  return { text, usage: data.usage, stop: data.stop_reason ?? null };
 }
 
 // Витягнути перший збалансований {...} або [...] блок, толеруючи прозу до/після
@@ -209,7 +210,7 @@ async function callHaikuMessages(
   messages: ChatMsg[],
   maxTokens = 700,
   model: string = MODEL_FAST,
-): Promise<{ text: string; usage: AnthropicUsage }> {
+): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -220,10 +221,10 @@ async function callHaikuMessages(
     body: JSON.stringify({ model, max_tokens: maxTokens, ...thinkingOff(model), system, messages }),
   });
   if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
-  const data = (await res.json()) as { content: { type: string; text?: string }[]; usage: AnthropicUsage };
+  const data = (await res.json()) as { content: { type: string; text?: string }[]; usage: AnthropicUsage; stop_reason?: string | null };
   const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   await recordUsage(env, model, data.usage); // §Хвіст C: акумулюємо вартість усіх викликів
-  return { text, usage: data.usage };
+  return { text, usage: data.usage, stop: data.stop_reason ?? null };
 }
 
 export async function chatAdvice(
@@ -269,8 +270,13 @@ async function callHaikuMessagesJson<T>(
   try {
     return { result: parseJson<T>(first.text), usage: first.usage };
   } catch {
-    const retry: ChatMsg[] = [...messages, { role: "user", content: "Поверни ЛИШЕ валідний JSON-обʼєкт, без тексту до/після." }];
-    const second = await callHaikuMessages(env, system, retry, maxTokens, model);
+    // Обірвано по ліміту → більше токенів (не сварка); інакше — суворо просимо чистий JSON.
+    const truncated = first.stop === "max_tokens";
+    const retryTokens = truncated ? Math.min(Math.round(maxTokens * 1.8), 8000) : maxTokens;
+    const retry: ChatMsg[] = truncated
+      ? messages
+      : [...messages, { role: "user", content: "Поверни ЛИШЕ валідний JSON-обʼєкт, без тексту до/після." }];
+    const second = await callHaikuMessages(env, system, retry, retryTokens, model);
     return { result: parseJson<T>(second.text), usage: second.usage };
   }
 }
@@ -334,13 +340,58 @@ function extractBalanced(text: string): string | null {
   return null;
 }
 
+// Рятуємо ОБІРВАНИЙ (truncated по max_tokens) JSON: доходимо до останньої структурної
+// межі (кома/закрита дужка), відкидаємо неповний хвіст і дозакриваємо відкриті дужки/рядок.
+// Це головна причина «AI повернув невалідний JSON» — довгі proposals/advice не вміщались.
+function repairTruncatedJson(text: string): string | null {
+  const start = text.search(/[{[]/);
+  if (start < 0) return null;
+  let inStr = false, esc = false, safeCut = -1;
+  const stack: string[] = [];
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{" || ch === "[") stack.push(ch === "{" ? "}" : "]");
+    else if (ch === "}" || ch === "]") { stack.pop(); safeCut = i + 1; }
+    else if (ch === ",") safeCut = i; // межа між елементами — безпечно обрізати тут
+  }
+  if (!stack.length) return text.slice(start); // насправді збалансований
+  // Обрізаємо до останньої безпечної межі, тоді перераховуємо відкриті дужки й закриваємо.
+  let body = safeCut > start ? text.slice(start, safeCut) : text.slice(start);
+  const open: string[] = [];
+  let s = false, e = false;
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i];
+    if (s) { if (e) e = false; else if (ch === "\\") e = true; else if (ch === '"') s = false; continue; }
+    if (ch === '"') s = true;
+    else if (ch === "{" || ch === "[") open.push(ch === "{" ? "}" : "]");
+    else if (ch === "}" || ch === "]") open.pop();
+  }
+  if (s) body += '"';
+  body = body.replace(/,\s*$/, "");
+  while (open.length) body += open.pop();
+  return body;
+}
+
 function parseJson<T>(text: string): T {
   const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
   try {
     return JSON.parse(cleaned) as T;
   } catch {
     const extracted = extractBalanced(cleaned);
-    if (extracted) return JSON.parse(extracted) as T;
+    if (extracted) {
+      try { return JSON.parse(extracted) as T; } catch { /* спробуємо ремонт нижче */ }
+    }
+    const repaired = repairTruncatedJson(cleaned);
+    if (repaired) {
+      try { return JSON.parse(repaired) as T; } catch { /* здались */ }
+    }
     throw new Error(`AI повернув невалідний JSON: ${text.slice(0, 200)}`);
   }
 }
@@ -358,11 +409,16 @@ export async function callHaikuJson<T>(
   try {
     return { result: parseJson<T>(first.text), usage: first.usage };
   } catch {
-    const retryContent = [
-      ...userContent,
-      { type: "text", text: "Твоя попередня відповідь була невалідним JSON. Поверни ЛИШЕ валідний JSON-обʼєкт, без жодного тексту, пояснень чи markdown до або після." },
-    ];
-    const second = await callHaiku(env, system, retryContent, maxTokens, model);
+    // Обірвано по ліміту → більше токенів; інакше — суворо просимо чистий JSON.
+    const truncated = first.stop === "max_tokens";
+    const retryTokens = truncated ? Math.min(Math.round(maxTokens * 1.8), 8000) : maxTokens;
+    const retryContent = truncated
+      ? userContent
+      : [
+          ...userContent,
+          { type: "text", text: "Твоя попередня відповідь була невалідним JSON. Поверни ЛИШЕ валідний JSON-обʼєкт, без жодного тексту, пояснень чи markdown до або після." },
+        ];
+    const second = await callHaiku(env, system, retryContent, retryTokens, model);
     return { result: parseJson<T>(second.text), usage: second.usage };
   }
 }
@@ -664,7 +720,7 @@ export async function proposeBudgetLimits(
         "(укр.), overall — 1-2 речення про логіку плану. Без markdown.",
     },
   ];
-  return callHaikuJson<BudgetPlan>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 1500, await getTaskModel(env, "budget"));
+  return callHaikuJson<BudgetPlan>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 2200, await getTaskModel(env, "budget"));
 }
 
 // Спільний структурований «факт» для стилізованого рендеру (гроші/категорії/дельти).
@@ -726,7 +782,7 @@ export async function generateAdvice(
         "коли доречно запропонувати ліміт-конверт на категорію. Суми — у гривнях.",
     },
   ];
-  return callHaikuJson<AdviceResult>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 1600, await getTaskModel(env, "advisor"));
+  return callHaikuJson<AdviceResult>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 2200, await getTaskModel(env, "advisor"));
 }
 
 // §Аналітика 2.0: розгорнутий періодичний репорт (Sonnet 5). Детальний розбір по
@@ -767,7 +823,7 @@ export async function budgetChat(
     },
     { type: "text", text: "Контекст: " + JSON.stringify(ctx) },
   ];
-  return callHaikuMessagesJson<BudgetChatResult>(env, system, messages, 900, await getTaskModel(env, "budget"));
+  return callHaikuMessagesJson<BudgetChatResult>(env, system, messages, 1400, await getTaskModel(env, "budget"));
 }
 
 export async function generateFinancialReport(

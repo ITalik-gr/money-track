@@ -28,8 +28,8 @@ export function SafeToSpend() {
           <div className="sts-line total"><span>= Вільно</span><b className={neg ? "neg" : "pos"}><Money minor={data.safe} decimals={false} signed /></b></div>
         </div>
         <div className="sts-imp">
-          <span className="lg"><span className="d" style={{ background: "#127c86" }} />обов'язкові <b><Money minor={data.essential} decimals={false} /></b></span>
-          <span className="lg"><span className="d" style={{ background: "#c9871a" }} />бажані/необов. <b><Money minor={data.discretionary} decimals={false} /></b></span>
+          <span className="lg"><span className="d" style={{ background: "var(--c-teal)" }} />обов'язкові <b><Money minor={data.essential} decimals={false} /></b></span>
+          <span className="lg"><span className="d" style={{ background: "var(--c-ochre)" }} />бажані/необов. <b><Money minor={data.discretionary} decimals={false} /></b></span>
         </div>
       </div>
     </section>

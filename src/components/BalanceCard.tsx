@@ -3,15 +3,18 @@ import { useGetSummaryQuery } from "../store/api.ts";
 import { Money } from "./Money.tsx";
 import { Icon } from "./Icon.tsx";
 import { formatMinor, currencySign } from "../lib/format.ts";
+import { useCountUp } from "../lib/useCountUp.ts";
 
 // Власні кошти великою sans-цифрою (гібрид, DESIGN.md §2) + швидкі дії (DeliFin R1).
 export function BalanceCard() {
   const { data, isLoading } = useGetSummaryQuery();
   const uah = data?.byCurrency.find((x) => x.currency_code === 980)?.own ?? 0;
   const others = data?.byCurrency.filter((x) => x.currency_code !== 980 && x.own !== 0) ?? [];
+  // §10.4: делікатний count-up герой-суми, коли дані приходять
+  const animUah = useCountUp(uah);
 
   return (
-    <div className="card balance">
+    <div className="card balance hero">
       <div className="bal-top">
         <span className="label">власні кошти</span>
         <Link to="/accounts" className="label">рахунки →</Link>
@@ -20,7 +23,7 @@ export function BalanceCard() {
       <div className={`bal-num num-hero ${uah < 0 ? "neg" : ""}`}>
         {isLoading ? "…" : (
           <>
-            {formatMinor(uah, { decimals: false })}
+            {formatMinor(Math.round(animUah), { decimals: false })}
             <span className="cur">{currencySign(980)}</span>
           </>
         )}
