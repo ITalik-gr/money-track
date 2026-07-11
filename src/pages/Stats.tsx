@@ -216,7 +216,7 @@ export function Stats() {
             {tab === "categories" && (
               <>
                 <section>
-                  <div className="section-head"><h2>Витрати по категоріях</h2><span className="label">клік — деталі</span></div>
+                  <div className="section-head"><h2>Витрати по категоріях</h2><InfoTip>Підкатегорії згорнуто в батьківську. Готівка й зняття зараховані за реальною категорією; перекази між своїми виключені. Клік — деталі категорії.</InfoTip><span className="label">клік — деталі</span></div>
                   {data.byCategory.length ? (
                     <CategoryBreakdown rows={data.byCategory} from={from} to={to} currency={currency} sign={sign} />
                   ) : <div className="card empty">Немає витрат за період.</div>}
@@ -459,7 +459,7 @@ function MerchantsBlock({ data, from, to, currency, sign, merchMax }: {
   const [open, setOpen] = useState<string | null>(null);
   return (
     <section>
-      <div className="section-head"><h2>Топ мерчантів</h2><span className="label">клік — операції</span></div>
+      <div className="section-head"><h2>Топ мерчантів</h2><InfoTip>Найбільші отримувачі витрат за період (зведено в ₴). Клік — усі операції мерчанта.</InfoTip><span className="label">клік — операції</span></div>
       {data.byMerchant.length ? (
         <div className="card"><div className="mrows">
           {data.byMerchant.slice(0, 7).map((m, i) => {
@@ -526,7 +526,7 @@ function AccountsBlock({ data, from, to, currency, sign }: {
   const max = Math.max(...data.byAccount.map((a) => a.spent), 1);
   return (
     <section>
-      <div className="section-head"><h2>По картках</h2><span className="label">клік — операції</span></div>
+      <div className="section-head"><h2>По картках</h2><InfoTip>Витрати згруповані за рахунком списання. Кредитний ліміт не зливається з власними коштами.</InfoTip><span className="label">клік — операції</span></div>
       <div className="card"><div className="mrows">
         {data.byAccount.map((a, i) => {
           const key = a.account_id ?? String(i);

@@ -4,7 +4,7 @@ import type { Env } from "../env.ts";
 import { generateInsight, briefUsage, logUsage, type StructuredInsight, type AiUsageBrief } from "./ai.ts";
 import { getState, setState } from "./repo.ts";
 import { getRates } from "./finance.ts";
-import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, SPEND_WHERE, valueMode, spendSum, amountSum } from "./stats.ts";
+import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "./stats.ts";
 
 const DAY = 86400;
 const PERIOD_KEY = "insight_period_days";
@@ -49,7 +49,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
 
-  const [thisWeek, prevWeek, merchants, notes, totalRow, events] = await Promise.all([
+  const [thisWeek, prevWeek, merchants, notes, totalRow, events, importanceRows, split, profile] = await Promise.all([
     spendByCategory(env, from, now, mult),
     spendByCategory(env, prevFrom, from, mult),
     env.DB.prepare(
@@ -70,6 +70,12 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
        WHERE t.time >= ? AND t.time < ? AND t.amount < 0 AND t.is_transfer = 0
        GROUP BY t.event_id ORDER BY spent DESC LIMIT 6`,
     ).bind(from, now).all<{ name: string; spent: number }>(),
+    env.DB.prepare(
+      `SELECT ${EFF_IMPORTANCE} AS imp, ${amountSum(mult)} AS spent, COUNT(*) AS n FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE} GROUP BY imp`,
+    ).bind(from, now).all<{ imp: string; spent: number; n: number }>(),
+    recurringOneoffSplit(env, from, now, mult),
+    getState(env.DB, "finance_profile"),
   ]);
 
   const totalUAH = (totalRow?.total ?? 0) / 100;
@@ -80,11 +86,29 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
   if (!totalUAH) {
     stored = { ...base, text: `За обраний період (${label}) витрат не було.`, empty: true };
   } else {
+    // Топ-аномалії: категорії з найбільшою зміною суми проти минулого періоду (детерміновано,
+    // без прогнозу — просто «що змінилось найпомітніше»). spent тут від'ємний (витрата).
+    const prevMap = new Map(prevWeek.map((c) => [c.name, c.spent]));
+    const anomalies = thisWeek
+      .map((c) => ({ category: c.name, delta_uah: Math.round(c.spent - (prevMap.get(c.name) ?? 0)) }))
+      .filter((c) => Math.abs(c.delta_uah) >= 200)
+      .sort((a, b) => Math.abs(b.delta_uah) - Math.abs(a.delta_uah))
+      .slice(0, 4);
+    // §6 вагомість: скільки пішло на essential/discretionary/optional за період.
+    const importance = (importanceRows.results ?? []).map((r) => ({ level: r.imp, spent: Math.round(r.spent / 100), n: r.n }));
     const payload = {
       period_label: label,
       total_uah_this_period: Math.round(totalUAH),
+      user_profile: profile || "(не вказано)",
       by_category_this_period: thisWeek,
       by_category_prev_period: prevWeek,
+      top_anomalies: anomalies,
+      by_importance: importance,
+      recurring_vs_oneoff: {
+        recurring_uah: Math.round(split.recurring.spent / 100),
+        oneoff_uah: Math.round(split.oneoff.spent / 100),
+        top_oneoff: split.oneoff_items.slice(0, 5).map((o) => ({ merchant: o.merchant, category: o.category, uah: Math.round(o.amount / 100) })),
+      },
       top_merchants: (merchants.results ?? []).map((m) => ({ merchant: m.merchant, spent: m.spent / 100, n: m.n })),
       by_event: (events.results ?? []).map((e) => ({ event: e.name, spent: Math.round(e.spent / 100) })),
       user_notes: (notes.results ?? []).map((n) => ({ merchant: n.merchant, note: n.user_note })),

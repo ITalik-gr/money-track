@@ -3,12 +3,13 @@
 // періодом, тягне аномалії (подорожчання підписок, викиди) і описи операцій (user_note),
 // кличе Sonnet 5, зберігає структурований репорт у ai_reports. Ідемпотентно по періоду.
 import type { Env } from "../env.ts";
-import { getRates, computeSummary } from "./finance.ts";
+import { getRates, computeSummary, toUAHMinor } from "./finance.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum,
-  lastCompletePeriod, currentPeriodToDate,
+  lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit,
 } from "./stats.ts";
 import { plannedActuals } from "./subscriptions.ts";
+import { getState } from "./repo.ts";
 import { generateFinancialReport, logUsage, getTaskModel, callCostUsd } from "./ai.ts";
 
 export type ReportType = "week" | "month";
@@ -65,7 +66,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
   const { from, to, prevFrom, prevTo } = scope === "current" ? currentPeriodToDate(type) : lastCompletePeriod(type);
   const periodDays = Math.max(1, Math.round((to - from) / 86400));
 
-  const [cur, prev, curCats, prevCats, merchants, notable, big, summary, actuals, imp] = await Promise.all([
+  const [cur, prev, curCats, prevCats, merchants, notable, big, summary, actuals, imp, split, profile] = await Promise.all([
     totals(env, from, to, mult),
     totals(env, prevFrom, prevTo, mult),
     cats(env, from, to, mult),
@@ -95,6 +96,8 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
     computeSummary(env),
     plannedActuals(env.DB),
     importance(env, from, to, mult),
+    recurringOneoffSplit(env, from, to, mult),
+    getState(env.DB, "finance_profile"),
   ]);
 
   const money = (minor: number) => Math.round(minor / 100);
@@ -124,10 +127,24 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
 
   const net = cur.income - cur.spend;
   const savingsRate = cur.income > 0 ? Math.round((net / cur.income) * 100) : null;
-  // Місячний burn ≈ витрати періоду, масштабовані до 30 днів; runway з власних коштів.
-  const burnMonthly = Math.round((cur.spend / periodDays) * 30);
-  const ownFunds = summary.totalUAH;
-  const runwayMonths = burnMonthly > 0 ? Math.round((ownFunds / burnMonthly) * 10) / 10 : null;
+
+  // §B чесна подушка: ліквідна = сума ПОЗИТИВНИХ власних залишків (₴+USD за курсом),
+  // борг = сума ВІД'ЄМНИХ (використаний кредит). НЕ мішаємо їх у «нетто».
+  let cushion = 0, debt = 0;
+  for (const { currency_code, own } of summary.byCurrency) {
+    const uah = toUAHMinor(own, currency_code, rates);
+    if (uah > 0) cushion += uah; else debt += -uah;
+  }
+
+  // §B прогноз не «burn×30»: беремо середнє за 3 ЗАВЕРШЕНІ місяці з тренду (стабільніше й
+  // враховує сезонність), fallback — витрати періоду, масштабовані до 30 днів.
+  const curMonthKey = `${dTo.getUTCFullYear()}-${String(dTo.getUTCMonth() + 1).padStart(2, "0")}`;
+  const completeMonths = trend.filter((t) => t.month !== curMonthKey);
+  const last3 = completeMonths.slice(-3);
+  const periodScaledBurn = money(Math.round((cur.spend / periodDays) * 30));
+  const burnMonthly = last3.length ? Math.round(last3.reduce((s, t) => s + t.spend_uah, 0) / last3.length) : periodScaledBurn;
+  const cushionMajor = money(cushion);
+  const runwayMonths = burnMonthly > 0 ? Math.round((cushionMajor / burnMonthly) * 10) / 10 : null;
 
   const anomaliesHint: string[] = [];
   for (const a of actuals) {
@@ -138,17 +155,30 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
 
   const context = {
     period: { type, scope, from, to, days: periodDays, note: scope === "current" ? "поточний період ДО СЬОГОДНІ (ще не завершений — не екстраполюй як повний)" : "завершений період" },
+    // §B реальна ситуація користувача — поважай її, не радь «по книжці» (напр. нема роботи → фокус на runway, а не «наростити дохід»).
+    user_profile: profile || "(не вказано)",
     current: {
       spend_uah: money(cur.spend), income_uah: money(cur.income), net_uah: money(net),
       savings_rate_pct: savingsRate,
     },
     previous: { spend_uah: money(prev.spend), income_uah: money(prev.income) },
     categories,
+    // §B разові (податки/стоматолог/велика покупка) vs регулярний ритм — не проєктуй разові в майбутнє.
+    recurring_vs_oneoff: {
+      recurring_uah: money(split.recurring.spent),
+      oneoff_uah: money(split.oneoff.spent),
+      top_oneoff: split.oneoff_items.slice(0, 6).map((o) => ({ merchant: o.merchant, category: o.category, amount_uah: money(o.amount) })),
+    },
     top_merchants: (merchants.results ?? []).map((m) => ({ merchant: m.merchant, amount_uah: money(m.spent), n: m.n })),
     notable: (notable.results ?? []).map((n) => ({ tx_id: n.id, merchant: n.merchant, note: n.note, category: n.category, amount_uah: money(n.amount) })),
     biggest_expenses: (big.results ?? []).map((b) => ({ tx_id: b.id, merchant: b.merchant, category: b.category, amount_uah: money(b.amount) })),
     anomalies_hint: anomaliesHint,
-    forecast: { own_funds_uah: money(ownFunds), monthly_burn_uah: money(burnMonthly), runway_months: runwayMonths },
+    // §B прогноз спирається на ЧЕСНУ подушку (позитивні власні), борг окремо; burn — середнє за 3 завершені міс (не burn×30).
+    forecast: {
+      cushion_uah: cushionMajor, debt_uah: money(debt),
+      monthly_burn_uah: burnMonthly, burn_method: last3.length ? "середнє за 3 завершені місяці" : "витрати періоду ×30",
+      runway_months: runwayMonths,
+    },
     // §6: обов'язкові (essential) не варто радити різати; optional — найбезпечніше.
     by_importance: importanceBreakdown,
   };

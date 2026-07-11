@@ -1768,6 +1768,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .report-meta { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); text-align: right; }
 .report-cat-grid { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: center; }
 @media (max-width: 620px) { .report-cat-grid { grid-template-columns: 1fr; } }
+
+/* §B: hero-блок прогнозу — великі числа нагорі репорту */
+.forecast-hero { padding: 18px 20px; background: linear-gradient(135deg, var(--accent-soft), transparent 70%); border-color: color-mix(in srgb, var(--accent) 22%, var(--line)); }
+.fh-nums { display: flex; flex-wrap: wrap; gap: 32px; }
+.fh-item { display: flex; flex-direction: column; gap: 4px; }
+.fh-label { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.fh-val { font-family: var(--font-sans); font-weight: 650; font-size: 30px; line-height: 1.05; font-variant-numeric: tabular-nums; color: var(--ink); }
+.fh-unit { font-size: 16px; font-weight: 500; color: var(--ink-2); }
+.fh-note { margin: 14px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
 .report-donut { position: relative; }
 .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
 .donut-center .dc-val { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }

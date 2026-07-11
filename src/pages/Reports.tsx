@@ -7,6 +7,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { formatMinor } from "../lib/format.ts";
 import { renderRich } from "../lib/citations.tsx";
 import { CashflowChart } from "../components/CashflowChart.tsx";
+import { InfoTip } from "../components/InfoTip.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 
 const rDate = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short" });
@@ -120,6 +121,8 @@ export function ReportDetail() {
           </div>
         )}
 
+        <ForecastHero p={r.predictions} />
+
         {r.sections?.length > 0 && (
           <section>
             <div className="section-head"><h2>Розбір</h2></div>
@@ -136,7 +139,7 @@ export function ReportDetail() {
 
         {r.category_breakdown?.length > 0 && (
           <section>
-            <div className="section-head"><h2>Категорії</h2><span className="label">vs минулий період</span></div>
+            <div className="section-head"><h2>Категорії</h2><InfoTip>Дельта — проти того самого попереднього періоду. Готівка й зняття зараховані за реальною категорією, перекази між своїми виключені, валюти зведені в ₴.</InfoTip><span className="label">vs минулий період</span></div>
             <div className="card" style={{ padding: 16 }}>
               <div className="report-cat-grid">
                 <CategoryDonut cats={r.category_breakdown} />
@@ -159,7 +162,7 @@ export function ReportDetail() {
 
         {r.trend && r.trend.length > 1 && (
           <section>
-            <div className="section-head"><h2>Тренд</h2><span className="label">витрати й надходження, 6 міс</span></div>
+            <div className="section-head"><h2>Тренд</h2><InfoTip>Витрати й надходження по місяцях за останні 6 місяців (зведено в ₴). Поточний місяць може бути неповним.</InfoTip><span className="label">витрати й надходження, 6 міс</span></div>
             <div className="card cashflow">
               <div className="legend" style={{ justifyContent: "flex-end", padding: "2px 4px 8px" }}>
                 <span><span className="d" style={{ background: "var(--chart-income)" }} />Надходження</span>
@@ -172,7 +175,7 @@ export function ReportDetail() {
 
         {r.anomalies?.length > 0 && (
           <section>
-            <div className="section-head"><h2>Аномалії</h2></div>
+            <div className="section-head"><h2>Аномалії</h2><InfoTip>Незвичні або разові витрати цього періоду та подорожчання підписок. Разові події (податки, лікування, велика покупка) не вважаються трендом.</InfoTip></div>
             <div className="card" style={{ padding: "6px 14px" }}>
               {r.anomalies.map((a, i) => (
                 <div key={i} className={`anomaly ${sevClass(a.severity)}`}>
@@ -180,23 +183,6 @@ export function ReportDetail() {
                   <div><b>{a.label}</b><div className="muted" style={{ fontSize: 13 }}>{renderRich(a.detail)}</div></div>
                 </div>
               ))}
-            </div>
-          </section>
-        )}
-
-        {r.predictions && (r.predictions.next_period_spend_uah != null || r.predictions.runway_months != null || r.predictions.note) && (
-          <section>
-            <div className="section-head"><h2>Прогноз</h2></div>
-            <div className="card" style={{ padding: 16 }}>
-              <div className="stat-facts" style={{ marginBottom: r.predictions.note ? 8 : 0 }}>
-                {r.predictions.next_period_spend_uah != null && (
-                  <div className="fact"><span className="fact-label">Прогноз витрат</span><span className="fact-val">{formatMinor(r.predictions.next_period_spend_uah * 100, { decimals: false })} ₴</span></div>
-                )}
-                {r.predictions.runway_months != null && (
-                  <div className="fact"><span className="fact-label">Запас (runway)</span><span className="fact-val">{r.predictions.runway_months} міс</span></div>
-                )}
-              </div>
-              {r.predictions.note && <p className="muted" style={{ margin: 0 }}>{renderRich(r.predictions.note)}</p>}
             </div>
           </section>
         )}
@@ -224,6 +210,33 @@ export function ReportDetail() {
   );
 }
 
+// §B: прогноз — hero-блок нагорі репорту (великі числа: очікувані витрати + запас-runway).
+function ForecastHero({ p }: { p: FinancialReport["predictions"] }) {
+  if (!p || (p.next_period_spend_uah == null && p.runway_months == null && !p.note)) return null;
+  return (
+    <section>
+      <div className="section-head"><h2>Прогноз</h2><InfoTip>Очікувані витрати — на основі середнього за завершені місяці (не разові викиди). Запас (runway) = ліквідна подушка ÷ місячний темп витрат; борг по кредитці рахується окремо.</InfoTip><span className="label">погляд уперед</span></div>
+      <div className="card forecast-hero">
+        <div className="fh-nums">
+          {p.next_period_spend_uah != null && (
+            <div className="fh-item">
+              <span className="fh-label">Очікувані витрати</span>
+              <span className="fh-val">{formatMinor(p.next_period_spend_uah * 100, { decimals: false })} ₴</span>
+            </div>
+          )}
+          {p.runway_months != null && (
+            <div className="fh-item">
+              <span className="fh-label">Запас (runway)</span>
+              <span className="fh-val">{p.runway_months} <span className="fh-unit">міс</span></span>
+            </div>
+          )}
+        </div>
+        {p.note && <p className="fh-note">{renderRich(p.note)}</p>}
+      </div>
+    </section>
+  );
+}
+
 // §6: смуга частки витрат за вагомістю (той самий візуал, що в Статистиці).
 function ImportanceSection({ data }: { data: NonNullable<FinancialReport["importance"]> }) {
   const total = data.reduce((s, d) => s + Math.abs(d.amount_uah), 0);
@@ -231,7 +244,7 @@ function ImportanceSection({ data }: { data: NonNullable<FinancialReport["import
   const byLevel = (lv: string) => data.find((d) => d.level === lv);
   return (
     <section>
-      <div className="section-head"><h2>Вагомість витрат</h2><span className="label">обов'язкові · бажані · необов'язкові</span></div>
+      <div className="section-head"><h2>Вагомість витрат</h2><InfoTip>Розподіл витрат за вагомістю: обов'язкові (essential) — базові потреби; бажані (discretionary); необов'язкові (optional) — найбезпечніші для скорочення. Задається на категорії, з override на транзакції.</InfoTip><span className="label">обов'язкові · бажані · необов'язкові</span></div>
       <div className="card" style={{ padding: 16 }}>
         <div className="imp-bar">
           {IMPORTANCE_LEVELS.map((lv) => {
