@@ -125,8 +125,9 @@ async function applyEnrichment(
     if (hit) {
       const rawDesc = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description?.trim() : null;
       const name = hit.merchant ?? tx.merchant;
+      // §R7: якщо назву зафіксовано вручну (name_locked) — не перетираємо мерчант, лише категорію.
       await env.DB.prepare(
-        "UPDATE transactions SET merchant = ?, category_id = ?, ai_note = ?, ai_enriched = 1 WHERE id = ?",
+        "UPDATE transactions SET merchant = CASE WHEN name_locked = 1 THEN merchant ELSE ? END, category_id = ?, ai_note = ?, ai_enriched = 1 WHERE id = ?",
       ).bind(name, hit.category_id, `категорію визначено за історією (${hit.n}× той самий мерчант)`, tx.id).run();
       // Навчаємо alias на точному сирому описі — наступний ідентичний піде миттєво (не чіпаючи ручні).
       if (tx.source === "mono" && rawDesc) await writeAiAlias(env, rawDesc, name, hit.category_id, 0);
@@ -168,8 +169,9 @@ async function applyEnrichment(
     : null;
   const finalCategory = sub?.category_id ?? result.category_id ?? null;
 
+  // §R7: name_locked → зберігаємо ручну назву (AI уточнює лише категорію/переказ/note).
   await env.DB.prepare(
-    "UPDATE transactions SET merchant = ?, category_id = COALESCE(?, category_id), is_transfer = ?, ai_note = ?, planned_id = COALESCE(?, planned_id), ai_enriched = 1 WHERE id = ?",
+    "UPDATE transactions SET merchant = CASE WHEN name_locked = 1 THEN merchant ELSE ? END, category_id = COALESCE(?, category_id), is_transfer = ?, ai_note = ?, planned_id = COALESCE(?, planned_id), ai_enriched = 1 WHERE id = ?",
   ).bind(cleanName, finalCategory, isTransfer, result.note?.trim() || null, sub?.planned_id ?? null, tx.id).run();
 
   // Теги (вторинні категорії), до 3, без дублю основної.

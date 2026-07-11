@@ -588,6 +588,9 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .group-foot { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
 .group-spent { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; }
 .group-link { text-decoration: none; }
+/* текстова кнопка-посилання (напр. «дозволити AI оновлювати») */
+.link-btn { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.link-btn:hover { color: var(--accent-strong); }
 
 /* savings goals grid */
 .goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
@@ -1571,18 +1574,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .usage-cost { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
 
 /* ===== AI BUDGET PLANNER ================================================= */
-.bp-list { display: flex; flex-direction: column; }
-.bp-row {
-  display: grid; grid-template-columns: 1fr auto auto auto; gap: 6px 12px; align-items: center;
-  padding: 10px 4px; border-bottom: 1px solid var(--line);
-}
-.bp-row:last-child { border-bottom: none; }
-.bp-name { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; }
+.bp-list { display: flex; flex-direction: column; gap: 4px; }
+.bp-item { padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.bp-item:last-child { border-bottom: none; }
+.bp-item.done { opacity: 0.6; }
+.bp-item-main { display: flex; align-items: center; gap: 10px; }
+.bp-name { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bp-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.bp-figs { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
 .bp-avg { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-.bp-sug { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 600; color: var(--accent); white-space: nowrap; }
-.bp-reason { grid-column: 1 / -1; font-size: 12px; color: var(--muted); line-height: 1.4; }
-@media (max-width: 520px) { .bp-row { grid-template-columns: 1fr auto auto; } .bp-avg { display: none; } }
+.bp-arrow { color: var(--muted); font-size: 13px; }
+.bp-sug { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 650; color: var(--ink); white-space: nowrap; }
+.bp-accept { padding: 5px 12px; font-size: 13px; flex-shrink: 0; }
+.bp-reason { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin-top: 5px; padding-left: 17px; }
+@media (max-width: 520px) {
+  .bp-item-main { flex-wrap: wrap; }
+  .bp-name { flex-basis: 100%; }
+  .bp-figs { flex: 1; }
+}
 
 /* §3 бюджет-діалог (чат) */
 .bch-starters { display: flex; flex-wrap: wrap; gap: 7px; }
@@ -1955,6 +1964,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .cmp-delta.up { color: var(--neg); background: var(--neg-soft); }
 .cmp-delta.down { color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); }
 .cmp-delta.flat { color: var(--muted); background: var(--line); }
+.cmp-delta.new { color: var(--accent); background: var(--accent-soft); }
 
 .btn.danger { background: var(--neg); color: #fff; border-color: var(--neg); }
 .btn.danger:hover { filter: brightness(0.95); }

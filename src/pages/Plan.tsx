@@ -58,9 +58,16 @@ function BudgetChat() {
     setInput("");
     try {
       const res = await chat({ messages: next }).unwrap();
-      setMsgs([...next, { role: "assistant", content: res.reply }]);
-      setProposals(res.proposals ?? []);
-    } catch { toast.error("AI не відповів. Спробуй ще раз."); }
+      const reply = res.reply?.trim() || (res.proposals?.length ? "Ось пропоновані ліміти 👇" : "…");
+      setMsgs([...next, { role: "assistant", content: reply }]);
+      // Не затираємо попередні пропозиції порожнім набором (напр. коли відповідь — просто пояснення).
+      if (res.proposals?.length) setProposals(res.proposals);
+    } catch (e) {
+      // Показуємо реальну причину з бекенду (напр. «ANTHROPIC_API_KEY not set», 502), а не глухе «не відповів».
+      const msg = (e as { data?: { error?: string } })?.data?.error;
+      toast.error(msg ? `AI: ${msg}` : "AI не відповів. Спробуй ще раз.");
+      setMsgs(next); // лишаємо запит користувача, прибираємо «завислий» стан
+    }
   }
 
   async function accept(p: { category_id: number; limit_uah: number }) {
@@ -160,19 +167,31 @@ function BudgetPlanner() {
         <div className="card" style={{ padding: 16 }}>
           {data.overall && <p className="ai-text" style={{ margin: "0 0 12px" }}>{highlightAmounts(data.overall)}</p>}
           <div className="bp-list">
-            {data.rows.map((r) => (
-              <div className="bp-row" key={r.category_id}>
-                <span className="bp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
-                <span className="bp-avg">сер. <Money minor={r.avg_month} decimals={false} /></span>
-                <span className="bp-sug"><Money minor={r.suggested} decimals={false} /></span>
-                <button className="btn" style={{ padding: "5px 11px", fontSize: 13 }} onClick={() => acceptOne(r)} disabled={accepted.has(r.category_id)}>
-                  {accepted.has(r.category_id) ? "✓" : "Прийняти"}
-                </button>
-                {r.reason && <span className="bp-reason">{r.reason}</span>}
-              </div>
-            ))}
+            {data.rows.map((r) => {
+              const delta = r.avg_month > 0 ? Math.round(((r.suggested - r.avg_month) / r.avg_month) * 100) : null;
+              const on = accepted.has(r.category_id);
+              return (
+                <div className={`bp-item ${on ? "done" : ""}`} key={r.category_id}>
+                  <div className="bp-item-main">
+                    <span className="bp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                    <span className="bp-figs">
+                      <span className="bp-avg">сер. <Money minor={r.avg_month} decimals={false} /></span>
+                      <span className="bp-arrow">→</span>
+                      <span className="bp-sug"><Money minor={r.suggested} decimals={false} /></span>
+                      {delta != null && delta !== 0 && (
+                        <span className={`cmp-delta ${delta < 0 ? "down" : "up"}`}>{delta > 0 ? "+" : ""}{delta}%</span>
+                      )}
+                    </span>
+                    <button className="btn bp-accept" onClick={() => acceptOne(r)} disabled={on}>
+                      {on ? "✓ додано" : "Прийняти"}
+                    </button>
+                  </div>
+                  {r.reason && <div className="bp-reason">{r.reason}</div>}
+                </div>
+              );
+            })}
           </div>
-          <button className="btn primary" style={{ marginTop: 12 }} onClick={acceptAll}>Прийняти всі</button>
+          <button className="btn primary" style={{ marginTop: 12 }} onClick={acceptAll}>Прийняти всі ліміти</button>
         </div>
       )}
     </section>

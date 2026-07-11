@@ -55,12 +55,16 @@ async function importance(env: Env, from: number, to: number, mult: string): Pro
 export interface TrendPoint { month: string; spend_uah: number; income_uah: number }
 // §6: детермінована розбивка вагомості для рендеру на сторінці репорту (зберігається в data_json).
 export interface ImportancePoint { level: string; amount_uah: number; pct: number }
+// §R6: детермінована розбивка по категоріях (надійні суми/дельти проти минулого періоду) —
+// зберігаємо в data_json і рендеримо саме її (AI-нотатку приклеюємо за назвою). prev_uah=0 → «новий».
+export interface CategoryDetail { name: string; amount_uah: number; prev_uah: number; delta_pct: number | null; note?: string | null }
 
 export async function buildReportContext(env: Env, type: ReportType, scope: ReportScope = "last"): Promise<{
   period: { type: ReportType; scope: ReportScope; from: number; to: number };
   context: unknown;
   trend: TrendPoint[];
   importance: ImportancePoint[];
+  categories: CategoryDetail[];
 }> {
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
@@ -183,7 +187,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
     // §6: обов'язкові (essential) не варто радити різати; optional — найбезпечніше.
     by_importance: importanceBreakdown,
   };
-  return { period: { type, scope, from, to }, context, trend, importance: importanceBreakdown };
+  return { period: { type, scope, from, to }, context, trend, importance: importanceBreakdown, categories };
 }
 
 // Згенерувати й зберегти репорт. force=false → пропускає, якщо для періоду вже є (крон).
@@ -192,7 +196,7 @@ export async function generateAndStoreReport(
   type: ReportType,
   opts: { force?: boolean; scope?: ReportScope } = {},
 ): Promise<{ id: number; created: boolean }> {
-  const { period, context, trend, importance } = await buildReportContext(env, type, opts.scope ?? "last");
+  const { period, context, trend, importance, categories } = await buildReportContext(env, type, opts.scope ?? "last");
   const existing = await env.DB.prepare(
     "SELECT id FROM ai_reports WHERE period_type = ? AND period_from = ? AND period_to = ?",
   ).bind(type, period.from, period.to).first<{ id: number }>();
@@ -210,8 +214,12 @@ export async function generateAndStoreReport(
   const cost = callCostUsd(model, usage);
   const now = Math.floor(Date.now() / 1000);
   const summary = result.summary || result.headline || "";
-  // Зберігаємо AI-результат + детерміновані дані (тренд, вагомість) для графіків на сторінці.
-  const stored = JSON.stringify({ ...result, trend, importance });
+  // §R6: детерміновані категорії (надійні суми/дельти) + приклеєна AI-нотатка за назвою —
+  // рендеримо саме їх, щоб «vs минулий період» не був порожнім через null-и від AI.
+  const noteByName = new Map((result.category_breakdown ?? []).map((cb) => [cb.name, cb.note ?? null]));
+  const categoriesDetail = categories.map((c) => ({ ...c, note: noteByName.get(c.name) ?? null }));
+  // Зберігаємо AI-результат + детерміновані дані (категорії, тренд, вагомість) для графіків на сторінці.
+  const stored = JSON.stringify({ ...result, trend, importance, categories: categoriesDetail });
 
   if (existing) {
     await env.DB.prepare(

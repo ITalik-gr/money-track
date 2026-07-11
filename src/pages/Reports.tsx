@@ -101,7 +101,11 @@ export function ReportDetail() {
   );
 
   const r: FinancialReport = data.data;
-  const catMax = Math.max(1, ...(r.category_breakdown ?? []).map((c) => Math.abs(c.amount_uah)));
+  // §R6: рендеримо детерміновані категорії (надійні суми/дельти), fallback — AI-версія (старі репорти).
+  type CatRow = { name: string; amount_uah: number; delta_pct: number | null; note?: string | null; prev_uah?: number };
+  const hasCatDetail = !!r.categories?.length;
+  const catList: CatRow[] = hasCatDetail ? r.categories! : (r.category_breakdown ?? []);
+  const catMax = Math.max(1, ...catList.map((c) => Math.abs(c.amount_uah)));
   const sevClass = (s: string) => s === "high" ? "high" : s === "warn" ? "warn" : "info";
 
   return (
@@ -142,16 +146,19 @@ export function ReportDetail() {
             <div className="section-head"><h2>Категорії</h2><InfoTip>Дельта — проти того самого попереднього періоду. Готівка й зняття зараховані за реальною категорією, перекази між своїми виключені, валюти зведені в ₴.</InfoTip><span className="label">vs минулий період</span></div>
             <div className="card" style={{ padding: 16 }}>
               <div className="report-cat-grid">
-                <CategoryDonut cats={r.category_breakdown} />
+                <CategoryDonut cats={catList} />
                 <div className="catbars" style={{ padding: 0 }}>
-                  {r.category_breakdown.map((c, i) => (
-                    <div key={i} className="catbar">
-                      <span className="cb-name" title={c.note ?? undefined}><span className="d" style={{ background: barColor(i), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} />{c.name}</span>
-                      <span className="cb-track"><span className="cb-fill" style={{ width: `${(Math.abs(c.amount_uah) / catMax) * 100}%`, background: barColor(i) }} /></span>
-                      <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} ₴</span>
-                      <span className="cb-pct"><Delta pct={c.delta_pct} /></span>
-                    </div>
-                  ))}
+                  {catList.map((c, i) => {
+                    const isNew = hasCatDetail && (c.prev_uah ?? 0) === 0 && c.amount_uah !== 0;
+                    return (
+                      <div key={i} className="catbar">
+                        <span className="cb-name" title={c.note ?? undefined}><span className="d" style={{ background: barColor(i), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} />{c.name}</span>
+                        <span className="cb-track"><span className="cb-fill" style={{ width: `${(Math.abs(c.amount_uah) / catMax) * 100}%`, background: barColor(i) }} /></span>
+                        <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} ₴</span>
+                        <span className="cb-pct">{isNew ? <span className="cmp-delta new">новий</span> : <Delta pct={c.delta_pct} />}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -291,7 +298,7 @@ function DonutTooltip(props: any) {
 }
 
 // §5: донат розподілу витрат по категоріях (топ-8 + «інші»).
-function CategoryDonut({ cats }: { cats: FinancialReport["category_breakdown"] }) {
+function CategoryDonut({ cats }: { cats: { name: string; amount_uah: number }[] }) {
   const top = cats.slice(0, 8).map((c, i) => ({ name: c.name, value: Math.abs(c.amount_uah), color: barColor(i) }));
   const restSum = cats.slice(8).reduce((s, c) => s + Math.abs(c.amount_uah), 0);
   if (restSum > 0) top.push({ name: "інші", value: restSum, color: "#9aa5a0" });

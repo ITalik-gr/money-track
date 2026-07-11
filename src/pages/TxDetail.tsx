@@ -147,6 +147,14 @@ export function TxDetail() {
     }
   }
 
+  // §R7: дозволити AI знову оновлювати назву (зняти ручний замок).
+  async function unlockName() {
+    try {
+      await editTx({ id, body: { lock_name: false } }).unwrap();
+      toast.success("AI зможе оновлювати назву");
+    } catch (e) { toast.error(String(e)); }
+  }
+
   return (
     <>
       <div className="section-head" style={{ justifyContent: "space-between" }}>
@@ -219,6 +227,12 @@ export function TxDetail() {
                 <span className="ai-fact-k">Розпізнав як</span>
                 <span className="ai-fact-v">{tx.merchant ?? tx.comment ?? "—"}</span>
               </div>
+              {tx.user_note && (
+                <div className="ai-fact">
+                  <span className="ai-fact-k">Моя нотатка</span>
+                  <span className="ai-fact-v">📝 {tx.user_note}</span>
+                </div>
+              )}
               {tx.ai_note && (
                 <div className="ai-fact">
                   <span className="ai-fact-k">AI розуміє це як</span>
@@ -300,6 +314,14 @@ export function TxDetail() {
               <label className="stack" style={{ gap: 4 }}>
                 <span className="label">мерчант / назва</span>
                 <input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder="напр. кавʼярня біля дому" />
+                {tx.name_locked ? (
+                  <span className="ai-block-sub" style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                    🔒 Ти задав цю назву — AI її не змінюватиме.
+                    <button type="button" className="link-btn" onClick={unlockName}>дозволити AI оновлювати</button>
+                  </span>
+                ) : (
+                  <span className="ai-block-sub">Зміниш назву — AI більше не перезаписуватиме її автоматично.</span>
+                )}
               </label>
               <label className="stack" style={{ gap: 4 }}>
                 <span className="label">категорія</span>

@@ -170,13 +170,17 @@ api.patch("/transactions/:id", async (c) => {
   const b = await c.req.json<{
     category_id?: number | null; merchant?: string; user_note?: string; learn?: boolean;
     is_transfer?: boolean; tags?: number[]; event_id?: number | null; real_category_id?: number | null;
-    importance?: string | null;
+    importance?: string | null; lock_name?: boolean;
   }>();
 
   const tx = await c.env.DB.prepare("SELECT * FROM transactions WHERE id = ?").bind(id).first<{
-    source: string; raw_json: string | null; comment: string | null; mcc: number | null;
+    source: string; raw_json: string | null; comment: string | null; mcc: number | null; merchant: string | null;
   }>();
   if (!tx) return c.json({ error: "not_found" }, 404);
+
+  // §R7: ручна назва авторитетна. Ставимо name_locked=1, коли користувач змінив назву на
+  // непорожню й іншу; явний lock_name (кнопка «дозволити AI змінювати») може зняти/поставити.
+  const renamed = b.merchant !== undefined && !!b.merchant?.trim() && b.merchant.trim() !== (tx.merchant ?? "").trim();
 
   // Теги (вторинні категорії, до 3, без основної) — повна заміна набору.
   if (b.tags !== undefined) {
@@ -196,6 +200,8 @@ api.patch("/transactions/:id", async (c) => {
   if (b.real_category_id !== undefined) { sets.push("real_category_id = ?"); binds.push(b.real_category_id); }
   if (b.event_id !== undefined) { sets.push("event_id = ?"); binds.push(b.event_id); }
   if (b.importance !== undefined) { sets.push("importance = ?"); binds.push(normImportance(b.importance)); }
+  if (b.lock_name !== undefined) { sets.push("name_locked = ?"); binds.push(b.lock_name ? 1 : 0); }
+  else if (renamed) { sets.push("name_locked = ?"); binds.push(1); }
   if (sets.length) {
     await c.env.DB.prepare(`UPDATE transactions SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
   }

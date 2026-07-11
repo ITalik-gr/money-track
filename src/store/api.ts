@@ -54,6 +54,7 @@ export interface TxDetail extends TxRow {
   account_type: string | null;
   is_transfer?: number;
   ai_enriched?: number;
+  name_locked?: number;             // §R7: ручну назву зафіксовано — AI не перезаписує
   ai_note?: string | null;          // розуміння AI «що це» (§R5)
   planned_id?: number | null;       // зв'язок із підпискою
   planned_title?: string | null;    // назва підписки, якщо прив'язано
@@ -208,6 +209,8 @@ export interface FinancialReport {
   advice: { title: string; detail: string; action?: AdviceAction | null }[];
   trend?: { month: string; spend_uah: number; income_uah: number }[]; // §5: детерміновані дані для лінії
   importance?: { level: string; amount_uah: number; pct: number }[]; // §6: детермінована розбивка вагомості
+  // §R6: детерміновані категорії (надійні суми + дельта + prev) з приклеєною AI-нотаткою.
+  categories?: { name: string; amount_uah: number; prev_uah: number; delta_pct: number | null; note?: string | null }[];
 }
 export interface ReportListItem {
   id: number; period_type: "week" | "month"; period_from: number; period_to: number;
