@@ -10,6 +10,17 @@
 - **`DESIGN.md`** — дизайн-система (живий документ). **Читай ПЕРШИМ перед будь-якою роботою над UI/UX.** Токени, патерни, референси, «Журнал рішень». Код токенів — `src/index.css`.
 - **`ROADMAP.md`** — жива черга задач/фіч (що зробити й доробити). **Завжди існує.** Додавай сюди нові таски; коли **доробив — викреслюй** (видаляй пункт); якщо результат важливий довгостроково — переноси стислий підсумок у `CLAUDE.md`.
 
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+
 ### 🔁 Робочий процес (тримати завжди)
 1. **UI/UX** → спершу `DESIGN.md`, потім код. Кожну дизайн-зміну фіксуй у «Журналі рішень» DESIGN.md.
 2. **Нова задача/ідея/баг** → одразу в `ROADMAP.md` (щоб не загубити).

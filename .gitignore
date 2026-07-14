@@ -5,3 +5,4 @@ dist
 worker-configuration.d.ts
 *.tsbuildinfo
 .DS_Store
+graphify-out/cache
