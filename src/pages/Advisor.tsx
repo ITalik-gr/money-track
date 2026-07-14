@@ -12,6 +12,7 @@ import type { AdviceAction, Advice, AdviceHistoryItem } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
 import { Gauge } from "../components/Gauge.tsx";
 import { AiInsightCard } from "../components/AiInsightCard.tsx";
+import { WhatIf } from "../components/WhatIf.tsx";
 import { RichFacts } from "../components/RichFacts.tsx";
 import { UsageCost } from "../components/UsageCost.tsx";
 import { InfoTip } from "../components/InfoTip.tsx";
@@ -84,6 +85,8 @@ export function Advisor() {
             {advice.runway_comment && <p className="runway-comment" style={{ gridColumn: "1 / -1" }}>{highlightAmounts(advice.runway_comment)}</p>}
           </div>
         )}
+
+        <WhatIf />
 
         <div className="advisor-grid">
           {/* Головна колонка — структуровані поради */}

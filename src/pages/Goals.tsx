@@ -82,6 +82,12 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
   const dl = daysLeft(g.deadline);
   const color = g.color ?? "var(--accent)";
   const done = g.current >= g.target_amount;
+
+  // §P5: скільки відкладати на місяць, щоб устигнути до дедлайну = залишок ÷ місяців до дати.
+  // <1 міс до дедлайну — показуємо «зібрати X за N дн» (місячна ставка вводила б в оману).
+  const monthsLeft = g.deadline != null ? (g.deadline - Date.now() / 1000) / (86400 * 30.44) : null;
+  const perMonth = !done && left > 0 && monthsLeft != null && monthsLeft >= 1 ? Math.round(left / monthsLeft) : null;
+  const sprint = !done && left > 0 && dl != null && dl >= 0 && (monthsLeft == null || monthsLeft < 1);
   return (
     <div className="goal-card" style={{ "--goal-color": color } as React.CSSProperties}>
       <div className="goal-top">
@@ -102,6 +108,12 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
           ? <span className="goal-meta pos">Ціль досягнута 🎉</span>
           : <span className="goal-meta">лишилось <Money minor={left} decimals={false} /></span>}
       </div>
+      {perMonth != null && (
+        <div className="goal-need">Щоб устигнути — відкладай <b><Money minor={perMonth} decimals={false} />/міс</b></div>
+      )}
+      {sprint && (
+        <div className="goal-need urgent">Лишилось {dl} дн — зібрати <b><Money minor={left} decimals={false} /></b></div>
+      )}
       <div className="goal-sub">
         {g.account_title ? <span className="goal-tag">🏦 {g.account_title}</span> : <span className="goal-tag">вручну</span>}
         {g.deadline && (
