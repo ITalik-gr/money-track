@@ -1,10 +1,11 @@
 // AI-порадник (структурований): рахуємо runway із власних коштів і місячного burn,
 // подаємо разом із профілем ситуації в Haiku → поради-картки. Кешуємо в app_state.
 import type { Env } from "../env.ts";
-import { type AdviceResult, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
+import { type AdviceResult, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type ChatTool, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
 import { getState, setState } from "./repo.ts";
 import { getRates, toUAHMinor } from "./finance.ts";
-import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels } from "./stats.ts";
+import { nextChargeUnix } from "./subscriptions.ts";
+import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels } from "./stats.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -77,7 +78,24 @@ export async function setProfile(env: Env, text: string): Promise<void> {
   await setState(env.DB, "finance_profile", text);
 }
 
-export async function buildAdvice(env: Env): Promise<StoredAdvice> {
+// §CTX (2026-07-14): ЄДИНЕ джерело фінансового контексту для AI — і для Порадника
+// (`buildAdvice`), і для чату (`chatReply`). Раніше чат мав збіднений контекст (лише нетто
+// own_funds + наївний burn 90д÷3), тож його числа розходились із Порадником, а AI домислював
+// «подушку $780». Тепер обидва беруть той самий знімок: розбивка коштів (подушка/борг/інвест +
+// рахунки з ролями й нотатками), канонічний burn (sumLevels), підписки, бюджети, вагомість,
+// тренд 6 міс, разові/регулярні та найближчі списання — консистентні цифри всюди.
+export interface FinanceSnapshot {
+  now: number;
+  funds: FundsBreakdown;
+  ownFunds: number;                        // копійки, нетто (подушка − борг)
+  monthlyBurn: number;                     // копійки/міс (sumLevels — канон)
+  runwayMonths: number | null;             // ЧЕСНИЙ: подушка / burn
+  subsMonthly: number;                     // грн/міс (major)
+  citable: { id: string; label: string }[]; // операції з id для цитат [tx:ID]
+  context: Record<string, unknown>;        // спільний JSON-контекст для AI (без tx-блоків)
+}
+
+export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot> {
   const now = Math.floor(Date.now() / 1000);
   const from90 = now - 90 * 86400;
   const dNow = new Date(now * 1000);
@@ -86,11 +104,10 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
 
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null); // канонічно, зведено в ₴
-  const [funds, burnRow, cats, merchants, events, importance, trend, budgetRows, monthByCat, subsAgg, split] = await Promise.all([
+  const [funds, levels, cats, merchants, events, importance, trend, budgetRows, monthByCat, subsAgg, split, upcomingRows] = await Promise.all([
     fundsBreakdown(env),
-    env.DB.prepare(
-      `SELECT ${spendSum(mult)} AS spent FROM transactions t ${STATS_JOINS} WHERE t.time >= ?`,
-    ).bind(from90).first<{ spent: number }>(),
+    // P1: канонічний місячний рівень категорій — джерело і для avg_month, і для burn (sumLevels).
+    categoryMonthlyLevels(env, mult, { now }),
     env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
@@ -136,10 +153,16 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     ).first<{ planned: number; n: number }>(),
     // §E1/C: разові vs регулярні за поточний місяць — щоб AI не проектував разове як норму.
     recurringOneoffSplit(env, monthStart, now, mult),
+    // §CTX: найближчі планові списання (для «коли платити») — рахуємо nextChargeUnix у JS.
+    env.DB.prepare(
+      `SELECT title, period, period_count, start_date, period_amount, kind FROM planned_payments WHERE is_active = 1`,
+    ).all<{ title: string; period: string; period_count: number; start_date: number; period_amount: number | null; kind: string }>(),
   ]);
 
   const ownFunds = funds.net;
-  const monthlyBurn = Math.round((burnRow?.spent ?? 0) / 3); // 90 днів → місяць
+  // P1 (2026-07-14): burn = сума місячних рівнів категорій (канон), а не «витрати_90д ÷ 3».
+  // Узгоджено з Патернами/Бюджетами; не роздувається разовими лумпами (податок/лікар).
+  const monthlyBurn = sumLevels(levels);
   // §C: ЧЕСНИЙ runway — від ліквідної подушки, не від нетто (нетто може бути від'ємним через борг).
   const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
   const profile = await getProfile(env);
@@ -151,15 +174,22 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     return { category: b.name, limit_uah: Math.round(b.lim / 100), spent_uah: Math.round(spent / 100), used_pct: b.lim > 0 ? Math.round((spent / b.lim) * 100) : null };
   });
   const subsMonthly = Math.round((subsAgg?.planned ?? 0) / 100);
-  // Канонічний «місячний рівень» категорії (fixed=останній платіж, змінні=середнє) —
-  // щоб avg_month збігався з рештою екранів (рента 12500, не 8к із 90д÷3).
-  const levels = await categoryMonthlyLevels(env, mult, { now });
+  // `levels` (канонічний місячний рівень) уже завантажено вище в Promise.all — джерело avg_month і burn.
   const catAvgMonth = (id: number, spent90: number) => Math.round((levels.get(id)?.level ?? spent90 / 3) / 100);
   // §2/§5: найбільші операції з id — щоб AI цитував конкретику токеном [tx:ID].
   const citable = await notableTransactions(env, 90, 12);
 
-  const payload = {
-    period_note: "top_categories/top_merchants/by_event — суми за ОСТАННІ 90 ДНІВ (3 місяці); avg_month_uah — усереднене на місяць. monthly_burn_uah — середні витрати/міс. НЕ плутай 90д із місячною; спирайся на avg_month_uah. by_importance: essential=обов'язкові (не ріж), discretionary=бажані, optional=необов'язкові (найбезпечніше скорочувати). monthly_trend: spend/income по місяцях (6 міс) — дивись динаміку/сезонність, а не лише середнє. budgets: ліміт vs факт цього місяця (used_pct>100 = перевитрата — підсвіти). subscriptions_monthly_uah: фіксовані підписки/міс (майже незмінні). recent_oneoff — РАЗОВІ витрати цього місяця (податки, лікар, велика покупка): НЕ проектуй їх як регулярні. Цитуй конкретику: категорії, підписки, бюджети.",
+  // §CTX: списання в найближчі 30 днів — щоб AI радив пріоритет/тайминг платежів.
+  const in30 = now + 30 * 86400;
+  const upcoming = (upcomingRows.results ?? [])
+    .map((p) => ({ title: p.title, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now), amount_uah: Math.round((p.period_amount ?? 0) / 100), kind: p.kind }))
+    .filter((p) => p.at <= in30)
+    .sort((a, b) => a.at - b.at)
+    .slice(0, 12)
+    .map((p) => ({ title: p.title, in_days: Math.max(0, Math.round((p.at - now) / 86400)), amount_uah: p.amount_uah, kind: p.kind }));
+
+  const context: Record<string, unknown> = {
+    period_note: "top_categories/top_merchants/by_event — суми за ОСТАННІ 90 ДНІВ (3 місяці); avg_month_uah — усереднене на місяць. monthly_burn_uah — середні витрати/міс. НЕ плутай 90д із місячною; спирайся на avg_month_uah. by_importance: essential=обов'язкові (не ріж), discretionary=бажані, optional=необов'язкові (найбезпечніше скорочувати). monthly_trend: spend/income по місяцях (6 міс) — дивись динаміку/сезонність, а не лише середнє. budgets: ліміт vs факт цього місяця (used_pct>100 = перевитрата — підсвіти). subscriptions_monthly_uah: фіксовані підписки/міс (майже незмінні). upcoming_charges: найближчі списання (in_days) — використовуй для порад про тайминг/пріоритет платежів. recent_oneoff — РАЗОВІ витрати цього місяця (податки, лікар, велика покупка): НЕ проектуй їх як регулярні. Цитуй конкретику: категорії, підписки, бюджети.",
     period_days: 90,
     situation: profile || "(не вказано)",
     // §C: реальна картина коштів. liquid_cushion — те, що справді є (заощадження/плюсові рахунки);
@@ -183,14 +213,23 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     },
     subscriptions_monthly_uah: subsMonthly,
     subscriptions_count: subsAgg?.n ?? 0,
+    upcoming_charges: upcoming,
     top_categories: (cats.results ?? []).map((c) => ({ id: c.id, name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: catAvgMonth(c.id, c.spent) })),
     top_merchants: (merchants.results ?? []).map((m) => ({ merchant: m.merchant, spent_90d_uah: Math.round(m.spent / 100), avg_month_uah: Math.round(m.spent / 3 / 100) })),
     by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), avg_month_uah: Math.round(e.spent / 3 / 100) })),
     by_importance: (importance.results ?? []).map((x) => ({ level: x.importance, spent_90d_uah: Math.round(x.spent / 100) })),
     monthly_trend: (trend.results ?? []).map((t) => ({ month: t.m, spend_uah: Math.round(t.spend / 100), income_uah: Math.round(t.income / 100) })),
     budgets,
-    citable_operations: citable, // [{id, label}] — для цитат [tx:ID] у тексті
   };
+
+  return { now, funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, citable, context };
+}
+
+export async function buildAdvice(env: Env): Promise<StoredAdvice> {
+  const snap = await collectFinanceSnapshot(env);
+  const { funds, ownFunds, monthlyBurn, runwayMonths, citable, context } = snap;
+  const now = snap.now;
+  const payload = { ...context, citable_operations: citable }; // [{id, label}] — для цитат [tx:ID]
 
   const { result, usage } = await generateAdvice(env, payload);
   logUsage("advice", usage);
@@ -285,8 +324,8 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
   const levels = await categoryMonthlyLevels(env, mult, { now });
   const catLevel = (id: number, spent90: number) => levels.get(id)?.level ?? Math.round(spent90 / 3);
 
-  const totalSpent90 = cats.reduce((s, c) => s + c.spent, 0);
-  const monthlyBurn = Math.round(totalSpent90 / 3);
+  // P1: burn = сума канонічних місячних рівнів (узгоджено з порадником/патернами).
+  const monthlyBurn = sumLevels(levels);
   const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
 
   const payload = {
@@ -342,9 +381,10 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
   const limit = new Map<number, number>();
   for (const b of budgetRows.results ?? []) if (b.category_id != null) limit.set(b.category_id, b.amount);
   const cats = spendRows.results ?? [];
-  const monthlyBurn = Math.round(cats.reduce((s, c) => s + c.spent, 0) / 3);
   const levels = await categoryMonthlyLevels(env, mult, { now });
   const catLevel = (id: number, spent90: number) => levels.get(id)?.level ?? Math.round(spent90 / 3);
+  // P1: burn = сума канонічних місячних рівнів (узгоджено з порадником/патернами).
+  const monthlyBurn = sumLevels(levels);
 
   const ctx = {
     situation: (await getProfile(env)) || "(не вказано)",
@@ -365,8 +405,11 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
 // Чат-порадник: діалог по фінансах із контекстом (профіль + власні + burn + топ-категорії
 // + помітні транзакції з id, які AI може цитувати чипами; + прикріплені юзером операції).
 export async function chatReply(env: Env, messages: ChatMsg[], attachedTxIds: string[] = []): Promise<{ reply: string }> {
-  const now = Math.floor(Date.now() / 1000);
-  const from90 = now - 90 * 86400;
+  // §CTX (2026-07-14): чат тепер отримує ТОЙ САМИЙ багатий знімок, що й Порадник
+  // (`collectFinanceSnapshot`) — розбивка коштів, канонічний burn/runway, підписки, бюджети,
+  // вагомість, тренд, разові, найближчі списання. Раніше контекст був збіднений (нетто + 90д÷3),
+  // тож AI «домислював подушку» й давав числа, що не збігались із екраном Порадника.
+  const snap = await collectFinanceSnapshot(env);
 
   // Прикріплені юзером транзакції — беруть пріоритет у контексті.
   let attached: { id: string; label: string }[] = [];
@@ -378,51 +421,148 @@ export async function chatReply(env: Env, messages: ChatMsg[], attachedTxIds: st
     attached = (rows.results ?? []).map(txLabel);
   }
 
-  const rates = await getRates(env.DB);
-  const { mult } = valueMode(rates, null);
-  const [ownFunds, burnRow, cats, events] = await Promise.all([
-    ownFundsUAH(env),
-    env.DB.prepare(
-      `SELECT ${spendSum(mult)} AS spent FROM transactions t ${STATS_JOINS} WHERE t.time >= ?`,
-    ).bind(from90).first<{ spent: number }>(),
-    env.DB.prepare(
-      `SELECT ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND ${SPEND_WHERE}
-       GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 8`,
-    ).bind(from90).all<{ name: string; spent: number }>(),
-    env.DB.prepare(
-      `SELECT e.name AS name, ${amountSum(mult)} AS spent FROM transactions t JOIN event_groups e ON e.id = t.event_id
-       WHERE t.time >= ? AND t.amount < 0 AND t.is_transfer = 0
-       GROUP BY t.event_id ORDER BY spent DESC LIMIT 6`,
-    ).bind(from90).all<{ name: string; spent: number }>(),
-  ]);
-
-  const monthlyBurn = Math.round((burnRow?.spent ?? 0) / 3);
-  const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
-  // Транзакції для контексту: прикріплені + помітні (дедуп за id).
-  const notable = await notableTransactions(env);
+  // Транзакції для контексту: прикріплені (пріоритет) + помітні зі знімка (дедуп за id).
   const seen = new Set(attached.map((t) => t.id));
-  const transactions = [...attached, ...notable.filter((t) => !seen.has(t.id))].slice(0, 20);
+  const transactions = [...attached, ...snap.citable.filter((t) => !seen.has(t.id))].slice(0, 20);
   const context = {
-    // ВАЖЛИВО про періоди: monthly_burn_uah — це вже СЕРЕДНЄ ЗА МІСЯЦЬ. А суми по категоріях/
-    // мерчантах/подіях подаємо і за весь період (90 днів), і усереднені на місяць — щоб AI
-    // не плутав накопичене за 3 міс із місячним (це була системна помилка).
-    period_note: "top_categories/by_event — суми за ОСТАННІ 90 ДНІВ (3 місяці); avg_month_uah — те саме, усереднене на місяць. monthly_burn_uah — середні витрати на місяць. НЕ плутай суму за 90 днів із місячною.",
-    period_days: 90,
-    situation: (await getProfile(env)) || "(не вказано)",
-    own_funds_uah: Math.round(ownFunds / 100),
-    monthly_burn_uah: Math.round(monthlyBurn / 100),
-    runway_months: runwayMonths,
-    top_categories: (cats.results ?? []).map((c) => ({ name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: Math.round(c.spent / 3 / 100) })),
-    by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), avg_month_uah: Math.round(e.spent / 3 / 100) })),
+    ...snap.context,
     attached_transactions: attached,
     transactions,
   };
 
-  const { text, usage } = await chatAdvice(env, context, messages);
+  const { text, usage } = await chatAdvice(env, context, messages, {
+    tools: financeChatTools(),
+    executor: (name, input) => runFinanceTool(env, name, input),
+  });
   logUsage("chat", usage);
   return { reply: text };
+}
+
+// §AGENT (2026-07-14): інструменти чату — доступ до ПОВНОЇ бази операцій поза фіксованим
+// контекстом. Усі суми зводяться в ₴ канонічно (valueMode/mult); фільтри — канонічні
+// SPEND_WHERE/INCOME_WHERE. Дозволяє питання «скільки на таксі влітку торік» без роздування
+// контексту. Домаінна логіка тут; транспорт tool-use — в ai.ts (runToolConversation).
+export function financeChatTools(): ChatTool[] {
+  const dateProp = { type: "string", description: "Дата у форматі YYYY-MM-DD" };
+  return [
+    {
+      name: "query_spend",
+      description: "Порахувати суму витрат або доходу користувача за період (у ГРН, зведено за курсом), з опційним фільтром по категорії/мерчанту та групуванням. Для питань «скільки я витратив/заробив на X за період Y».",
+      input_schema: {
+        type: "object",
+        properties: {
+          from_date: { ...dateProp, description: "Початок періоду (включно), YYYY-MM-DD" },
+          to_date: { ...dateProp, description: "Кінець періоду (включно), YYYY-MM-DD" },
+          flow: { type: "string", enum: ["spend", "income"], description: "Витрати чи доходи. Дефолт spend." },
+          category: { type: "string", description: "Назва категорії, частковий збіг (напр. «Таксі»). Опційно." },
+          merchant: { type: "string", description: "Назва мерчанта, частковий збіг (напр. «Uklon»). Опційно." },
+          group_by: { type: "string", enum: ["none", "month", "category", "merchant"], description: "Групування. Дефолт none." },
+        },
+        required: ["from_date", "to_date"],
+      },
+    },
+    {
+      name: "find_transactions",
+      description: "Знайти конкретні операції за фільтрами (повертає id, дату, мерчанта, суму в ₴, категорію). Використовуй, коли треба показати приклади операцій, а не лише суму. id можна цитувати як [tx:ID|підпис].",
+      input_schema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Текст у назві мерчанта/коментарі. Опційно." },
+          from_date: { ...dateProp, description: "Від дати (включно). Опційно." },
+          to_date: { ...dateProp, description: "До дати (включно). Опційно." },
+          category: { type: "string", description: "Назва категорії, частковий збіг. Опційно." },
+          flow: { type: "string", enum: ["spend", "income", "any"], description: "Дефолт any." },
+          min_amount_uah: { type: "number", description: "Мінімальна |сума| у ₴. Опційно." },
+          limit: { type: "number", description: "Скільки повернути (1-25, дефолт 12)." },
+        },
+      },
+    },
+    {
+      name: "list_categories",
+      description: "Перелік категорій користувача (назви верхнього рівня) — щоб знати, за якими значеннями фільтрувати. Виклич, якщо не впевнений у точній назві категорії.",
+      input_schema: { type: "object", properties: {} },
+    },
+  ];
+}
+
+function parseToolDate(s: unknown, endOfDay = false): number | null {
+  if (typeof s !== "string") return null;
+  const m = s.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
+  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+}
+const isoDay = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+
+export async function runFinanceTool(env: Env, name: string, input: Record<string, unknown>): Promise<unknown> {
+  const rates = await getRates(env.DB);
+  const { mult } = valueMode(rates, null); // завжди ₴
+
+  if (name === "query_spend") {
+    const from = parseToolDate(input.from_date);
+    const to = parseToolDate(input.to_date, true);
+    if (from == null || to == null) return { error: "from_date і to_date мають бути у форматі YYYY-MM-DD" };
+    const flow = input.flow === "income" ? "income" : "spend";
+    const whereFlow = flow === "income" ? INCOME_WHERE : SPEND_WHERE;
+    const sumExpr = flow === "income"
+      ? `CAST(ROUND(COALESCE(SUM(t.amount * ${mult}), 0)) AS INTEGER)`
+      : amountSum(mult);
+    const binds: unknown[] = [from, to];
+    const extra: string[] = [];
+    if (typeof input.category === "string" && input.category.trim()) { extra.push(`${EFF_CAT_NAME} LIKE ?`); binds.push(`%${input.category.trim()}%`); }
+    if (typeof input.merchant === "string" && input.merchant.trim()) { extra.push("t.merchant LIKE ?"); binds.push(`%${input.merchant.trim()}%`); }
+    const where = `t.time >= ? AND t.time <= ? AND ${whereFlow}${extra.length ? ` AND ${extra.join(" AND ")}` : ""}`;
+    const group = input.group_by;
+    if (group === "month" || group === "category" || group === "merchant") {
+      const sel = group === "month" ? "strftime('%Y-%m', t.time, 'unixepoch')" : group === "category" ? EFF_CAT_NAME : "COALESCE(t.merchant, 'інше')";
+      const grp = group === "category" ? EFF_CAT_ID : sel;
+      const order = group === "month" ? "label ASC" : "amt DESC";
+      const rows = await env.DB.prepare(
+        `SELECT ${sel} AS label, ${sumExpr} AS amt, COUNT(*) AS n FROM transactions t ${STATS_JOINS} WHERE ${where} GROUP BY ${grp} ORDER BY ${order} LIMIT 24`,
+      ).bind(...binds).all<{ label: string; amt: number; n: number }>();
+      return { flow, from_date: input.from_date, to_date: input.to_date, currency: "UAH", groups: (rows.results ?? []).map((r) => ({ label: r.label, amount_uah: Math.round(r.amt / 100), count: r.n })) };
+    }
+    const tot = await env.DB.prepare(
+      `SELECT ${sumExpr} AS amt, COUNT(*) AS n FROM transactions t ${STATS_JOINS} WHERE ${where}`,
+    ).bind(...binds).first<{ amt: number; n: number }>();
+    return { flow, from_date: input.from_date, to_date: input.to_date, currency: "UAH", total_uah: Math.round((tot?.amt ?? 0) / 100), count: tot?.n ?? 0 };
+  }
+
+  if (name === "find_transactions") {
+    const from = parseToolDate(input.from_date);
+    const to = parseToolDate(input.to_date, true);
+    const parts = ["t.transfer_pair_id IS NULL"];
+    const binds: unknown[] = [];
+    if (from != null) { parts.push("t.time >= ?"); binds.push(from); }
+    if (to != null) { parts.push("t.time <= ?"); binds.push(to); }
+    if (input.flow === "spend") parts.push("t.amount < 0");
+    else if (input.flow === "income") parts.push("t.amount > 0");
+    if (typeof input.category === "string" && input.category.trim()) { parts.push(`${EFF_CAT_NAME} LIKE ?`); binds.push(`%${input.category.trim()}%`); }
+    if (typeof input.query === "string" && input.query.trim()) { const q = `%${input.query.trim()}%`; parts.push("(t.merchant LIKE ? OR t.comment LIKE ?)"); binds.push(q, q); }
+    if (typeof input.min_amount_uah === "number" && input.min_amount_uah > 0) { parts.push(`ABS(t.amount * ${mult}) >= ?`); binds.push(Math.round(input.min_amount_uah * 100)); }
+    const limit = Math.min(Math.max(Math.trunc(Number(input.limit) || 12), 1), 25);
+    const rows = await env.DB.prepare(
+      `SELECT t.id AS id, t.time AS time, t.merchant AS merchant, t.comment AS comment,
+              CAST(ROUND(t.amount * ${mult}) AS INTEGER) AS amt, ${EFF_CAT_NAME} AS cat
+       FROM transactions t ${STATS_JOINS} WHERE ${parts.join(" AND ")} ORDER BY t.time DESC LIMIT ?`,
+    ).bind(...binds, limit).all<{ id: string; time: number; merchant: string | null; comment: string | null; amt: number; cat: string | null }>();
+    return {
+      count: rows.results?.length ?? 0,
+      transactions: (rows.results ?? []).map((r) => ({
+        id: r.id, date: isoDay(r.time), merchant: r.merchant || r.comment || "операція",
+        amount_uah: Math.round(r.amt / 100), category: r.cat || "без категорії",
+      })),
+    };
+  }
+
+  if (name === "list_categories") {
+    const rows = await env.DB.prepare(
+      "SELECT name FROM categories WHERE parent_id IS NULL AND id <> 13 ORDER BY name",
+    ).all<{ name: string }>();
+    return { categories: (rows.results ?? []).map((r) => r.name) };
+  }
+
+  return { error: `невідомий інструмент: ${name}` };
 }
 
 // §GR2: спільний контекст групи — тотали, категорії всередині, транзакції (з id).
@@ -488,7 +628,7 @@ export async function chatAboutGroup(env: Env, eventId: number, messages: ChatMs
 
 // Інлайн-чат по КОНКРЕТНІЙ операції: людяна відповідь + опційне застосування зміни
 // (категорія / прапорець переказу), коли з розмови стало однозначно ясно, що це.
-export interface TxChatApplied { category_id?: number | null; category_name?: string | null; is_transfer?: boolean }
+export interface TxChatApplied { category_id?: number | null; category_name?: string | null; is_transfer?: boolean; understanding?: string }
 export async function chatAboutTx(
   env: Env,
   id: string,
@@ -541,6 +681,14 @@ export async function chatAboutTx(
   if (result.is_transfer !== undefined && !!result.is_transfer !== !!tx.is_transfer) {
     await env.DB.prepare("UPDATE transactions SET is_transfer = ? WHERE id = ?").bind(result.is_transfer ? 1 : 0, id).run();
     applied.is_transfer = !!result.is_transfer;
+  }
+  // §Хвіст: чат оновлює «AI розуміє це як» (ai_note). txChat повертає уточнене understanding —
+  // раніше воно викидалось, тож пояснення в чаті («це моя зарплата з крипти») не приживалось на
+  // екрані. Тепер персистимо, щоб рядок відображав актуальне розуміння після розмови.
+  const understanding = result.understanding?.trim();
+  if (understanding) {
+    await env.DB.prepare("UPDATE transactions SET ai_note = ? WHERE id = ?").bind(understanding, id).run();
+    applied.understanding = understanding;
   }
 
   return { reply: result.reply, applied: Object.keys(applied).length ? applied : undefined };

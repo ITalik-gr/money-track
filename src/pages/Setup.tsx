@@ -264,7 +264,8 @@ const MODEL_META: Record<AiModelToken, { name: string; price: string }> = {
 };
 const AI_MODEL_ROWS: { task: AiTask; label: string; hint: string; options: AiModelToken[] }[] = [
   { task: "report", label: "Репорти", hint: "глибокий розбір періоду — варто найкращої моделі", options: ["sonnet", "opus"] },
-  { task: "advisor", label: "Порадник", hint: "поради на твоїх числах і чат", options: ["haiku", "sonnet", "opus"] },
+  { task: "advisor", label: "Порадник", hint: "поради-картки на сторінці Порадника", options: ["haiku", "sonnet", "opus"] },
+  { task: "chat", label: "Чат з AI", hint: "розмова про твої гроші як з фінменеджером", options: ["haiku", "sonnet", "opus"] },
   { task: "insight", label: "AI-огляд у Статистиці", hint: "короткий коментар — масово, дешево", options: ["haiku", "sonnet"] },
 ];
 

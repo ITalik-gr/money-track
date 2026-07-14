@@ -17,7 +17,7 @@ import { InfoTip } from "../components/InfoTip.tsx";
 import { Select } from "../components/Select.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { cardKind, cardKindLabel, cardLast4 } from "../lib/merchant.ts";
-import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
+import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../lib/importance.ts";
 
 const RANGES = {
   week: { label: "Тиждень", days: 7 },
@@ -74,7 +74,13 @@ function toCumulative(series: Overview["series"], opts?: { mode: string; to: num
   const remaining = opts.periodLen - opts.days;
   if (remaining <= 0) return rows;
   const lastCum = rows[rows.length - 1].cum ?? 0;
-  const slope = lastCum / Math.max(1, opts.days); // середній денний нетто-темп
+  // Нахил — МЕДІАНА денного нетто, не середнє. Середнє (= lastCum/days) розмазує разовий
+  // лумп (напр. зайшла +31k зарплата одного дня) як щоденний приплив і тягне пунктир угору,
+  // ніби дохід капає щодня. Медіана відкидає такий одноденний викид → нахил відображає
+  // звичайний темп (переважно витрати), тож після разового поповнення лінія йде вниз.
+  const nets = series.map((s) => (s.income - s.spend) / 100).sort((a, b) => a - b);
+  const mid = Math.floor(nets.length / 2);
+  const slope = nets.length % 2 ? nets[mid] : (nets[mid - 1] + nets[mid]) / 2;
   rows[rows.length - 1].proj = lastCum; // місток від фактичної точки до пунктиру
   const d = new Date(opts.to * 1000);
   const dm = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "numeric" });
@@ -202,7 +208,7 @@ export function Stats() {
                     </div>
                   )}
                 </div>
-                <ImportanceBreakdown data={data} sign={sign} />
+                <ImportanceBreakdown data={data} sign={sign} from={from} to={to} currency={currency} />
                 <SpendingPatterns />
                 <section>
                   <div className="section-head"><h2>Грошовий потік</h2><span className="label">витрати й надходження</span></div>
@@ -254,7 +260,7 @@ export function Stats() {
             {tab === "merchants" && (
               <>
                 <div className="stats-2col">
-                  <MerchantsBlock data={data} from={from} to={to} currency={currency} sign={sign} merchMax={merchMax} />
+                  <MerchantsBlock data={data} sign={sign} merchMax={merchMax} />
                   <EventsBlock data={data} from={from} to={to} currency={currency} sign={sign} />
                 </div>
                 <AccountsBlock data={data} from={from} to={to} currency={currency} sign={sign} />
@@ -457,35 +463,30 @@ function DrillTxList({ txs, kind = "expense" }: { txs: DrillTx[]; kind?: "expens
   );
 }
 
-// §R2-ST3+ST5(б): Топ мерчантів — рядки-кнопки, клік розкриває операції зрізу.
-function MerchantsBlock({ data, from, to, currency, sign, merchMax }: {
-  data: Overview; from: number; to: number; currency: Cur; sign: string; merchMax: number;
+// §R2-ST3+ST5(б) / §P3: Топ мерчантів — рядки-лінки на сторінку мерчанта (уся історія,
+// тренд, середній чек, частка в категорії). Раніше клік розкривав інлайн-дрил операцій —
+// сторінка мерчанта багатша, тож ведемо туди.
+function MerchantsBlock({ data, sign, merchMax }: {
+  data: Overview; sign: string; merchMax: number;
 }) {
-  const [open, setOpen] = useState<string | null>(null);
   return (
     <section>
-      <div className="section-head"><h2>Топ мерчантів</h2><InfoTip>Найбільші отримувачі витрат за період (зведено в ₴). Клік — усі операції мерчанта.</InfoTip><span className="label">клік — операції</span></div>
+      <div className="section-head"><h2>Топ мерчантів</h2><InfoTip>Найбільші отримувачі витрат за період (зведено в ₴). Клік — сторінка мерчанта.</InfoTip><span className="label">клік — деталі</span></div>
       {data.byMerchant.length ? (
         <div className="card"><div className="mrows">
-          {data.byMerchant.slice(0, 7).map((m, i) => {
-            const isOpen = open === m.merchant;
-            return (
-              <div key={i}>
-                <button type="button" className={`mrow mrow-btn ${isOpen ? "open" : ""}`} onClick={() => setOpen(isOpen ? null : m.merchant)}>
-                  <MerchantLogo merchant={m.merchant} color="var(--accent)" fallbackLabel={m.merchant} />
-                  <div className="m-body">
-                    <div className="m-name">{m.merchant}</div>
-                    <div className="m-track"><div className="m-fill" style={{ width: `${(m.spent / merchMax) * 100}%` }} /></div>
-                  </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div className="m-val">{formatMinor(m.spent, { decimals: false })} {sign}</div>
-                    <div className="m-sub">{m.n} оп. · сер. {formatMinor(Math.round(m.spent / m.n), { decimals: false })} {sign}</div>
-                  </div>
-                </button>
-                {isOpen && <SliceDrillPanel dim="merchant" value={m.merchant} from={from} to={to} currency={currency} sign={sign} />}
+          {data.byMerchant.slice(0, 7).map((m, i) => (
+            <Link key={i} to={`/merchant/${encodeURIComponent(m.merchant)}`} className="mrow mrow-link">
+              <MerchantLogo merchant={m.merchant} color="var(--accent)" fallbackLabel={m.merchant} />
+              <div className="m-body">
+                <div className="m-name">{m.merchant}</div>
+                <div className="m-track"><div className="m-fill" style={{ width: `${(m.spent / merchMax) * 100}%` }} /></div>
               </div>
-            );
-          })}
+              <div style={{ textAlign: "right" }}>
+                <div className="m-val">{formatMinor(m.spent, { decimals: false })} {sign}</div>
+                <div className="m-sub">{m.n} оп. · сер. {formatMinor(Math.round(m.spent / m.n), { decimals: false })} {sign}</div>
+              </div>
+            </Link>
+          ))}
         </div></div>
       ) : <div className="card empty">Немає мерчантів за період.</div>}
     </section>
@@ -566,7 +567,7 @@ function AccountsBlock({ data, from, to, currency, sign }: {
 
 // §R2-ST5(б): drill зрізу — підсумок + операції. dim=all → увесь період (клік по KPI).
 function SliceDrillPanel({ dim, value, type, from, to, currency, sign, embedded }: {
-  dim: "merchant" | "account" | "event" | "weekday" | "day" | "all"; value?: string; type?: "expense" | "income";
+  dim: "merchant" | "account" | "event" | "weekday" | "day" | "dom" | "importance" | "all"; value?: string; type?: "expense" | "income";
   from: number; to: number; currency: Cur; sign: string; embedded?: boolean;
 }) {
   const { data, isFetching } = useGetSliceDrillQuery({ dim, value, type, from, to, currency, limit: dim === "all" ? 300 : 60 });
@@ -752,6 +753,7 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
 }) {
   const [openWd, setOpenWd] = useState<number | null>(null);
   const [openPriciest, setOpenPriciest] = useState(false);
+  const [openDom, setOpenDom] = useState<number | null>(null);
   const daily = series.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket));
   if (daily.length < 4) return null;
 
@@ -847,19 +849,28 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
 
       {hasDom && (
         <div className="card deep-card" style={{ marginTop: 14 }}>
-          <div className="deep-title">Витрати за числом місяця <span className="label" style={{ fontWeight: 400 }}>· темніше = більше</span></div>
+          <div className="deep-title">Витрати за числом місяця <span className="label" style={{ fontWeight: 400 }}>· темніше = більше · клік — операції</span></div>
           <div className="dom-heat">
             {byDom.map((v, i) => {
               const intensity = v > 0 ? 0.15 + 0.85 * (v / domMax) : 0;
+              const dom = i + 1;
               return (
-                <HoverTip key={i} content={<><div className="tip-lbl">{i + 1}-е число</div><div className="r">{formatMinor(v, { decimals: false })} {sign}</div></>}>
-                  <div className="dom-cell" style={{ background: v > 0 ? `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, transparent)` : "var(--surface-2)" }}>
-                    <span className="dom-num" style={{ color: intensity > 0.55 ? "#fff" : "var(--muted)" }}>{i + 1}</span>
-                  </div>
+                <HoverTip key={i} content={<><div className="tip-lbl">{dom}-е число</div><div className="r">{formatMinor(v, { decimals: false })} {sign}</div></>}>
+                  <button type="button" className={`dom-cell ${openDom === dom ? "open" : ""}`} disabled={!(v > 0)}
+                    onClick={() => setOpenDom((o) => (o === dom ? null : dom))}
+                    style={{ background: v > 0 ? `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, transparent)` : "var(--surface-2)" }}>
+                    <span className="dom-num" style={{ color: intensity > 0.55 ? "#fff" : "var(--muted)" }}>{dom}</span>
+                  </button>
                 </HoverTip>
               );
             })}
           </div>
+          {openDom != null && (
+            <div className="drill-open-card" style={{ marginTop: 12, padding: 0 }}>
+              <div className="label" style={{ marginBottom: 6 }}>{openDom}-е число місяця — операції за період</div>
+              <SliceDrillPanel dim="dom" value={String(openDom)} from={from} to={to} currency={currency} sign={sign} embedded />
+            </div>
+          )}
           <p className="deep-desc">Дні місяця з найбільшими витратами — часто це оренда, підписки чи регулярні платежі.</p>
         </div>
       )}
@@ -972,16 +983,17 @@ function SpendingPatterns() {
   );
 }
 
-function ImportanceBreakdown({ data, sign }: { data: Overview; sign: string }) {
+function ImportanceBreakdown({ data, sign, from, to, currency }: { data: Overview; sign: string; from: number; to: number; currency: Cur }) {
   const rows = data.byImportance ?? [];
   const total = rows.reduce((s, r) => s + Math.abs(r.spent), 0);
+  const [open, setOpen] = useState<Importance | null>(null);
   if (!total) return null;
   const byLevel = (lv: string) => Math.abs(rows.find((r) => r.importance === lv)?.spent ?? 0);
   return (
     <section>
       <div className="section-head">
         <h2>Вагомість витрат</h2>
-        <HoverTip content={<>Скільки з витрат — <b>обов'язкові</b> (не поріжеш), <b>бажані</b> (гнучкі) чи <b>необов'язкові</b> (можна не робити). Задається на категорії, операція може перевизначати.</>}>
+        <HoverTip content={<>Скільки з витрат — <b>обов'язкові</b> (не поріжеш), <b>бажані</b> (гнучкі) чи <b>необов'язкові</b> (можна не робити). Задається на категорії, операція може перевизначати. Клікни блок — побачиш ці операції.</>}>
           <span className="label">що це?</span>
         </HoverTip>
       </div>
@@ -1003,14 +1015,21 @@ function ImportanceBreakdown({ data, sign }: { data: Overview; sign: string }) {
             const v = byLevel(lv);
             const pct = Math.round((v / total) * 100);
             return (
-              <div key={lv} className="imp-card">
-                <span className="imp-card-top"><span className="d" style={{ background: IMPORTANCE_META[lv].color }} />{IMPORTANCE_META[lv].label}</span>
+              <button type="button" key={lv} className={`imp-card fact-click ${open === lv ? "open" : ""}`}
+                disabled={!v} onClick={() => setOpen((o) => (o === lv ? null : lv))}>
+                <span className="imp-card-top"><span className="d" style={{ background: IMPORTANCE_META[lv].color }} />{IMPORTANCE_META[lv].label} ›</span>
                 <span className="imp-card-amt num-hero">{formatMinor(v, { decimals: false })} {sign}</span>
                 <span className="imp-card-pct muted">{pct}% витрат</span>
-              </div>
+              </button>
             );
           })}
         </div>
+        {open && byLevel(open) > 0 && (
+          <div className="drill-open-card" style={{ marginTop: 12 }}>
+            <div className="label" style={{ marginBottom: 6 }}>{IMPORTANCE_META[open].label} — операції за період</div>
+            <SliceDrillPanel dim="importance" value={open} from={from} to={to} currency={currency} sign={sign} embedded />
+          </div>
+        )}
       </div>
     </section>
   );

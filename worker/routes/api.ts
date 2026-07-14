@@ -312,6 +312,12 @@ api.get("/reports/:id", async (c) => {
   return c.json({ ...meta, data: JSON.parse(data_json) });
 });
 
+// Видалити репорт (напр. тестові генерації). Ідемпотентно — 404 не критично.
+api.delete("/reports/:id", async (c) => {
+  await c.env.DB.prepare("DELETE FROM ai_reports WHERE id = ?").bind(c.req.param("id")).run();
+  return c.json({ ok: true });
+});
+
 // Згенерувати репорт на вимогу (кнопка). type=week|month; scope=current(дефолт, для тесту —
 // поточний період до сьогодні) | last (завершений, як у крона); force перегенеровує наявний.
 api.post("/reports/generate", async (c) => {
@@ -886,6 +892,63 @@ api.put("/settings/ai-models", async (c) => {
   return c.json({ ok: true, task, model });
 });
 
+// §P3: сторінка мерчанта — агрегати по одному мерчанту (уся історія + тренд 6 міс + частка
+// в категорії). Канон stats.ts (SPEND_WHERE/amountSum/EFF_*), зведено в ₴.
+api.get("/analytics/merchant", async (c) => {
+  const name = new URL(c.req.url).searchParams.get("name");
+  if (!name) return c.json({ error: "name required" }, 400);
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const now = Math.floor(Date.now() / 1000);
+  const d = new Date(now * 1000);
+  const from6 = Math.floor(new Date(d.getFullYear(), d.getMonth() - 5, 1).getTime() / 1000);
+
+  const [agg, byMonth, topCat, txs] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT ${amountSum(mult)} AS total, COUNT(*) AS n, MIN(t.time) AS first_at, MAX(t.time) AS last_at
+       FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?`,
+    ).bind(name).first<{ total: number; n: number; first_at: number | null; last_at: number | null }>(),
+    c.env.DB.prepare(
+      `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ? AND t.time >= ?
+       GROUP BY m ORDER BY m`,
+    ).bind(name, from6).all<{ m: string; spent: number }>(),
+    c.env.DB.prepare(
+      `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?
+       GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 1`,
+    ).bind(name).first<{ id: number | null; name: string | null; color: string | null; spent: number }>(),
+    c.env.DB.prepare(
+      `SELECT t.*, ${EFF_CAT_NAME} AS category_name, ${EFF_CAT_COLOR} AS category_color,
+              COALESCE(rc.icon, c.icon) AS category_icon
+       FROM transactions t ${STATS_JOINS} WHERE t.merchant = ? ORDER BY t.time DESC LIMIT 40`,
+    ).bind(name).all(),
+  ]);
+
+  // Частка в категорії: витрати мерчанта / витрати всієї категорії (уся історія).
+  let categoryShare: number | null = null;
+  if (topCat?.id != null && topCat.spent > 0) {
+    const catTot = await c.env.DB.prepare(
+      `SELECT ${amountSum(mult)} AS spent FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?`,
+    ).bind(topCat.id).first<{ spent: number }>();
+    if (catTot && catTot.spent > 0) categoryShare = Math.round((topCat.spent / catTot.spent) * 100);
+  }
+
+  const total = agg?.total ?? 0;
+  const n = agg?.n ?? 0;
+  return c.json({
+    name,
+    total, n,
+    avg: n > 0 ? Math.round(total / n) : 0,
+    first_at: agg?.first_at ?? null,
+    last_at: agg?.last_at ?? null,
+    by_month: (byMonth.results ?? []).map((r) => ({ month: r.m, spent: r.spent })),
+    top_category: topCat?.name ? { name: topCat.name, color: topCat.color, spent: topCat.spent } : null,
+    category_share: categoryShare,
+    transactions: txs.results ?? [],
+  });
+});
+
 // Порівняння двох періодів side-by-side (беклог): вибраний період A проти попереднього
 // рівного за довжиною B. Тотали + розбивка по категоріях (рол-ап підкатегорій), per-currency.
 api.get("/analytics/compare", async (c) => {
@@ -1343,12 +1406,14 @@ api.get("/analytics/slice", async (c) => {
     : dim === "event" ? "t.event_id"
     : dim === "weekday" ? "CAST(strftime('%w', t.time, 'unixepoch') AS INTEGER)"
     : dim === "day" ? "strftime('%Y-%m-%d', t.time, 'unixepoch')"
+    : dim === "dom" ? "CAST(strftime('%d', t.time, 'unixepoch') AS INTEGER)" // §1: число місяця (heat-map)
+    : dim === "importance" ? EFF_IMPORTANCE // §6: вагомість ефективної категорії/override
     : dim === "all" ? null
     : "t.merchant";
   const dimClause = dimCol ? ` AND ${dimCol} = ?` : "";
   const base = `t.time >= ? AND t.time <= ? AND ${canon}${curFilter}${dimClause}`;
   const binds: unknown[] = dimCol
-    ? [from, to, dim === "event" || dim === "weekday" ? Number(value) : value]
+    ? [from, to, dim === "event" || dim === "weekday" || dim === "dom" ? Number(value) : value]
     : [from, to];
   const order = type === "income" ? "DESC" : "ASC"; // найбільша витрата / найбільше надходження зверху
 

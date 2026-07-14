@@ -55,6 +55,33 @@ function ChartBlock({ title, rows, keyBase }: { title: string | null; rows: { la
   );
 }
 
+// §CTX: AI кидає таблицю директивою [table]…[/table]. Перший рядок — заголовки колонок,
+// далі — рядки даних, усе через «|». Числові клітинки підсвічуються (highlightAmounts),
+// перша колонка — лейбл. Self-contained, CSP-safe.
+function TableBlock({ title, header, rows, keyBase }: { title: string | null; header: string[]; rows: string[][]; keyBase: string }) {
+  return (
+    <div className="md-table-wrap" key={keyBase}>
+      {title && <div className="md-table-title">{title}</div>}
+      <table className="md-table">
+        <thead>
+          <tr>{header.map((h, i) => <th key={`${keyBase}-h${i}`} className={i === 0 ? "md-td-lbl" : ""}>{h}</th>)}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={`${keyBase}-r${ri}`}>
+              {r.map((cell, ci) => (
+                <td key={`${keyBase}-r${ri}c${ci}`} className={ci === 0 ? "md-td-lbl" : "md-td-num"}>
+                  {ci === 0 ? cell : highlightAmounts(cell)}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function renderMarkdown(text: string): ReactNode {
   const lines = text.replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];
@@ -83,6 +110,25 @@ export function renderMarkdown(text: string): ReactNode {
         idx++;
       }
       if (rows.length) blocks.push(<ChartBlock key={`chart${key++}`} keyBase={`chart${key}`} title={title} rows={rows} />);
+      continue;
+    }
+    // Блок-таблиця: [table] або [table:Заголовок] … [/table]. Перший рядок — заголовки.
+    const tableStart = line.trim().match(/^\[table(?::\s*(.+?))?\]$/i);
+    if (tableStart) {
+      flushList();
+      const title = tableStart[1]?.trim() || null;
+      const gridRows: string[][] = [];
+      idx++;
+      while (idx < lines.length && !/^\s*\[\/table\]\s*$/i.test(lines[idx])) {
+        const cells = lines[idx].split("|").map((c) => c.trim());
+        if (cells.some((c) => c)) gridRows.push(cells);
+        idx++;
+      }
+      if (gridRows.length >= 2) {
+        const header = gridRows[0];
+        const body = gridRows.slice(1).map((r) => { const c = [...r]; while (c.length < header.length) c.push(""); return c.slice(0, header.length); });
+        blocks.push(<TableBlock key={`table${key++}`} keyBase={`table${key}`} title={title} header={header} rows={body} />);
+      }
       continue;
     }
     if (!line.trim()) { flushList(); continue; }

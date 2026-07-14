@@ -199,6 +199,20 @@ export interface CategoryDrill {
 }
 export interface SliceDrill { spent: number; n: number; transactions: DrillTx[] }
 
+// §P3: сторінка мерчанта — агрегати по одному мерчанту.
+export interface MerchantAnalytics {
+  name: string;
+  total: number;                 // копійки, ₴ — уся історія витрат
+  n: number;
+  avg: number;                   // копійки, середній чек
+  first_at: number | null;
+  last_at: number | null;
+  by_month: { month: string; spent: number }[];
+  top_category: { name: string; color: string | null; spent: number } | null;
+  category_share: number | null; // % витрат категорії, що припадає на мерчанта
+  transactions: TxRow[];
+}
+
 // §Аналітика 2.0 — AI-репорти.
 export interface FinancialReport {
   headline: string;
@@ -380,6 +394,10 @@ export const api = createApi({
       query: (body) => ({ url: "/reports/generate", method: "POST", body }),
       invalidatesTags: ["Report"],
     }),
+    deleteReport: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/reports/${id}`, method: "DELETE" }),
+      invalidatesTags: ["Report"],
+    }),
     getTransaction: b.query<TxDetail, string>({
       query: (id) => `/transactions/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Tx", id }],
@@ -407,6 +425,10 @@ export const api = createApi({
     getSafeToSpend: b.query<SafeToSpend, void>({ query: () => "/analytics/safe-to-spend", providesTags: ["Tx", "Summary", "Budget"] }),
     getCapitalTrend: b.query<CapitalTrend, number | void>({ query: (months) => `/analytics/capital-trend?months=${months ?? 6}`, providesTags: ["Tx", "Summary"] }),
     // currency undefined → зведено в ₴; preset → сервер рахує межі за period_mode.
+    getMerchant: b.query<MerchantAnalytics, string>({
+      query: (name) => `/analytics/merchant?name=${encodeURIComponent(name)}`,
+      providesTags: ["Summary"],
+    }),
     getOverview: b.query<Overview, { preset?: Preset; from?: number; to?: number; bucket?: string; currency?: number | null }>({
       query: ({ preset, from, to, bucket, currency }) => {
         const p = new URLSearchParams();
@@ -452,7 +474,7 @@ export const api = createApi({
       query: ({ category, from, to, currency }) => `/analytics/category?category=${category}&from=${from}&to=${to}${currency ? `&currency=${currency}` : ""}`,
       providesTags: ["Tx"],
     }),
-    getSliceDrill: b.query<SliceDrill, { dim: "merchant" | "account" | "event" | "weekday" | "day" | "all"; value?: string; type?: "expense" | "income"; from: number; to: number; currency?: number | null; limit?: number }>({
+    getSliceDrill: b.query<SliceDrill, { dim: "merchant" | "account" | "event" | "weekday" | "day" | "dom" | "importance" | "all"; value?: string; type?: "expense" | "income"; from: number; to: number; currency?: number | null; limit?: number }>({
       query: ({ dim, value, type, from, to, currency, limit }) => {
         const p = new URLSearchParams({ dim, from: String(from), to: String(to) });
         if (value != null) p.set("value", value);
@@ -619,7 +641,7 @@ export const api = createApi({
       query: ({ id, messages }) => ({ url: `/events/${id}/chat`, method: "POST", body: { messages } }),
     }),
     chatTx: b.mutation<
-      { reply: string; applied?: { category_id?: number | null; category_name?: string | null; is_transfer?: boolean } },
+      { reply: string; applied?: { category_id?: number | null; category_name?: string | null; is_transfer?: boolean; understanding?: string } },
       { id: string; messages: { role: "user" | "assistant"; content: string }[] }
     >({
       query: ({ id, messages }) => ({ url: `/transactions/${id}/chat`, method: "POST", body: { messages } }),
@@ -660,11 +682,13 @@ export const {
   useGetReportsQuery,
   useGetReportQuery,
   useGenerateReportMutation,
+  useDeleteReportMutation,
   useGetTransactionsQuery,
   useGetTransactionQuery,
   useGetByCategoryQuery,
   useGetSafeToSpendQuery,
   useGetCapitalTrendQuery,
+  useGetMerchantQuery,
   useGetOverviewQuery,
   useGetCurrenciesQuery,
   useGetForecastQuery,

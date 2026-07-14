@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   useChatTxMutation,
   useEditTransactionMutation,
@@ -172,7 +172,11 @@ export function TxDetail() {
           <div className="row" style={{ gap: 13, minWidth: 0 }}>
             <MerchantLogo merchant={tx.merchant} catIcon={tx.category_icon} color={tx.category_color} transfer={!!tx.is_transfer} fallbackLabel={tx.category_name} />
             <div style={{ minWidth: 0 }}>
-              <div className="who" style={{ fontSize: 18, fontWeight: 600 }}>{tx.merchant ?? tx.comment ?? "—"}</div>
+              <div className="who" style={{ fontSize: 18, fontWeight: 600 }}>
+                {tx.merchant
+                  ? <Link to={`/merchant/${encodeURIComponent(tx.merchant)}`} className="merchant-link">{tx.merchant}</Link>
+                  : (tx.comment ?? "—")}
+              </div>
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{when}</div>
             </div>
           </div>
@@ -466,6 +470,7 @@ function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
       setMessages((m) => [...m, { role: "assistant", content: r.reply }]);
       if (r.applied?.category_name) toast.success(`AI оновив категорію → ${r.applied.category_name}`);
       if (r.applied?.is_transfer) toast.success("AI позначив як переказ між своїми");
+      if (r.applied?.understanding) toast.success("AI оновив розуміння операції");
     } catch {
       setMessages((m) => [...m, { role: "assistant", content: "Не вдалося відповісти. Спробуй ще раз." }]);
     } finally { sending.current = false; }

@@ -23,6 +23,7 @@ export function RichFacts({ headline, facts, note }: { headline?: string; facts?
         <div className="rich-facts">
           {facts.map((f, i) => {
             const catColor = f.category ? colorByName.get(f.category.toLowerCase()) : undefined;
+            const hasVal = f.category || f.amount != null || f.delta_pct != null;
             return (
               <div className="fact-row" key={i}>
                 <span className="fact-label">{f.label}</span>
@@ -37,6 +38,8 @@ export function RichFacts({ headline, facts, note }: { headline?: string; facts?
                   {f.delta_pct != null && (
                     <span className="fact-delta">{f.delta_pct >= 0 ? "+" : ""}{f.delta_pct}%</span>
                   )}
+                  {/* Факт без числового значення (напр. «Runway на burn») не лишаємо порожнім рядком. */}
+                  {!hasVal && <span className="fact-amt muted-dash">—</span>}
                 </span>
               </div>
             );

@@ -235,6 +235,10 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   .content { padding: 28px 40px 48px; }
 }
 
+/* Великі екрани — ширший контент, щоб не тулився у вузьку колонку на широких моніторах */
+@media (min-width: 1500px) { :root { --content-w: 1400px; } }
+@media (min-width: 1800px) { :root { --content-w: 1560px; } }
+
 /* brand */
 .brand {
   display: flex;
@@ -1474,9 +1478,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 /* структурований AI-вивід (RichFacts) */
 .rich-headline { font-size: 14.5px; font-weight: 600; line-height: 1.5; margin-bottom: 12px; }
-.rich-facts { display: flex; flex-direction: column; gap: 9px; }
-.fact-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.rich-facts { display: flex; flex-direction: column; }
+.fact-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.fact-row:first-child { padding-top: 0; }
+.fact-row:last-child { border-bottom: none; padding-bottom: 0; }
 .fact-label { font-size: 13.5px; color: var(--ink-2); min-width: 0; }
+.fact-amt.muted-dash { color: var(--muted); font-weight: 500; }
 .fact-vals { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .fact-cat { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
 .fact-cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
@@ -1541,7 +1548,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .deep-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
 /* §1 heat-map витрат за числом місяця */
 .dom-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 5px; }
-.dom-cell { aspect-ratio: 1; border-radius: 7px; display: grid; place-items: center; border: 1px solid var(--line); cursor: default; }
+.dom-cell { aspect-ratio: 1; border-radius: 7px; display: grid; place-items: center; border: 1px solid var(--line); cursor: pointer; padding: 0; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
+.dom-cell:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); }
+.dom-cell.open { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.dom-cell:disabled { cursor: default; }
 .dom-num { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .wd-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
 .wd-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; border: none; background: none; cursor: pointer; padding: 0; border-radius: 8px; transition: background 0.12s; }
@@ -1658,13 +1668,23 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .mrow-btn { position: relative; width: 100%; border: none; background: none; cursor: pointer; text-align: left; border-radius: 8px; padding-right: 24px; transition: background 0.12s; }
 .mrow-btn:hover { background: var(--surface-2); }
 .mrow-btn.open { background: var(--surface-2); }
+/* §P3: рядок-лінк на сторінку мерчанта (стрілка-вправо замість каре-тогла) */
+.mrow-link { position: relative; width: 100%; border-radius: 8px; padding-right: 26px; text-decoration: none; color: inherit; transition: background var(--dur-1) var(--ease-out); }
+.mrow-link:hover { background: var(--surface-2); }
+.mrow-link::after {
+  content: ""; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
+  border-right: 1.6px solid var(--muted); border-top: 1.6px solid var(--muted);
+  transform: translateY(-50%) rotate(45deg); opacity: 0; transition: opacity var(--dur-1) var(--ease-out);
+}
+.mrow-link:hover::after { opacity: 1; border-color: var(--accent); }
 .drill-open-link { margin-left: auto; font-size: 11.5px; color: var(--accent); text-decoration: none; font-weight: 500; text-transform: none; letter-spacing: 0; }
 .drill-open-link:hover { text-decoration: underline; }
 .cat-drill-txs .label { display: flex; align-items: center; gap: 8px; }
 
 /* ===== ADVISOR (runway + gauge) ========================================== */
-.runway-card { display: flex; gap: 22px; align-items: center; padding: 20px 22px; flex-wrap: wrap; }
-.runway-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 24px; flex: 1; min-width: 240px; }
+.runway-card { display: flex; gap: 22px 28px; align-items: center; padding: 20px 22px; flex-wrap: wrap; }
+/* Метрики — щільна авто-fit KPI-стрічка (заповнює ширину, без порожнеч праворуч на десктопі). */
+.runway-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 16px 24px; flex: 1; min-width: 240px; }
 .runway-metric .label { margin-bottom: 3px; }
 .runway-val { font-size: 22px; }
 .runway-comment { grid-column: 1 / -1; margin: 6px 0 0; font-size: 14px; line-height: 1.55; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-2); }
@@ -1672,9 +1692,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .gauge-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .gauge-val { font-size: 30px; line-height: 1; }
 
-/* §R6 Advisor — 2 колонки: інтерактивне «запитай» + структуровані поради */
-.advisor-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 18px; align-items: start; }
-@media (max-width: 900px) { .advisor-grid { grid-template-columns: 1fr; } }
+/* §R6 Advisor — 2 колонки: головна (поради, ширша для читабельності) + рейл (розбивка/огляд/історія) */
+.advisor-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+.advisor-grid > * { min-width: 0; }
+.advisor-rail { position: sticky; top: 84px; }
+@media (max-width: 980px) { .advisor-grid { grid-template-columns: 1fr; } .advisor-rail { position: static; } }
 .advisor-ask { position: sticky; top: 78px; }
 @media (max-width: 900px) { .advisor-ask { position: static; } }
 .advisor-ask-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
@@ -1700,16 +1722,52 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .chat-msg.assistant { align-self: flex-start; background: var(--surface-2); color: var(--ink); border-bottom-left-radius: 5px; }
 .chat-typing { color: var(--muted); letter-spacing: 2px; }
 
-/* dedicated chat page */
-.chat-page { display: flex; flex-direction: column; min-height: calc(100vh - 190px); }
+/* dedicated chat page — рейл розмов + основна колонка.
+   Фіксована висота = в'юпорт мінус topbar+паддинги контенту → сам БЛОК чату скролиться
+   всередині (лог + рейл), сторінка НЕ росте. */
+.chat-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 16px; align-items: stretch; height: calc(100dvh - 140px); }
+.chat-page { display: flex; flex-direction: column; min-height: 0; }
+.chat-head { align-items: flex-start; flex-shrink: 0; }
+.chat-rail-toggle { display: none; }
+
+/* Рейл розмов (desktop: власний скрол, лишається на місці; mobile: drawer) */
+.chat-rail { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.chat-new { width: 100%; justify-content: center; }
+.chat-rail-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; padding-right: 2px; }
+.chat-rail-item {
+  display: flex; align-items: center; gap: 6px; padding: 9px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; color: var(--ink-2); font-size: 13px; transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-rail-item:hover { background: var(--surface-2); }
+.chat-rail-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.cri-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cri-del {
+  flex-shrink: 0; width: 20px; height: 20px; border: none; background: none; color: var(--muted);
+  font-size: 17px; line-height: 1; border-radius: var(--radius-xs); cursor: pointer; opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+.chat-rail-item:hover .cri-del, .chat-rail-item.active .cri-del { opacity: 1; }
+.cri-del:hover { background: var(--surface); color: var(--neg); }
+.chat-rail-scrim { display: none; }
+
 .chat-shell {
   flex: 1; display: flex; flex-direction: column; min-height: 0;
-  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg);
- overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  overflow: hidden;
 }
-.chat-log2 { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding: 18px; min-height: 240px; }
-.chat-log2 .chat-msg { max-width: 78%; animation: chat-in 0.22s ease; }
+.chat-log2 { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px 18px 22px; min-height: 0; scroll-padding-top: 12px; }
+.chat-msg-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 82%; animation: chat-in 0.22s ease; }
+.chat-msg-wrap.user { align-self: flex-end; align-items: flex-end; }
+.chat-msg-wrap.assistant { align-self: flex-start; align-items: flex-start; }
+.chat-msg-wrap .chat-msg { max-width: 100%; }
 @keyframes chat-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.chat-msg-actions { display: flex; gap: 4px; padding-left: 4px; }
+.chat-msg-actions button {
+  display: inline-flex; align-items: center; gap: 4px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 11.5px; padding: 3px 6px; border-radius: var(--radius-xs);
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-msg-actions button:hover { background: var(--surface-2); color: var(--ink-2); }
 .chat-log2 .chat-typing { display: inline-flex; gap: 4px; align-items: center; }
 .chat-log2 .chat-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); display: inline-block; animation: chat-dot 1s infinite ease-in-out; }
 .chat-log2 .chat-typing span:nth-child(2) { animation-delay: 0.15s; }
@@ -1717,17 +1775,57 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 @keyframes chat-dot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 .chat-retry { align-self: flex-start; margin-top: 2px; font-size: 12.5px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 2px; }
 .chat-retry:hover { text-decoration: underline; }
-.chat-empty { margin: auto; text-align: center; color: var(--muted); max-width: 440px; }
+.chat-empty { margin: auto; text-align: center; color: var(--muted); max-width: 460px; }
 .chat-empty p { margin-bottom: 14px; font-size: 14px; }
 .chat-suggest { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .chat-chip {
-  padding: 9px 14px; border-radius: 999px; border: 1px solid var(--line-strong);
-  background: var(--surface); color: var(--ink-2); font-size: 13px; cursor: pointer; transition: background 0.12s, border-color 0.12s;
+  padding: 9px 14px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--ink-2); font-size: 13px; cursor: pointer; transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
 .chat-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.chat-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--surface); }
-.chat-input input { flex: 1; }
-.chat-input .btn.primary { padding: 10px 18px; }
+.chat-input { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surface); align-items: flex-end; }
+.chat-input textarea {
+  flex: 1; resize: none; font: inherit; line-height: 1.5; min-height: 42px; max-height: 160px; overflow-y: hidden;
+  padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-2); color: var(--ink); box-sizing: border-box;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+.chat-input textarea::placeholder { color: var(--muted); }
+.chat-input textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+/* Тонкий скролбар у полі вводу (лише коли текст сягає максимуму) */
+.chat-input textarea { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.chat-input textarea::-webkit-scrollbar { width: 8px; }
+.chat-input textarea::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid var(--surface); }
+.chat-input textarea::-webkit-scrollbar-track { background: transparent; }
+.chat-send { padding: 0; width: 42px; height: 42px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; border-radius: var(--radius); }
+
+/* Мобілка: рейл розмов — off-canvas шухляда */
+@media (max-width: 860px) {
+  .chat-layout { grid-template-columns: 1fr; height: calc(100dvh - 176px); }
+  .chat-rail-toggle {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 38px; height: 38px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink-2); cursor: pointer; margin-right: 2px;
+  }
+  .chat-head { align-items: center; }
+  .chat-rail {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 268px; z-index: 60;
+    background: var(--surface); border-right: 1px solid var(--line-strong); padding: 16px;
+    transform: translateX(-100%); transition: transform var(--dur-2) var(--ease-out);
+    box-shadow: var(--shadow-card);
+  }
+  .chat-layout.rail-open .chat-rail { transform: translateX(0); }
+  .chat-layout.rail-open .chat-rail-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(15, 22, 32, 0.4); }
+}
+
+/* §P3: сторінка мерчанта */
+.merchant-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.merchant-stat { padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
+.merchant-stat-v { font-size: 22px; letter-spacing: -0.02em; }
+.merchant-stat-v .cur { font-size: 14px; color: var(--muted); margin-left: 2px; }
+.merchant-stat-sub { font-size: 12.5px; color: var(--muted); }
+.merchant-link { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--line-strong); transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out); }
+.merchant-link:hover { color: var(--accent); border-color: var(--accent); }
 
 /* advisor → chat CTA */
 .chat-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; text-decoration: none; color: inherit; transition: border-color 0.12s, background 0.12s; }
@@ -1880,7 +1978,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .imp-bar-lg span { display: flex; align-items: center; justify-content: center; }
 .imp-seg-lbl { font-size: 11.5px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
 .imp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
-.imp-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-width: 0; }
+.imp-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-width: 0; text-align: left; font: inherit; cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
+.imp-card.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); }
+.imp-card.fact-click.open { border-color: var(--accent); }
+.imp-card:disabled { cursor: default; opacity: 0.6; }
 .imp-card-top { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
 .imp-card-top .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
 .imp-card-amt { font-size: 18px; }
@@ -1928,11 +2029,20 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §5 РЕПОРТИ — окрема сторінка (список карток + деталь) */
 .report-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .report-card {
+  position: relative;
   display: flex; flex-direction: column; gap: 8px; padding: 15px 16px;
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
  text-decoration: none; color: inherit; transition: border-color .12s, transform .12s;
 }
 .report-card:hover { border-color: var(--muted); transform: translateY(-1px); }
+.rc-del {
+  position: absolute; top: 10px; right: 10px; display: grid; place-items: center;
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer; opacity: 0.5;
+  transition: opacity .12s, background .12s, color .12s;
+}
+.report-card:hover .rc-del, .rc-del:focus-visible { opacity: 1; }
+.rc-del:hover { background: var(--neg-soft, color-mix(in srgb, var(--neg) 14%, transparent)); color: var(--neg); }
 .rc-top { display: flex; align-items: center; gap: 8px; }
 .rc-badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
 .rc-badge.week { background: var(--accent-soft); color: var(--accent); }
@@ -2183,10 +2293,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* Чат — прикріплення операцій (§CH2) */
 .chat-attach { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 0; align-items: center; position: relative; }
 .chat-attach-btn {
-  flex-shrink: 0; width: 38px; border: 1px solid var(--line-strong); background: var(--surface);
-  border-radius: var(--radius-sm); color: var(--muted); font-size: 18px; cursor: pointer;
+  flex-shrink: 0; width: 42px; height: 42px; border: 1px solid var(--line-strong); background: var(--surface);
+  border-radius: var(--radius); color: var(--muted); font-size: 20px; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
 }
-.chat-attach-btn:hover { background: var(--surface-2); color: var(--ink); }
+.chat-attach-btn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--muted); }
 .chat-picker {
   position: absolute; bottom: calc(100% + 6px); left: 10px; right: 10px; z-index: 20;
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius); box-shadow: var(--shadow); padding: 8px;
@@ -2254,6 +2366,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .md-chart-lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .md-chart-track { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .md-chart-fill { display: block; height: 100%; border-radius: 999px; background: var(--accent); min-width: 3px; }
+/* §CTX: таблиця у відповіді чату */
+.md-table-wrap { margin: 8px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow-x: auto; background: var(--surface); }
+.md-table-title { font-size: 12px; font-weight: 600; color: var(--muted); padding: 8px 12px 0; }
+.md-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.md-table th, .md-table td { padding: 7px 12px; text-align: right; white-space: nowrap; border-top: 1px solid var(--line); }
+.md-table thead th { border-top: none; color: var(--muted); font-weight: 600; font-size: 11.5px; }
+.md-table .md-td-lbl { text-align: left; color: var(--ink); }
+.md-table .md-td-num { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.md-table tbody tr:hover { background: var(--surface-2); }
 .md-chart-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
 @media (prefers-reduced-motion: reduce) {

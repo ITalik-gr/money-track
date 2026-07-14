@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { useGetReportsQuery, useGetReportQuery, useGenerateReportMutation } from "../store/api.ts";
+import { useGetReportsQuery, useGetReportQuery, useGenerateReportMutation, useDeleteReportMutation } from "../store/api.ts";
 import type { ReportListItem, FinancialReport } from "../store/api.ts";
 import { toast } from "../lib/toast.ts";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
@@ -32,6 +32,7 @@ function Delta({ pct }: { pct: number | null }) {
 export function Reports() {
   const { data: reports } = useGetReportsQuery();
   const [generate, { isLoading }] = useGenerateReportMutation();
+  const [deleteReport] = useDeleteReportMutation();
   const [busy, setBusy] = useState<"week" | "month" | null>(null);
   const navigate = useNavigate();
 
@@ -44,6 +45,15 @@ export function Reports() {
       navigate(`/reports/${r.id}`);
     } catch (e) { toast.error(String(e)); }
     finally { setBusy(null); }
+  };
+
+  // Видалення тестових репортів. Кнопка всередині картки-Link → гасимо навігацію.
+  const remove = async (e: React.MouseEvent, id: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Видалити цей репорт?")) return;
+    try { await deleteReport(id).unwrap(); toast.success("Репорт видалено"); }
+    catch (err) { toast.error(String(err)); }
   };
 
   return (
@@ -84,6 +94,9 @@ export function Reports() {
               <span>{rDateTime.format(r.created_at * 1000)}</span>
               <span className="rc-open">відкрити →</span>
             </div>
+            <button type="button" className="rc-del" aria-label="Видалити репорт" title="Видалити" onClick={(e) => remove(e, r.id)}>
+              <Icon name="trash" size={15} />
+            </button>
           </Link>
         ))}
       </div>

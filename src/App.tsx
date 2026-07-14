@@ -6,6 +6,7 @@ import { TxDetail } from "./pages/TxDetail.tsx";
 import { Add } from "./pages/Add.tsx";
 import { Accounts } from "./pages/Accounts.tsx";
 import { Stats } from "./pages/Stats.tsx";
+import { Merchant } from "./pages/Merchant.tsx";
 import { Reports, ReportDetail } from "./pages/Reports.tsx";
 import { Advisor } from "./pages/Advisor.tsx";
 import { Chat } from "./pages/Chat.tsx";
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
       { path: "tx/:id", element: <TxDetail /> },
       { path: "accounts", element: <Accounts /> },
       { path: "stats", element: <Stats /> },
+      { path: "merchant/:name", element: <Merchant /> },
       { path: "reports", element: <Reports /> },
       { path: "reports/:id", element: <ReportDetail /> },
       { path: "advisor", element: <Advisor /> },

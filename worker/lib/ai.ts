@@ -15,7 +15,8 @@ const API = "https://api.anthropic.com/v1/messages";
 // Моделі окремо НА ЗАДАЧУ (рішення 2026-07-11). Кожна user-facing задача має свій ключ
 // app_state.ai_model_<task> зі значенням-токеном (haiku|sonnet|opus). Дефолти нижче:
 // репорти — Opus (найглибший розбір), порадник/чат/бюджет — Sonnet, AI-огляд — Haiku (масово/дешево).
-// Enrich/OCR/categorize НЕ конфігуруються — завжди Haiku.
+// Enrich/OCR/categorize НЕ конфігуруються: авто/масово — Haiku; ВИНЯТОК — enrich, коли користувач
+// САМ описав операцію нотаткою (user_note) → Sonnet (поважає пояснення, не плутає зарплату з подарунком).
 export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group";
 export const AI_TASK_DEFAULTS: Record<AiTask, string> = {
   report: MODEL_OPUS,
@@ -227,33 +228,135 @@ async function callHaikuMessages(
   return { text, usage: data.usage, stop: data.stop_reason ?? null };
 }
 
+// §AGENT (2026-07-14): агентний tool-use для чату. Модель може викликати інструменти
+// (запити до повної бази операцій), коли фіксованого контексту не вистачає — напр. «скільки
+// я витратив на таксі влітку торік». Домаінна логіка інструментів (SQL) живе в advisor.ts;
+// тут — лише транспорт: цикл виклик→tool_use→tool_result→повтор до текстової відповіді.
+export interface ChatTool { name: string; description: string; input_schema: Record<string, unknown> }
+export type ToolExecutor = (name: string, input: Record<string, unknown>) => Promise<unknown>;
+interface RawMsg { role: "user" | "assistant"; content: unknown }
+interface RawBlock { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }
+
+async function callMessagesRaw(
+  env: Env,
+  system: AnthropicContentBlock[],
+  messages: RawMsg[],
+  maxTokens: number,
+  model: string,
+  tools?: ChatTool[],
+): Promise<{ content: RawBlock[]; usage: AnthropicUsage; stop: string | null }> {
+  const res = await fetch(API, {
+    method: "POST",
+    headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({ model, max_tokens: maxTokens, ...thinkingOff(model), system, messages, ...(tools?.length ? { tools } : {}) }),
+  });
+  if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as { content: RawBlock[]; usage: AnthropicUsage; stop_reason?: string | null };
+  await recordUsage(env, model, data.usage); // §Хвіст C: кожен виклик (вкл. tool-turns) у лічильник
+  return { content: data.content ?? [], usage: data.usage, stop: data.stop_reason ?? null };
+}
+
+// Веде діалог з інструментами до фінальної текстової відповіді (кеп ходів — межа вартості).
+async function runToolConversation(
+  env: Env,
+  system: AnthropicContentBlock[],
+  initial: ChatMsg[],
+  tools: ChatTool[],
+  executor: ToolExecutor,
+  maxTokens: number,
+  model: string,
+  maxTurns = 5,
+): Promise<{ text: string; usage: AnthropicUsage }> {
+  const messages: RawMsg[] = initial.map((m) => ({ role: m.role, content: m.content }));
+  const total: AnthropicUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
+  const add = (u: AnthropicUsage) => {
+    total.input_tokens += u.input_tokens; total.output_tokens += u.output_tokens;
+    total.cache_read_input_tokens = (total.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+    total.cache_creation_input_tokens = (total.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+  };
+  const textOf = (content: RawBlock[]) => content.filter((b) => b.type === "text").map((b) => b.text).join("");
+
+  for (let turn = 0; turn < maxTurns; turn++) {
+    const { content, usage, stop } = await callMessagesRaw(env, system, messages, maxTokens, model, tools);
+    add(usage);
+    if (stop === "tool_use") {
+      const uses = content.filter((b) => b.type === "tool_use");
+      messages.push({ role: "assistant", content });
+      const results = [];
+      for (const u of uses) {
+        let out: unknown;
+        try { out = await executor(u.name ?? "", u.input ?? {}); }
+        catch (e) { out = { error: String(e instanceof Error ? e.message : e) }; }
+        results.push({ type: "tool_result", tool_use_id: u.id, content: JSON.stringify(out) });
+      }
+      messages.push({ role: "user", content: results });
+      continue;
+    }
+    return { text: textOf(content), usage: total };
+  }
+  // Вичерпали ходи → фінальний виклик БЕЗ інструментів, щоб примусити текстову відповідь.
+  const final = await callMessagesRaw(env, system, messages, maxTokens, model);
+  add(final.usage);
+  return { text: textOf(final.content), usage: total };
+}
+
 export async function chatAdvice(
   env: Env,
   context: unknown,
   messages: ChatMsg[],
+  opts?: { tools?: ChatTool[]; executor?: ToolExecutor },
 ): Promise<{ text: string; usage: AnthropicUsage }> {
+  const today = new Date().toISOString().slice(0, 10);
+  const toolNote = opts?.tools?.length
+    ? `Сьогодні ${today}. У тебе Є ІНСТРУМЕНТИ (tools) для запитів до ПОВНОЇ бази операцій користувача (не лише контекст вище): ` +
+      "query_spend (сума витрат/доходу за період з фільтром по категорії/мерчанту й групуванням), find_transactions (знайти конкретні " +
+      "операції), list_categories (перелік категорій). ВИКОРИСТОВУЙ їх, коли фіксованого контексту не вистачає — напр. питання про " +
+      "конкретний період/категорію/мерчанта в минулому («скільки на таксі влітку торік», «мої найбільші покупки в грудні»). Сам обчислюй " +
+      "дати періодів (YYYY-MM-DD) відносно сьогодні. НЕ вигадуй числа — якщо треба точні дані поза контекстом, виклич інструмент. " +
+      "Операції з інструментів теж можна цитувати як [tx:ID|підпис]. "
+    : "";
   const system: AnthropicContentBlock[] = [
     {
       type: "text",
       text:
-        "Ти — особистий фінансовий радник у застосунку Money Track. Відповідай українською, по-людськи, по суті. " +
+        toolNote +
+        "Ти — досвідчений персональний фінансовий менеджер користувача у застосунку Money Track (не безликий бот, а радник " +
+        "«зі стажем», який веде саме ЙОГО гроші). Відповідай українською, по-людськи, по суті. Твоя робота — не лише " +
+        "констатувати цифри, а РАДИТИ РІШЕННЯ: куди спрямувати гроші, платити зараз чи почекати, що різати першим, як " +
+        "розтягнути подушку, коли безпечно витратити. Думай як менеджер, що дбає про клієнта: пріоритети, тайминг, ризик. " +
         "Коли питання просте — стисло; коли складне чи користувач просить розібратись/порадити — відповідай ДЕТАЛЬНО й " +
         "структуровано (короткий висновок → пояснення на його числах → 2-4 конкретні дієві кроки з ефектом у грн). " +
-        "⚠️ ПЕРІОДИ (критично, щоб не вводити в оману): у контексті period_note пояснює, що monthly_burn_uah — це вже " +
-        "СЕРЕДНЄ НА МІСЯЦЬ, а суми top_categories/by_event подано і за 90 днів (spent_90d_uah), і на місяць (avg_month_uah). " +
-        "Порівнюючи з доходом чи burn — бери avg_month_uah; НЕ називай 90-денну суму місячною витратою. " +
-        "Можна markdown: **жирний** для акцентів, списки з «- », підзаголовки. " +
-        "Ось контекст фінансів користувача (суми в грн): " + JSON.stringify(context) +
-        ". Якщо в контексті є transactions:[{id,label}] і доречно послатися на конкретну операцію — цитуй її як " +
-        "[tx:ID|короткий підпис] (напр. [tx:abc|MrGrill 150₴]); застосунок перетворить це на клікабельний чип. " +
-        "Коли доречно ПОРІВНЯТИ кілька чисел (розподіл по категоріях, топ витрат тощо) — намалюй міні-графік " +
-        "блоком: рядок «[chart:Заголовок]», далі по рядку «Підпис|число» (число у грн, без символів), і закрий «[/chart]». " +
-        "Приклад: [chart:Витрати по категоріях]\\nПродукти|4500\\nКафе|3200\\n[/chart]. Використовуй лише реальні числа з контексту, максимум 6 рядків. " +
-        "Спирайся лише на подані дані; якщо потрібної інформації нема — скажи чесно, не вигадуй транзакцій чи чисел.",
+        "⚠️ КОШТИ (критично — не плутай): liquid_cushion_uah — реальна ліквідна ПОДУШКА (готівка/картки/банки), це головне " +
+        "число для «скільки протягну». debt_uah — використаний кредитний ЛІМІТ (це БОРГ, а не «мінус запас»). " +
+        "investment_reserve_uah — крипта/брокер: остання лінія оборони, НЕ подушка й НЕ входить у runway; не радь її чіпати, " +
+        "поки ситуація не критична. own_funds_uah = подушка − борг (нетто). accounts — рахунки з роллю та описом (note): " +
+        "враховуй їх, не домислюй сум поза контекстом. runway_months = подушка / burn. " +
+        "⚠️ ПЕРІОДИ: monthly_burn_uah та avg_month_uah — це вже СЕРЕДНЄ НА МІСЯЦЬ; spent_90d_uah — сума за 90 днів. " +
+        "Порівнюючи з доходом чи burn — бери місячні числа; НЕ називай 90-денну суму місячною. recent_oneoff — разові " +
+        "витрати (податки/лікар): не проектуй їх як регулярні. upcoming_charges — найближчі списання (in_days): спирайся на " +
+        "них для порад про тайминг платежів. " +
+        "Ось повний фінансовий контекст користувача (суми в грн): " + JSON.stringify(context) +
+        ". Спирайся ЛИШЕ на ці дані; якщо потрібної інформації нема — скажи чесно, не вигадуй транзакцій чи чисел. " +
+        "Форматування — markdown: **жирний** для акцентів, списки «- », короткі підзаголовки. " +
+        "Якщо в контексті є transactions:[{id,label}] і доречно послатися на конкретну операцію — цитуй її як " +
+        "[tx:ID|короткий підпис] (напр. [tx:abc|MrGrill 150₴]); застосунок зробить із цього клікабельний чип. " +
+        "📊 ВІЗУАЛІЗАЦІЇ — використовуй ОЩАДЛИВО, лише коли вони справді допомагають зрозуміти (порівняння кількох чисел, " +
+        "розклад, план по місяцях). НЕ додавай графік/таблицю до кожної відповіді й ніколи — коли достатньо речення. " +
+        "Максимум одна візуалізація на відповідь, лише з реальних чисел контексту.\\n" +
+        "• Міні-графік (горизонтальні бари для порівняння): рядок «[chart:Заголовок]», далі по рядку «Підпис|число» " +
+        "(число у грн, без символів), закрий «[/chart]». Приклад: [chart:Витрати по категоріях]\\nПродукти|4500\\nКафе|3200\\n[/chart]. Макс 6 рядків.\\n" +
+        "• Таблиця (коли треба кілька колонок, напр. план погашення чи ліміт vs факт): рядок «[table:Заголовок]», далі " +
+        "рядок заголовків «Кол1|Кол2|Кол3», далі рядки даних так само через «|», закрий «[/table]». Макс 6 рядків даних, 4 колонки.",
     },
   ];
-  // §R6: детальніші відповіді порадника (Sonnet 5) — більший ліміт виводу.
-  const { text, usage } = await callHaikuMessages(env, system, messages, 1300, await getTaskModel(env, "chat"));
+  const model = await getTaskModel(env, "chat");
+  // §AGENT: якщо передано інструменти — ведемо агентний діалог; інакше звичайний виклик.
+  if (opts?.tools?.length && opts.executor) {
+    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model);
+    return { text: text.trim(), usage };
+  }
+  // §R6/§CTX: детальні відповіді менеджера — більший ліміт виводу.
+  const { text, usage } = await callHaikuMessages(env, system, messages, 1500, model);
   return { text: text.trim(), usage };
 }
 
@@ -305,7 +408,10 @@ export async function txChat(
       "is_transfer (true якщо стало ясно, що це переказ між своїми рахунками; інакше пропусти поле), " +
       "understanding (оновлений короткий здогад «що це» або null)}. НЕ міняй категорію без чіткої підстави з розмови. " +
       "У контексті є user_note (нотатка користувача до операції) та user_profile (опис користувача) — ОБОВʼЯЗКОВО " +
-      "враховуй їх: якщо користувач уже пояснив, що це, спирайся на це, а не ігноруй.",
+      "враховуй їх: якщо користувач уже пояснив, що це, спирайся на це, а не ігноруй. " +
+      "Якщо це НАДХОДЖЕННЯ і користувач каже, що це його зарплата / дохід / вивід власних коштів (напр. вивів " +
+      "криптозарплату переказом від людини) — постав «Зарплата» (чи названий дохід) і опиши розуміння саме так; " +
+      "НЕ називай це «Подарунком» і не пиши «переказ від приватної особи», якщо користувач прямо сказав інше.",
   );
   const system: AnthropicContentBlock[] = [
     ...base,
@@ -627,9 +733,13 @@ export async function enrichTransaction(
       "kind ('expense'|'income'|'transfer'|'withdrawal'; transfer=переказ між своїми рахунками/округлення, " +
       "withdrawal=зняття готівки), tag_ids (масив 0-3 id вторинних категорій), note (короткий здогад або null)}. " +
       "ПРІОРИТЕТ №1 — user_note: якщо користувач прямо написав, що це (напр. «це відпочинок», «подарунок», " +
-      "«це Розваги»), став саме ту категорію, яку він має на увазі (враховуй синоніми: відпочинок/дозвілля→Розваги, " +
+      "«це Розваги», «це моя зарплата»), став саме ту категорію, яку він має на увазі (враховуй синоніми: відпочинок/дозвілля→Розваги, " +
       "їжа→Продукти тощо). ПРІОРИТЕТ №2 — current_category: якщо користувач уже вручну обрав категорію, НЕ перетирай " +
       "її на «Інше» без вагомих підстав із полів; лишай як є або уточнюй у її межах. " +
+      "НАДХОДЖЕННЯ (sign=надходження): вхідний переказ від приватної особи (навіть без магазину/MCC 4829) — це НЕ " +
+      "автоматично «Подарунок». Якщо користувач каже (в user_note чи профілі), що це його зарплата / дохід / вивід " +
+      "власних коштів (напр. вивів криптозарплату через P2P) — став «Зарплата» або відповідний дохід, а не «Подарунок». " +
+      "«Подарунок» лише коли справді схоже на дарунок і немає інших вказівок. " +
       "Якщо є user_profile — це опис користувача та його ситуації; використовуй для контексту (напр. фрилансер → " +
       "деякі списання це податки/робочі витрати). Якщо є merchant_history — раніше користувач класифікував цього " +
       "мерчанта; узгоджуйся, якщо не суперечить вище. Якщо є known_subscriptions — це оголошені користувачем " +
@@ -650,9 +760,13 @@ export async function enrichTransaction(
     user_profile: tx.profile ?? null,
     known_subscriptions: tx.subscriptions ?? null,
   };
+  // Модель за задачею (рішення користувача 2026-07-14): коли користувач САМ описав операцію
+  // нотаткою (user_note) — беремо розумний Sonnet для розпізнання (він поважає пояснення й не
+  // плутає «зарплату/вивід» з «подарунком»). Масовий/авто-enrich без нотатки лишається на дешевому Haiku.
+  const model = tx.user_note?.trim() ? MODEL_SMART : MODEL_FAST;
   return callHaikuJson<EnrichResult>(env, system, [
     { type: "text", text: `Проаналізуй транзакцію і поверни лише JSON:\n${JSON.stringify(payload)}` },
-  ]);
+  ], 1024, model);
 }
 
 // §F2 крок 2: для операції у бакеті «Перекази і зняття» (зняття готівки, card-to-card)

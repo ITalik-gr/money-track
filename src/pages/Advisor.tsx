@@ -85,53 +85,54 @@ export function Advisor() {
           </div>
         )}
 
-        <div className="advisor-grid single">
-          {/* Структуровані поради + інсайт */}
-          <div className="stack" style={{ gap: 18 }}>
-            <section>
-              <div className="section-head">
-                <h2>Поради на твоїх числах</h2>
-                <button className="btn primary sm" onClick={runAdvice} disabled={generating}>
-                  {generating ? "Аналізую…" : advice ? "Оновити" : "Отримати"}
-                </button>
-              </div>
+        <div className="advisor-grid">
+          {/* Головна колонка — структуровані поради */}
+          <section className="advisor-main">
+            <div className="section-head">
+              <h2>Поради на твоїх числах</h2>
+              <button className="btn primary sm" onClick={runAdvice} disabled={generating}>
+                {generating ? "Аналізую…" : advice ? "Оновити" : "Отримати"}
+              </button>
+            </div>
 
-              {advice?.suggestions?.length ? (
-                <div className="stack">
-                  <SinceLastTime advice={advice} />
-                  {advice.summary && <p className="ai-text" style={{ margin: "0 2px 6px" }}>{renderRich(advice.summary)}</p>}
-                  {advice.facts && advice.facts.length > 0 && (
-                    <div className="card" style={{ padding: 16 }}>
-                      <RichFacts facts={advice.facts} />
+            {advice?.suggestions?.length ? (
+              <div className="stack">
+                <SinceLastTime advice={advice} />
+                {advice.summary && <p className="ai-text" style={{ margin: "0 2px 6px" }}>{renderRich(advice.summary)}</p>}
+                {advice.suggestions.map((s, i) => (
+                  <div key={i} className="card advice-card">
+                    <div className="advice-num">{i + 1}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="advice-title">{s.title}</div>
+                      <div className="advice-detail">{renderRich(s.detail)}</div>
+                      {s.action && <AdviceActionButton action={s.action} />}
                     </div>
-                  )}
-                  {advice.suggestions.map((s, i) => (
-                    <div key={i} className="card advice-card">
-                      <div className="advice-num">{i + 1}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="advice-title">{s.title}</div>
-                        <div className="advice-detail">{renderRich(s.detail)}</div>
-                        {s.action && <AdviceActionButton action={s.action} />}
-                      </div>
-                    </div>
-                  ))}
-                  <div className="row" style={{ justifyContent: "space-between", marginTop: 2 }}>
-                    <span className="label">
-                      станом на {new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format((advice?.generated_at ?? 0) * 1000)}
-                    </span>
-                    <UsageCost usage={advice?.usage} />
                   </div>
+                ))}
+                <div className="row" style={{ justifyContent: "space-between", marginTop: 2 }}>
+                  <span className="label">
+                    станом на {new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format((advice?.generated_at ?? 0) * 1000)}
+                  </span>
+                  <UsageCost usage={advice?.usage} />
                 </div>
-              ) : genError ? (
-                <div className="card empty">{genError} <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={runAdvice} disabled={generating}>Ще раз</button></div>
-              ) : (
-                <div className="card empty">Натисни «Отримати» — AI врахує твої числа, цілі й профіль із Налаштувань.</div>
-              )}
-            </section>
+              </div>
+            ) : genError ? (
+              <div className="card empty">{genError} <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={runAdvice} disabled={generating}>Ще раз</button></div>
+            ) : (
+              <div className="card empty">Натисни «Отримати» — AI врахує твої числа, цілі й профіль із Налаштувань.</div>
+            )}
+          </section>
 
+          {/* Правий рейл — розбивка коштів + AI-огляд + історія (заповнює ширину) */}
+          <aside className="stack advisor-rail" style={{ gap: 18 }}>
+            {advice?.facts && advice.facts.length > 0 && (
+              <div className="card" style={{ padding: 16 }}>
+                <RichFacts facts={advice.facts} />
+              </div>
+            )}
             <AiInsightCard days={30} />
             <AdviceHistory />
-          </div>
+          </aside>
         </div>
       </div>
     </>
