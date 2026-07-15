@@ -26,3 +26,18 @@ export function cardLast4(title: string | null | undefined): string | null {
   const m = title.match(/(\d{4})\s*$/);
   return m ? `··${m[1]}` : null;
 }
+
+// Людська назва рахунку: «white 444111******5181» → «Біла картка ··5181», банка/крипта
+// лишають власну назву («На квартиру»). Сирий PAN — шум (§11.3 прибрав його зі списку),
+// але останні 4 лишаємо: карток одного типу кілька (3 чорні в різних валютах), без них
+// «Чорна картка» неоднозначна.
+export function accountLabel(title: string | null | undefined): string {
+  if (!title) return "—";
+  const last4 = cardLast4(title);
+  const kind = cardKind(title);
+  if (!last4) return kind === "fop" ? cardKindLabel(kind) : title;
+  if (kind !== "other") return `${cardKindLabel(kind)} ${last4}`;
+  // Тип, якого нема в CardKind (madeInUkraine…): лишаємо його назву, ховаємо маску PAN.
+  const type = title.replace(/[\d*\s]+$/, "").trim();
+  return type ? `${type} ${last4}` : last4;
+}

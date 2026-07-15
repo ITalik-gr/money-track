@@ -27,6 +27,9 @@ export interface TxRow {
   category_icon?: string | null;
   account_title: string | null;
   is_transfer?: number;
+  real_category_id?: number | null;   // реальна суть зняття/переказу → лишає операцію витратою
+  transfer_pair_id?: string | null;   // пара-переказ між своїми: подача нейтральна (`lib/transfer.ts`)
+  pair_account_title?: string | null; // рахунок другої сторони пари → маршрут «звідки → куди»
   planned_id?: number | null;   // прив'язано до підписки → бейдж «підписка» (§R6)
   event_id?: number | null;
   event_name?: string | null;

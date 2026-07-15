@@ -195,7 +195,17 @@ a { color: inherit; text-decoration: none; }
   border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   box-shadow: none;
+  /* Падінг за замовчуванням — картка БЕЗ нього не потрібна нікому, а його відсутність у
+     базі означала, що кожна нова картка мусить згадати свій (і `.whatif` не згадала —
+     контент ліг на рамку). Модифікатори нижче вільно перевизначають своїм значенням;
+     хто має бути врівень (список приносить падінг сам) — бере `.card.flush`. */
+  padding: var(--sp-5);
 }
+/* Картка-обгортка врівень: падінг усередині (`.catbars`, `.mrows`, `.ledger`), інакше подвоївся б. */
+.card.flush { padding: 0; }
+/* `.section-head` має `margin-top: 26px` для відступу МІЖ секціями сторінки. Першою дитиною
+   картки цей відступ додається до падінга — заголовок провалюється вниз. */
+.card > .section-head:first-child { margin-top: 0; }
 /* Hero card (dashboard balance) — no lift either; hierarchy comes from its content. */
 .card.hero { box-shadow: none; border-color: var(--line-strong); }
 
@@ -970,6 +980,88 @@ input:focus, select:focus, textarea:focus {
 /* Полям — свій фокус вище; жорсткий outline лишаємо лише для кнопок/лінків (доступність). */
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
 
+/* ---- range (`Range.tsx`) -------------------------------------------------- */
+/* Переюзабельний повзунок — `Range` замість native range, як `Select` замість `<select>`.
+   Нативний віджет ігнорував систему: товстий OS-трек + великий сатурований кружок
+   (той самий «дефолтний синій», що прибрали з кнопок у §10.2). Тут: неткий трек 6px,
+   заливка нейтральним ink-2 (акцент лишається за лінками/активним/focus-ring),
+   ink-повзунок. Заливка — `--rng-p` від компонента (WebKit не має range-progress). */
+.rng {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 16px; padding: 0; border: none;
+  background: none; cursor: pointer;
+}
+.rng:disabled { cursor: not-allowed; opacity: 0.45; }
+/* Глобальне `input:focus` малює border+кільце навколо всього боксу — для треку зайве. */
+.rng:focus { outline: none; border: none; box-shadow: none; }
+
+/* Заливка від `--rng-o` (origin) до `--rng-p` (значення) — двобічна шкала фарбується від
+   центра в бік значення. `--rng-o` дефолтом 0% = звична заливка зліва. `::-moz-range-progress`
+   не годиться: він завжди тягне від лівого краю, тож обидва рушії йдуть одним градієнтом.
+   ⚠️ Вендорні псевдоелементи НЕ ГРУПУВАТИ в один список селекторів: невідомий рушію селектор
+   викидає ВСЕ правило (WebKit не знає `-moz-range-track` → трек зникав повністю). Тому два
+   окремі правила, а спільний градієнт живе у `--rng-track`, щоб не дублювався. */
+.rng {
+  --rng-a: min(var(--rng-p, 0%), var(--rng-o, 0%));
+  --rng-b: max(var(--rng-p, 0%), var(--rng-o, 0%));
+  --rng-track: linear-gradient(to right,
+    var(--surface-2) 0 var(--rng-a),
+    var(--ink-2) var(--rng-a) var(--rng-b),
+    var(--surface-2) var(--rng-b) 100%);
+}
+.rng::-webkit-slider-runnable-track {
+  height: 6px; border-radius: var(--radius-pill); background: var(--rng-track);
+}
+.rng::-moz-range-track {
+  height: 6px; border-radius: var(--radius-pill); background: var(--rng-track);
+}
+
+.rng::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -4px; /* (трек 6 − повзунок 14) / 2 */
+  border: none; border-radius: var(--radius-pill); background: var(--ink);
+  transition: transform var(--dur-1) var(--ease-out);
+}
+.rng::-moz-range-thumb {
+  width: 14px; height: 14px; border: none; border-radius: var(--radius-pill);
+  background: var(--ink); transition: transform var(--dur-1) var(--ease-out);
+}
+/* Рух = стан (натиснув/тягну), не декор. Hover — лише там, де курсор реальний. */
+@media (hover: hover) {
+  .rng:hover::-webkit-slider-thumb { transform: scale(1.12); }
+  .rng:hover::-moz-range-thumb { transform: scale(1.12); }
+}
+.rng:active::-webkit-slider-thumb { transform: scale(0.94); }
+.rng:active::-moz-range-thumb { transform: scale(0.94); }
+.rng:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent); }
+.rng:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent); }
+
+/* ---- переказ між своїми (нейтральна подача, `lib/transfer.ts`) ------------- */
+/* Гроші не покинули власні кошти → ані `--neg`, ані `--pos`: приглушений ink-2 без знака.
+   Червоний «−4 000» був подвійно хибним — stats цю суму витратою й не рахує. */
+.money.neutral { color: var(--ink-2); }
+.amt-neutral { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.amt-swap { color: var(--muted); flex-shrink: 0; }
+.num-hero.neutral { color: var(--ink-2); display: inline-flex; align-items: center; gap: 9px; }
+.hero-swap { color: var(--muted); flex-shrink: 0; }
+
+/* Маршрут у рядку списку — замість слова «переказ». */
+.tx-route-mini { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.tx-route-mini .tr-acc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-route-mini .tr-arrow { color: var(--muted); flex-shrink: 0; }
+
+/* Маршрут у шапці TxDetail — два чипи-рахунки зі стрілкою. */
+.tx-route {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
+}
+.tx-route-acc {
+  padding: 5px 10px; border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--ink-2);
+  font-size: var(--fs-sm); white-space: nowrap;
+}
+.tx-route-arrow { color: var(--muted); flex-shrink: 0; }
+
 /* ---- modal --------------------------------------------------------------- */
 
 .modal-backdrop {
@@ -1705,16 +1797,26 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §P4: What-if симулятор */
 .whatif-body { display: grid; grid-template-columns: minmax(0, 1fr) 264px; gap: 22px; align-items: start; margin-top: 6px; }
 @media (max-width: 720px) { .whatif-body { grid-template-columns: 1fr; } }
-.whatif-sliders { display: flex; flex-direction: column; gap: 15px; }
-.whatif-row { display: flex; flex-direction: column; gap: 6px; }
+/* Повзунки — auto-fit колонки, НЕ один стовпчик (трек тягнувся через увесь екран, а
+   лейбл/сума/−N% розліталися по краях — та сама «порожнеча в центрі рядка», що й §11.3).
+   Мінімум 320px, а не 240: на 240 виходило 3-4 колонки й довгі назви різались
+   («Відсотки по кредиту та с:»). 320 дає 2 колонки на типовому десктопі — назви влазять,
+   трек лишається достатньо довгим, щоб у нього можна було цілитись. */
+.whatif-sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px 28px; align-content: start; }
+/* Тісно ВСЕРЕДИНІ рядка, вільніше МІЖ рядками (gap вище) — інакше пари «назва/повзунок»
+   зливаються в суцільну сітку фрагментів. */
+.whatif-row { display: flex; flex-direction: column; gap: 5px; }
 .whatif-row-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
 .whatif-cat { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .whatif-cat .d { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
 .whatif-usual { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .whatif-slider-line { display: flex; align-items: center; gap: 10px; }
-.whatif-slider-line input[type="range"] { flex: 1; accent-color: var(--accent); cursor: pointer; height: 4px; }
-.whatif-cut { width: 44px; text-align: right; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.whatif-cut.on { color: var(--accent); font-weight: 600; }
+.whatif-slider-line .rng { flex: 1; }
+/* Ширина під найдовше «+100%», щоб трек не стрибав при перетягуванні. */
+.whatif-cut { width: 48px; text-align: right; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Зрізати витрату — краще (pos), додати — гірше (neg): та сама семантика, що в дельті runway. */
+.whatif-cut.cut { color: var(--pos); font-weight: 600; }
+.whatif-cut.raise { color: var(--neg); font-weight: 600; }
 .whatif-result { display: flex; flex-direction: column; gap: 11px; padding: 16px; border-radius: var(--radius); background: var(--surface-2); }
 .whatif-runway-big { display: flex; flex-direction: column; gap: 2px; }
 .wr-label { font-size: 12px; color: var(--muted); }

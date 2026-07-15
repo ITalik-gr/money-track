@@ -28,20 +28,27 @@ export function descriptionIsTransfer(desc: string | null): boolean {
 
 interface Row {
   id: string; account_id: string; amount: number; currency_code: number; time: number;
-  desc: string; is_jar: number;
+  desc: string; is_jar: number; is_transfer: number;
 }
 
 export async function detectTransfers(env: Env): Promise<number> {
+  // Holds ВКЛЮЧЕНО у вибірку: моно лишає внутрішні рухи («Округлення балансу» на банку)
+  // холдом надовго, тоді як вхідна сторона на банці постить одразу hold=0. З фільтром
+  // hold=0 мінусова сторона не бачилась → пара не збиралась і обидва рядки лишались у
+  // списку окремо. Сеттлмент перезаписує той самий id (repo.upsertMonoTx), тож подвійного
+  // рахунку нема; зміну суми на сеттлменті там же й розпарюємо.
   const res = await env.DB.prepare(
     `SELECT t.id, t.account_id, t.amount, t.currency_code, t.time,
             LOWER(COALESCE(json_extract(t.raw_json, '$.description'), t.comment, t.merchant, '')) AS desc,
-            CASE WHEN a.type = 'jar' THEN 1 ELSE 0 END AS is_jar
+            CASE WHEN a.type = 'jar' THEN 1 ELSE 0 END AS is_jar,
+            t.is_transfer
      FROM transactions t
      LEFT JOIN accounts a ON a.id = t.account_id
-     WHERE t.transfer_pair_id IS NULL AND t.hold = 0 AND t.amount <> 0
+     WHERE t.transfer_pair_id IS NULL AND t.amount <> 0
      ORDER BY t.time`,
   ).all<Row>();
   const rows = res.results ?? [];
+  const byId = new Map(rows.map((r) => [r.id, r]));
 
   // Групуємо додатні за ключем валюта:|сума| для швидкого пошуку пари.
   const positives = new Map<string, Row[]>();
@@ -85,10 +92,19 @@ export async function detectTransfers(env: Env): Promise<number> {
   }
 
   if (!matched.size) return 0;
-  // Оновлюємо кожну операцію: is_transfer=1 + (для пар) спільний transfer_pair_id.
+  // Оновлюємо лише те, що РЕАЛЬНО змінюється: односторонні (pair=null) марки вже стоять
+  // із вставки (repo) і pair_id не отримають ніколи, тож без цієї перевірки вони щоразу
+  // переписувались наново — по одному D1-запиту на кожну, на КОЖЕН вебхук.
+  const stmts = [];
   for (const id of matched) {
-    await env.DB.prepare("UPDATE transactions SET is_transfer = 1, transfer_pair_id = ? WHERE id = ?")
-      .bind(pairId.get(id) ?? null, id).run();
+    const pair = pairId.get(id) ?? null;
+    if (pair === null && byId.get(id)?.is_transfer === 1) continue;
+    stmts.push(
+      env.DB.prepare("UPDATE transactions SET is_transfer = 1, transfer_pair_id = ? WHERE id = ?")
+        .bind(pair, id),
+    );
   }
-  return matched.size;
+  if (!stmts.length) return 0;
+  await env.DB.batch(stmts);
+  return stmts.length;
 }

@@ -348,7 +348,7 @@ function CategoryBreakdown({ rows, from, to, currency, sign }: {
   };
 
   return (
-    <div className="card"><div className="catbars">
+    <div className="card flush"><div className="catbars">
       {primary.slice(0, 9).map((e, i) => bar(e, i, false))}
       {secondary.length > 0 && (
         <div className="cat-secondary">
@@ -473,7 +473,7 @@ function MerchantsBlock({ data, sign, merchMax }: {
     <section>
       <div className="section-head"><h2>Топ мерчантів</h2><InfoTip>Найбільші отримувачі витрат за період (зведено в ₴). Клік — сторінка мерчанта.</InfoTip><span className="label">клік — деталі</span></div>
       {data.byMerchant.length ? (
-        <div className="card"><div className="mrows">
+        <div className="card flush"><div className="mrows">
           {data.byMerchant.slice(0, 7).map((m, i) => (
             <Link key={i} to={`/merchant/${encodeURIComponent(m.merchant)}`} className="mrow mrow-link">
               <MerchantLogo merchant={m.merchant} color="var(--accent)" fallbackLabel={m.merchant} />
@@ -503,7 +503,7 @@ function EventsBlock({ data, from, to, currency, sign }: {
   return (
     <section>
       <div className="section-head"><h2>По групах</h2><span className="label">подорожі, проєкти, події</span></div>
-      <div className="card"><div className="catbars">
+      <div className="card flush"><div className="catbars">
         {data.byEvent.map((e) => {
           const isOpen = open === e.event_id;
           return (
@@ -533,7 +533,7 @@ function AccountsBlock({ data, from, to, currency, sign }: {
   return (
     <section>
       <div className="section-head"><h2>По картках</h2><InfoTip>Витрати згруповані за рахунком списання. Кредитний ліміт не зливається з власними коштами.</InfoTip><span className="label">клік — операції</span></div>
-      <div className="card"><div className="mrows">
+      <div className="card flush"><div className="mrows">
         {data.byAccount.map((a, i) => {
           const key = a.account_id ?? String(i);
           const isOpen = open === key;

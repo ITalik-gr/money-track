@@ -72,9 +72,9 @@ export async function upsertMonoTx(
   item: MonoStatementItem,
 ): Promise<void> {
   const existing = await db
-    .prepare("SELECT id FROM transactions WHERE id = ?")
+    .prepare("SELECT id, amount, transfer_pair_id FROM transactions WHERE id = ?")
     .bind(item.id)
-    .first<{ id: string }>();
+    .first<{ id: string; amount: number; transfer_pair_id: string | null }>();
 
   // §R2-CUR1: item.amount — у валюті РАХУНКУ, тож currency_code беремо з рахунку.
   // item.operationAmount/currencyCode — валюта операції → зберігаємо як original_*.
@@ -100,6 +100,16 @@ export async function upsertMonoTx(
   const originalCurrency = hasOriginal ? item.currencyCode : null;
 
   if (existing) {
+    // Пару збирають по РІВНИХ протилежних сумах, а detectTransfers тепер парує й холди.
+    // Якщо сеттлмент змінив суму — стара пара більше не рівна: розпарюємо ОБИДВІ сторони
+    // (вони ділять один transfer_pair_id), щоб наступний detectTransfers зібрав заново.
+    // Інакше «+» сторона лишилась би схованою в списку назавжди.
+    if (existing.transfer_pair_id && existing.amount !== item.amount) {
+      await db
+        .prepare("UPDATE transactions SET transfer_pair_id = NULL WHERE transfer_pair_id = ?")
+        .bind(existing.transfer_pair_id)
+        .run();
+    }
     // Refresh volatile fields (hold -> settled, balance) but keep manual edits to category/note.
     await db
       .prepare(

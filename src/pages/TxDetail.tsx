@@ -11,8 +11,10 @@ import {
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { Money } from "../components/Money.tsx";
 import { MerchantLogo } from "../components/MerchantLogo.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { toast } from "../lib/toast.ts";
 import { currencySign } from "../lib/format.ts";
+import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
 import { Select } from "../components/Select.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 import type { SelectOption } from "../components/Select.tsx";
@@ -114,6 +116,9 @@ export function TxDetail() {
   const when = new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
   // Операція у бакеті «Перекази і зняття» — показуємо поле «реальна категорія» (§F2 крок 2).
   const looksTransfer = /переказ|зняття/i.test(tx.category_name ?? "") || isTransfer;
+  // Подача — від збереженого факту (не від пенд-тогла у формі): див. `lib/transfer.ts`.
+  const neutralTx = isNeutralTransfer(tx);
+  const route = transferRoute(tx);
 
   async function save() {
     try {
@@ -181,8 +186,11 @@ export function TxDetail() {
             </div>
           </div>
           <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-            <div className={`num-hero ${tx.amount < 0 ? "neg" : "pos"}`} style={{ fontSize: 30 }}>
-              {tx.amount > 0 ? "+" : ""}{new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(tx.amount / 100)}
+            {/* Переказ між своїми — гроші лишились власними: без знака й без червоного. */}
+            <div className={`num-hero ${neutralTx ? "neutral" : tx.amount < 0 ? "neg" : "pos"}`} style={{ fontSize: 30 }}>
+              {neutralTx && <Icon name="swap" size={19} className="hero-swap" />}
+              {!neutralTx && tx.amount > 0 ? "+" : ""}
+              {new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(tx.amount) : tx.amount) / 100)}
               <span className="cur">{tx.currency_code === 840 ? "$" : tx.currency_code === 978 ? "€" : "₴"}</span>
             </div>
             {tx.original_amount != null && tx.original_currency != null && tx.original_currency !== tx.currency_code && (
@@ -193,6 +201,15 @@ export function TxDetail() {
             )}
           </div>
         </div>
+
+        {/* Маршрут «звідки → куди» — головне, що треба знати про переказ між своїми. */}
+        {route && (
+          <div className="tx-route">
+            <span className="tx-route-acc">{route.from}</span>
+            <Icon name="arrowRight" size={15} className="tx-route-arrow" />
+            <span className="tx-route-acc">{route.to}</span>
+          </div>
+        )}
       </div>
 
       {/* 2 колонки: факти + AI (+чек) ліворуч, редагування праворуч */}

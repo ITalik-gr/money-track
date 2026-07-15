@@ -131,6 +131,13 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M19 15l.7 1.8L21.5 17.5 19.7 18.2 19 20l-.7-1.8L16.5 17.5l1.8-.7L19 15z" />
     </>
   ),
+  swap: (
+    <>
+      <path d="M4 8h13M14 5l3 3-3 3" />
+      <path d="M20 16H7M10 13l-3 3 3 3" />
+    </>
+  ),
+  arrowRight: (<path d="M5 12h14M13 6l6 6-6 6" />),
   check: (<path d="M5 12l5 5L20 6" />),
   plus: (<path d="M12 5v14M5 12h14" />),
   menu: (<path d="M4 6h16M4 12h16M4 18h16" />),

@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { formatDate } from "../lib/format.ts";
 import { Money } from "./Money.tsx";
 import { MerchantLogo } from "./MerchantLogo.tsx";
+import { Icon } from "./Icon.tsx";
+import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
 
 // Спільний рядок транзакції (роадмап §1 «TxRow»): один вигляд для списку операцій і для
 // дрилів Статистики. `compact` — менша висота/шрифт для вкладених дрилів. Приймає широку
@@ -18,6 +20,9 @@ export interface TxItemData {
   category_icon?: string | null;
   account_title?: string | null;
   is_transfer?: number;
+  real_category_id?: number | null;
+  transfer_pair_id?: string | null;
+  pair_account_title?: string | null;
   planned_id?: number | null;
   event_id?: number | null;
   event_name?: string | null;
@@ -37,6 +42,9 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
   const transfer = !!t.is_transfer;
   const groupColor = t.event_id ? (t.event_color ?? "var(--accent)") : null;
   const isSel = selected ?? false;
+  // Переказ між своїми — не витрата й не дохід: без знака, без червоного (`lib/transfer.ts`).
+  const neutral = isNeutralTransfer(t);
+  const route = transferRoute(t);
 
   // Клітинки-осередки (logo · who · cat · date · amt) розкладаються сіткою:
   // stacked у 2 рядки (вузько) або вирівняні колонки (широко) — керує CSS-контейнер (§11.3).
@@ -66,13 +74,29 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
         <div className="tx-line2">
           <span className="tx-cat">
             {!transfer && <span className="d" style={{ background: t.category_color ?? "var(--muted)" }} />}
-            <span className="tx-cat-name">{transfer ? "переказ" : (t.category_name ?? "без категорії")}</span>
+            {route ? (
+              // Маршрут замість слова «переказ»: той самий рядок несе більше сенсу.
+              <span className="tx-route-mini">
+                <span className="tr-acc">{route.from}</span>
+                <Icon name="arrowRight" size={12} className="tr-arrow" />
+                <span className="tr-acc">{route.to}</span>
+              </span>
+            ) : (
+              <span className="tx-cat-name">{transfer ? "переказ" : (t.category_name ?? "без категорії")}</span>
+            )}
           </span>
           <span className="tx-date">{formatDate(t.time)}</span>
         </div>
       </div>
       <div className="amt">
-        <Money minor={t.amount} currency={t.currency_code} signed />
+        {neutral ? (
+          <span className="amt-neutral">
+            <Icon name="swap" size={13} className="amt-swap" />
+            <Money minor={Math.abs(t.amount)} currency={t.currency_code} className="neutral" />
+          </span>
+        ) : (
+          <Money minor={t.amount} currency={t.currency_code} signed />
+        )}
       </div>
     </>
   );

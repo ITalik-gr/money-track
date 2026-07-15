@@ -16,7 +16,7 @@ export function ReceiptItems({ from, to, sign }: { from: number; to: number; sig
           <span className="label">{data.receipts} чек{data.receipts % 10 === 1 && data.receipts % 100 !== 11 ? "" : "и/ів"} · що це?</span>
         </HoverTip>
       </div>
-      <div className="card"><div className="catbars">
+      <div className="card flush"><div className="catbars">
         {data.items.map((it, i) => {
           const p = (it.total / max) * 100;
           return (

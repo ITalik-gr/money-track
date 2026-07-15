@@ -71,13 +71,19 @@ api.get("/transactions", async (c) => {
   if (q) { where.push("(t.merchant LIKE ? OR t.comment LIKE ? OR t.user_note LIKE ? OR e.name LIKE ?)"); binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
+  // Друга сторона пари-переказу → маршрут «звідки → куди» в рядку. `tp.transfer_pair_id =
+  // t.transfer_pair_id` не з'єднує нічого, коли pair_id NULL (NULL = NULL хибне), тож
+  // звичайні операції join не чіпає.
   const rows = await c.env.DB.prepare(
     `SELECT t.*, c.name AS category_name, c.color AS category_color, c.icon AS category_icon,
-            a.title AS account_title, e.name AS event_name, e.color AS event_color
+            a.title AS account_title, e.name AS event_name, e.color AS event_color,
+            ap.title AS pair_account_title
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN accounts a ON a.id = t.account_id
      LEFT JOIN event_groups e ON e.id = t.event_id
+     LEFT JOIN transactions tp ON tp.transfer_pair_id = t.transfer_pair_id AND tp.id <> t.id
+     LEFT JOIN accounts ap ON ap.id = tp.account_id
      ${clause}
      ORDER BY t.time DESC LIMIT ? OFFSET ?`,
   )
@@ -121,13 +127,16 @@ api.get("/transactions/:id", async (c) => {
             rc.name AS real_category_name, rc.color AS real_category_color,
             a.title AS account_title, a.type AS account_type,
             e.name AS event_name, e.color AS event_color,
-            p.title AS planned_title
+            p.title AS planned_title,
+            ap.title AS pair_account_title
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN categories rc ON rc.id = t.real_category_id
      LEFT JOIN accounts a ON a.id = t.account_id
      LEFT JOIN event_groups e ON e.id = t.event_id
      LEFT JOIN planned_payments p ON p.id = t.planned_id
+     LEFT JOIN transactions tp ON tp.transfer_pair_id = t.transfer_pair_id AND tp.id <> t.id
+     LEFT JOIN accounts ap ON ap.id = tp.account_id
      WHERE t.id = ?`,
   ).bind(id).first();
   if (!tx) return c.json({ error: "not_found" }, 404);
