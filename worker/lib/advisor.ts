@@ -71,6 +71,58 @@ async function ownFundsUAH(env: Env): Promise<number> {
   return (await fundsBreakdown(env)).net;
 }
 
+// §H (2026-07-19): детермінований «Індекс фінздоров'я» 0..100 — БЕЗ AI. Чотири складові з
+// канонічних чисел (stats): runway, норма заощаджень, борг/дохід, стабільність доходу.
+// Дефолтна (проста, прозора) реалізація — далі можна уточнювати ваги/криві.
+export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
+export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[] }
+export async function financeHealth(env: Env): Promise<FinanceHealth> {
+  const now = Math.floor(Date.now() / 1000);
+  const d = new Date(now * 1000);
+  const from6 = Math.floor(new Date(d.getFullYear(), d.getMonth() - 6, 1).getTime() / 1000);
+  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+  const { mult } = valueMode(await getRates(env.DB), null);
+  const [funds, levels, incomeRows] = await Promise.all([
+    fundsBreakdown(env),
+    categoryMonthlyLevels(env, mult, { now }),
+    // Дохід по ПОВНИХ місяцях (поточний частковий виключено) — для норми/стабільності.
+    env.DB.prepare(
+      `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${incomeSum(mult)} AS income
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time < ? GROUP BY m ORDER BY m`,
+    ).bind(from6, monthStart).all<{ m: string; income: number }>(),
+  ]);
+
+  const burn = sumLevels(levels); // ₴-мінор/міс (канон)
+  const incomes = (incomeRows.results ?? []).map((r) => r.income).filter((v) => v > 0);
+  const avgIncome = incomes.length ? incomes.reduce((s, v) => s + v, 0) / incomes.length : 0;
+  const runway = burn > 0 ? funds.cushion / burn : (funds.cushion > 0 ? 12 : 0);
+  const savingsRate = avgIncome > 0 ? (avgIncome - burn) / avgIncome : 0;
+  const debtRatio = avgIncome > 0 ? funds.debt / avgIncome : (funds.debt > 0 ? 3 : 0);
+  const mean = incomes.length ? incomes.reduce((s, v) => s + v, 0) / incomes.length : 0;
+  const cv = mean > 0 && incomes.length > 1
+    ? Math.sqrt(incomes.reduce((s, v) => s + (v - mean) ** 2, 0) / incomes.length) / mean : 0;
+
+  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
+  const sRunway = clamp01(runway / 6);          // 6 міс подушки = максимум
+  const sSavings = clamp01(savingsRate / 0.2);  // 20%+ = максимум
+  const sDebt = funds.debt <= 0 ? 1 : clamp01(1 - debtRatio / 3); // 3 міс доходу боргу = 0
+  const sStable = clamp01(1 - cv);
+  const score = Math.round((sRunway * 0.35 + sSavings * 0.30 + sDebt * 0.20 + sStable * 0.15) * 100);
+  const band: FinanceHealth["band"] = score >= 70 ? "good" : score >= 45 ? "ok" : "risk";
+
+  const pct = (x: number) => `${Math.round(x * 100)}%`;
+  return {
+    score, band,
+    components: [
+      { key: "runway", label: "Подушка (runway)", value: runway >= 12 ? "12+ міс" : `${Math.round(runway * 10) / 10} міс`, score: Math.round(sRunway * 100), hint: "Скільки протягнеш на ліквідну подушку при поточному burn. 6+ міс — добре." },
+      { key: "savings", label: "Норма заощаджень", value: pct(savingsRate), score: Math.round(sSavings * 100), hint: "Частка доходу, що лишається після витрат (за повними місяцями). 20%+ — добре." },
+      { key: "debt", label: "Борг / дохід", value: funds.debt <= 0 ? "нема боргу" : `${Math.round(debtRatio * 10) / 10}× міс`, score: Math.round(sDebt * 100), hint: "Скільки місяців доходу треба, щоб покрити борг по кредитці. Менше — краще." },
+      { key: "stability", label: "Стабільність доходу", value: pct(1 - cv), score: Math.round(sStable * 100), hint: "Наскільки рівний дохід по місяцях (менший розкид = стабільніше)." },
+    ],
+  };
+}
+
 export async function getProfile(env: Env): Promise<string> {
   return (await getState(env.DB, "finance_profile")) ?? "";
 }
@@ -188,6 +240,12 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
     .slice(0, 12)
     .map((p) => ({ title: p.title, in_days: Math.max(0, Math.round((p.at - now) / 86400)), amount_uah: p.amount_uah, kind: p.kind }));
 
+  // §A1: активні факти про світ (наратив). Тут — ЄДИНЕ джерело контексту, тож і Порадник,
+  // і Чат бачать факти автоматом (не додаємо їх у чат окремо). applied_to_numbers показує,
+  // чи факт уже рухає burn/runway (лише підтверджений факт з коригуванням) — щоб AI не плутав
+  // «пояснив» із «порахував».
+  const facts = await activeFacts(env, now);
+
   const context: Record<string, unknown> = {
     period_note: "top_categories/top_merchants/by_event — суми за ОСТАННІ 90 ДНІВ (3 місяці); avg_month_uah — усереднене на місяць. monthly_burn_uah — середні витрати/міс. НЕ плутай 90д із місячною; спирайся на avg_month_uah. by_importance: essential=обов'язкові (не ріж), discretionary=бажані, optional=необов'язкові (найбезпечніше скорочувати). monthly_trend: spend/income по місяцях (6 міс) — дивись динаміку/сезонність, а не лише середнє. budgets: ліміт vs факт цього місяця (used_pct>100 = перевитрата — підсвіти). subscriptions_monthly_uah: фіксовані підписки/міс (майже незмінні). upcoming_charges: найближчі списання (in_days) — використовуй для порад про тайминг/пріоритет платежів. recent_oneoff — РАЗОВІ витрати цього місяця (податки, лікар, велика покупка): НЕ проектуй їх як регулярні. Цитуй конкретику: категорії, підписки, бюджети.",
     period_days: 90,
@@ -221,8 +279,36 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
     monthly_trend: (trend.results ?? []).map((t) => ({ month: t.m, spend_uah: Math.round(t.spend / 100), income_uah: Math.round(t.income / 100) })),
     budgets,
   };
+  if (facts.length) {
+    context.facts = facts;
+    context.facts_note = "facts — факти про світ, які повідомив користувач (напр. «метро подорожчало 8→30 ₴», «я звільнився»). Враховуй їх у поясненнях і прогнозі. applied_to_numbers=true означає, що факт УЖЕ враховано в avg_month_uah/monthly_burn/runway (не додавай ефект удруге). applied_to_numbers=false — факт лише пояснювальний (не підтверджений або без коригування суми): згадай його словами, але цифри поки НЕ змінюй.";
+  }
 
   return { now, funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, citable, context };
+}
+
+// §A1: активні факти на `now` (наратив для снапшота). Повертає []-безпечно, якщо таблиці ще нема.
+export interface ActiveFact { text: string; since: string; until: string | null; category: string | null; applied_to_numbers: boolean }
+async function activeFacts(env: Env, now: number): Promise<ActiveFact[]> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT f.text AS text, f.effective_from AS ef, f.expires_at AS ex, f.confirmed_at AS cf,
+              f.adjust_kind AS kind, c.name AS cat
+       FROM facts f LEFT JOIN categories c ON c.id = f.category_id
+       WHERE f.effective_from <= ? AND (f.expires_at IS NULL OR f.expires_at > ?)
+       ORDER BY f.effective_from DESC LIMIT 20`,
+    ).bind(now, now).all<{ text: string; ef: number; ex: number | null; cf: number | null; kind: string | null; cat: string | null }>();
+    const iso = (u: number) => new Date(u * 1000).toISOString().slice(0, 10);
+    return (rows.results ?? []).map((r) => ({
+      text: r.text,
+      since: iso(r.ef),
+      until: r.ex != null ? iso(r.ex) : null,
+      category: r.cat,
+      applied_to_numbers: r.cf != null && r.kind != null,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function buildAdvice(env: Env): Promise<StoredAdvice> {
@@ -482,6 +568,25 @@ export function financeChatTools(): ChatTool[] {
       description: "Перелік категорій користувача (назви верхнього рівня) — щоб знати, за якими значеннями фільтрувати. Виклич, якщо не впевнений у точній назві категорії.",
       input_schema: { type: "object", properties: {} },
     },
+    {
+      name: "remember_fact",
+      description:
+        "Запам'ятати ФАКТ про світ, який повідомив користувач (напр. «з 15.07 метро 30 ₴ замість 8», «я звільнився», «підняли оренду до 12500»). Факт зберігається як ПРОПОЗИЦІЯ (не застосовується до чисел, поки користувач сам не натисне «застосувати»). " +
+        "Якщо факт впливає на місячні витрати категорії — СПЕРШУ порахуй ефект детерміновано через find_transactions/query_spend (напр. скільки поїздок метро/міс за історією × різниця ціни), і передай monthly_delta_uah АБО multiplier. НЕ вигадуй цифру з голови. " +
+        "Глобальні факти без впливу на суму (звільнення, переїзд) передавай лише з text (без category/коригування). Після виклику скажи користувачу оцінку ефекту й що треба підтвердити застосування.",
+      input_schema: {
+        type: "object",
+        properties: {
+          text: { type: "string", description: "Короткий опис факту людською мовою, напр. «Метро подорожчало 8 → 30 ₴»." },
+          category: { type: "string", description: "Назва категорії, якої стосується коригування суми (частковий збіг, напр. «Транспорт»). Пропусти для глобального факту." },
+          effective_from: { ...dateProp, description: "З якої дати діє факт (YYYY-MM-DD). Дефолт — сьогодні." },
+          expires_at: { ...dateProp, description: "До якої дати діє (YYYY-MM-DD). Пропусти, якщо безстроково." },
+          monthly_delta_uah: { type: "number", description: "На скільки ₴/міс змінюються витрати категорії (+ дорожче / − дешевше). Порахуй з історії. Взаємовиключно з multiplier." },
+          multiplier: { type: "number", description: "У скільки разів зростає/падає рівень категорії (напр. 3.75 для 8→30). Взаємовиключно з monthly_delta_uah." },
+        },
+        required: ["text"],
+      },
+    },
   ];
 }
 
@@ -562,7 +667,96 @@ export async function runFinanceTool(env: Env, name: string, input: Record<strin
     return { categories: (rows.results ?? []).map((r) => r.name) };
   }
 
+  if (name === "remember_fact") {
+    const text = typeof input.text === "string" ? input.text.trim() : "";
+    if (!text) return { error: "потрібен text факту" };
+    const now = Math.floor(Date.now() / 1000);
+    const ef = parseToolDate(input.effective_from) ?? now;
+    const ex = parseToolDate(input.expires_at, true); // null = безстроково
+    let categoryId: number | null = null;
+    if (typeof input.category === "string" && input.category.trim()) {
+      const cat = await env.DB.prepare(
+        "SELECT id FROM categories WHERE parent_id IS NULL AND name LIKE ? ORDER BY name LIMIT 1",
+      ).bind(`%${input.category.trim()}%`).first<{ id: number }>();
+      if (!cat) return { error: `категорію «${input.category}» не знайдено — виклич list_categories і спробуй точну назву`, needs_category: true };
+      categoryId = cat.id;
+    }
+    // Коригування числа лише коли є категорія (глобальний факт = лише наратив).
+    let adjustKind: string | null = null;
+    let adjustValue: number | null = null;
+    if (categoryId != null) {
+      if (typeof input.multiplier === "number" && input.multiplier > 0) { adjustKind = "multiplier"; adjustValue = input.multiplier; }
+      else if (typeof input.monthly_delta_uah === "number" && input.monthly_delta_uah !== 0) { adjustKind = "delta_minor"; adjustValue = Math.round(input.monthly_delta_uah * 100); }
+    }
+    const res = await env.DB.prepare(
+      `INSERT INTO facts (text, effective_from, expires_at, category_id, adjust_kind, adjust_value, confirmed_at, source, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, 'ai_proposed', ?) RETURNING id`,
+    ).bind(text, ef, ex, categoryId, adjustKind, adjustValue, now).first<{ id: number }>();
+    return {
+      saved: true,
+      fact_id: res?.id ?? null,
+      needs_confirmation: adjustKind != null,
+      text, category_id: categoryId, adjust_kind: adjustKind, adjust_value: adjustValue,
+      note: adjustKind
+        ? "Факт збережено як ПРОПОЗИЦІЮ. Числа (avg_month/burn/runway) НЕ зміняться, поки користувач не натисне «застосувати» у списку фактів. Скажи це користувачу й наведи оцінку ефекту."
+        : "Факт збережено (лише пояснювальний, без коригування сум).",
+    };
+  }
+
   return { error: `невідомий інструмент: ${name}` };
+}
+
+// ---- §A1: CRUD фактів для API (Порадник/Налаштування) ------------------------
+export interface FactRow {
+  id: number; text: string; effective_from: number; expires_at: number | null;
+  category_id: number | null; category_name: string | null;
+  adjust_kind: string | null; adjust_value: number | null;
+  confirmed_at: number | null; source: string; created_at: number;
+}
+export interface FactInput {
+  text: string; effective_from?: number; expires_at?: number | null;
+  category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
+  adjust_value?: number | null; confirm?: boolean; source?: string;
+}
+
+export async function listFacts(env: Env): Promise<FactRow[]> {
+  const rows = await env.DB.prepare(
+    `SELECT f.id, f.text, f.effective_from, f.expires_at, f.category_id,
+            c.name AS category_name, f.adjust_kind, f.adjust_value,
+            f.confirmed_at, f.source, f.created_at
+     FROM facts f LEFT JOIN categories c ON c.id = f.category_id
+     ORDER BY f.confirmed_at IS NOT NULL, f.created_at DESC`,
+  ).all<FactRow>();
+  return rows.results ?? [];
+}
+
+export async function addFact(env: Env, f: FactInput): Promise<{ id: number | null }> {
+  const now = Math.floor(Date.now() / 1000);
+  const text = (f.text ?? "").trim();
+  if (!text) throw new Error("потрібен текст факту");
+  // Коригування числа тільки при заданій категорії.
+  const kind = f.category_id != null ? (f.adjust_kind ?? null) : null;
+  const value = kind ? (f.adjust_value ?? null) : null;
+  // Ручний факт від користувача = він сам ввів число → підтвердження за замовчуванням дозволене.
+  const confirmedAt = f.confirm !== false && kind != null ? now : null;
+  const res = await env.DB.prepare(
+    `INSERT INTO facts (text, effective_from, expires_at, category_id, adjust_kind, adjust_value, confirmed_at, source, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+  ).bind(
+    text, f.effective_from ?? now, f.expires_at ?? null, f.category_id ?? null,
+    kind, value, confirmedAt, f.source ?? "user", now,
+  ).first<{ id: number }>();
+  return { id: res?.id ?? null };
+}
+
+// Гейт підтвердження: лише підтверджений факт із коригуванням рухає числа (categoryMonthlyLevels).
+export async function confirmFact(env: Env, id: number, on: boolean): Promise<void> {
+  await env.DB.prepare("UPDATE facts SET confirmed_at = ? WHERE id = ?")
+    .bind(on ? Math.floor(Date.now() / 1000) : null, id).run();
+}
+
+export async function deleteFact(env: Env, id: number): Promise<void> {
+  await env.DB.prepare("DELETE FROM facts WHERE id = ?").bind(id).run();
 }
 
 // §GR2: спільний контекст групи — тотали, категорії всередині, транзакції (з id).

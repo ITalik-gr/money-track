@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
   useGenerateAdviceMutation,
@@ -14,6 +14,9 @@ import { Gauge } from "../components/Gauge.tsx";
 import { AiInsightCard } from "../components/AiInsightCard.tsx";
 import { WhatIf } from "../components/WhatIf.tsx";
 import { RichFacts } from "../components/RichFacts.tsx";
+import { FactsCard } from "../components/FactsCard.tsx";
+import { HealthIndexCard } from "../components/HealthIndexCard.tsx";
+import { KnowledgeCorpusCard } from "../components/KnowledgeCorpusCard.tsx";
 import { UsageCost } from "../components/UsageCost.tsx";
 import { InfoTip } from "../components/InfoTip.tsx";
 import { highlightAmounts } from "../lib/highlight.tsx";
@@ -24,10 +27,16 @@ import { toast } from "../lib/toast.ts";
 
 // AI-порадник: числа (runway) + структуровані поради + інтерактивне «запитай/опиши».
 // Профіль «про мене» редагується лише в Налаштуваннях — AI його й так знає в усіх викликах.
+const TABS = { advice: "Поради", state: "Стан фінансів" } as const;
+type AdvTab = keyof typeof TABS;
+
 export function Advisor() {
   const { data: advice } = useGetAdviceQuery();
   const [generate, { isLoading: generating }] = useGenerateAdviceMutation();
   const [genError, setGenError] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const tab: AdvTab = params.get("tab") === "state" ? "state" : "advice";
+  const setTab = (t: AdvTab) => setParams((p) => { p.set("tab", t); return p; }, { replace: true });
 
   async function runAdvice() {
     setGenError(null);
@@ -58,6 +67,23 @@ export function Advisor() {
         </div>
       </div>
 
+      <div className="stat-tabs" role="tablist">
+        {(Object.keys(TABS) as AdvTab[]).map((k) => (
+          <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>
+            {TABS[k]}
+          </button>
+        ))}
+      </div>
+
+      {tab === "state" && (
+        <div className="advisor-state">
+          <HealthIndexCard />
+          <FactsCard />
+          <KnowledgeCorpusCard />
+        </div>
+      )}
+
+      {tab === "advice" && (
       <div className="stack" style={{ gap: 18 }}>
         {advice && (
           <div className="card runway-card">
@@ -138,6 +164,7 @@ export function Advisor() {
           </aside>
         </div>
       </div>
+      )}
     </>
   );
 }

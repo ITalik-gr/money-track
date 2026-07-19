@@ -313,10 +313,28 @@ export interface SetupStatus {
   backfill: { progress: number; total: number; done: boolean } | null;
 }
 
+// §A1: факт про світ. adjust_* рухає числа лише коли confirmed_at != null (гейт підтвердження).
+export interface Fact {
+  id: number; text: string; effective_from: number; expires_at: number | null;
+  category_id: number | null; category_name: string | null;
+  adjust_kind: "multiplier" | "delta_minor" | null; adjust_value: number | null;
+  confirmed_at: number | null; source: string; created_at: number;
+}
+export interface FactInput {
+  text: string; effective_from?: number; expires_at?: number | null;
+  category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
+  adjust_value?: number | null; confirm?: boolean;
+}
+// §A5: метадані вбудованого документа корпусу знань (для картки на рейлі Порадника).
+export interface KnowledgeMeta { id: string; title: string; summary: string; chars: number }
+// §H: детермінований Індекс фінздоров'я (без AI) — 4 складові + зважений скор 0..100.
+export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
+export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[] }
+
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact"],
   endpoints: (b) => ({
     getMe: b.query<{ authenticated: boolean }, void>({ query: () => "/me", providesTags: ["Me"] }),
     login: b.mutation<{ ok: boolean }, string>({
@@ -651,6 +669,25 @@ export const api = createApi({
       // Оновлення категорії/переказу застосовується на бекенді — перечитуємо транзакцію.
       invalidatesTags: (_r, _e, { id }) => ["Tx", { type: "Tx", id }, "Summary"],
     }),
+    // §A1: шар фактів. Підтвердження/видалення факту з коригуванням рухає burn/runway →
+    // інвалідуємо Tx/Summary/Advice, щоб цифри всюди перерахувались.
+    getFacts: b.query<Fact[], void>({ query: () => "/facts", providesTags: ["Fact"] }),
+    // §A5: метадані вбудованого корпусу знань (статичне; сам текст живе в промті чату).
+    getKnowledge: b.query<KnowledgeMeta[], void>({ query: () => "/knowledge" }),
+    // §H: детермінований Індекс фінздоров'я. Провайдить Advice → перерахунок при зміні фактів/порад.
+    getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
+    addFact: b.mutation<{ id: number | null }, FactInput>({
+      query: (body) => ({ url: "/facts", method: "POST", body }),
+      invalidatesTags: ["Fact", "Tx", "Summary", "Advice"],
+    }),
+    confirmFact: b.mutation<{ ok: boolean }, { id: number; on: boolean }>({
+      query: ({ id, on }) => ({ url: `/facts/${id}/confirm`, method: "POST", body: { on } }),
+      invalidatesTags: ["Fact", "Tx", "Summary", "Advice"],
+    }),
+    deleteFact: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/facts/${id}`, method: "DELETE" }),
+      invalidatesTags: ["Fact", "Tx", "Summary", "Advice"],
+    }),
   }),
 });
 
@@ -750,4 +787,10 @@ export const {
   useEvaluateGroupMutation,
   useChatGroupMutation,
   useChatTxMutation,
+  useGetFactsQuery,
+  useGetKnowledgeQuery,
+  useGetHealthQuery,
+  useAddFactMutation,
+  useConfirmFactMutation,
+  useDeleteFactMutation,
 } = api;

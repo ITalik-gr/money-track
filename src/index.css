@@ -371,6 +371,9 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   align-items: center;
   gap: 7px;
   margin: 26px 2px 10px;
+  h3 {
+    margin: 0;
+  }
 }
 .section-head:first-child { margin-top: 4px; }
 .section-head .label { margin-left: auto; }
@@ -1794,6 +1797,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .advisor-rail { position: sticky; top: 84px; }
 @media (max-width: 980px) { .advisor-grid { grid-template-columns: 1fr; } .advisor-rail { position: static; } }
 
+/* Таб «Стан фінансів»: індекс на всю ширину (gauge+складові), під ним Факти | Корпус знань. */
+.advisor-state { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; margin-top: 18px; }
+.advisor-state > * { min-width: 0; }
+.advisor-state > .health-card { grid-column: 1 / -1; }
+@media (max-width: 760px) { .advisor-state { grid-template-columns: 1fr; } }
+
 /* §P4: What-if симулятор */
 .whatif-body { display: grid; grid-template-columns: minmax(0, 1fr) 264px; gap: 22px; align-items: start; margin-top: 6px; }
 @media (max-width: 720px) { .whatif-body { grid-template-columns: 1fr; } }
@@ -2510,6 +2519,80 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .md-table .md-td-num { font-variant-numeric: tabular-nums; color: var(--ink-2); }
 .md-table tbody tr:hover { background: var(--surface-2); }
 .md-chart-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+/* §A1: шар фактів — картка на рейлі Порадника. Плаский список із hairline (як `.ledger`),
+   не купа surface-2-боксів — щоб читалось як інші картки рейла. */
+.btn.icon { padding: 6px; }
+/* Нейтральний бейдж голови картки (той самий габарит, що `.ai-badge`, але не accent —
+   для «інструментальних» карток рейла: Факти, Корпус знань). */
+.ai-badge.soft { background: var(--surface-2); color: var(--ink-2); }
+.facts-card { padding: 18px 20px; }
+.facts-list { display: flex; flex-direction: column; margin-top: var(--sp-1); }
+.fact-item {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3);
+  padding: var(--sp-3) 0; border-top: 1px solid var(--line);
+}
+.fact-item:first-child { border-top: none; }
+.fact-item-main { min-width: 0; flex: 1; }
+.fact-item-text { color: var(--ink); font-size: var(--fs-sm); line-height: 1.35; }
+.fact-item-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 5px; font-size: var(--fs-xs); }
+.fact-chip {
+  padding: 1px 7px; border-radius: var(--radius-pill); background: var(--surface-2);
+  color: var(--ink-2); font-variant-numeric: tabular-nums;
+}
+.fact-chip.on { background: color-mix(in srgb, var(--pos) 14%, var(--surface)); color: var(--pos); }
+.fact-status { color: var(--muted); }
+.fact-status.on { color: var(--pos); }
+.fact-item-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+/* Форма — один стовпчик (рейл вузький; side-by-side стискав Select у нуль). */
+.fact-form { display: flex; flex-direction: column; gap: var(--sp-3); margin-top: var(--sp-3); padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.fact-field { display: flex; flex-direction: column; gap: 5px; }
+.fact-field-lbl { font-size: var(--fs-xs); color: var(--muted); }
+.fact-input {
+  width: 100%; padding: 8px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: inherit;
+}
+.fact-input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+/* Native date: у вузькому рейлі індикатор-календар «плив» і поле переростало ширину.
+   min-width:0 тримає в межах, color-scheme малює пікер під активну тему, height=42 як інші поля. */
+.fact-date { min-width: 0; height: 42px; color-scheme: light dark; }
+.fact-date::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+.fact-date::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+.fact-form-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+
+/* §Health/§A5: картки рейла Порадника — «Індекс здоров'я» (gauge-скор) + «Корпус знань»
+   (плейсхолдер завантаження PDF/MD). Той самий габарит голови, що інші картки рейла. */
+.health-card { padding: 18px 20px; }
+.health-body { display: flex; align-items: center; gap: 16px; }
+.health-gauge { flex-shrink: 0; }
+.health-gauge .gauge svg { width: 104px; height: 104px; }
+.health-factors { display: flex; flex-direction: column; gap: 8px; flex: 1; min-width: 0; }
+.health-factor { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: var(--fs-md); }
+.health-factor .hf-lbl { color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.health-factor .hf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+.health-factor .hf-dot.pos { background: var(--pos); }
+.health-factor .hf-dot.warn { background: var(--warn); }
+.health-factor .hf-dot.neg { background: var(--neg); }
+.health-factor .hf-val { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.health-note { margin: 12px 0 0; font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; }
+
+.corpus-card { padding: 18px 20px; }
+.corpus-list { display: flex; flex-direction: column; gap: 2px; }
+.corpus-doc { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; border-top: 1px solid var(--line); }
+.corpus-doc:first-child { border-top: none; }
+.corpus-doc > svg { color: var(--muted); flex-shrink: 0; margin-top: 2px; }
+.corpus-doc-title { font-size: var(--fs-md); color: var(--ink); font-weight: 500; }
+.corpus-doc-sum { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top: 2px; }
+.corpus-hint { margin: 12px 0 0; font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; }
+
+/* Підписки: річна вартість, топ-найдорожчі, детект «мертвих» */
+.sub-hero-year { margin-top: 4px; color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.sub-badge.dead { background: color-mix(in srgb, var(--neg) 14%, var(--surface)); color: var(--neg); border: 1px solid color-mix(in srgb, var(--neg) 35%, var(--line)); }
+.top-subs { display: flex; flex-direction: column; margin-top: var(--sp-3); }
+.top-sub-row { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) 0; border-top: 1px solid var(--line); }
+.top-sub-row:first-child { border-top: none; }
+.top-sub-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.top-sub-amt { font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

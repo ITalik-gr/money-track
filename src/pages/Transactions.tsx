@@ -155,6 +155,9 @@ export function Transactions() {
           <div className="sub">Усі операції з пошуком, фільтром і групуванням.</div>
         </div>
         <div className="page-head-actions">
+          <a className="btn ghost" href="/api/export/transactions.csv" title="Вивантажити всі операції у CSV (для бухгалтера/податкової)">
+            <Icon name="export" size={16} /> CSV
+          </a>
           <button className={`btn select-btn ${selectMode ? "primary" : ""}`} onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
             <Icon name={selectMode ? "overview" : "tag"} size={16} />
             {selectMode ? "Готово" : "Вибрати"}

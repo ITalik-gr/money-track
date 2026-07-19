@@ -92,6 +92,55 @@ api.get("/transactions", async (c) => {
   return c.json(rows.results);
 });
 
+// §J: CSV-експорт транзакцій (для бухгалтера/податкової). Опційні from/to (unix). BOM для
+// коректної кирилиці в Excel; сума — у валюті рахунку. Пара-переказ — один рядок (як у списку).
+const CUR_ALPHA: Record<number, string> = { 980: "UAH", 840: "USD", 978: "EUR", 985: "PLN", 826: "GBP", 756: "CHF" };
+api.get("/export/transactions.csv", async (c) => {
+  const url = new URL(c.req.url);
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const where: string[] = ["NOT (t.transfer_pair_id IS NOT NULL AND t.amount > 0)"];
+  const binds: unknown[] = [];
+  if (from) { where.push("t.time >= ?"); binds.push(Number(from)); }
+  if (to) { where.push("t.time <= ?"); binds.push(Number(to)); }
+  const rows = await c.env.DB.prepare(
+    `SELECT t.time, t.merchant, t.comment, t.user_note, t.amount, t.currency_code, t.is_transfer,
+            c.name AS category_name, a.title AS account_title, e.name AS event_name
+     FROM transactions t
+     LEFT JOIN categories c ON c.id = t.category_id
+     LEFT JOIN accounts a ON a.id = t.account_id
+     LEFT JOIN event_groups e ON e.id = t.event_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY t.time DESC LIMIT 20000`,
+  ).bind(...binds).all<{
+    time: number; merchant: string | null; comment: string | null; user_note: string | null;
+    amount: number; currency_code: number; is_transfer: number;
+    category_name: string | null; account_title: string | null; event_name: string | null;
+  }>();
+  const esc = (v: unknown) => {
+    const s = v == null ? "" : String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const header = ["Дата", "Мерчант", "Коментар", "Нотатка", "Сума", "Валюта", "Категорія", "Рахунок", "Група", "Переказ"];
+  const lines = [header.join(",")];
+  for (const r of rows.results ?? []) {
+    lines.push([
+      new Date(r.time * 1000).toISOString().slice(0, 10),
+      r.merchant ?? "", r.comment ?? "", r.user_note ?? "",
+      (r.amount / 100).toFixed(2), CUR_ALPHA[r.currency_code] ?? String(r.currency_code),
+      r.category_name ?? "", r.account_title ?? "", r.event_name ?? "",
+      r.is_transfer ? "так" : "",
+    ].map(esc).join(","));
+  }
+  const csv = "﻿" + lines.join("\r\n");
+  return new Response(csv, {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="money-track-transactions.csv"`,
+    },
+  });
+});
+
 // Bulk-редагування виділених транзакцій (мультивибір на /tx): призначити групу,
 // категорію чи позначити переказом одразу для набору. Порожній ids — no-op.
 api.post("/transactions/bulk", async (c) => {
@@ -1659,6 +1708,53 @@ api.post("/advisor/chat", async (c) => {
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }
+});
+
+// §A1: шар фактів про світ. Список / додати (ручний) / підтвердити-скасувати / видалити.
+// Гейт: лише confirmed факт із коригуванням рухає числа (categoryMonthlyLevels).
+api.get("/facts", async (c) => {
+  const { listFacts } = await import("../lib/advisor.ts");
+  return c.json(await listFacts(c.env));
+});
+
+// §A5: вбудований корпус знань — метадані для UI (сам текст іде в промт чату, не сюди).
+api.get("/knowledge", async (c) => {
+  const { knowledgeMeta } = await import("../lib/knowledge/index.ts");
+  return c.json(knowledgeMeta());
+});
+
+// §H: детермінований Індекс фінздоров'я (без AI).
+api.get("/analytics/health", async (c) => {
+  const { financeHealth } = await import("../lib/advisor.ts");
+  return c.json(await financeHealth(c.env));
+});
+
+api.post("/facts", async (c) => {
+  const { addFact } = await import("../lib/advisor.ts");
+  const b = await c.req.json<{
+    text?: string; effective_from?: number; expires_at?: number | null;
+    category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
+    adjust_value?: number | null; confirm?: boolean;
+  }>();
+  if (!b.text?.trim()) return c.json({ error: "text required" }, 400);
+  try {
+    return c.json(await addFact(c.env, { ...b, text: b.text, source: "user" }));
+  } catch (e) {
+    return c.json({ error: String(e instanceof Error ? e.message : e) }, 400);
+  }
+});
+
+api.post("/facts/:id/confirm", async (c) => {
+  const { confirmFact } = await import("../lib/advisor.ts");
+  const on = (await c.req.json<{ on?: boolean }>().catch(() => ({ on: true }))).on !== false;
+  await confirmFact(c.env, Number(c.req.param("id")), on);
+  return c.json({ ok: true });
+});
+
+api.delete("/facts/:id", async (c) => {
+  const { deleteFact } = await import("../lib/advisor.ts");
+  await deleteFact(c.env, Number(c.req.param("id")));
+  return c.json({ ok: true });
 });
 
 // §GR2: AI-оцінка групи (структуровані факти) + чат по конкретній групі.

@@ -200,7 +200,36 @@ export async function categoryMonthlyLevels(
     const level = fixed ? Math.round(recentNz.reduce((s, v) => s + v, 0) / recentNz.length) : mean;
     out.set(id, { level, mean, last, active_months: activeMonths, cv: Math.round(cvOf(series.filter((v) => v > 0)) * 100) / 100, fixed });
   }
+
+  // §A1: коригування рівня ПІДТВЕРДЖЕНИМИ фактами (шар фактів). Тут — ЄДИНЕ місце,
+  // де факт рухає число (не в ендпоінті), тож burn/runway/Патерни/чат лишаються узгодженими.
+  // Лише confirmed_at IS NOT NULL і активний на `now`. multiplier масштабує рівень
+  // (метро 8→30 = ×3.75), delta_minor додає копійки/міс (±). Обидва — в ₴-мінор, як level.
+  await applyFactAdjustments(env, out, now);
   return out;
+}
+
+async function applyFactAdjustments(env: Env, out: Map<number, MonthLevel>, now: number): Promise<void> {
+  try {
+    const rows = await env.DB.prepare(
+      `SELECT category_id AS id, adjust_kind AS kind, adjust_value AS val
+       FROM facts
+       WHERE confirmed_at IS NOT NULL AND category_id IS NOT NULL
+         AND adjust_kind IS NOT NULL AND adjust_value IS NOT NULL
+         AND effective_from <= ? AND (expires_at IS NULL OR expires_at > ?)`,
+    ).bind(now, now).all<{ id: number; kind: string; val: number }>();
+    for (const f of rows.results ?? []) {
+      const cur = out.get(f.id);
+      if (f.kind === "multiplier") {
+        if (cur) cur.level = Math.round(cur.level * f.val); // 0×val=0 → категорію без історії не чіпаємо
+      } else if (f.kind === "delta_minor") {
+        if (cur) cur.level = Math.round(cur.level + f.val);
+        else if (f.val > 0) out.set(f.id, { level: Math.round(f.val), mean: 0, last: 0, active_months: 0, cv: 0, fixed: false });
+      }
+    }
+  } catch {
+    // Таблиця facts може ще не бути на remote (міграція 0020) — не валимо канонічну статистику.
+  }
 }
 
 // Канонічний МІСЯЧНИЙ BURN (₴-мінор) = сума місячних рівнів усіх категорій (ЄДИНЕ джерело).

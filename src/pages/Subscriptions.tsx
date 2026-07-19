@@ -121,6 +121,13 @@ export function Subscriptions() {
   const list = (planned ?? []).slice().sort((a, b) => nextCharge(a) - nextCharge(b));
   // Місячний тягар — зводимо кожну підписку в ₴ за її валютою (§F4).
   const burden = Math.round(list.reduce((s, p) => s + (toUAHMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)), 0));
+  // Топ-найдорожчі за місячним ₴-еквівалентом (завершені не рахуємо).
+  const topExpensive = list
+    .filter((p) => !isFinished(p))
+    .map((p) => ({ p, uah: Math.round(toUAHMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)) }))
+    .filter((x) => x.uah > 0)
+    .sort((a, b) => b.uah - a.uah)
+    .slice(0, 3);
 
   return (
     <>
@@ -136,6 +143,7 @@ export function Subscriptions() {
           <div>
             <div className="label">на місяць виходить</div>
             <div className="num-hero"><Money minor={burden} decimals={false} /></div>
+            <div className="sub-hero-year">≈ {formatMinor(burden * 12, { decimals: false })} ₴ на рік</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="label">активних</div>
@@ -193,6 +201,13 @@ export function Subscriptions() {
                       <>
                         <span className="sub-badge">наступне {fmtDate.format(nextCharge(p) * 1000)}</span>
                         {rem != null && <span className="sub-rem">лишилось ~{rem}</span>}
+                        {(() => {
+                          // Детект «мертвої»: активна >60 днів, але поряд НЕ видно фактичних списань → лише підказка.
+                          const a = actualBy.get(p.id);
+                          const ageDays = (Date.now() / 1000 - p.start_date) / 86400;
+                          const stale = (!a || a.count === 0) && ageDays > 60;
+                          return stale ? <span className="sub-badge dead" title="Активна підписка, але поряд не видно фактичних списань. Досі користуєшся?">не видно списань — актуальна?</span> : null;
+                        })()}
                       </>
                     )}
                   </div>
@@ -206,6 +221,21 @@ export function Subscriptions() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {topExpensive.length >= 3 && (
+          <div className="card top-subs-card">
+            <div className="section-head"><h2>Найдорожчі</h2><span className="label">на місяць</span></div>
+            <div className="top-subs">
+              {topExpensive.map(({ p, uah }) => (
+                <div className="top-sub-row" key={p.id}>
+                  <MerchantLogo merchant={p.title} color="var(--c-plum)" fallbackLabel={p.title} />
+                  <span className="top-sub-name">{p.title}</span>
+                  <span className="top-sub-amt">{formatMinor(uah, { decimals: false })} ₴/міс</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

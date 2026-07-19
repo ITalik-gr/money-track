@@ -4,6 +4,7 @@
 // category taxonomy + examples must stay large enough or the cache silently no-ops.
 import type { Env } from "../env.ts";
 import { getState, setState } from "./repo.ts";
+import { KNOWLEDGE_CORPUS } from "./knowledge/index.ts";
 
 // Гібрид (рішення користувача 2026-07-06): масові/фонові задачі — дешевий Haiku;
 // розумні user-facing (чат по операції, поради, розуміння підписок, рев'ю) — Sonnet 5.
@@ -48,11 +49,23 @@ interface AnthropicContentBlock {
   cache_control?: { type: "ephemeral"; ttl?: "5m" | "1h" };
 }
 
+// §A3 (AI 4.0): серверний web_search. Обмежуємо офіційними/фінансовими джерелами, щоб не
+// тягнути шум (курс НБУ, тарифи, податки, ціни). Приватність: пошук іде тим самим каналом
+// Anthropic, що й знімок фінансів — не третій стороні.
+const WEB_SEARCH_DOMAINS = ["bank.gov.ua", "minfin.com.ua", "index.minfin.com.ua", "tax.gov.ua"];
+// Sonnet/Opus → динамічна фільтрація (_20260209); Haiku 4.5 — лише базовий (_20250305).
+export function webSearchTool(model: string, maxUses = 4): Record<string, unknown> {
+  const type = model === MODEL_FAST ? "web_search_20250305" : "web_search_20260209";
+  return { type, name: "web_search", max_uses: maxUses, allowed_domains: WEB_SEARCH_DOMAINS };
+}
+
 interface AnthropicUsage {
   input_tokens: number;
   output_tokens: number;
   cache_creation_input_tokens?: number;
   cache_read_input_tokens?: number;
+  // Розбивка write-кешу за TTL (API повертає, коли є кеш-write). 5хв=1.25×, 1год=2×.
+  cache_creation?: { ephemeral_5m_input_tokens?: number; ephemeral_1h_input_tokens?: number };
 }
 
 // Спостережуваність вартості AI (§технічні нотатки): компактний usage + лог у консоль.
@@ -71,25 +84,41 @@ export function logUsage(tag: string, u: AnthropicUsage): void {
 // тут ми АКУМУЛЮЄМО usage у app_state, щоб показати «$ за сьогодні/місяць» у Налаштуваннях.
 // Записується централізовано в callHaiku/callHaikuMessages, тож ловить УСІ виклики (вкл. ретраї).
 
-// Ціни за 1M токенів (USD), станом на 2026-07. Sonnet 5 має інтро-ціну $2/$10 до 2026-08-31,
-// але беремо стікер $3/$15 як стабільну оцінку (лічильник — орієнтир, не білінг).
-// cache read ≈ 0.1× input; cache write ≈ 1.25× input (5хв) — enrich пише 1h (~2×), тож
-// це радше нижня оцінка вартості кешу. Достатньо для «скільки я витратив».
+// Ціни за 1M токенів (USD). Стікер; вступну ціну Sonnet 5 див. priceFor.
+// cache read ≈ 0.1× input; cache write — 1.25× (5хв TTL) / 2× (1год TTL) — див. callCostUsd.
 const PRICES: Record<string, { in: number; out: number }> = {
   [MODEL_FAST]: { in: 1.0, out: 5.0 },   // Haiku 4.5
-  [MODEL_SMART]: { in: 3.0, out: 15.0 }, // Sonnet 5
+  [MODEL_SMART]: { in: 3.0, out: 15.0 }, // Sonnet 5 (стікер; до 31.08.2026 діє вступна)
   [MODEL_OPUS]: { in: 5.0, out: 25.0 },  // Opus 4.8
 };
 
-export function callCostUsd(model: string, u: AnthropicUsage): number {
-  const p = PRICES[model] ?? PRICES[MODEL_FAST];
+// Sonnet 5: ВСТУПНА ціна $2/$10 за MTok діє ДО 2026-08-31 включно (тобто до 01.09.2026 UTC),
+// після — стікер $3/$15. Тож ціна Sonnet — date-aware (§A2).
+const SONNET_INTRO_END = Date.UTC(2026, 8, 1) / 1000; // 1 вересня 2026, 00:00 UTC
+const SONNET_INTRO: { in: number; out: number } = { in: 2.0, out: 10.0 };
+
+function priceFor(model: string, nowSec: number): { in: number; out: number } {
+  if (model === MODEL_SMART && nowSec < SONNET_INTRO_END) return SONNET_INTRO;
+  return PRICES[model] ?? PRICES[MODEL_FAST];
+}
+
+export function callCostUsd(model: string, u: AnthropicUsage, nowSec: number = Date.now() / 1000): number {
+  const p = priceFor(model, nowSec);
   const cacheRead = u.cache_read_input_tokens ?? 0;
-  const cacheWrite = u.cache_creation_input_tokens ?? 0;
+  // Cache write множник за TTL: 5хв=1.25×, 1год=2×. Беремо розбивку, коли API її дав;
+  // інакше — агрегат за нашим фактичним TTL (усі write-и через buildSystemPrefix — 1год → 2×).
+  const cc = u.cache_creation;
+  const write5m = cc?.ephemeral_5m_input_tokens ?? 0;
+  const write1h = cc?.ephemeral_1h_input_tokens ?? 0;
+  const cacheWriteCost =
+    cc && (write5m || write1h)
+      ? write5m * p.in * 1.25 + write1h * p.in * 2.0
+      : (u.cache_creation_input_tokens ?? 0) * p.in * 2.0;
   return (
     (u.input_tokens * p.in +
       u.output_tokens * p.out +
       cacheRead * p.in * 0.1 +
-      cacheWrite * p.in * 1.25) /
+      cacheWriteCost) /
     1_000_000
   );
 }
@@ -120,7 +149,7 @@ function monthKey(now: number): string { return new Date(now * 1000).toISOString
 async function recordUsage(env: Env, model: string, u: AnthropicUsage): Promise<void> {
   try {
     const now = Math.floor(Date.now() / 1000);
-    const cost = callCostUsd(model, u);
+    const cost = callCostUsd(model, u, now);
     const raw = await getState(env.DB, "ai_usage");
     const store: UsageStore = raw
       ? (JSON.parse(raw) as UsageStore)
@@ -243,7 +272,7 @@ async function callMessagesRaw(
   messages: RawMsg[],
   maxTokens: number,
   model: string,
-  tools?: ChatTool[],
+  tools?: unknown[], // client-side ChatTool[] та/або серверні блоки (web_search)
 ): Promise<{ content: RawBlock[]; usage: AnthropicUsage; stop: string | null }> {
   const res = await fetch(API, {
     method: "POST",
@@ -265,8 +294,10 @@ async function runToolConversation(
   executor: ToolExecutor,
   maxTokens: number,
   model: string,
-  maxTurns = 5,
+  maxTurns = 6,
+  serverTools: unknown[] = [], // §A3: серверні tools (web_search) — виконуються на боці Anthropic
 ): Promise<{ text: string; usage: AnthropicUsage }> {
+  const reqTools = [...tools, ...serverTools];
   const messages: RawMsg[] = initial.map((m) => ({ role: m.role, content: m.content }));
   const total: AnthropicUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
   const add = (u: AnthropicUsage) => {
@@ -277,8 +308,10 @@ async function runToolConversation(
   const textOf = (content: RawBlock[]) => content.filter((b) => b.type === "text").map((b) => b.text).join("");
 
   for (let turn = 0; turn < maxTurns; turn++) {
-    const { content, usage, stop } = await callMessagesRaw(env, system, messages, maxTokens, model, tools);
+    const { content, usage, stop } = await callMessagesRaw(env, system, messages, maxTokens, model, reqTools);
     add(usage);
+    // §A3: серверний цикл (web_search) міг паузитись — дослати ту саму розмову, щоб він завершив.
+    if (stop === "pause_turn") { messages.push({ role: "assistant", content }); continue; }
     if (stop === "tool_use") {
       const uses = content.filter((b) => b.type === "tool_use");
       messages.push({ role: "assistant", content });
@@ -294,8 +327,9 @@ async function runToolConversation(
     }
     return { text: textOf(content), usage: total };
   }
-  // Вичерпали ходи → фінальний виклик БЕЗ інструментів, щоб примусити текстову відповідь.
-  const final = await callMessagesRaw(env, system, messages, maxTokens, model);
+  // Вичерпали ходи → фінальний виклик БЕЗ client-інструментів (примус тексту), але серверні
+  // лишаємо: історія може містити незавершений server_tool_use, і виклик без нього дав би 400.
+  const final = await callMessagesRaw(env, system, messages, maxTokens, model, serverTools.length ? serverTools : undefined);
   add(final.usage);
   return { text: textOf(final.content), usage: total };
 }
@@ -313,46 +347,56 @@ export async function chatAdvice(
       "операції), list_categories (перелік категорій). ВИКОРИСТОВУЙ їх, коли фіксованого контексту не вистачає — напр. питання про " +
       "конкретний період/категорію/мерчанта в минулому («скільки на таксі влітку торік», «мої найбільші покупки в грудні»). Сам обчислюй " +
       "дати періодів (YYYY-MM-DD) відносно сьогодні. НЕ вигадуй числа — якщо треба точні дані поза контекстом, виклич інструмент. " +
-      "Операції з інструментів теж можна цитувати як [tx:ID|підпис]. "
+      "Операції з інструментів теж можна цитувати як [tx:ID|підпис]. Ще Є web_search — пошук в " +
+      "офіційних джерелах (курс НБУ, тарифи, податки, ціни) для АКТУАЛЬНИХ фактів про світ, яких нема " +
+      "в тренувальних даних; використовуй його ЛИШЕ для зовнішніх фактів (не для особистих операцій " +
+      "користувача) і посилайся на джерело. "
     : "";
+  // §A5: стабільний блок (корпус знань + персона/правила) з cache_control ttl:1h — байт-ідентичний
+  // між викликами й користувачами, тож читається з кешу ≈0.1×. Динамічний контекст — окремим блоком
+  // ПІСЛЯ (не кешується). Це ще й здешевлює: персона раніше слалась щоразу без кешу.
+  const stableRules =
+    "Ти — досвідчений персональний фінансовий менеджер користувача у застосунку Money Track (не безликий бот, а радник " +
+    "«зі стажем», який веде саме ЙОГО гроші). Відповідай українською, по-людськи, по суті. Твоя робота — не лише " +
+    "констатувати цифри, а РАДИТИ РІШЕННЯ: куди спрямувати гроші, платити зараз чи почекати, що різати першим, як " +
+    "розтягнути подушку, коли безпечно витратити. Думай як менеджер, що дбає про клієнта: пріоритети, тайминг, ризик. " +
+    "Коли питання просте — стисло; коли складне чи користувач просить розібратись/порадити — відповідай ДЕТАЛЬНО й " +
+    "структуровано (короткий висновок → пояснення на його числах → 2-4 конкретні дієві кроки з ефектом у грн). " +
+    "⚠️ КОШТИ (критично — не плутай): liquid_cushion_uah — реальна ліквідна ПОДУШКА (готівка/картки/банки), це головне " +
+    "число для «скільки протягну». debt_uah — використаний кредитний ЛІМІТ (це БОРГ, а не «мінус запас»). " +
+    "investment_reserve_uah — крипта/брокер: остання лінія оборони, НЕ подушка й НЕ входить у runway; не радь її чіпати, " +
+    "поки ситуація не критична. own_funds_uah = подушка − борг (нетто). accounts — рахунки з роллю та описом (note): " +
+    "враховуй їх, не домислюй сум поза контекстом. runway_months = подушка / burn. " +
+    "⚠️ ПЕРІОДИ: monthly_burn_uah та avg_month_uah — це вже СЕРЕДНЄ НА МІСЯЦЬ; spent_90d_uah — сума за 90 днів. " +
+    "Порівнюючи з доходом чи burn — бери місячні числа; НЕ називай 90-денну суму місячною. recent_oneoff — разові " +
+    "витрати (податки/лікар): не проектуй їх як регулярні. upcoming_charges — найближчі списання (in_days): спирайся на " +
+    "них для порад про тайминг платежів. " +
+    "Форматування — markdown: **жирний** для акцентів, списки «- », короткі підзаголовки. " +
+    "Якщо в контексті є transactions:[{id,label}] і доречно послатися на конкретну операцію — цитуй її як " +
+    "[tx:ID|короткий підпис] (напр. [tx:abc|MrGrill 150₴]); застосунок зробить із цього клікабельний чип. " +
+    "📊 ВІЗУАЛІЗАЦІЇ — використовуй ОЩАДЛИВО, лише коли вони справді допомагають зрозуміти (порівняння кількох чисел, " +
+    "розклад, план по місяцях). НЕ додавай графік/таблицю до кожної відповіді й ніколи — коли достатньо речення. " +
+    "Максимум одна візуалізація на відповідь, лише з реальних чисел контексту.\\n" +
+    "• Міні-графік (горизонтальні бари для порівняння): рядок «[chart:Заголовок]», далі по рядку «Підпис|число» " +
+    "(число у грн, без символів), закрий «[/chart]». Приклад: [chart:Витрати по категоріях]\\nПродукти|4500\\nКафе|3200\\n[/chart]. Макс 6 рядків.\\n" +
+    "• Таблиця (коли треба кілька колонок, напр. план погашення чи ліміт vs факт): рядок «[table:Заголовок]», далі " +
+    "рядок заголовків «Кол1|Кол2|Кол3», далі рядки даних так само через «|», закрий «[/table]». Макс 6 рядків даних, 4 колонки.";
   const system: AnthropicContentBlock[] = [
+    { type: "text", text: KNOWLEDGE_CORPUS + "\n\n---\n\n" + stableRules, cache_control: { type: "ephemeral", ttl: "1h" } },
     {
       type: "text",
       text:
         toolNote +
-        "Ти — досвідчений персональний фінансовий менеджер користувача у застосунку Money Track (не безликий бот, а радник " +
-        "«зі стажем», який веде саме ЙОГО гроші). Відповідай українською, по-людськи, по суті. Твоя робота — не лише " +
-        "констатувати цифри, а РАДИТИ РІШЕННЯ: куди спрямувати гроші, платити зараз чи почекати, що різати першим, як " +
-        "розтягнути подушку, коли безпечно витратити. Думай як менеджер, що дбає про клієнта: пріоритети, тайминг, ризик. " +
-        "Коли питання просте — стисло; коли складне чи користувач просить розібратись/порадити — відповідай ДЕТАЛЬНО й " +
-        "структуровано (короткий висновок → пояснення на його числах → 2-4 конкретні дієві кроки з ефектом у грн). " +
-        "⚠️ КОШТИ (критично — не плутай): liquid_cushion_uah — реальна ліквідна ПОДУШКА (готівка/картки/банки), це головне " +
-        "число для «скільки протягну». debt_uah — використаний кредитний ЛІМІТ (це БОРГ, а не «мінус запас»). " +
-        "investment_reserve_uah — крипта/брокер: остання лінія оборони, НЕ подушка й НЕ входить у runway; не радь її чіпати, " +
-        "поки ситуація не критична. own_funds_uah = подушка − борг (нетто). accounts — рахунки з роллю та описом (note): " +
-        "враховуй їх, не домислюй сум поза контекстом. runway_months = подушка / burn. " +
-        "⚠️ ПЕРІОДИ: monthly_burn_uah та avg_month_uah — це вже СЕРЕДНЄ НА МІСЯЦЬ; spent_90d_uah — сума за 90 днів. " +
-        "Порівнюючи з доходом чи burn — бери місячні числа; НЕ називай 90-денну суму місячною. recent_oneoff — разові " +
-        "витрати (податки/лікар): не проектуй їх як регулярні. upcoming_charges — найближчі списання (in_days): спирайся на " +
-        "них для порад про тайминг платежів. " +
         "Ось повний фінансовий контекст користувача (суми в грн): " + JSON.stringify(context) +
-        ". Спирайся ЛИШЕ на ці дані; якщо потрібної інформації нема — скажи чесно, не вигадуй транзакцій чи чисел. " +
-        "Форматування — markdown: **жирний** для акцентів, списки «- », короткі підзаголовки. " +
-        "Якщо в контексті є transactions:[{id,label}] і доречно послатися на конкретну операцію — цитуй її як " +
-        "[tx:ID|короткий підпис] (напр. [tx:abc|MrGrill 150₴]); застосунок зробить із цього клікабельний чип. " +
-        "📊 ВІЗУАЛІЗАЦІЇ — використовуй ОЩАДЛИВО, лише коли вони справді допомагають зрозуміти (порівняння кількох чисел, " +
-        "розклад, план по місяцях). НЕ додавай графік/таблицю до кожної відповіді й ніколи — коли достатньо речення. " +
-        "Максимум одна візуалізація на відповідь, лише з реальних чисел контексту.\\n" +
-        "• Міні-графік (горизонтальні бари для порівняння): рядок «[chart:Заголовок]», далі по рядку «Підпис|число» " +
-        "(число у грн, без символів), закрий «[/chart]». Приклад: [chart:Витрати по категоріях]\\nПродукти|4500\\nКафе|3200\\n[/chart]. Макс 6 рядків.\\n" +
-        "• Таблиця (коли треба кілька колонок, напр. план погашення чи ліміт vs факт): рядок «[table:Заголовок]», далі " +
-        "рядок заголовків «Кол1|Кол2|Кол3», далі рядки даних так само через «|», закрий «[/table]». Макс 6 рядків даних, 4 колонки.",
+        ". Спирайся ЛИШЕ на ці дані; якщо потрібної інформації нема — скажи чесно, не вигадуй транзакцій чи чисел.",
     },
   ];
   const model = await getTaskModel(env, "chat");
   // §AGENT: якщо передано інструменти — ведемо агентний діалог; інакше звичайний виклик.
   if (opts?.tools?.length && opts.executor) {
-    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model);
+    // §A3: додаємо серверний web_search (варіант за моделлю) — актуальні курси/тарифи/ціни.
+    const serverTools = [webSearchTool(model)];
+    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model, 6, serverTools);
     return { text: text.trim(), usage };
   }
   // §R6/§CTX: детальні відповіді менеджера — більший ліміт виводу.
