@@ -4,7 +4,7 @@ import type { Env } from "../env.ts";
 import { setState, getState } from "../lib/repo.ts";
 import { computeSummary, createCashTx, getRates } from "../lib/finance.ts";
 import {
-  STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE,
+  STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_WHERE,
   SPEND_COUNT, valueMode, uahMult, spendSum, incomeSum, amountSum, periodBounds,
   recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels,
   type PeriodMode, type Preset,
@@ -857,8 +857,8 @@ api.get("/analytics/safe-to-spend", async (c) => {
 
   const tot = await c.env.DB.prepare(
     `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND ${EFF_IMPORTANCE} = 'essential' THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS essential,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND t.planned_id IS NOT NULL THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS subs_paid
+            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND ${EFF_IMPORTANCE} = 'essential' THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS essential,
+            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND t.planned_id IS NOT NULL THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS subs_paid
      FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?`,
   ).bind(monthStart, now).first<{ spend: number; income: number; essential: number; subs_paid: number }>();
 
@@ -1087,6 +1087,15 @@ api.get("/analytics/forecast", async (c) => {
     ? Math.round(paceProj * elapsedFrac + histProj * (1 - elapsedFrac))
     : Math.round(paceProj);
 
+  // Діапазон довіри: розкид (σ) місячних витрат історії, звужений на решту місяця (вже витрачене
+  // — певне). Дає чесніший «12–15к» замість однієї цифри. Без історії — діапазон = точка.
+  const sd = trailMonths.length > 1
+    ? Math.sqrt(trailMonths.reduce((s, v) => s + (v - avgMonth) ** 2, 0) / trailMonths.length)
+    : avgMonth * 0.15;
+  const band = avgMonth > 0 ? Math.round(sd * (daysRemaining / daysInMonth) * 0.9) : 0;
+  const projectedLow = Math.max(spend, projectedSpend - band);
+  const projectedHigh = projectedSpend + band;
+
   // Майбутні планові платежі, що спишуться до кінця місяця (інформативно).
   const { nextChargeUnix } = await import("../lib/subscriptions.ts");
   const planned = await c.env.DB.prepare(
@@ -1104,7 +1113,7 @@ api.get("/analytics/forecast", async (c) => {
   return c.json({
     monthStart, now, daysInMonth, daysElapsed, daysRemaining,
     spend, income, pace: Math.round(pace),
-    projectedSpend, projectedNet: income - projectedSpend,
+    projectedSpend, projectedLow, projectedHigh, projectedNet: income - projectedSpend,
     upcomingPlanned, upcomingItems,
   });
 });
@@ -1203,6 +1212,44 @@ api.get("/planned/upcoming", async (c) => {
     .sort((a, b) => a.at - b.at);
 
   return c.json({ days, total: items.reduce((s, p) => s + p.amount, 0), items });
+});
+
+// Cashflow-календар: ВСІ очікувані списання (підписки/розстрочки) по днях у вікні [from,to]
+// (на відміну від /planned/upcoming — той дає лише наступне списання на план). + стартова
+// ліквідна подушка для проєкції балансу «наперед» → видно провали ліквідності. Аутфлоу-only
+// (планового доходу в моделі нема; регулярна зарплата — майбутнє покращення).
+api.get("/analytics/cashflow-calendar", async (c) => {
+  const url = new URL(c.req.url);
+  const now = Math.floor(Date.now() / 1000);
+  const nd = new Date(now * 1000);
+  const defFrom = Math.floor(new Date(nd.getFullYear(), nd.getMonth(), 1).getTime() / 1000);
+  const defTo = Math.floor(new Date(nd.getFullYear(), nd.getMonth() + 2, 0, 23, 59, 59).getTime() / 1000);
+  const from = Number(url.searchParams.get("from") ?? defFrom);
+  const to = Number(url.searchParams.get("to") ?? defTo);
+
+  const { nextChargeUnix } = await import("../lib/subscriptions.ts");
+  const { fundsBreakdown } = await import("../lib/advisor.ts");
+  const [planned, funds] = await Promise.all([
+    c.env.DB.prepare(
+      "SELECT id, title, kind, period_amount, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
+    ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>(),
+    fundsBreakdown(c.env),
+  ]);
+
+  const iso = (u: number) => new Date(u * 1000).toISOString().slice(0, 10);
+  const items: { at: number; date: string; title: string; amount: number; category_id: number | null; kind: string }[] = [];
+  for (const p of planned.results ?? []) {
+    const amt = p.period_amount ?? 0;
+    if (amt <= 0) continue;
+    let t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, from - 1);
+    for (let guard = 0; guard < 400 && t <= to; guard++) {
+      if (p.end_date != null && t > p.end_date) break; // розстрочка добігла кінця
+      items.push({ at: t, date: iso(t), title: p.title, amount: amt, category_id: p.category_id, kind: p.kind });
+      t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, t);
+    }
+  }
+  items.sort((a, b) => a.at - b.at);
+  return c.json({ from, to, now, cushion: funds.cushion, items });
 });
 
 // Аналітика позицій чека (receipt_items з OCR): топ товарів за сумою за період.
@@ -1319,10 +1366,10 @@ api.get("/analytics/patterns", async (c) => {
     // (n — к-ть операцій, biggest — найбільша одна) для чесного прогнозу.
     c.env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS id,
-              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS recurring,
-              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN 0 ELSE (-t.amount) * ${mult} END), 0)) AS INTEGER) AS oneoff,
+              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS recurring,
+              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN 0 ELSE (-${EFF_AMOUNT}) * ${mult} END), 0)) AS INTEGER) AS oneoff,
               COUNT(*) AS n,
-              CAST(ROUND(COALESCE(MAX((-t.amount) * ${mult}), 0)) AS INTEGER) AS biggest
+              CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER) AS biggest
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
        GROUP BY ${EFF_CAT_ID}`,
@@ -1717,16 +1764,105 @@ api.get("/facts", async (c) => {
   return c.json(await listFacts(c.env));
 });
 
+// §SPLIT: спліт транзакції на кілька категорій. GET — частини tx; PUT — замінити всі (порожній
+// масив = прибрати спліт). Валідація: лише витрата, ≥2 частини, кожна <0, сума частин = сумі tx.
+// Спліт міняє категорійну аналітику → інвалідуємо Tx/Summary/Advice на клієнті.
+api.get("/transactions/:id/splits", async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT s.id, s.category_id, s.amount, cat.name AS category_name, cat.color AS category_color
+     FROM tx_splits s LEFT JOIN categories cat ON cat.id = s.category_id
+     WHERE s.tx_id = ? ORDER BY s.id`,
+  ).bind(c.req.param("id")).all();
+  return c.json(rows.results ?? []);
+});
+
+api.put("/transactions/:id/splits", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json<{ splits?: { category_id: number; amount: number }[] }>().catch(() => ({ splits: [] }));
+  const splits = (body.splits ?? []).map((p) => ({ category_id: Number(p.category_id), amount: Math.round(Number(p.amount)) }));
+  const tx = await c.env.DB.prepare("SELECT amount FROM transactions WHERE id = ?").bind(id).first<{ amount: number }>();
+  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
+  if (splits.length > 0) {
+    if (tx.amount >= 0) return c.json({ error: "Ділити можна лише витрату" }, 400);
+    if (splits.length < 2) return c.json({ error: "Потрібно щонайменше 2 частини" }, 400);
+    if (splits.some((p) => !p.category_id || !Number.isFinite(p.amount) || p.amount >= 0)) {
+      return c.json({ error: "Кожна частина: категорія + сума < 0" }, 400);
+    }
+    const sum = splits.reduce((s, p) => s + p.amount, 0);
+    if (sum !== tx.amount) return c.json({ error: `Сума частин має дорівнювати сумі операції (${tx.amount})` }, 400);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const stmts = [c.env.DB.prepare("DELETE FROM tx_splits WHERE tx_id = ?").bind(id)];
+  for (const p of splits) {
+    stmts.push(c.env.DB.prepare("INSERT INTO tx_splits (tx_id, category_id, amount, created_at) VALUES (?, ?, ?, ?)").bind(id, p.category_id, p.amount, now));
+  }
+  await c.env.DB.batch(stmts);
+  return c.json({ ok: true, count: splits.length });
+});
+
 // §A5: вбудований корпус знань — метадані для UI (сам текст іде в промт чату, не сюди).
 api.get("/knowledge", async (c) => {
   const { knowledgeMeta } = await import("../lib/knowledge/index.ts");
   return c.json(knowledgeMeta());
 });
 
-// §H: детермінований Індекс фінздоров'я (без AI).
+// Спарклайни: 6-міс місячні витрати на КАТЕГОРІЮ й на МЕРЧАНТА (канон stats.ts, зведено в ₴).
+// Мапа {ключ: [6 значень копійок]} + буксети-місяці. Клієнт малює міні-тренд у рядках списків.
+api.get("/analytics/spark", async (c) => {
+  const N = 6;
+  const nd = new Date();
+  const from = Math.floor(new Date(nd.getFullYear(), nd.getMonth() - (N - 1), 1).getTime() / 1000);
+  const buckets: string[] = [];
+  for (let i = N - 1; i >= 0; i--) {
+    const dt = new Date(nd.getFullYear(), nd.getMonth() - i, 1);
+    buckets.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
+  }
+  const bIdx = new Map(buckets.map((b, i) => [b, i]));
+  const { mult } = valueMode(await getRates(c.env.DB), null);
+  const [cat, mer] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT ${EFF_CAT_ID} AS id, strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}, m`,
+    ).bind(from).all<{ id: number; m: string; spent: number }>(),
+    c.env.DB.prepare(
+      `SELECT t.merchant AS name, strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND ${SPEND_WHERE} AND t.merchant IS NOT NULL GROUP BY t.merchant, m`,
+    ).bind(from).all<{ name: string; m: string; spent: number }>(),
+  ]);
+  const categories: Record<string, number[]> = {};
+  for (const r of cat.results ?? []) {
+    if (r.id == null) continue;
+    const arr = (categories[String(r.id)] ??= buckets.map(() => 0));
+    const i = bIdx.get(r.m); if (i != null) arr[i] = Math.round(r.spent);
+  }
+  const merchants: Record<string, number[]> = {};
+  for (const r of mer.results ?? []) {
+    const arr = (merchants[r.name] ??= buckets.map(() => 0));
+    const i = bIdx.get(r.m); if (i != null) arr[i] = Math.round(r.spent);
+  }
+  return c.json({ buckets, categories, merchants });
+});
+
+// §H: детермінований Індекс фінздоров'я (без AI) + запис скору за добу для тренду в часі.
 api.get("/analytics/health", async (c) => {
   const { financeHealth } = await import("../lib/advisor.ts");
-  return c.json(await financeHealth(c.env));
+  const h = await financeHealth(c.env);
+  const now = Math.floor(Date.now() / 1000);
+  const day = new Date(now * 1000).toISOString().slice(0, 10);
+  try {
+    await c.env.DB.prepare(
+      "INSERT INTO health_history (day, score, ts) VALUES (?, ?, ?) ON CONFLICT(day) DO UPDATE SET score = excluded.score, ts = excluded.ts",
+    ).bind(day, h.score, now).run();
+    const since = new Date((now - 45 * 86400) * 1000).toISOString().slice(0, 10);
+    const rows = await c.env.DB.prepare(
+      "SELECT day, score FROM health_history WHERE day >= ? ORDER BY day",
+    ).bind(since).all<{ day: string; score: number }>();
+    return c.json({ ...h, trend: rows.results ?? [] });
+  } catch {
+    return c.json({ ...h, trend: [] }); // таблиця може лагати на remote до міграції
+  }
 });
 
 api.post("/facts", async (c) => {

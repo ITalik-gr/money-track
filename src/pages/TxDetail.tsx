@@ -16,6 +16,7 @@ import { toast } from "../lib/toast.ts";
 import { currencySign } from "../lib/format.ts";
 import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
 import { Select } from "../components/Select.tsx";
+import { TxSplitEditor } from "../components/TxSplitEditor.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 import type { SelectOption } from "../components/Select.tsx";
 import type { Category } from "../../shared/types.ts";
@@ -226,6 +227,11 @@ export function TxDetail() {
             {tx.balance_after != null ? <FactLine k="Баланс після" v={<Money minor={tx.balance_after} currency={tx.currency_code} />} /> : null}
             {tx.comment ? <FactLine k="Коментар банку" v={tx.comment} /> : null}
           </div>
+
+          {/* §SPLIT: поділ витрати на кілька категорій (не для переказів/надходжень) */}
+          {tx.amount < 0 && !looksTransfer && (
+            <TxSplitEditor txId={id} amount={tx.amount} currency={tx.currency_code} cats={cats} />
+          )}
 
           {/* Окремий AI-блок: що AI знає + розпізнавання + нотатка + інлайн-чат */}
           <div className="card ai-block">

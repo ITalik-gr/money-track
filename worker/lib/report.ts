@@ -6,7 +6,7 @@ import type { Env } from "../env.ts";
 import { getRates } from "./finance.ts";
 import { fundsBreakdown } from "./advisor.ts";
 import {
-  STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum,
+  STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum,
   lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit,
 } from "./stats.ts";
 import { plannedActuals } from "./subscriptions.ts";
@@ -85,7 +85,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
     // Помітні операції з описом користувача — щоб AI не плутав разове з регулярним.
     env.DB.prepare(
       `SELECT t.id AS id, t.merchant AS merchant, t.user_note AS note, ${EFF_CAT_NAME} AS category,
-              CAST(ROUND((-t.amount) * ${mult}) AS INTEGER) AS amount
+              CAST(ROUND((-${EFF_AMOUNT}) * ${mult}) AS INTEGER) AS amount
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND t.user_note IS NOT NULL AND t.user_note <> ''
        ORDER BY amount DESC LIMIT 15`,
@@ -93,7 +93,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
     // Найбільші разові витрати (кандидати в аномалії).
     env.DB.prepare(
       `SELECT t.id AS id, t.merchant AS merchant, ${EFF_CAT_NAME} AS category,
-              CAST(ROUND((-t.amount) * ${mult}) AS INTEGER) AS amount
+              CAST(ROUND((-${EFF_AMOUNT}) * ${mult}) AS INTEGER) AS amount
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
        ORDER BY amount DESC LIMIT 6`,

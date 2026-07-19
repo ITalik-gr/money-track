@@ -17,6 +17,7 @@ import { RichFacts } from "../components/RichFacts.tsx";
 import { FactsCard } from "../components/FactsCard.tsx";
 import { HealthIndexCard } from "../components/HealthIndexCard.tsx";
 import { KnowledgeCorpusCard } from "../components/KnowledgeCorpusCard.tsx";
+import { CashflowCalendar } from "../components/CashflowCalendar.tsx";
 import { UsageCost } from "../components/UsageCost.tsx";
 import { InfoTip } from "../components/InfoTip.tsx";
 import { highlightAmounts } from "../lib/highlight.tsx";
@@ -78,6 +79,7 @@ export function Advisor() {
       {tab === "state" && (
         <div className="advisor-state">
           <HealthIndexCard />
+          <CashflowCalendar />
           <FactsCard />
           <KnowledgeCorpusCard />
         </div>

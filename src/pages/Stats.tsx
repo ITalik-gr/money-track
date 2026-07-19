@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useSearchParams, Link } from "react-router-dom";
-import { useGetCurrenciesQuery, useGetOverviewQuery, useGetCategoryDrillQuery, useGetSliceDrillQuery, useGetTransfersStatusQuery, useGetCompareQuery, useGetPatternsQuery, useGetPeriodModeQuery, useSetPeriodModeMutation } from "../store/api.ts";
+import { useGetCurrenciesQuery, useGetOverviewQuery, useGetCategoryDrillQuery, useGetSliceDrillQuery, useGetTransfersStatusQuery, useGetCompareQuery, useGetPatternsQuery, useGetPeriodModeQuery, useSetPeriodModeMutation, useGetSparkQuery } from "../store/api.ts";
+import { Sparkline } from "../components/Sparkline.tsx";
 import type { Overview, DrillTx } from "../store/api.ts";
 import { TransferReviewModal } from "../components/TransferReviewModal.tsx";
 import { currencySign, formatMinor, formatDate } from "../lib/format.ts";
@@ -318,6 +319,7 @@ function CategoryBreakdown({ rows, from, to, currency, sign }: {
   rows: Overview["byCategory"]; from: number; to: number; currency: Cur; sign: string;
 }) {
   const [openId, setOpenId] = useState<number | null>(null);
+  const { data: spark } = useGetSparkQuery();
   const primary = rows.filter((r) => !isSecondaryCat(r.category_name));
   const secondary = rows.filter((r) => isSecondaryCat(r.category_name));
   const total = primary.reduce((a, c) => a + c.spent, 0) || 1;
@@ -338,6 +340,7 @@ function CategoryBreakdown({ rows, from, to, currency, sign }: {
             onClick={() => id != null && setOpenId(open ? null : id)}>
             <span className="cb-name"><span className="d" style={{ background: color }} />{e.category_name ?? "без категорії"}</span>
             <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.min(p, 100)}%`, background: color }} /></span>
+            {id != null && spark?.categories[String(id)] && <Sparkline values={spark.categories[String(id)]} color={color} />}
             <span className="cb-val">{formatMinor(e.spent, { decimals: false })} {sign}</span>
             <span className="cb-pct">{p.toFixed(0)}%</span>
           </button>
@@ -469,6 +472,7 @@ function DrillTxList({ txs, kind = "expense" }: { txs: DrillTx[]; kind?: "expens
 function MerchantsBlock({ data, sign, merchMax }: {
   data: Overview; sign: string; merchMax: number;
 }) {
+  const { data: spark } = useGetSparkQuery();
   return (
     <section>
       <div className="section-head"><h2>Топ мерчантів</h2><InfoTip>Найбільші отримувачі витрат за період (зведено в ₴). Клік — сторінка мерчанта.</InfoTip><span className="label">клік — деталі</span></div>
@@ -481,6 +485,7 @@ function MerchantsBlock({ data, sign, merchMax }: {
                 <div className="m-name">{m.merchant}</div>
                 <div className="m-track"><div className="m-fill" style={{ width: `${(m.spent / merchMax) * 100}%` }} /></div>
               </div>
+              {spark?.merchants[m.merchant] && <Sparkline values={spark.merchants[m.merchant]} color="var(--accent)" />}
               <div style={{ textAlign: "right" }}>
                 <div className="m-val">{formatMinor(m.spent, { decimals: false })} {sign}</div>
                 <div className="m-sub">{m.n} оп. · сер. {formatMinor(Math.round(m.spent / m.n), { decimals: false })} {sign}</div>

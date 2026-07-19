@@ -1,6 +1,7 @@
 import { Gauge } from "./Gauge.tsx";
 import { InfoTip } from "./InfoTip.tsx";
 import { Icon } from "./Icon.tsx";
+import { Sparkline } from "./Sparkline.tsx";
 import { useGetHealthQuery } from "../store/api.ts";
 
 // §H: Індекс фінздоров'я — детермінований (без AI), джерело worker/lib/advisor.ts financeHealth.
@@ -43,7 +44,22 @@ export function HealthIndexCard() {
             ))}
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {data && (data.trend?.length ?? 0) >= 2 && (
+        <div className="health-trend">
+          <span className="label">Тренд індексу</span>
+          <Sparkline values={data.trend!.map((t) => t.score)} width={120} height={26} color="var(--accent)" goodUp />
+          <span className="health-trend-delta">
+            {(() => {
+              const t = data.trend!; const d = t[t.length - 1].score - t[0].score;
+              return d === 0 ? "без змін" : `${d > 0 ? "+" : "−"}${Math.abs(d)} за ${t.length} дн`;
+            })()}
+          </span>
+        </div>
+      )}
+
+      {!data && (
         <p className="muted" style={{ margin: 0 }}>Рахуємо…</p>
       )}
     </div>

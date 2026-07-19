@@ -257,7 +257,7 @@ export interface SavingsGoal {
 export interface Forecast {
   monthStart: number; now: number; daysInMonth: number; daysElapsed: number; daysRemaining: number;
   spend: number; income: number; pace: number;
-  projectedSpend: number; projectedNet: number;
+  projectedSpend: number; projectedLow?: number; projectedHigh?: number; projectedNet: number;
   upcomingPlanned: number;
   upcomingItems: { title: string; amount: number; at: number }[];
 }
@@ -329,7 +329,14 @@ export interface FactInput {
 export interface KnowledgeMeta { id: string; title: string; summary: string; chars: number }
 // §H: детермінований Індекс фінздоров'я (без AI) — 4 складові + зважений скор 0..100.
 export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
-export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[] }
+export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[]; trend?: { day: string; score: number }[] }
+// Спарклайни: 6-міс місячні витрати (копійки) на категорію (ключ=id) і мерчанта (ключ=назва).
+export interface SparkData { buckets: string[]; categories: Record<string, number[]>; merchants: Record<string, number[]> }
+// Cashflow-календар: очікувані списання по днях + стартова подушка (для проєкції балансу).
+export interface CashflowItem { at: number; date: string; title: string; amount: number; category_id: number | null; kind: string }
+export interface CashflowCalendar { from: number; to: number; now: number; cushion: number; items: CashflowItem[] }
+// §SPLIT: частина розділеної транзакції (копійки, знак як у tx). Порожній список = не розділено.
+export interface TxSplit { id: number; category_id: number; amount: number; category_name: string | null; category_color: string | null }
 
 export const api = createApi({
   reducerPath: "api",
@@ -676,6 +683,19 @@ export const api = createApi({
     getKnowledge: b.query<KnowledgeMeta[], void>({ query: () => "/knowledge" }),
     // §H: детермінований Індекс фінздоров'я. Провайдить Advice → перерахунок при зміні фактів/порад.
     getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
+    // Спарклайни (6-міс тренд у списках категорій/мерчантів). Оновлюється з новими операціями.
+    getSpark: b.query<SparkData, void>({ query: () => "/analytics/spark", providesTags: ["Summary"] }),
+    // Cashflow-календар очікуваних списань. Залежить від планів/підписок і подушки.
+    getCashflowCalendar: b.query<CashflowCalendar, { from?: number; to?: number } | void>({
+      query: (a) => { const p = new URLSearchParams(); if (a?.from) p.set("from", String(a.from)); if (a?.to) p.set("to", String(a.to)); const q = p.toString(); return `/analytics/cashflow-calendar${q ? `?${q}` : ""}`; },
+      providesTags: ["Summary", "Planned"],
+    }),
+    // §SPLIT: частини транзакції. Зміна рухає категорійну аналітику → інвалідуємо Tx/Summary/Advice.
+    getTxSplits: b.query<TxSplit[], string>({ query: (id) => `/transactions/${id}/splits`, providesTags: (_r, _e, id) => [{ type: "Tx", id }] }),
+    setTxSplits: b.mutation<{ ok: boolean; count: number }, { id: string; splits: { category_id: number; amount: number }[] }>({
+      query: ({ id, splits }) => ({ url: `/transactions/${id}/splits`, method: "PUT", body: { splits } }),
+      invalidatesTags: (_r, _e, { id }) => ["Tx", { type: "Tx", id }, "Summary", "Advice"],
+    }),
     addFact: b.mutation<{ id: number | null }, FactInput>({
       query: (body) => ({ url: "/facts", method: "POST", body }),
       invalidatesTags: ["Fact", "Tx", "Summary", "Advice"],
@@ -790,6 +810,10 @@ export const {
   useGetFactsQuery,
   useGetKnowledgeQuery,
   useGetHealthQuery,
+  useGetSparkQuery,
+  useGetCashflowCalendarQuery,
+  useGetTxSplitsQuery,
+  useSetTxSplitsMutation,
   useAddFactMutation,
   useConfirmFactMutation,
   useDeleteFactMutation,

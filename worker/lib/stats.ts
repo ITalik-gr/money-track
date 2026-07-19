@@ -12,21 +12,29 @@ import type { Env } from "../env.ts";
 export const TRANSFER_CAT = 13; // «Перекази і зняття» (+ діти через рол-ап)
 
 // Джоїни, потрібні для рол-апу і звичайної, і реальної категорії. Очікує alias `t`.
+// §SPLIT: LEFT JOIN tx_splits — якщо у tx є частини, рядок розмножується на них; sc/scp —
+// рол-ап категорії частини. Для НЕ-спліт tx усі sp/sc/scp = NULL → рядок один, поведінка стара.
 export const STATS_JOINS = `
   LEFT JOIN categories c  ON c.id  = t.category_id
   LEFT JOIN categories p  ON p.id  = c.parent_id
   LEFT JOIN categories rc ON rc.id = t.real_category_id
-  LEFT JOIN categories rp ON rp.id = rc.parent_id`;
+  LEFT JOIN categories rp ON rp.id = rc.parent_id
+  LEFT JOIN tx_splits sp  ON sp.tx_id = t.id
+  LEFT JOIN categories sc ON sc.id = sp.category_id
+  LEFT JOIN categories scp ON scp.id = sc.parent_id`;
 
-// Ефективна категорія (рол-ап у батька): спершу реальна (для зняття/переказів із
-// визначеною суттю), інакше звичайна. NULL = без категорії (рахуємо як витрату).
-export const EFF_CAT_ID = "COALESCE(rp.id, rc.id, p.id, c.id)";
-export const EFF_CAT_NAME = "COALESCE(rp.name, rc.name, p.name, c.name)";
-export const EFF_CAT_COLOR = "COALESCE(rp.color, rc.color, p.color, c.color)";
+// §SPLIT: ефективна сума рядка = сума частини (якщо tx розділено), інакше сума tx. Копійки, знак tx.
+export const EFF_AMOUNT = "COALESCE(sp.amount, t.amount)";
 
-// §6 Вагомість: override операції → вагомість ефективної категорії (рол-ап) → дефолт 'discretionary'.
-// Потребує STATS_JOINS (c/p/rc/rp). Значення: essential|discretionary|optional.
-export const EFF_IMPORTANCE = "COALESCE(t.importance, rp.importance, rc.importance, p.importance, c.importance, 'discretionary')";
+// Ефективна категорія (рол-ап у батька): спершу частина спліту (sc/scp), тоді реальна (для
+// зняття/переказів), інакше звичайна. NULL = без категорії (рахуємо як витрату).
+export const EFF_CAT_ID = "COALESCE(scp.id, sc.id, rp.id, rc.id, p.id, c.id)";
+export const EFF_CAT_NAME = "COALESCE(scp.name, sc.name, rp.name, rc.name, p.name, c.name)";
+export const EFF_CAT_COLOR = "COALESCE(scp.color, sc.color, rp.color, rc.color, p.color, c.color)";
+
+// §6 Вагомість: override операції → вагомість ефективної категорії (рол-ап; частина спліту має
+// пріоритет) → дефолт 'discretionary'. Потребує STATS_JOINS. Значення: essential|discretionary|optional.
+export const EFF_IMPORTANCE = "COALESCE(t.importance, scp.importance, sc.importance, rp.importance, rc.importance, p.importance, c.importance, 'discretionary')";
 
 // Канонічний фільтр витрати. `IS NOT 13` (а не `!= 13`) — щоб NULL-категорія (без
 // категорії) все одно рахувалась як витрата; лише явний бакет 13 виключається.
@@ -35,7 +43,7 @@ export const EFF_IMPORTANCE = "COALESCE(t.importance, rp.importance, rc.importan
 // витрата; інакше свіжий тиждень/місяць у репорті/Статистиці порожній, хоча в списку
 // транзакцій операції є (той список holds показує). Прапорець `hold` лишається для UI-бейджа.
 export const SPEND_WHERE = `
-  t.amount < 0
+  ${EFF_AMOUNT} < 0
   AND t.transfer_pair_id IS NULL
   AND NOT (t.is_transfer = 1 AND t.real_category_id IS NULL)
   AND ${EFF_CAT_ID} IS NOT ${TRANSFER_CAT}`;
@@ -65,7 +73,7 @@ export function valueMode(rates: Rates, currency?: number | null): { mult: strin
 // Готові SUM-вирази із ВБУДОВАНИМ канонічним фільтром (тому totals — один запит; запит
 // має включати STATS_JOINS). `mult` — з valueMode(). Округлено, знак витрати додатний.
 export function spendSum(mult: string): string {
-  return `CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
+  return `CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
 }
 export function incomeSum(mult: string): string {
   return `CAST(ROUND(COALESCE(SUM(CASE WHEN ${INCOME_WHERE} THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
@@ -74,7 +82,7 @@ export const SPEND_COUNT = `SUM(CASE WHEN ${SPEND_WHERE} THEN 1 ELSE 0 END)`;
 export const INCOME_COUNT = `SUM(CASE WHEN ${INCOME_WHERE} THEN 1 ELSE 0 END)`;
 // Сума однієї канонічної гілки (byCategory/byMerchant — SPEND_WHERE уже у WHERE рядка).
 export function amountSum(mult: string): string {
-  return `CAST(ROUND(COALESCE(SUM((-t.amount) * ${mult}), 0)) AS INTEGER)`;
+  return `CAST(ROUND(COALESCE(SUM((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER)`;
 }
 
 // ---- §E1: Разові vs регулярні (канонічно) -----------------------------------
@@ -131,7 +139,7 @@ export async function recurringOneoffSplit(
     ).bind(from, to).all<{ kind: string; spent: number; n: number }>(),
     env.DB.prepare(
       `SELECT t.merchant AS merchant, ${EFF_CAT_NAME} AS category,
-              CAST(ROUND((-t.amount) * ${mult}) AS INTEGER) AS amount, t.time AS time
+              CAST(ROUND((-${EFF_AMOUNT}) * ${mult}) AS INTEGER) AS amount, t.time AS time
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND NOT ${recur}
        ORDER BY amount DESC LIMIT 6`,

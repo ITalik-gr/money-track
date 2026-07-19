@@ -26,6 +26,9 @@ export function ForecastCard() {
           <div>
             <div className="label">прогноз витрат до кінця місяця</div>
             <div className="num-hero" style={{ fontSize: 34 }}><Money minor={f.projectedSpend} decimals={false} /></div>
+            {f.projectedLow != null && f.projectedHigh != null && f.projectedHigh > f.projectedLow && (
+              <div className="fc-range">≈ {formatMinor(f.projectedLow, { decimals: false })}–{formatMinor(f.projectedHigh, { decimals: false })} ₴</div>
+            )}
           </div>
           <div className="fc-net">
             <div className="label">прогноз-нетто</div>
