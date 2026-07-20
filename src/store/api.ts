@@ -96,6 +96,9 @@ export interface Advice {
   runway_months: number | null;
   usage?: AiUsageBrief;
   generated_at: number;
+  /** Порада зібрана детерміновано з чисел, без AI (ключ/ліміт/збій моделі). */
+  fallback?: boolean;
+  fallback_reason?: string;
 }
 export interface AdviceHistoryItem {
   generated_at: number; summary: string; runway_months: number | null; monthly_burn: number; own_funds: number;
@@ -148,7 +151,7 @@ export interface Overview {
   byImportance: { importance: string; spent: number; n: number }[];
 }
 export type PeriodMode = "calendar" | "rolling";
-export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group";
+export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group" | "notify";
 export type AiModelToken = "haiku" | "sonnet" | "opus";
 export type Preset = "week" | "month" | "quarter" | "year";
 
@@ -338,13 +341,43 @@ export interface SparkData { buckets: string[]; categories: Record<string, numbe
 // §CUR-PLAN: `amount` — у ₴ (його сумують і віднімають від подушки), оригінал — у `amount_orig`.
 export interface CashflowItem { at: number; date: string; title: string; amount: number; amount_orig: number; currency_code: number; category_id: number | null; kind: string }
 export interface CashflowCalendar { from: number; to: number; now: number; cushion: number; items: CashflowItem[] }
+// Автобюджет: пропозиція лімітів із канонічного місячного рівня категорії. Копійки.
+export interface AutoBudgetItem {
+  category_id: number; name: string; color: string | null;
+  importance: string; essential: boolean;
+  level: number; suggested: number; current: number | null;
+}
+export interface AutoBudget { trim_pct: number; total_level: number; total_suggested: number; items: AutoBudgetItem[] }
+// Збережений фільтр Транзакцій: `query` — той самий рядок, що в URL сторінки.
+export interface SavedFilter { id: string; name: string; query: string }
+// Глобальний пошук (командна панель Ctrl-K). Сторінки/дії статичні на клієнті — тут лише дані.
+export interface SearchResults {
+  merchants: { name: string; n: number; spent: number }[];
+  categories: { id: number; name: string; color: string | null; parent_name: string | null }[];
+  transactions: { id: string; time: number; amount: number; currency_code: number; merchant: string | null; category_name: string | null }[];
+}
+// Нетворт у часі: активи (подушка + інвест) − борг, на кінець кожного місяця. Копійки.
+export interface NetworthPoint { t: number; cushion: number; debt: number; investment: number; assets: number; net: number }
+export interface Networth { months: number; points: NetworthPoint[]; now: NetworthPoint | null; caveats: string[] }
 // §SPLIT: частина розділеної транзакції (копійки, знак як у tx). Порожній список = не розділено.
 export interface TxSplit { id: number; category_id: number; amount: number; category_name: string | null; category_color: string | null }
+// Центр сповіщень: стрічка того, що система «хоче сказати» (репорти/дедлайни/аномалії/…).
+export type NotifKind =
+  | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
+  | "big_tx" | "duplicate" | "health_drop" | "goal_risk" | "dead_sub" | "win" | "todo" | "ai";
+export interface Notification {
+  id: number; kind: NotifKind; title: string; body: string | null;
+  severity: "info" | "warn" | "urgent";
+  entity_type: string | null; entity_id: string | null;
+  created_at: number; read_at: number | null;
+}
+export interface NotificationFeed { items: Notification[]; unread: number }
+export type NotifPrefs = Record<NotifKind, boolean>
 
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter"],
   endpoints: (b) => ({
     getMe: b.query<{ authenticated: boolean }, void>({ query: () => "/me", providesTags: ["Me"] }),
     login: b.mutation<{ ok: boolean }, string>({
@@ -537,7 +570,7 @@ export const api = createApi({
       query: ({ id, body }) => ({ url: `/transactions/${id}`, method: "PATCH", body }),
       invalidatesTags: (_r, _e, { id }) => ["Tx", { type: "Tx", id }, "Summary", "Event"],
     }),
-    bulkEditTransactions: b.mutation<{ ok: boolean; updated: number }, { ids: string[]; event_id?: number | null; category_id?: number | null; is_transfer?: boolean }>({
+    bulkEditTransactions: b.mutation<{ ok: boolean; updated: number }, { ids: string[]; event_id?: number | null; category_id?: number | null; is_transfer?: boolean; importance?: string | null; tag_ids?: number[] }>({
       query: (body) => ({ url: "/transactions/bulk", method: "POST", body }),
       invalidatesTags: ["Tx", "Summary", "Event"],
     }),
@@ -688,6 +721,33 @@ export const api = createApi({
     getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
     // Спарклайни (6-міс тренд у списках категорій/мерчантів). Оновлюється з новими операціями.
     getSpark: b.query<SparkData, void>({ query: () => "/analytics/spark", providesTags: ["Summary"] }),
+    getAutoBudget: b.query<AutoBudget, { trim?: number } | void>({
+      query: (a) => `/budgets/auto?trim=${a?.trim ?? 10}`,
+      providesTags: ["Budget", "Tx"],
+    }),
+    applyAutoBudget: b.mutation<{ ok: boolean; applied: number }, { items: { category_id: number; amount: number }[] }>({
+      query: (body) => ({ url: "/budgets/auto", method: "POST", body }),
+      invalidatesTags: ["Budget", "Summary"],
+    }),
+    getSavedFilters: b.query<SavedFilter[], void>({
+      query: () => "/settings/saved-filters", providesTags: ["SavedFilter"],
+    }),
+    saveFilter: b.mutation<SavedFilter[], { name: string; query: string }>({
+      query: (body) => ({ url: "/settings/saved-filters", method: "POST", body }),
+      invalidatesTags: ["SavedFilter"],
+    }),
+    deleteSavedFilter: b.mutation<SavedFilter[], string>({
+      query: (id) => ({ url: `/settings/saved-filters/${id}`, method: "DELETE" }),
+      invalidatesTags: ["SavedFilter"],
+    }),
+    search: b.query<SearchResults, string>({
+      query: (q) => `/search?q=${encodeURIComponent(q)}`,
+      providesTags: ["Tx"],
+    }),
+    getNetworth: b.query<Networth, number | void>({
+      query: (months) => `/analytics/networth?months=${months ?? 12}`,
+      providesTags: ["Summary", "Account"],
+    }),
     // Cashflow-календар очікуваних списань. Залежить від планів/підписок і подушки.
     getCashflowCalendar: b.query<CashflowCalendar, { from?: number; to?: number } | void>({
       query: (a) => { const p = new URLSearchParams(); if (a?.from) p.set("from", String(a.from)); if (a?.to) p.set("to", String(a.to)); const q = p.toString(); return `/analytics/cashflow-calendar${q ? `?${q}` : ""}`; },
@@ -710,6 +770,38 @@ export const api = createApi({
     deleteFact: b.mutation<{ ok: boolean }, number>({
       query: (id) => ({ url: `/facts/${id}`, method: "DELETE" }),
       invalidatesTags: ["Fact", "Tx", "Summary", "Advice"],
+    }),
+    // Центр сповіщень. Стрічку тягне і сторінка, і бейдж на дзвіночку — один тег «Notification».
+    getNotifications: b.query<NotificationFeed, { kind?: string | null; limit?: number } | void>({
+      query: (a) => {
+        const p = new URLSearchParams();
+        if (a?.kind) p.set("kind", a.kind);
+        if (a?.limit) p.set("limit", String(a.limit));
+        const q = p.toString();
+        return `/notifications${q ? `?${q}` : ""}`;
+      },
+      providesTags: ["Notification"],
+    }),
+    markNotificationsRead: b.mutation<{ ok: boolean; unread: number }, number[]>({
+      query: (ids) => ({ url: "/notifications/read", method: "POST", body: { ids } }),
+      invalidatesTags: ["Notification"],
+    }),
+    markAllNotificationsRead: b.mutation<{ ok: boolean; unread: number }, void>({
+      query: () => ({ url: "/notifications/read-all", method: "POST" }),
+      invalidatesTags: ["Notification"],
+    }),
+    clearNotifications: b.mutation<{ ok: boolean }, void>({
+      query: () => ({ url: "/notifications", method: "DELETE" }),
+      invalidatesTags: ["Notification"],
+    }),
+    generateNotifications: b.mutation<{ created: number; pushed: number; pruned: number; skipped: string[] }, void>({
+      query: () => ({ url: "/notifications/generate", method: "POST" }),
+      invalidatesTags: ["Notification"],
+    }),
+    getNotifPrefs: b.query<NotifPrefs, void>({ query: () => "/notifications/prefs", providesTags: ["Notification"] }),
+    setNotifPrefs: b.mutation<NotifPrefs, Partial<NotifPrefs>>({
+      query: (body) => ({ url: "/notifications/prefs", method: "PUT", body }),
+      invalidatesTags: ["Notification"],
     }),
   }),
 });
@@ -814,10 +906,24 @@ export const {
   useGetKnowledgeQuery,
   useGetHealthQuery,
   useGetSparkQuery,
+  useGetNetworthQuery,
+  useLazySearchQuery,
+  useLazyGetAutoBudgetQuery,
+  useApplyAutoBudgetMutation,
+  useGetSavedFiltersQuery,
+  useSaveFilterMutation,
+  useDeleteSavedFilterMutation,
   useGetCashflowCalendarQuery,
   useGetTxSplitsQuery,
   useSetTxSplitsMutation,
   useAddFactMutation,
   useConfirmFactMutation,
   useDeleteFactMutation,
+  useGetNotificationsQuery,
+  useMarkNotificationsReadMutation,
+  useMarkAllNotificationsReadMutation,
+  useClearNotificationsMutation,
+  useGenerateNotificationsMutation,
+  useGetNotifPrefsQuery,
+  useSetNotifPrefsMutation,
 } = api;

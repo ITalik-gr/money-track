@@ -5,6 +5,9 @@ import { Icon } from "../components/Icon.tsx";
 import { CategoryIcon } from "../components/CategoryIcon.tsx";
 import { Select } from "../components/Select.tsx";
 import { GroupModal } from "../components/GroupModal.tsx";
+import { SavedFilters } from "../components/SavedFilters.tsx";
+import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
+import { toast } from "../lib/toast.ts";
 import {
   useBulkEditTransactionsMutation,
   useGetAccountsQuery,
@@ -128,6 +131,18 @@ export function Transactions() {
   async function assignGroup(eventId: number | null) { if (!ids.length) return; await bulkEdit({ ids, event_id: eventId }).unwrap(); exitSelect(); }
   async function assignCategory(categoryId: number | null) { if (!ids.length) return; await bulkEdit({ ids, category_id: categoryId }).unwrap(); exitSelect(); }
   async function markTransfer() { if (!ids.length) return; await bulkEdit({ ids, is_transfer: true }).unwrap(); exitSelect(); }
+  // Тег ДОДАЄТЬСЯ до наявних (сервер робить INSERT OR IGNORE), тож вибір не скидаємо —
+  // зазвичай на ту саму пачку хочеться повісити ще один тег.
+  async function addTag(tagId: number) {
+    if (!ids.length) return;
+    await bulkEdit({ ids, tag_ids: [tagId] }).unwrap();
+    toast.success(`Тег додано до ${ids.length} операцій`);
+  }
+  async function assignImportance(importance: string | null) {
+    if (!ids.length) return;
+    await bulkEdit({ ids, importance }).unwrap();
+    exitSelect();
+  }
 
   const tops = (cats ?? []).filter((c) => c.parent_id == null && !c.is_income);
   const childrenOf = (id: number) => (cats ?? []).filter((c) => c.parent_id === id);
@@ -245,6 +260,8 @@ export function Transactions() {
           </FilterSection>
 
           {anyFilter && <button className="btn ghost filt-clear" onClick={clearAll}>Скинути фільтри</button>}
+
+          <SavedFilters current={params.toString()} onApply={(query) => setParams(new URLSearchParams(query), { replace: true })} />
         </aside>
 
         <div className="tx-main">
@@ -278,6 +295,21 @@ export function Transactions() {
               <div className="bulk-field">
                 <Select value={null} placeholder="Категорія…" searchable
                   options={catOptions} onChange={(v) => assignCategory(v == null ? null : Number(v))} disabled={!selected.size || bulkSaving} />
+              </div>
+              <div className="bulk-field">
+                <Select value={null} placeholder="Тег…" searchable
+                  options={catOptions} onChange={(v) => v != null && addTag(Number(v))} disabled={!selected.size || bulkSaving} />
+              </div>
+              <div className="bulk-field">
+                {/* §6 вагомість гуртом. «за категорією» = зняти override операції — це не
+                    те саме, що «бажана», тож окремий пункт, а не дефолтне значення. */}
+                <Select value={null} placeholder="Вагомість…"
+                  options={[
+                    ...IMPORTANCE_LEVELS.map((lv) => ({ value: lv, label: IMPORTANCE_META[lv].label })),
+                    { value: "__inherit", label: "за категорією" },
+                  ]}
+                  onChange={(v) => v != null && assignImportance(v === "__inherit" ? null : String(v))}
+                  disabled={!selected.size || bulkSaving} />
               </div>
               <button className="btn ghost" onClick={markTransfer} disabled={!selected.size || bulkSaving}>Переказ</button>
               <button className="btn ghost" onClick={() => setSelected(new Set())} disabled={!selected.size}>Зняти</button>

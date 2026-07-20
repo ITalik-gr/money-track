@@ -1230,15 +1230,136 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 
 /* топбар-пошук — веде на /tx?q= */
-.top-search { position: relative; display: flex; align-items: center; }
-.top-search .ico { position: absolute; left: 12px; color: var(--muted); pointer-events: none; display: flex; }
-.top-search input {
-  width: 220px; padding: 9px 12px 9px 34px; border-radius: 999px;
-  border: 1px solid var(--line-strong); background: var(--surface); font-size: 13.5px;
+/* Кнопка-пошук у топбарі: виглядає як поле, але відкриває командну панель (⌘K).
+   Форму поля лишаємо свідомо — вона читається як «сюди можна писати», і саме тому
+   на неї тиснуть; `kbd` поруч навчає шорткату, який інакше ніхто б не знайшов. */
+.top-search {
+  display: flex; align-items: center; gap: 8px;
+  width: 240px; padding: 8px 10px 8px 12px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--muted); font-size: 13.5px; text-align: left;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
-.top-search input:focus { width: 260px; }
-@media (max-width: 620px) { .top-search input { width: 150px; } .top-search input:focus { width: 170px; } }
+.top-search:hover { background: var(--surface-2); border-color: var(--muted); }
+.top-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.top-search .ico { color: var(--muted); display: flex; flex: none; }
+.ts-ph { flex: 1; min-width: 0; }
+.ts-kbd {
+  flex: none; font-family: var(--font-mono); font-size: 11px;
+  padding: 2px 6px; border-radius: var(--radius-xs);
+  border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted);
+}
+@media (max-width: 620px) { .top-search { width: 170px; } .ts-kbd { display: none; } }
 @media (max-width: 400px) { .top-search { display: none; } }
+
+/* ---- Автобюджет із історії ------------------------------------------------ */
+.ab-trim { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3); }
+.ab-hint { margin: 0 0 var(--sp-4); font-size: var(--fs-xs); color: var(--muted); line-height: 1.5; }
+/* Рядок пропозиції = чекбокс + тіло `.bp-item` (спільне з AI-планом — та сама сутність,
+   той самий вигляд). Знятий рядок гасне, але лишається читабельним: він не зник, а виключений. */
+.ab-item { display: flex; align-items: flex-start; gap: var(--sp-3); cursor: pointer; }
+.ab-item > input { margin-top: 3px; flex: none; }
+.ab-item > .bp-item-main { flex: 1; min-width: 0; }
+.ab-item.off { opacity: 0.45; }
+.ab-tag {
+  margin-left: 6px; padding: 1px 6px; border-radius: var(--radius-pill);
+  font-size: 10px; letter-spacing: 0.02em; color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.ab-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  flex-wrap: wrap; margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line);
+}
+.ab-total { font-size: var(--fs-sm); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+/* ---- Збережені фільтри (сайдбар Транзакцій) ------------------------------- */
+.sf { margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
+.sf-head {
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: var(--sp-2);
+}
+.sf-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--sp-2); }
+/* Рядок = «застосувати» + «видалити». Кошик проявляється на hover/focus рядка, щоб
+   список читався як перелік, а не як стіна іконок. */
+.sf-item { display: flex; align-items: center; gap: 2px; border-radius: var(--radius-sm); }
+.sf-item:hover, .sf-item:focus-within { background: var(--surface-2); }
+.sf-apply {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
+  padding: 7px 8px; border: none; background: none; color: var(--ink-2);
+  font: inherit; font-size: var(--fs-sm); text-align: left; cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.sf-apply > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sf-apply > svg { color: var(--accent); flex: none; }
+.sf-item.active .sf-apply { color: var(--ink); font-weight: 500; }
+.sf-del {
+  flex: none; padding: 6px; border: none; background: none; color: var(--muted);
+  border-radius: var(--radius-xs); cursor: pointer; opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.sf-item:hover .sf-del, .sf-del:focus-visible { opacity: 1; }
+.sf-del:hover { color: var(--neg); }
+.sf-form { display: flex; gap: 6px; }
+.sf-form input {
+  flex: 1; min-width: 0; padding: 6px 9px; font-size: var(--fs-sm);
+  border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface);
+}
+.sf-add { width: 100%; justify-content: center; }
+@media (max-width: 900px) { .sf-del { opacity: 1; } }  /* на тачі hover нема */
+
+/* ---- Командна панель (Ctrl-K) -------------------------------------------- */
+.cmdk-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: color-mix(in srgb, var(--ink) 32%, transparent);
+  backdrop-filter: blur(2px);
+  display: flex; justify-content: center; align-items: flex-start;
+  padding: 12vh 16px 16px;
+}
+.cmdk {
+  width: min(620px, 100%); max-height: 60vh; display: flex; flex-direction: column;
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden;
+}
+.cmdk-input {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px; border-bottom: 1px solid var(--line);
+}
+.cmdk-input > svg { color: var(--muted); flex: none; }
+.cmdk-input input {
+  flex: 1; min-width: 0; border: none; background: none; padding: 0;
+  font: inherit; font-size: var(--fs-lg); color: var(--ink);
+}
+.cmdk-input input:focus { outline: none; }
+.cmdk-input kbd {
+  flex: none; font-size: 11px; padding: 2px 6px; border-radius: var(--radius-xs);
+  border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted);
+}
+.cmdk-list { overflow-y: auto; padding: 6px; }
+.cmdk-group {
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); padding: 10px 10px 4px;
+}
+.cmdk-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 9px 10px; border: none; background: none; color: inherit; font: inherit;
+  border-radius: var(--radius-sm); cursor: pointer;
+}
+/* Підсвітка ТІЛЬКИ активного рядка — курсор і клавіатура ведуть один і той самий вибір,
+   тож окремий :hover-стан дав би два «активних» рядки одночасно. */
+.cmdk-row.active { background: var(--accent-soft); }
+.cmdk-ico {
+  display: grid; place-items: center; width: 26px; height: 26px; flex: none;
+  border-radius: var(--radius-xs); background: var(--surface-2); color: var(--muted);
+}
+.cmdk-row.active .cmdk-ico { color: var(--accent); }
+.cmdk-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); }
+.cmdk-hint { flex: none; font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.cmdk-empty { padding: 24px; text-align: center; color: var(--muted); font-size: var(--fs-sm); }
+@media (max-width: 520px) {
+  .cmdk-overlay { padding: 6vh 10px 10px; }
+  .cmdk { max-height: 76vh; }
+  .cmdk-hint { display: none; }
+}
 
 .icon-btn {
   width: 40px; height: 40px; border-radius: 12px;
@@ -2716,6 +2837,101 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .top-sub-row:first-child { border-top: none; }
 .top-sub-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .top-sub-amt { font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 600; }
+
+/* Межі точності нетворту — дрібним під графіком. Це не помилка й не попередження,
+   а виноска: графік чесний рівно настільки, наскільки дозволяють наявні дані. */
+.nw-caveats {
+  margin: var(--sp-3) 0 0; padding-left: 1.1em;
+  font-size: var(--fs-xs); color: var(--muted); line-height: 1.5;
+}
+.nw-caveats li + li { margin-top: 3px; }
+
+/* Позначка «порада без AI» (детермінований fallback). Нейтральний info-тон, не помилка:
+   нічого не зламалось назавжди — просто показуємо простішу версію на тих самих числах. */
+.fb-note {
+  display: flex; gap: var(--sp-3); align-items: flex-start;
+  padding: var(--sp-3) var(--sp-4); margin: 0 2px;
+  border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.45;
+  color: var(--ink-2);
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+}
+.fb-note > svg { color: var(--muted); flex: none; margin-top: 2px; }
+.fb-note b { color: var(--ink); }
+
+/* ---- Порівняння двох довільних місяців (таб Статистики) ------------------- */
+/* Два селекти в один ряд із «проти» посередині — вибір читається як речення.
+   На вузькому екрані «проти» їде в окремий рядок, селекти стають на всю ширину. */
+.mc-pickers {
+  display: flex; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+.mc-pick { display: flex; flex-direction: column; gap: 5px; min-width: 190px; flex: 1 1 190px; }
+.mc-pick > .label { font-size: var(--fs-xs); color: var(--muted); }
+.mc-vs { font-size: var(--fs-sm); color: var(--muted); padding-bottom: 9px; flex: none; }
+.mc-note {
+  margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.45;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--line));
+}
+
+/* ---- Центр сповіщень (ROADMAP §Черга 2) ---------------------------------- */
+/* Стрічка = ledger-рядки, не «картки-бульбашки»: подій багато, вони скануються очима
+   зверху вниз. Непрочитане позначає ліва акцентна засічка + жирніший заголовок —
+   без кольорових плашок на весь рядок (DESIGN.md §10.1 «точний інструмент»). */
+.nt-group { margin-bottom: var(--sp-5); }
+.nt-day {
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); margin: 0 2px var(--sp-2);
+}
+.nt-list { display: flex; flex-direction: column; }
+.nt-row {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: start;
+  gap: var(--sp-3); width: 100%; text-align: left;
+  padding: var(--sp-4) var(--sp-5);
+  border: none; border-top: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  background: none; color: inherit; font: inherit; cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out);
+}
+.nt-row:first-child { border-top: none; }
+.nt-row:hover { background: var(--surface-2); }
+.nt-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.nt-row.unread { border-left-color: var(--accent); }
+.nt-row.read { color: var(--ink-2); }
+.nt-row.read .nt-title { font-weight: 500; color: var(--ink-2); }
+
+.nt-ico {
+  display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0;
+  border-radius: var(--radius-sm); color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+/* Серйозність фарбує лише іконку — рядок лишається спокійним. */
+.nt-ico.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 30%, var(--line)); }
+.nt-ico.urgent { color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 30%, var(--line)); }
+
+.nt-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.nt-title { font-size: var(--fs-md); font-weight: 600; color: var(--ink); }
+.nt-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.nt-time { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.nt-prefs { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-3); }
+.nt-pref { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; }
+.nt-pref > svg { color: var(--muted); }
+
+/* Лічильник непрочитаних на дзвіночку. До 9 — цифра, далі «9+». */
+.icon-btn .count-badge {
+  position: absolute; top: 3px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px;
+  display: grid; place-items: center; border-radius: 999px;
+  background: var(--neg); color: #fff; border: 1.5px solid var(--surface);
+  font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+  .nt-row { padding: var(--sp-3) var(--sp-4); }
+  .nt-time { display: none; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

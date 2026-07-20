@@ -18,8 +18,10 @@ import { FactsCard } from "../components/FactsCard.tsx";
 import { HealthIndexCard } from "../components/HealthIndexCard.tsx";
 import { KnowledgeCorpusCard } from "../components/KnowledgeCorpusCard.tsx";
 import { CashflowCalendar } from "../components/CashflowCalendar.tsx";
+import { NetworthCard } from "../components/NetworthCard.tsx";
 import { UsageCost } from "../components/UsageCost.tsx";
 import { InfoTip } from "../components/InfoTip.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { renderRich } from "../lib/citations.tsx";
 import { formatMinor } from "../lib/format.ts";
@@ -33,9 +35,13 @@ const TABS = { advice: "Поради", state: "Стан фінансів" } as c
 type AdvTab = keyof typeof TABS;
 
 export function Advisor() {
-  const { data: advice } = useGetAdviceQuery();
+  const { data: stored } = useGetAdviceQuery();
   const [generate, { isLoading: generating }] = useGenerateAdviceMutation();
   const [genError, setGenError] = useState<string | null>(null);
+  // Детермінований fallback свідомо НЕ зберігається на сервері (щоб не затер останню
+  // нормальну AI-пораду), тож тримаємо його тут і показуємо замість збереженої.
+  const [fallback, setFallback] = useState<Advice | null>(null);
+  const advice = fallback ?? stored;
   const [params, setParams] = useSearchParams();
   const tab: AdvTab = params.get("tab") === "state" ? "state" : "advice";
   const setTab = (t: AdvTab) => setParams((p) => { p.set("tab", t); return p; }, { replace: true });
@@ -43,7 +49,11 @@ export function Advisor() {
   async function runAdvice() {
     setGenError(null);
     try {
-      await generate().unwrap();
+      const res = await generate().unwrap();
+      // Сервер міг віддати детермінований fallback замість AI — тоді показуємо його
+      // (а не стару збережену пораду) і чесно кажемо чому.
+      setFallback(res.fallback ? res : null);
+      if (res.fallback) toast.info("AI недоступний — показуємо підсумок на числах");
     } catch (e) {
       const raw = errText(e);
       const friendly = raw.includes("not set")
@@ -80,6 +90,7 @@ export function Advisor() {
       {tab === "state" && (
         <div className="advisor-state">
           <HealthIndexCard />
+          <NetworthCard />
           <CashflowCalendar />
           <FactsCard />
           <KnowledgeCorpusCard />
@@ -129,6 +140,18 @@ export function Advisor() {
 
             {advice?.suggestions?.length ? (
               <div className="stack">
+                {/* Порада без AI мусить бути ПОЗНАЧЕНОЮ: інакше слабший детермінований
+                    текст читається як повноцінний AI-розбір, і збій лишається невидимим. */}
+                {advice.fallback && (
+                  <div className="fb-note" role="status">
+                    <Icon name="info" size={15} />
+                    <div>
+                      <b>Без AI — підсумок на твоїх числах.</b>
+                      {advice.fallback_reason ? ` ${advice.fallback_reason}` : ""}
+                      {" "}Цифри канонічні, але формулювання простіші, ніж у повного розбору.
+                    </div>
+                  </div>
+                )}
                 <SinceLastTime advice={advice} />
                 {advice.summary && <p className="ai-text" style={{ margin: "0 2px 6px" }}>{renderRich(advice.summary)}</p>}
                 {advice.suggestions.map((s, i) => (

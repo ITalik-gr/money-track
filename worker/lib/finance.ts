@@ -15,6 +15,67 @@ export async function getRates(db: D1Database): Promise<Rates> {
   return raw ? (JSON.parse(raw.value) as Rates) : {};
 }
 
+/**
+ * Зафіксувати поточні курси за добу (крон). Ідемпотентно: повторний прогін того самого дня
+ * перезаписує запис, а не плодить дублі.
+ *
+ * Навіщо: без історії ретроспективні перерахунки (нетворт) беруть СЬОГОДНІШНІЙ курс на
+ * минулі залишки, і коливання курсу читається як рух грошей.
+ */
+export async function snapshotRates(db: D1Database, now = Math.floor(Date.now() / 1000)): Promise<number> {
+  const rates = await getRates(db);
+  const day = new Date(now * 1000).toISOString().slice(0, 10);
+  const entries = Object.entries(rates).filter(([code, rate]) => Number(code) > 0 && rate > 0);
+  if (!entries.length) return 0;
+  await db.batch(entries.map(([code, rate]) =>
+    db.prepare(
+      `INSERT INTO rate_history (day, code, rate, ts) VALUES (?, ?, ?, ?)
+       ON CONFLICT(day, code) DO UPDATE SET rate = excluded.rate, ts = excluded.ts`,
+    ).bind(day, Number(code), rate, now),
+  ));
+  return entries.length;
+}
+
+/**
+ * Курси на КОЖНУ з переданих дат. Для дати без запису бере найсвіжіший ЛІВОРУЧ (курс тримається
+ * до наступної фіксації), а якщо історії ще нема зовсім — фолбек на поточні курси.
+ * Повертає {день: Rates} + `covered` — чи всі дати покриті історією (для чесного caveat).
+ */
+export async function ratesForDays(
+  db: D1Database, days: string[],
+): Promise<{ byDay: Map<string, Rates>; covered: boolean }> {
+  const current = await getRates(db);
+  const byDay = new Map<string, Rates>();
+  if (!days.length) return { byDay, covered: true };
+
+  // Таблиці може ще не бути на remote (міграція 0024) — тоді просто працюємо на поточних
+  // курсах, як до фічі. Нова аналітика не має ламати вже робочий графік.
+  let rows: { results?: { day: string; code: number; rate: number }[] };
+  try {
+    rows = await db.prepare(
+      "SELECT day, code, rate FROM rate_history WHERE day <= ? ORDER BY day ASC",
+    ).bind(days[days.length - 1]).all<{ day: string; code: number; rate: number }>();
+  } catch {
+    for (const day of days) byDay.set(day, current);
+    return { byDay, covered: false };
+  }
+
+  // Один прохід: несемо «останній відомий курс» уперед по датах.
+  const running: Rates = {};
+  let i = 0;
+  const hist = rows.results ?? [];
+  let anyMissing = false;
+  for (const day of [...days].sort()) {
+    while (i < hist.length && hist[i].day <= day) {
+      running[String(hist[i].code)] = hist[i].rate;
+      i++;
+    }
+    if (!Object.keys(running).length) { byDay.set(day, current); anyMissing = true; }
+    else byDay.set(day, { ...running });
+  }
+  return { byDay, covered: !anyMissing };
+}
+
 /** Convert a minor-unit amount in `code` to UAH minor units. 0 rate → 0 (unknown). */
 export function toUAHMinor(amountMinor: number, code: number, rates: Rates): number {
   if (code === 980) return amountMinor;

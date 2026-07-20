@@ -1,7 +1,9 @@
 import { useState } from "react";
-import { NavLink, Outlet, Link, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, Link } from "react-router-dom";
 import { Icon } from "./Icon.tsx";
 import { Toaster } from "./Toaster.tsx";
+import { CommandPalette, openCommandPalette } from "./CommandPalette.tsx";
+import { useGetNotificationsQuery } from "../store/api.ts";
 
 // Пункти навігації. desktop=сайдбар (усі), mobile=нижній таб-бар (тільки core).
 const items = [
@@ -36,15 +38,35 @@ function useTheme() {
   return { dark, toggle };
 }
 
-// Топбар-пошук: інпут → веде на /tx?q=… (Transactions читає q з URL).
+// Топбар-пошук: відкриває командну панель (Ctrl-K). Раніше тут був окремий інпут, що вів
+// на /tx?q= — панель уміє те саме й більше, тож два пошуки поруч були зайвим вибором.
+// Кнопка лишається головним способом ЗНАЙТИ шорткат: без неї про ⌘K ніхто б не дізнався.
 function TopSearch() {
-  const navigate = useNavigate();
-  const [q, setQ] = useState("");
   return (
-    <form className="top-search" onSubmit={(e) => { e.preventDefault(); navigate(`/tx${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ""}`); }}>
+    <button type="button" className="top-search" onClick={openCommandPalette}>
       <span className="ico"><Icon name="search" size={16} /></span>
-      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Пошук операцій…" aria-label="Пошук" />
-    </form>
+      <span className="ts-ph">Пошук…</span>
+      <kbd className="ts-kbd">⌘K</kbd>
+    </button>
+  );
+}
+
+// Дзвіночок → /notifications. Бейдж — РЕАЛЬНИЙ лічильник непрочитаних (раніше тут висіла
+// статична червона крапка, яка світилась завжди й нічого не означала).
+function NotifBell() {
+  // Стрічку наповнює добовий крон, тож рідкого опитування досить — без нього бейдж
+  // застигав би до перезавантаження сторінки (RTK кешує, а інвалідації ззовні нема).
+  const { data } = useGetNotificationsQuery({ limit: 1 }, { pollingInterval: 600_000 });
+  const unread = data?.unread ?? 0;
+  return (
+    <Link
+      to="/notifications"
+      className="icon-btn"
+      aria-label={unread ? `Сповіщення, непрочитаних: ${unread}` : "Сповіщення"}
+    >
+      <Icon name="bell" />
+      {unread > 0 && <span className="count-badge">{unread > 9 ? "9+" : unread}</span>}
+    </Link>
   );
 }
 
@@ -55,6 +77,7 @@ export function Layout() {
   return (
     <div className="shell">
       <Toaster />
+      <CommandPalette />
       <aside className="sidebar">
         <div className="brand">
           <span className="mark">₴</span>
@@ -99,10 +122,7 @@ export function Layout() {
           </Link>
           <div className="topbar-right">
             <TopSearch />
-            <button className="icon-btn" aria-label="Сповіщення" type="button">
-              <Icon name="bell" />
-              <span className="dot-badge" />
-            </button>
+            <NotifBell />
             <Link to="/setup" className="avatar-chip">
               <span className="avatar">В</span>
               <span className="who2">

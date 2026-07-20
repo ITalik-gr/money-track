@@ -94,6 +94,30 @@ export default {
       return;
     }
 
+    // Центр сповіщень: добова генерація стрічки (06:00 UTC ≈ 08:00 Київ). Детермінована,
+    // без AI — дедуп по `dedup_key`, тож повторний прогін нічого не дублює.
+    if (event.cron === "0 6 * * *") {
+      ctx.waitUntil(
+        (async () => {
+          // Фіксуємо курс за добу ПЕРЕД стрічкою: історія курсів потрібна ретроспективним
+          // перерахункам (нетворт), і одна пропущена доба — це назавжди діра в ряді.
+          try {
+            const { snapshotRates } = await import("./lib/finance.ts");
+            await snapshotRates(env.DB);
+          } catch {
+            /* best-effort; завтра запишеться наступна доба */
+          }
+          try {
+            const { generateNotifications } = await import("./lib/notify.ts");
+            await generateNotifications(env);
+          } catch {
+            /* стрічка best-effort; завтрашній крон повторить */
+          }
+        })(),
+      );
+      return;
+    }
+
     // Місячний репорт (1 число). Окремий крон — не робимо тижневих задач.
     if (event.cron === "0 9 1 * *") {
       ctx.waitUntil(
@@ -125,6 +149,9 @@ export default {
             }
           }
           await setState(env.DB, "rates", JSON.stringify(map));
+          // Одразу фіксуємо свіжі курси в історію (див. §Історія курсів).
+          const { snapshotRates } = await import("./lib/finance.ts");
+          await snapshotRates(env.DB);
         } catch {
           /* rate refresh is best-effort */
         }

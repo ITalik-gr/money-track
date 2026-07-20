@@ -2,7 +2,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { setState, getState } from "../lib/repo.ts";
-import { computeSummary, createCashTx, getRates } from "../lib/finance.ts";
+import { computeSummary, createCashTx, getRates, toUAHMinor, ratesForDays, type Rates } from "../lib/finance.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_WHERE,
   SPEND_COUNT, valueMode, uahMult, spendSum, incomeSum, amountSum, periodBounds,
@@ -146,6 +146,7 @@ api.get("/export/transactions.csv", async (c) => {
 api.post("/transactions/bulk", async (c) => {
   const b = await c.req.json<{
     ids: string[]; event_id?: number | null; category_id?: number | null; is_transfer?: boolean;
+    importance?: string | null; tag_ids?: number[];
   }>();
   const ids = [...new Set(b.ids ?? [])].filter(Boolean);
   if (!ids.length) return c.json({ ok: true, updated: 0 });
@@ -155,15 +156,50 @@ api.post("/transactions/bulk", async (c) => {
   if (b.event_id !== undefined) { sets.push("event_id = ?"); vals.push(b.event_id); }
   if (b.category_id !== undefined) { sets.push("category_id = ?"); vals.push(b.category_id); }
   if (b.is_transfer !== undefined) { sets.push("is_transfer = ?"); vals.push(b.is_transfer ? 1 : 0); }
-  if (!sets.length) return c.json({ ok: true, updated: 0 });
+  // §6 вагомість: null = зняти override операції (успадкує від категорії). Чужі значення
+  // не пускаємо — вони мовчки випали б з `EFF_IMPORTANCE` і зіпсували всю аналітику вагомості.
+  if (b.importance !== undefined) {
+    if (b.importance !== null && !["essential", "discretionary", "optional"].includes(b.importance)) {
+      return c.json({ error: "invalid importance" }, 400);
+    }
+    sets.push("importance = ?"); vals.push(b.importance);
+  }
+
+  // §FK-GUARD: `INSERT OR IGNORE` гасить лише конфлікт унікальності, а НЕ порушення FK —
+  // один неіснуючий id тега завалив би весь батч у `FOREIGN KEY constraint failed`
+  // (перевірено на D1). Тож фільтруємо теги по наявних категоріях перед записом.
+  let validTags: number[] = [];
+  if (b.tag_ids?.length) {
+    const want = [...new Set(b.tag_ids)].filter((t): t is number => Number.isFinite(t));
+    if (want.length) {
+      const rows = await c.env.DB.prepare(
+        `SELECT id FROM categories WHERE id IN (${want.map(() => "?").join(",")})`,
+      ).bind(...want).all<{ id: number }>();
+      validTags = (rows.results ?? []).map((r) => r.id);
+    }
+  }
+  if (!sets.length && !validTags.length) return c.json({ ok: true, updated: 0 });
 
   let updated = 0;
   for (let i = 0; i < ids.length; i += 100) {
     const chunk = ids.slice(i, i + 100);
     const ph = chunk.map(() => "?").join(",");
-    const r = await c.env.DB.prepare(`UPDATE transactions SET ${sets.join(", ")} WHERE id IN (${ph})`)
-      .bind(...vals, ...chunk).run();
-    updated += r.meta.changes ?? 0;
+    if (sets.length) {
+      const r = await c.env.DB.prepare(`UPDATE transactions SET ${sets.join(", ")} WHERE id IN (${ph})`)
+        .bind(...vals, ...chunk).run();
+      updated += r.meta.changes ?? 0;
+    }
+    // Теги — окрема таблиця many-to-many. ДОДАЄМО, не заміщаємо: гуртова дія «повісити тег»
+    // не повинна тихо знести теги, розставлені поштучно. Зняття — з деталей операції.
+    if (validTags.length) {
+      const tags = validTags;
+      {
+        await c.env.DB.batch(chunk.flatMap((id) => tags.map((tag) =>
+          c.env.DB.prepare("INSERT OR IGNORE INTO transaction_tags (transaction_id, category_id) VALUES (?, ?)").bind(id, tag),
+        )));
+        if (!sets.length) updated += chunk.length;
+      }
+    }
   }
   return c.json({ ok: true, updated });
 });
@@ -333,6 +369,83 @@ api.put("/budgets", async (c) => {
     await del.run();
   }
   return c.json({ ok: true });
+});
+
+/**
+ * Автобюджет із історії — детерміновано, БЕЗ AI (є окремий `/budgets/chat` для розмови).
+ *
+ * Ліміт = канонічний місячний рівень категорії (`categoryMonthlyLevels`, §Канонічне) мінус
+ * запас `trim`%. Беремо саме рівень, а не «середнє за 90 днів»: він уже вміє відрізняти
+ * fixed-кост від змінної категорії й не роздувається разовим піком.
+ *
+ * ⚠️ Обовʼязкові категорії (`importance='essential'` — оренда, продукти, ліки) НЕ ріжемо:
+ * запропонувати «оренду на 10% менше» неможливо виконати, і такий бюджет одразу стає
+ * фальшивим червоним. Їм ліміт = рівень як є.
+ * GET віддає ПРОПОЗИЦІЮ (нічого не змінює), POST застосовує обрані — щоб один тап не
+ * переписав мовчки вже налаштовані конверти.
+ */
+api.get("/budgets/auto", async (c) => {
+  const url = new URL(c.req.url);
+  const trim = Math.min(Math.max(Number(url.searchParams.get("trim") ?? 10), 0), 50) / 100;
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const now = Math.floor(Date.now() / 1000);
+
+  const [levels, cats, existing] = await Promise.all([
+    categoryMonthlyLevels(c.env, mult, { now }),
+    c.env.DB.prepare(
+      `SELECT c.id, c.name, c.color, c.importance FROM categories c
+       WHERE c.parent_id IS NULL AND COALESCE(c.is_income, 0) = 0`,
+    ).all<{ id: number; name: string; color: string | null; importance: string | null }>(),
+    c.env.DB.prepare("SELECT category_id, amount FROM budgets WHERE period = 'month'")
+      .all<{ category_id: number; amount: number }>(),
+  ]);
+  const currentByCat = new Map((existing.results ?? []).map((b) => [b.category_id, b.amount]));
+
+  const MIN_LEVEL = 30000; // 300 ₴/міс — дрібним категоріям конверт не потрібен
+  const items = (cats.results ?? [])
+    .map((cat) => {
+      const level = levels.get(cat.id)?.level ?? 0;
+      if (level < MIN_LEVEL) return null;
+      const essential = cat.importance === "essential";
+      // Округлюємо до 50 ₴ — «2 350 ₴» читається як рішення, «2 347 ₴» як шум обчислення.
+      const raw = essential ? level : level * (1 - trim);
+      const suggested = Math.max(MIN_LEVEL, Math.round(raw / 5000) * 5000);
+      return {
+        category_id: cat.id, name: cat.name, color: cat.color,
+        importance: cat.importance ?? "discretionary",
+        essential,
+        level, suggested,
+        current: currentByCat.get(cat.id) ?? null,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => b.level - a.level);
+
+  return c.json({
+    trim_pct: Math.round(trim * 100),
+    total_level: items.reduce((s, i) => s + i.level, 0),
+    total_suggested: items.reduce((s, i) => s + i.suggested, 0),
+    items,
+  });
+});
+
+api.post("/budgets/auto", async (c) => {
+  const b = await c.req.json<{ items?: { category_id: number; amount: number }[] }>()
+    .catch(() => ({} as { items?: { category_id: number; amount: number }[] }));
+  const items = (b.items ?? [])
+    .map((i) => ({ category_id: Number(i.category_id), amount: Math.round(Number(i.amount)) }))
+    .filter((i) => Number.isFinite(i.category_id) && i.amount > 0);
+  if (!items.length) return c.json({ error: "Нема що застосовувати" }, 400);
+
+  // Той самий delete-then-insert, що й у PUT /budgets (унікального індексу на таблиці нема).
+  const stmts = items.flatMap((i) => [
+    c.env.DB.prepare("DELETE FROM budgets WHERE category_id = ? AND period = 'month'").bind(i.category_id),
+    c.env.DB.prepare("INSERT INTO budgets (category_id, period, amount, currency_code, rollover) VALUES (?, 'month', ?, 980, 0)")
+      .bind(i.category_id, i.amount),
+  ]);
+  await c.env.DB.batch(stmts);
+  return c.json({ ok: true, applied: items.length });
 });
 
 // §Хвіст C: глобальний лічильник витрат AI — «$ за сьогодні / цей місяць / за весь час».
@@ -920,6 +1033,112 @@ api.get("/analytics/capital-trend", async (c) => {
   return c.json({ now_uah: Math.round(summary.totalUAH / 100), points });
 });
 
+/**
+ * Нетворт у часі: активи (ліквідні + інвест) мінус борги, по місяцях.
+ *
+ * Відрізняється від `capital-trend`: той дає ОДНУ лінію нетто-капіталу. Тут потрібен
+ * РОЗКЛАД, а він рахується лише поточкового: знак визначає, чи рахунок іде в подушку
+ * чи в борг, тож зводити рахунки перед реконструкцією не можна. Реконструюємо кожен
+ * рахунок назад окремо, а cushion/debt/investment складаємо ТИМ САМИМ правилом, що
+ * `fundsBreakdown` (§R3) — інакше «зараз» на графіку не збігся б із Порадником.
+ *
+ * ⚠️ Дві чесні межі точності, які віддаємо клієнту в `caveats` (без них графік бреше):
+ *  1) Курси — ПОТОЧНІ. Історичних не зберігаємо, тож валютний залишок минулих місяців
+ *     оцінено сьогоднішнім курсом (рух курсу виглядатиме як рух грошей).
+ *  2) Рахунки без історії операцій (крипта, ручні картки) назад лишаються ПЛОСКИМИ —
+ *     їхній баланс це ручний зріз «на зараз», а не ряд у часі.
+ */
+api.get("/analytics/networth", async (c) => {
+  const url = new URL(c.req.url);
+  const months = Math.min(Math.max(Number(url.searchParams.get("months") ?? 12), 2), 24);
+  const rates = await getRates(c.env.DB);
+  const now = Math.floor(Date.now() / 1000);
+  const d = new Date(now * 1000);
+  const fromDate = new Date(d.getFullYear(), d.getMonth() - months + 1, 1);
+  const from = Math.floor(fromDate.getTime() / 1000);
+
+  const accounts = await c.env.DB.prepare(
+    `SELECT id, title, type, role, balance, credit_limit, currency_code, is_manual
+     FROM accounts WHERE is_active = 1`,
+  ).all<{
+    id: string; title: string | null; type: string | null; role: string | null;
+    balance: number; credit_limit: number; currency_code: number; is_manual: number;
+  }>();
+  const accs = accounts.results ?? [];
+  if (!accs.length) return c.json({ months, points: [], caveats: [], now: null });
+
+  // Денна зміна ПО РАХУНКУ, у валюті рахунку (конвертація — на етапі зведення).
+  const daily = await c.env.DB.prepare(
+    `SELECT t.account_id AS acc, CAST(t.time / 86400 AS INTEGER) AS day,
+            CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS net
+     FROM transactions t WHERE t.time >= ? GROUP BY t.account_id, day`,
+  ).bind(from).all<{ acc: string; day: number; net: number }>();
+  const netByAccDay = new Map<string, number>();
+  for (const r of daily.results ?? []) netByAccDay.set(`${r.acc}:${r.day}`, r.net);
+
+  // Поточний власний залишок кожного рахунку (баланс − кредитний ліміт, §Інваріанти).
+  const own = new Map<string, number>(accs.map((a) => [a.id, (a.balance ?? 0) - (a.credit_limit ?? 0)]));
+  const roleOf = (a: typeof accs[number]): "liquid" | "investment" => (a.role === "investment" ? "investment" : "liquid");
+  const iso = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+
+  // Дати всіх майбутніх точок рахуємо ЗАЗДАЛЕГІДЬ, щоб одним запитом узяти курси на ці дати
+  // (§Історія курсів). Інакше довелось би або бити по базі в циклі, або (як було) міряти
+  // минулі залишки сьогоднішнім курсом.
+  const todayDay = Math.floor(now / 86400);
+  const fromDay = Math.floor(from / 86400);
+  const pointDays: { day: number; t: number }[] = [];
+  for (let day = todayDay; day >= fromDay; day--) {
+    if (new Date(day * 86400 * 1000).getUTCDate() === 1 && day !== todayDay) {
+      pointDays.push({ day, t: day * 86400 - 1 });
+    }
+  }
+  const { byDay, covered } = await ratesForDays(c.env.DB, [...pointDays.map((p) => iso(p.t)), iso(now)].sort());
+
+  // Зводимо стан рахунків у cushion/debt/investment — правило `fundsBreakdown`.
+  const snapshot = (t: number, at: Rates) => {
+    let cushion = 0, debt = 0, investment = 0;
+    for (const a of accs) {
+      const uah = toUAHMinor(own.get(a.id) ?? 0, a.currency_code, at);
+      if (roleOf(a) === "investment") { if (uah > 0) investment += uah; else debt += -uah; }
+      else { if (uah >= 0) cushion += uah; else debt += -uah; }
+    }
+    return {
+      t,
+      cushion: Math.round(cushion), debt: Math.round(debt), investment: Math.round(investment),
+      assets: Math.round(cushion + investment),
+      net: Math.round(cushion + investment - debt),
+    };
+  };
+  const ratesAt = (t: number) => byDay.get(iso(t)) ?? rates;
+
+  // Ідемо від сьогодні назад, знімаючи денні зміни; точку фіксуємо на кінці кожного місяця.
+  const pointAtDay = new Map(pointDays.map((p) => [p.day, p.t]));
+  const points: ReturnType<typeof snapshot>[] = [snapshot(now, ratesAt(now))];
+  for (let day = todayDay; day >= fromDay; day--) {
+    for (const a of accs) {
+      const delta = netByAccDay.get(`${a.id}:${day}`);
+      if (delta) own.set(a.id, (own.get(a.id) ?? 0) - delta); // назад: прибираємо зміну дня
+    }
+    // Кінець попереднього місяця = день, перед яким починається новий календарний місяць.
+    const t = pointAtDay.get(day);
+    if (t != null) points.push(snapshot(t, ratesAt(t)));
+  }
+  points.reverse();
+
+  const caveats: string[] = [];
+  // Кажемо про курс лише коли це справді так: коли історія покриває весь період, попередження
+  // було б неправдою в інший бік — воно применшувало б точність, якої ми вже досягли.
+  if (!covered) {
+    caveats.push("Для частини періоду історії курсів ще нема — ті місяці перераховано поточним курсом, тож рух курсу там виглядає як рух грошей. Історія накопичується щодоби.");
+  }
+  const flat = accs.filter((a) => a.is_manual === 1).map((a) => a.title ?? a.type ?? a.id);
+  if (flat.length) {
+    caveats.push(`Рахунки без історії операцій (${flat.join(", ")}) назад показані плоскими — їхній баланс це ручний зріз «на зараз».`);
+  }
+
+  return c.json({ months, points, now: points[points.length - 1] ?? null, caveats });
+});
+
 // Режим періоду (календарний ⇄ ковзний) — єдине джерело для Головної/Статистики/AI.
 api.get("/settings/period-mode", async (c) => {
   const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
@@ -933,7 +1152,7 @@ api.put("/settings/period-mode", async (c) => {
 
 // AI-моделі ОКРЕМО НА ЗАДАЧУ (report/advisor/insight/…): токен haiku|sonnet|opus на кожну.
 // UI редагує три головні (report/advisor/insight); решта — дефолти. Enrich/OCR завжди Haiku.
-const AI_MODEL_TASKS = ["report", "advisor", "insight", "chat", "budget", "group"] as const;
+const AI_MODEL_TASKS = ["report", "advisor", "insight", "chat", "budget", "group", "notify"] as const;
 api.get("/settings/ai-models", async (c) => {
   const { AI_TASK_DEFAULTS, TOKEN_BY_MODEL, MODEL_BY_TOKEN } = await import("../lib/ai.ts");
   const out: Record<string, string> = {};
@@ -1753,13 +1972,24 @@ api.delete("/advisor/history", async (c) => {
   return c.json({ ok: true });
 });
 
+// Порада. Якщо AI недоступний (нема ключа / ліміт / збій моделі) — НЕ віддаємо порожнечу
+// й не ховаємось за 502: рахуємо детермінований fallback із канонічних чисел і кажемо, чому
+// він тут (`fallback_reason`). Краще деградувати, ніж мовчати (§Обробка помилок).
 api.post("/advisor/generate", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
-  const { buildAdvice } = await import("../lib/advisor.ts");
+  const { buildAdvice, fallbackAdvice } = await import("../lib/advisor.ts");
+  if (!c.env.ANTHROPIC_API_KEY) {
+    return c.json(await fallbackAdvice(c.env, "AI-ключ не налаштовано на цьому середовищі."));
+  }
   try {
     return c.json(await buildAdvice(c.env));
   } catch (e) {
-    return c.json({ error: String(e) }, 502);
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[advisor] AI failed, falling back to deterministic advice:", msg);
+    try {
+      return c.json(await fallbackAdvice(c.env, msg));
+    } catch {
+      return c.json({ error: msg }, 502);   // впав і fallback — тоді вже чесна помилка
+    }
   }
 });
 
@@ -1821,6 +2051,153 @@ api.put("/transactions/:id/splits", async (c) => {
   }
   await c.env.DB.batch(stmts);
   return c.json({ ok: true, count: splits.length });
+});
+
+// ---- Центр сповіщень (ROADMAP §Черга 2, v1 in-app) ---------------------------
+// Стрічка того, що система «хоче сказати». Уся логіка — `lib/notify.ts` (ЄДИНЕ джерело),
+// тут лише транспорт. Генерація йде добовим кроном; `/notifications/generate` — ручний прогін.
+api.get("/notifications", async (c) => {
+  const url = new URL(c.req.url);
+  const { listNotifications } = await import("../lib/notify.ts");
+  return c.json(await listNotifications(c.env, {
+    limit: Number(url.searchParams.get("limit") ?? 60),
+    kind: url.searchParams.get("kind"),
+    unreadOnly: url.searchParams.get("unread") === "1",
+  }));
+});
+
+api.post("/notifications/read", async (c) => {
+  const body = await c.req.json<{ ids?: number[] }>().catch(() => ({ ids: [] }));
+  const ids = (body.ids ?? []).map(Number).filter(Number.isFinite);
+  const { markRead, unreadCount } = await import("../lib/notify.ts");
+  await markRead(c.env, ids);
+  return c.json({ ok: true, unread: await unreadCount(c.env) });
+});
+
+api.post("/notifications/read-all", async (c) => {
+  const { markAllRead } = await import("../lib/notify.ts");
+  await markAllRead(c.env);
+  return c.json({ ok: true, unread: 0 });
+});
+
+api.delete("/notifications", async (c) => {
+  const { clearNotifications } = await import("../lib/notify.ts");
+  await clearNotifications(c.env);
+  return c.json({ ok: true });
+});
+
+api.post("/notifications/generate", async (c) => {
+  const { generateNotifications } = await import("../lib/notify.ts");
+  return c.json(await generateNotifications(c.env));
+});
+
+api.get("/notifications/prefs", async (c) => {
+  const { getPrefs } = await import("../lib/notify.ts");
+  return c.json(await getPrefs(c.env));
+});
+
+api.put("/notifications/prefs", async (c) => {
+  const body = await c.req.json<Record<string, boolean>>().catch(() => ({}));
+  const { setPrefs } = await import("../lib/notify.ts");
+  return c.json(await setPrefs(c.env, body));
+});
+
+/**
+ * Збережені фільтри Транзакцій («Робочі витрати», «Готівка цього місяця»).
+ *
+ * Зберігаємо САМ QUERY-РЯДОК, а не розібрані поля: фільтри й так живуть в URL (єдине
+ * джерело стану сторінки), тож збережений набір — це просто той самий URL. Нове поле
+ * фільтра почне зберігатись автоматично, без міграції й без правок тут.
+ * Ліміт 24 — це особистий список швидкого доступу, а не сховище.
+ */
+const FILTERS_KEY = "saved_filters";
+interface SavedFilter { id: string; name: string; query: string }
+
+async function readFilters(db: D1Database): Promise<SavedFilter[]> {
+  const raw = await getState(db, FILTERS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as SavedFilter[];
+    return Array.isArray(parsed) ? parsed.filter((f) => f?.id && f?.name) : [];
+  } catch { return []; }
+}
+
+api.get("/settings/saved-filters", async (c) => c.json(await readFilters(c.env.DB)));
+
+api.post("/settings/saved-filters", async (c) => {
+  const b = await c.req.json<{ name?: string; query?: string }>().catch(() => ({} as { name?: string; query?: string }));
+  const name = (b.name ?? "").trim().slice(0, 60);
+  const query = (b.query ?? "").replace(/^\?/, "").slice(0, 500);
+  if (!name) return c.json({ error: "Потрібна назва" }, 400);
+  if (!query) return c.json({ error: "Немає жодного активного фільтра" }, 400);
+
+  const list = await readFilters(c.env.DB);
+  if (list.length >= 24) return c.json({ error: "Забагато збережених фільтрів (максимум 24)" }, 400);
+  // Та сама назва — перезапис, а не дубль: інакше список швидко заростає «Робочі (2)».
+  const idx = list.findIndex((f) => f.name.toLowerCase() === name.toLowerCase());
+  const item: SavedFilter = { id: idx >= 0 ? list[idx].id : crypto.randomUUID(), name, query };
+  if (idx >= 0) list[idx] = item; else list.push(item);
+  await setState(c.env.DB, FILTERS_KEY, JSON.stringify(list));
+  return c.json(list);
+});
+
+api.delete("/settings/saved-filters/:id", async (c) => {
+  const list = (await readFilters(c.env.DB)).filter((f) => f.id !== c.req.param("id"));
+  await setState(c.env.DB, FILTERS_KEY, JSON.stringify(list));
+  return c.json(list);
+});
+
+/**
+ * Глобальний пошук для командної панелі (Ctrl-K): мерчанти, категорії, конкретні операції.
+ * Сторінки й дії — статичні, їх фільтрує клієнт (нема сенсу ганяти по мережі).
+ *
+ * Свідомо ДЕШЕВИЙ: короткі LIMIT-и й префіксний LIKE — панель смикає це на кожен ввід.
+ * Мерчанти зводимо агрегатом (сума/кількість), щоб рядок одразу щось означав, а не був
+ * просто назвою: «Сільпо · 34 операції · 12 400 ₴» відповідає на питання ще до кліку.
+ */
+api.get("/search", async (c) => {
+  const q = (new URL(c.req.url).searchParams.get("q") ?? "").trim();
+  if (q.length < 2) return c.json({ merchants: [], categories: [], transactions: [] });
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+
+  // ⚠️ SQLite згортає регістр ТІЛЬКИ для ASCII: `LOWER('Сільпо')` = `'Сільпо'` (перевірено
+  // на D1). Тобто `LIKE '%сільпо%'` НІКОЛИ не знайде «Сільпо» — а це основна мова застосунку,
+  // тож наївний LIKE зробив би пошук марним. Складаємо регістрові варіанти в JS (він
+  // Unicode-aware) і матчимо через OR. Покриває реальні введення: усе малими, усе великими,
+  // з великої літери. Екзотичний внутрішній регістр («МакДональдз» на запит «макдональдз»)
+  // лишається поза — це свідомий компроміс проти сканування всієї таблиці на кожну літеру.
+  const variants = [...new Set([q, q.toLocaleLowerCase("uk"), q.toLocaleUpperCase("uk"),
+    q.charAt(0).toLocaleUpperCase("uk") + q.slice(1).toLocaleLowerCase("uk")])];
+  const likes = variants.map((v) => `%${v}%`);
+  const orLike = (col: string) => `(${variants.map(() => `${col} LIKE ?`).join(" OR ")})`;
+
+  const [merchants, categories, transactions] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT t.merchant AS name, COUNT(DISTINCT t.id) AS n, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS}
+       WHERE ${orLike("t.merchant")} AND ${SPEND_WHERE}
+       GROUP BY t.merchant ORDER BY spent DESC LIMIT 6`,
+    ).bind(...likes).all<{ name: string; n: number; spent: number }>(),
+    c.env.DB.prepare(
+      `SELECT c.id, c.name, c.color, p.name AS parent_name
+       FROM categories c LEFT JOIN categories p ON p.id = c.parent_id
+       WHERE ${orLike("c.name")} ORDER BY c.parent_id IS NOT NULL, c.name LIMIT 6`,
+    ).bind(...likes).all<{ id: number; name: string; color: string | null; parent_name: string | null }>(),
+    c.env.DB.prepare(
+      `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, c.name AS category_name
+       FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+       WHERE ${orLike("t.merchant")} OR ${orLike("t.comment")} OR ${orLike("t.user_note")}
+       ORDER BY t.time DESC LIMIT 6`,
+    ).bind(...likes, ...likes, ...likes)
+      .all<{ id: string; time: number; amount: number; currency_code: number; merchant: string | null; category_name: string | null }>(),
+  ]);
+
+  return c.json({
+    merchants: merchants.results ?? [],
+    categories: categories.results ?? [],
+    transactions: transactions.results ?? [],
+  });
 });
 
 // §A5: вбудований корпус знань — метадані для UI (сам текст іде в промт чату, не сюди).

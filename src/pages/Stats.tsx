@@ -34,6 +34,7 @@ const TABS = {
   categories: "Категорії",
   trends: "Тренди",
   merchants: "Мерчанти",
+  compare: "Порівняння",
 } as const;
 type TabKey = keyof typeof TABS;
 
@@ -271,6 +272,8 @@ export function Stats() {
                 <AccountsBlock data={data} from={from} to={to} currency={currency} sign={sign} />
               </>
             )}
+
+            {tab === "compare" && <MonthCompare currency={currency} sign={sign} />}
           </>
         )}
       </div>
@@ -602,14 +605,17 @@ function deltaPct(a: number, b: number): number {
   if (b > 0) return Math.round(((a - b) / b) * 100);
   return a > 0 ? 100 : 0;
 }
-function DeltaChip({ a, b }: { a: number; b: number }) {
+// `goodUp` — для рядків, де зростання ДОБРЕ (надходження). Міняє лише КОЛІР, не число:
+// підмінити місцями a/b було б простіше, але тоді «+20% доходу» показалось би як «−20%».
+function DeltaChip({ a, b, goodUp }: { a: number; b: number; goodUp?: boolean }) {
   if (a === b) return <span className="cmp-delta flat">0%</span>;
   // §R2-ST2(а): 0→X — не «+100%» (вводить в оману), а «новий»; X→0 — «зникло».
-  if (b === 0 && a > 0) return <span className="cmp-delta up">новий</span>;
-  if (a === 0 && b > 0) return <span className="cmp-delta down">зникло</span>;
+  const grew = a > b;
+  if (b === 0 && a > 0) return <span className={`cmp-delta ${goodUp ? "down" : "up"}`}>новий</span>;
+  if (a === 0 && b > 0) return <span className={`cmp-delta ${goodUp ? "up" : "down"}`}>зникло</span>;
   const p = deltaPct(a, b);
-  // Для витрат зростання — «погано» (червоне), спад — «добре» (зелене).
-  const cls = a > b ? "up" : "down";
+  // Для витрат зростання — «погано» (червоне), спад — «добре» (зелене). Для доходу — навпаки.
+  const cls = grew === !goodUp ? "up" : "down";
   return <span className={`cmp-delta ${cls}`}>{p > 0 ? "+" : ""}{p}%</span>;
 }
 
@@ -749,6 +755,173 @@ function PeriodCompare({ range, mode, currency, sign }: {
         )}
         <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>Перекази і зняття виключено з порівняння.</p>
       </div>
+    </section>
+  );
+}
+
+// ---- Порівняння двох ДОВІЛЬНИХ місяців (таб «Порівняння») --------------------
+// `PeriodCompare` вище прибитий до «цей період проти минулого». Тут місяці обирає
+// користувач — «а що змінилось із березня?». Бекенд той самий `/analytics/compare`
+// (він від початку приймає дві незалежні пари меж), тож канон і фільтри спільні.
+const MONTHS_FULL = ["січень", "лютий", "березень", "квітень", "травень", "червень",
+  "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"];
+
+/** Межі календарного місяця за зсувом назад від поточного. */
+function monthBounds(back: number): { from: number; to: number; label: string; y: number; m: number } {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+  const from = Math.floor(d.getTime() / 1000);
+  const to = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime() / 1000);
+  return { from, to, label: `${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`, y: d.getFullYear(), m: d.getMonth() };
+}
+
+function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
+  const [aBack, setABack] = useState(0);   // A = пізніший місяць (за замовчуванням поточний)
+  const [bBack, setBBack] = useState(1);   // B = база порівняння
+  const options = useMemo(
+    () => Array.from({ length: 24 }, (_, i) => ({ value: i, label: monthBounds(i).label })),
+    [],
+  );
+  const A = useMemo(() => monthBounds(aBack), [aBack]);
+  const B = useMemo(() => monthBounds(bBack), [bBack]);
+
+  const { data, isFetching, error, refetch } = useGetCompareQuery({
+    from: A.from, to: A.to, currency, bfrom: B.from, bto: B.to,
+  });
+
+  const { rows, rest, movers } = useMemo(() => {
+    if (!data) return { rows: [] as MoverRow[], rest: null as null | { a: number; b: number }, movers: { up: [], down: [] } as Movers };
+    const map = new Map<number | null, { name: string; color: string | null; a: number; b: number }>();
+    for (const r of data.a.byCategory) map.set(r.category_id, { name: r.category_name ?? "без категорії", color: r.color, a: r.spent, b: 0 });
+    for (const r of data.b.byCategory) {
+      const cur = map.get(r.category_id);
+      if (cur) cur.b = r.spent;
+      else map.set(r.category_id, { name: r.category_name ?? "без категорії", color: r.color, a: 0, b: r.spent });
+    }
+    // Сортуємо за БІЛЬШОЮ з двох сум: категорія, що зникла, має лишитись видимою —
+    // саме її зникнення часто і є відповіддю на «що змінилось».
+    const all = [...map.values()].sort((x, y) => Math.max(y.a, y.b) - Math.max(x.a, x.b));
+    const tail = all.slice(12);
+    return {
+      rows: all.slice(0, 12) as MoverRow[],
+      rest: tail.length ? tail.reduce((s, r) => ({ a: s.a + r.a, b: s.b + r.b }), { a: 0, b: 0 }) : null,
+      movers: (() => {
+        const deltas = [...map.values()].map((r) => ({ ...r, delta: r.a - r.b })).filter((r) => Math.abs(r.delta) >= 5000);
+        return {
+          up: deltas.filter((r) => r.delta > 0).sort((x, y) => y.delta - x.delta).slice(0, 3),
+          down: deltas.filter((r) => r.delta < 0).sort((x, y) => x.delta - y.delta).slice(0, 3),
+        } as Movers;
+      })(),
+    };
+  }, [data]);
+
+  const sameMonth = A.y === B.y && A.m === B.m;
+  // ⚠️ Поточний місяць ще не завершився — порівнювати його з повним місяцем нечесно.
+  // Не ховаємо дані (користувач свідомо обрав), але кажемо це прямо, як у прогнозах.
+  const now = new Date();
+  const partial = [A, B].filter((x) => x.y === now.getFullYear() && x.m === now.getMonth());
+  const elapsedDays = now.getDate();
+  const monthDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+  return (
+    <section>
+      <div className="section-head">
+        <h2>Порівняння місяців</h2>
+        <span className="label">що зросло, що впало — по категоріях</span>
+      </div>
+
+      <div className="mc-pickers">
+        <label className="mc-pick">
+          <span className="label">База</span>
+          <Select value={bBack} options={options} onChange={(v) => setBBack(Number(v))} searchable />
+        </label>
+        <span className="mc-vs" aria-hidden="true">проти</span>
+        <label className="mc-pick">
+          <span className="label">Порівнюємо</span>
+          <Select value={aBack} options={options} onChange={(v) => setABack(Number(v))} searchable />
+        </label>
+      </div>
+
+      <ErrorNote error={error} what="порівняння" onRetry={refetch} />
+
+      {sameMonth && <div className="card empty">Обрано той самий місяць двічі — вибери різні.</div>}
+
+      {!sameMonth && partial.length > 0 && (
+        <p className="mc-note">
+          {MONTHS_FULL[now.getMonth()]} ще триває — минуло {elapsedDays} з {monthDays} днів.
+          Порівняння з повним місяцем занижене.
+        </p>
+      )}
+
+      {!sameMonth && data && !isFetching && !data.a.spend && !data.b.spend && (
+        <div className="card empty">За обидва місяці витрат немає.</div>
+      )}
+
+      {!sameMonth && data && (data.a.spend > 0 || data.b.spend > 0) && (
+        <>
+          {(movers.up.length > 0 || movers.down.length > 0) && (
+            <div className="movers">
+              <div className="mv-col">
+                <div className="mv-head up">↑ Найбільше зросли</div>
+                {movers.up.length ? movers.up.map((r, i) => (
+                  <div key={i} className="mv-row">
+                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                    <span className="mv-delta up">+{formatMinor(r.delta, { decimals: false })} {sign}</span>
+                  </div>
+                )) : <div className="mv-empty">без помітних зростань</div>}
+              </div>
+              <div className="mv-col">
+                <div className="mv-head down">↓ Найбільше впали</div>
+                {movers.down.length ? movers.down.map((r, i) => (
+                  <div key={i} className="mv-row">
+                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                    <span className="mv-delta down">−{formatMinor(-r.delta, { decimals: false })} {sign}</span>
+                  </div>
+                )) : <div className="mv-empty">без помітних падінь</div>}
+              </div>
+            </div>
+          )}
+
+          <div className="card cmp-card">
+            <div className="cmp-head">
+              <div className="cmp-col-h prev">{B.label}</div>
+              <div className="cmp-col-h cur">{A.label}</div>
+              <div className="cmp-col-h" />
+            </div>
+            <div className="cmp-row cmp-total">
+              <span className="cmp-name">Витрати всього</span>
+              <span className="cmp-b">{formatMinor(data.b.spend, { decimals: false })} {sign}</span>
+              <span className="cmp-a">{formatMinor(data.a.spend, { decimals: false })} {sign}</span>
+              <DeltaChip a={data.a.spend} b={data.b.spend} />
+            </div>
+            <div className="cmp-row cmp-total">
+              <span className="cmp-name">Надходження</span>
+              <span className="cmp-b">{formatMinor(data.b.income, { decimals: false })} {sign}</span>
+              <span className="cmp-a">{formatMinor(data.a.income, { decimals: false })} {sign}</span>
+              <DeltaChip a={data.a.income} b={data.b.income} goodUp />
+            </div>
+            {rows.map((r, i) => (
+              <div key={i} className="cmp-row">
+                <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                <span className="cmp-b">{formatMinor(r.b, { decimals: false })} {sign}</span>
+                <span className="cmp-a">{formatMinor(r.a, { decimals: false })} {sign}</span>
+                <DeltaChip a={r.a} b={r.b} />
+              </div>
+            ))}
+            {rest && (rest.a > 0 || rest.b > 0) && (
+              <div className="cmp-row">
+                <span className="cmp-name"><span className="d" style={{ background: "var(--muted)" }} />інші категорії</span>
+                <span className="cmp-b">{formatMinor(rest.b, { decimals: false })} {sign}</span>
+                <span className="cmp-a">{formatMinor(rest.a, { decimals: false })} {sign}</span>
+                <DeltaChip a={rest.a} b={rest.b} />
+              </div>
+            )}
+            <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
+              Перекази і зняття виключено з порівняння.
+            </p>
+          </div>
+        </>
+      )}
     </section>
   );
 }

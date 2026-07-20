@@ -18,7 +18,7 @@ const API = "https://api.anthropic.com/v1/messages";
 // репорти — Opus (найглибший розбір), порадник/чат/бюджет — Sonnet, AI-огляд — Haiku (масово/дешево).
 // Enrich/OCR/categorize НЕ конфігуруються: авто/масово — Haiku; ВИНЯТОК — enrich, коли користувач
 // САМ описав операцію нотаткою (user_note) → Sonnet (поважає пояснення, не плутає зарплату з подарунком).
-export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group";
+export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group" | "notify";
 export const AI_TASK_DEFAULTS: Record<AiTask, string> = {
   report: MODEL_OPUS,
   advisor: MODEL_SMART,
@@ -26,6 +26,8 @@ export const AI_TASK_DEFAULTS: Record<AiTask, string> = {
   chat: MODEL_SMART,
   budget: MODEL_SMART,
   group: MODEL_SMART,
+  // Спостереження для стрічки сповіщень: щодня, коротко, з готових цифр → Haiku.
+  notify: MODEL_FAST,
 };
 export const MODEL_BY_TOKEN: Record<string, string> = { haiku: MODEL_FAST, sonnet: MODEL_SMART, opus: MODEL_OPUS };
 export const TOKEN_BY_MODEL: Record<string, string> = { [MODEL_FAST]: "haiku", [MODEL_SMART]: "sonnet", [MODEL_OPUS]: "opus" };
@@ -905,6 +907,44 @@ export interface AdviceResult {
   summary: string;                                // короткий підсумок ситуації
   facts: AiFact[];                                // 2-5 ключових фактів для стилізації
   suggestions: { title: string; detail: string; action?: AdviceAction | null }[]; // 3-5 кроків
+}
+
+// Спостереження для стрічки сповіщень (Центр сповіщень, kind='ai'). Модель НЕ рахує —
+// вона лише називає людською мовою те, що вже пораховано канонічно (collectFinanceSnapshot).
+// Це і є різниця з «тупим алертом»: не «поріг перевищено», а що змінилось і що з цим робити.
+export interface NotifyObservation { title: string; body: string; severity?: string }
+export async function generateNotifyObservations(
+  env: Env,
+  payload: unknown,
+): Promise<{ result: { observations?: NotifyObservation[] }; usage: AnthropicUsage }> {
+  const system: AnthropicContentBlock[] = [
+    {
+      type: "text",
+      text:
+        "Ти — особистий фінансовий помічник. Дивишся на знімок фінансів користувача і формулюєш " +
+        "0-2 КОРОТКІ спостереження для стрічки сповіщень. " +
+        "⚠️ ГОЛОВНЕ: використовуй ВИКЛЮЧНО числа з payload. НЕ рахуй нових сум, НЕ множ, НЕ оцінюй «на око», " +
+        "НЕ вигадуй цифр, яких у payload немає — краще без числа, ніж із вигаданим. " +
+        "⚠️ ПЕРІОДИ: monthly_burn_uah уже усереднений НА МІСЯЦЬ; у категорій є і spent_90d_uah, і avg_month_uah — " +
+        "для порівнянь бери avg_month_uah, не називай 90-денну суму місячною. " +
+        "Спостереження має бути ДІЄВИМ: не «витрати зросли», а що саме змінилось і що варто зробити. " +
+        "НЕ дублюй те, про що вже є окремі сповіщення: перевищений бюджет, дедлайн підписки, подорожчання, " +
+        "аномалія темпу категорії, провал ліквідності, індекс здоровʼя. Шукай те, чого детермінований " +
+        "детект НЕ ловить: зміну структури витрат, накопичений ефект дрібних сум, звʼязок між категоріями, " +
+        "наслідок ситуації користувача (situation). " +
+        "Якщо нічого справді вартого уваги немає — поверни порожній масив. Це нормальна й правильна відповідь: " +
+        "мовчання краще за шум. " +
+        "МОВА: природна українська. title — іменникова фраза, як заголовок новини " +
+        "(«Кредитний борг зʼїдає подушку», а НЕ «Мініатюрний дохід vs квартира не робить»). " +
+        "Жодних англійських слів і внутрішніх термінів у тексті: не «optional/discretionary», а " +
+        "«необовʼязкові витрати»; не «burn», а «витрати на місяць»; не «runway», а «запас/на скільки вистачить». " +
+        "title ≤ 60 символів, body ≤ 200 символів, без markdown. " +
+        'Відповідай ВИКЛЮЧНО валідним JSON: {"observations":[{"title","body","severity":"info"|"warn"}]}',
+    },
+  ];
+  return callHaikuJson<{ observations?: NotifyObservation[] }>(
+    env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "notify"),
+  );
 }
 
 export async function generateAdvice(

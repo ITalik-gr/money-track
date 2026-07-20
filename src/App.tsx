@@ -16,6 +16,7 @@ import { Goals } from "./pages/Goals.tsx";
 import { Subscriptions } from "./pages/Subscriptions.tsx";
 import { Events } from "./pages/Events.tsx";
 import { EventDetail } from "./pages/EventDetail.tsx";
+import { Notifications } from "./pages/Notifications.tsx";
 import { Setup } from "./pages/Setup.tsx";
 import { Login } from "./pages/Login.tsx";
 import { useGetMeQuery } from "./store/api.ts";
@@ -42,6 +43,7 @@ const router = createBrowserRouter([
       { path: "subs", element: <Subscriptions /> },
       { path: "events", element: <Events /> },
       { path: "events/:id", element: <EventDetail /> },
+      { path: "notifications", element: <Notifications /> },
       { path: "setup", element: <Setup /> },
     ],
   },

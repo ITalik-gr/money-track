@@ -1,7 +1,7 @@
 // AI-порадник (структурований): рахуємо runway із власних коштів і місячного burn,
 // подаємо разом із профілем ситуації в Haiku → поради-картки. Кешуємо в app_state.
 import type { Env } from "../env.ts";
-import { type AdviceResult, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type ChatTool, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
+import { type AdviceResult, type AiFact, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type ChatTool, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
 import { getState, setState } from "./repo.ts";
 import { getRates, toUAHMinor } from "./finance.ts";
 import { nextChargeUnix, plannedUAH } from "./subscriptions.ts";
@@ -35,6 +35,10 @@ export interface StoredAdvice extends AdviceResult {
   runway_months: number | null;  // ЧЕСНИЙ: подушка / burn
   usage?: AiUsageBrief;
   generated_at: number;
+  /** true — порада зібрана детерміновано з чисел, БЕЗ AI (див. `fallbackAdvice`). */
+  fallback?: boolean;
+  /** Чому впали у fallback — показуємо користувачу, а не глушимо (§Обробка помилок). */
+  fallback_reason?: string;
 }
 
 // §C: чесна розбивка коштів. Ліквідна ПОДУШКА = сума ПОЗИТИВНИХ власних залишків (те, що
@@ -353,6 +357,118 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
   } catch { /* історія не критична */ }
 
   return stored;
+}
+
+/**
+ * Детермінований fallback поради — коли AI недоступний (нема ключа, ліміт, збій моделі).
+ *
+ * Правило §Обробка помилок: краще ДЕГРАДУВАТИ, ніж мовчати. Порожня сторінка не відрізняється
+ * від «нема даних», тож користувач не знає, чи щось зламалось. Тут — ті самі канонічні числа
+ * (`collectFinanceSnapshot`), просто складені без моделі: подушка, burn, runway, найбільша
+ * категорія, необовʼязкові витрати, перевитрачені бюджети, найближчі списання.
+ *
+ * ⚠️ НЕ зберігаємо в `app_state.advisor` і НЕ пишемо в історію: інакше слабша детермінована
+ * порада затерла б останню нормальну AI-пораду, і користувач мовчки втратив би кращий результат.
+ */
+export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredAdvice> {
+  const snap = await collectFinanceSnapshot(env);
+  const { funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, context } = snap;
+  const uah = (minor: number) => Math.round(minor / 100);
+  const fmt = (minor: number) => `${uah(minor).toLocaleString("uk-UA")} ₴`;
+
+  type Cat = { id: number; name: string; avg_month_uah: number };
+  const cats = (context.top_categories as Cat[] | undefined) ?? [];
+  const budgets = (context.budgets as { category: string; used_pct: number | null }[] | undefined) ?? [];
+  const importance = (context.by_importance as { level: string; spent_90d_uah: number }[] | undefined) ?? [];
+  const upcoming = (context.upcoming_charges as { title: string; in_days: number; amount_uah: number }[] | undefined) ?? [];
+
+  const runwayText = runwayMonths == null
+    ? "Місячних витрат поки замало, щоб порахувати запас."
+    : `Ліквідної подушки ${fmt(funds.cushion)} вистачить приблизно на ${runwayMonths.toFixed(1)} міс за поточних витрат ${fmt(monthlyBurn)}/міс.`;
+
+  const suggestions: AdviceResult["suggestions"] = [];
+
+  // 1. Найбільша категорія — найбільший важіль. Ефект рахуємо явно, щоб порада була дієвою.
+  const top = cats[0];
+  if (top && top.avg_month_uah > 0) {
+    const cut = Math.round(top.avg_month_uah * 0.15);
+    suggestions.push({
+      title: `«${top.name}» — найбільша стаття витрат`,
+      detail: `У середньому ${top.avg_month_uah.toLocaleString("uk-UA")} ₴/міс. Скорочення на 15% дає ${cut.toLocaleString("uk-UA")} ₴/міс — це ${(cut * 12).toLocaleString("uk-UA")} ₴ за рік.`,
+      action: { type: "create_budget", label: `Ліміт ${(top.avg_month_uah - cut).toLocaleString("uk-UA")} ₴ на «${top.name}»`, category_id: top.id, category_name: top.name, amount_uah: top.avg_month_uah - cut },
+    });
+  }
+
+  // 2. Необовʼязкові витрати — найбезпечніше, що можна різати (§6 вагомість).
+  const optional = importance.find((x) => x.level === "optional");
+  if (optional && optional.spent_90d_uah > 0) {
+    suggestions.push({
+      title: "Необовʼязкові витрати — найбезпечніше скорочення",
+      detail: `За 90 днів ${optional.spent_90d_uah.toLocaleString("uk-UA")} ₴ (≈ ${Math.round(optional.spent_90d_uah / 3).toLocaleString("uk-UA")} ₴/міс) у категоріях, позначених як необовʼязкові. Це те, що ріжеться без шкоди для базових потреб.`,
+      action: null,
+    });
+  }
+
+  // 3. Перевитрачені бюджети — конкретний факт, а не абстракція.
+  const over = budgets.filter((b) => (b.used_pct ?? 0) > 100);
+  if (over.length) {
+    suggestions.push({
+      title: over.length === 1 ? `Бюджет «${over[0].category}» перевищено` : `Перевищено бюджетів: ${over.length}`,
+      detail: over.map((b) => `${b.category} — ${b.used_pct}%`).join(" · ") + ". Або підтягни витрати до ліміту, або визнай, що ліміт нереалістичний, і онови його.",
+      action: null,
+    });
+  }
+
+  // 4. Підписки — фіксований відтік, який легко не помічати.
+  if (subsMonthly > 0) {
+    suggestions.push({
+      title: "Підписки йдуть фоном",
+      detail: `${subsMonthly.toLocaleString("uk-UA")} ₴/міс — це ${(subsMonthly * 12).toLocaleString("uk-UA")} ₴ за рік, які списуються без окремого рішення. Перевір, чи всіма користуєшся.`,
+      action: null,
+    });
+  }
+
+  // 5. Найближчі списання — тайминг, а не тільки суми.
+  const soon = upcoming.filter((u) => u.in_days <= 7);
+  if (soon.length) {
+    const total = soon.reduce((s, u) => s + u.amount_uah, 0);
+    suggestions.push({
+      title: `Найближчі 7 днів: ${total.toLocaleString("uk-UA")} ₴ списань`,
+      detail: soon.slice(0, 4).map((u) => `${u.title} — ${u.amount_uah.toLocaleString("uk-UA")} ₴ (через ${u.in_days} дн)`).join(" · "),
+      action: null,
+    });
+  }
+
+  if (!suggestions.length) {
+    suggestions.push({
+      title: "Даних поки замало",
+      detail: "Коли назбирається історія витрат за кілька місяців, тут зʼявляться конкретні кроки на твоїх числах.",
+      action: null,
+    });
+  }
+
+  const facts: AiFact[] = [
+    { label: "Ліквідна подушка", amount: uah(funds.cushion), category: null, delta_pct: null, tone: funds.cushion > 0 ? "pos" : "neg" },
+    { label: "Витрати на місяць", amount: uah(monthlyBurn), category: null, delta_pct: null, tone: "neutral" },
+  ];
+  if (funds.debt > 0) facts.push({ label: "Борг по кредитці", amount: uah(funds.debt), category: null, delta_pct: null, tone: "neg" });
+  if (top) facts.push({ label: "Найбільша категорія", amount: top.avg_month_uah, category: top.name, delta_pct: null, tone: "neutral" });
+
+  return {
+    runway_comment: runwayText,
+    summary: "Це підсумок на твоїх числах без AI — детерміновані спостереження з тих самих канонічних розрахунків, що й уся статистика.",
+    facts,
+    suggestions: suggestions.slice(0, 5),
+    own_funds: ownFunds,
+    cushion: funds.cushion,
+    debt: funds.debt,
+    investment: funds.investment,
+    monthly_burn: monthlyBurn,
+    runway_months: runwayMonths,
+    generated_at: snap.now,
+    fallback: true,
+    fallback_reason: reason,
+  };
 }
 
 export interface AdviceHistoryItem {

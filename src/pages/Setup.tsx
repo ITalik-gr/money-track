@@ -268,6 +268,7 @@ const AI_MODEL_ROWS: { task: AiTask; label: string; hint: string; options: AiMod
   { task: "advisor", label: "Порадник", hint: "поради-картки на сторінці Порадника", options: ["haiku", "sonnet", "opus"] },
   { task: "chat", label: "Чат з AI", hint: "розмова про твої гроші як з фінменеджером", options: ["haiku", "sonnet", "opus"] },
   { task: "insight", label: "AI-огляд у Статистиці", hint: "короткий коментар — масово, дешево", options: ["haiku", "sonnet"] },
+  { task: "notify", label: "Спостереження у сповіщеннях", hint: "1-2 короткі думки щодоби — дешево", options: ["haiku", "sonnet"] },
 ];
 
 function AiModelToggle() {

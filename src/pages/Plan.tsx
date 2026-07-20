@@ -9,6 +9,7 @@ import {
   useSetBudgetMutation,
 } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
+import { AutoBudget } from "../components/AutoBudget.tsx";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { toast } from "../lib/toast.ts";
@@ -25,6 +26,7 @@ export function Plan() {
         </div>
       </div>
       <div className="stack" style={{ gap: 18 }}>
+        <AutoBudget />
         <BudgetChat />
         <BudgetPlanner />
         <section>
