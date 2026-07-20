@@ -1252,6 +1252,59 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 @media (max-width: 620px) { .top-search { width: 170px; } .ts-kbd { display: none; } }
 @media (max-width: 400px) { .top-search { display: none; } }
 
+/* ---- Бюджет події / подорожі --------------------------------------------- */
+/* Мова та сама, що в конвертів (ok/warn/over + заливка scaleX): це той самий патерн
+   «ліміт і скільки з нього зʼїдено», тож другого вигляду для нього бути не має. */
+.eb-bar {
+  position: relative; height: 6px; margin-top: var(--sp-3);
+  border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden;
+}
+.eb-fill {
+  position: absolute; inset: 0; transform-origin: left center;
+  border-radius: var(--radius-pill); background: var(--accent);
+  transition: transform var(--dur-3) var(--ease-out);
+}
+.eb-bar.warn .eb-fill { background: var(--warn); }
+.eb-bar.over .eb-fill { background: var(--neg); }
+.eb-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.eb-nums { margin-top: 3px; font-size: var(--fs-lg); font-variant-numeric: tabular-nums; }
+.eb-foot {
+  display: flex; justify-content: space-between; gap: var(--sp-3);
+  margin-top: var(--sp-2); font-size: var(--fs-sm); color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.eb-foot .neg { color: var(--neg); font-weight: 500; }
+.eb-edit-row { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-2); }
+.eb-edit-row input {
+  width: 140px; padding: 7px 10px; font-size: var(--fs-md);
+  border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+.eb-cur { color: var(--muted); margin-left: -4px; }
+.eb-hint { margin: var(--sp-3) 0 0; font-size: var(--fs-xs); color: var(--muted); line-height: 1.45; }
+/* На картці у списку смуга притиснута до низу — вона підсумок, а не окремий блок. */
+.group-card .eb-bar { margin-top: var(--sp-3); }
+
+/* ---- Індекс фінздоровʼя, компакт (рейл Головної) -------------------------- */
+/* Ціле — посилання: усе, що тут показано, детальніше живе на «Стані фінансів»,
+   тож клікабельним має бути весь блок, а не дрібне «детальніше →». */
+.hm { display: flex; align-items: center; gap: var(--sp-4); }
+.hm:hover { border-color: var(--line-strong); }
+.hm-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.hm-label { font-size: var(--fs-sm); color: var(--muted); }
+.hm-band { font-size: var(--fs-lg); font-weight: 600; }
+.hm-band.pos { color: var(--pos); }
+.hm-band.warn { color: var(--warn); }
+.hm-band.neg { color: var(--neg); }
+.hm-trend { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.hm-delta { font-size: var(--fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hm-delta.pos { color: var(--pos); }
+.hm-delta.neg { color: var(--neg); }
+/* Компактний gauge: геометрія масштабується цілком, а от текст усередині — ні,
+   тому герой-число зменшуємо окремо. */
+.gauge.sm .gauge-val { font-size: 22px; }
+.gauge.sm .label { font-size: 10px; }
+
 /* ---- Автобюджет із історії ------------------------------------------------ */
 .ab-trim { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3); }
 .ab-hint { margin: 0 0 var(--sp-4); font-size: var(--fs-xs); color: var(--muted); line-height: 1.5; }

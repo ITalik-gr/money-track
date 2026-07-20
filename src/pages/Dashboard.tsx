@@ -5,6 +5,7 @@ import { CashflowCard } from "../components/CashflowCard.tsx";
 import { CapitalTrendCard } from "../components/CapitalTrendCard.tsx";
 import { ForecastCard } from "../components/ForecastCard.tsx";
 import { CreditBanner } from "../components/CreditBanner.tsx";
+import { HealthMini } from "../components/HealthMini.tsx";
 import { EnvelopeGrid } from "../components/EnvelopeGrid.tsx";
 import { SafeToSpend } from "../components/SafeToSpend.tsx";
 import { MonthPulse } from "../components/MonthPulse.tsx";
@@ -62,6 +63,7 @@ export function Dashboard() {
         </div>
 
         <aside className="dash-rail">
+          <HealthMini />
           <CreditBanner />
           <section>
             <div className="section-head">

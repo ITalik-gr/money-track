@@ -52,6 +52,8 @@ export interface EventGroup {
   note: string | null;
   is_active: number;
   created_at: number | null;
+  /** Ліміт на подію в ₴-копійках (міграція 0025). NULL = ліміту не задано. */
+  budget: number | null;
 }
 
 export interface Transaction {

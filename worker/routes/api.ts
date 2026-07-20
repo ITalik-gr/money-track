@@ -673,18 +673,41 @@ api.get("/planned/detect", async (c) => {
 
 // Список подій із агрегатами (скільки транзакцій і сума витрат по кожній).
 api.get("/events", async (c) => {
-  // Рахуємо ВСІ операції групи (вкл. holds — тест/мono-холди мають лічитись); ₴-суми по 980.
+  // Рахуємо ВСІ операції групи (вкл. holds — тест/мono-холди мають лічитись).
+  // ⚠️ Раніше тут стояв фільтр `currency_code = 980`, тобто валютні витрати групи просто
+  // НЕ рахувались. Для подорожі це найгірше можливе місце для такої дірки — саме там
+  // валюта і трапляється, і бюджет поїздки виглядав би виконаним. Зводимо в ₴ як усюди.
+  const rates = await getRates(c.env.DB);
+  const mult = uahMult(rates);
   const rows = await c.env.DB.prepare(
     `SELECT e.*,
             COUNT(t.id) AS tx_count,
-            COALESCE(SUM(CASE WHEN t.amount < 0 AND t.currency_code = 980 THEN -t.amount ELSE 0 END), 0) AS spent,
-            COALESCE(SUM(CASE WHEN t.amount > 0 AND t.currency_code = 980 THEN t.amount ELSE 0 END), 0) AS income
+            CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount < 0 THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS spent,
+            CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER) AS income
      FROM event_groups e
      LEFT JOIN transactions t ON t.event_id = e.id
      WHERE e.is_active = 1
      GROUP BY e.id ORDER BY e.created_at DESC`,
   ).all();
   return c.json(rows.results ?? []);
+});
+
+// Бюджет події («скільки закладаю на цю подорож»). amount<=0 або null — прибрати ліміт.
+api.patch("/events/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  const b = await c.req.json<{ budget?: number | null; name?: string; note?: string | null }>()
+    .catch(() => ({} as { budget?: number | null; name?: string; note?: string | null }));
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  if (b.budget !== undefined) {
+    const v = b.budget == null || b.budget <= 0 ? null : Math.round(b.budget);
+    sets.push("budget = ?"); binds.push(v);
+  }
+  if (b.name !== undefined && b.name.trim()) { sets.push("name = ?"); binds.push(b.name.trim()); }
+  if (b.note !== undefined) { sets.push("note = ?"); binds.push(b.note?.trim() || null); }
+  if (!sets.length) return c.json({ ok: true });
+  await c.env.DB.prepare(`UPDATE event_groups SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
+  return c.json({ ok: true });
 });
 
 api.post("/events", async (c) => {
@@ -709,14 +732,29 @@ api.get("/events/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const event = await c.env.DB.prepare("SELECT * FROM event_groups WHERE id = ?").bind(id).first();
   if (!event) return c.json({ error: "not_found" }, 404);
-  const txs = await c.env.DB.prepare(
-    `SELECT t.*, c.name AS category_name, c.color AS category_color, a.title AS account_title
-     FROM transactions t
-     LEFT JOIN categories c ON c.id = t.category_id
-     LEFT JOIN accounts a ON a.id = t.account_id
-     WHERE t.event_id = ? ORDER BY t.time DESC`,
-  ).bind(id).all();
-  return c.json({ event, transactions: txs.results ?? [] });
+  // Підсумки рахує СЕРВЕР і зводить у ₴. Раніше сторінка рахувала їх сама, фільтруючи
+  // `currency_code === 980`, тож валютні операції випадали — і та сама група показувала
+  // на сторінці меншу суму, ніж у списку. Одна цифра має бути одна.
+  const rates = await getRates(c.env.DB);
+  const mult = uahMult(rates);
+  const [txs, agg] = await Promise.all([
+    c.env.DB.prepare(
+      `SELECT t.*, c.name AS category_name, c.color AS category_color, a.title AS account_title
+       FROM transactions t
+       LEFT JOIN categories c ON c.id = t.category_id
+       LEFT JOIN accounts a ON a.id = t.account_id
+       WHERE t.event_id = ? ORDER BY t.time DESC`,
+    ).bind(id).all(),
+    c.env.DB.prepare(
+      `SELECT CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount < 0 THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS spent,
+              CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER) AS income
+       FROM transactions t WHERE t.event_id = ?`,
+    ).bind(id).first<{ spent: number; income: number }>(),
+  ]);
+  return c.json({
+    event, transactions: txs.results ?? [],
+    spent: agg?.spent ?? 0, income: agg?.income ?? 0,
+  });
 });
 
 // ---- savings goals (§7) -----------------------------------------------------

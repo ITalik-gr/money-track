@@ -427,7 +427,11 @@ export const api = createApi({
       invalidatesTags: ["Category", "Tx", "Summary"],
     }),
     getEvents: b.query<EventWithAgg[], void>({ query: () => "/events", providesTags: ["Event"] }),
-    getEvent: b.query<{ event: EventGroup; transactions: TxRow[] }, number>({
+    setEventBudget: b.mutation<{ ok: boolean }, { id: number; budget: number | null }>({
+      query: ({ id, budget }) => ({ url: `/events/${id}`, method: "PATCH", body: { budget } }),
+      invalidatesTags: ["Event"],
+    }),
+    getEvent: b.query<{ event: EventGroup; transactions: TxRow[]; spent: number; income: number }, number>({
       query: (id) => `/events/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Event", id }],
     }),
@@ -825,6 +829,7 @@ export const {
   useGetEventsQuery,
   useGetEventQuery,
   useCreateEventMutation,
+  useSetEventBudgetMutation,
   useDeleteEventMutation,
   useGetBudgetsQuery,
   useGetPlannedQuery,

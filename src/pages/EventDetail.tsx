@@ -5,6 +5,7 @@ import type { StructuredInsight, TxRow } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { TransactionList } from "../components/TransactionList.tsx";
+import { EventBudget } from "../components/EventBudget.tsx";
 import { GROUP_KINDS } from "../components/GroupModal.tsx";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { toast } from "../lib/toast.ts";
@@ -21,10 +22,9 @@ export function EventDetail() {
   if (isLoading) return <div className="empty">Завантаження…</div>;
   if (!data?.event) return <div className="card empty">Групу не знайдено.</div>;
 
-  const { event, transactions } = data;
-  const uah = transactions.filter((t) => t.currency_code === 980);
-  const spent = uah.filter((t) => t.amount < 0).reduce((s, t) => s - t.amount, 0);
-  const income = uah.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  // Суми беремо з сервера (зведені в ₴), а не рахуємо тут — інакше сторінка й список груп
+  // розходяться на валютних операціях.
+  const { event, transactions, spent, income } = data;
   const color = event.color ?? "var(--accent)";
 
   return (
@@ -46,6 +46,10 @@ export function EventDetail() {
           <div><div className="label">витрачено</div><div className="num-hero" style={{ fontSize: 24 }}><Money minor={spent} decimals={false} /></div></div>
           {income > 0 && <div><div className="label">надійшло</div><div className="num-hero pos" style={{ fontSize: 24 }}><Money minor={income} decimals={false} /></div></div>}
         </div>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <EventBudget id={Number(id)} spent={spent} budget={event.budget} />
       </div>
 
       <div className="evt-grid">

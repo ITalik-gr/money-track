@@ -4,6 +4,7 @@ import { useDeleteEventMutation, useGetEventsQuery } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { GroupModal, GROUP_KINDS } from "../components/GroupModal.tsx";
+import { EventBudgetBar } from "../components/EventBudget.tsx";
 
 const kindLabel = (k: string | null) => GROUP_KINDS.find((x) => x.value === k)?.label ?? "Група";
 
@@ -42,11 +43,12 @@ export function Events() {
               {g.note && <div className="group-note">{g.note}</div>}
               <div className="group-foot">
                 <div>
-                  <div className="label">витрачено</div>
+                  <div className="label">витрачено{g.budget ? <> з <Money minor={g.budget} decimals={false} /></> : null}</div>
                   <div className="group-spent"><Money minor={g.spent} decimals={false} /></div>
                 </div>
                 <span className="label group-link">транзакції →</span>
               </div>
+              {g.budget ? <EventBudgetBar spent={g.spent} budget={g.budget} /> : null}
             </Link>
           ))}
         </div>

@@ -36,21 +36,56 @@ export const EFF_CAT_COLOR = "COALESCE(scp.color, sc.color, rp.color, rc.color, 
 // пріоритет) → дефолт 'discretionary'. Потребує STATS_JOINS. Значення: essential|discretionary|optional.
 export const EFF_IMPORTANCE = "COALESCE(t.importance, scp.importance, sc.importance, rp.importance, rc.importance, p.importance, c.importance, 'discretionary')";
 
+// Чи ефективна категорія рядка — ДОХІДНА. Та сама черга пріоритетів, що й `EFF_CAT_ID`.
+export const EFF_CAT_IS_INCOME = "COALESCE(scp.is_income, sc.is_income, rp.is_income, rc.is_income, p.is_income, c.is_income)";
+
+// ---- §REFUND: повернення коштів — це НЕ дохід ---------------------------------
+// Баг, знайдений 2026-07-20 на реальних даних: `INCOME_WHERE` був просто `amount > 0`, тож
+// «Скасування. BlaBlaCar +145 ₴» рахувалось ДОХОДОМ, а вихідна покупка −145 ₴ лишалась
+// повною витратою в «Транспорті». Роздувались одночасно дохід, витрати категорії, норма
+// заощаджень, burn і runway.
+//
+// Правильна модель: рефанд — це ВІД'ЄМНА ВИТРАТА своєї категорії. Тому він проходить
+// `SPEND_WHERE` (і `amountSum` віднімає його, бо рахує `-EFF_AMOUNT`) і НЕ проходить
+// `INCOME_WHERE`. Розпізнаємо двома незалежними ознаками:
+//   1) надходження з ВИТРАТНОЮ категорією (is_income=0) — категоризований рефанд;
+//   2) опис від банку («Скасування. …») — коли категорії ще нема (звірено на remote:
+//      усі 6 рефандів мають рівно цей префікс, решта надходжень — реальний дохід/перекази).
+// ⚠️ Кирилиця: SQLite згортає регістр лише для ASCII, тож перелічуємо варіанти явно.
+const REFUND_PREFIXES = ["Скасування", "скасування", "СКАСУВАННЯ", "Повернення", "повернення", "Відміна", "відміна", "Refund", "refund"];
+const REFUND_DESC = REFUND_PREFIXES.map((w) => `t.merchant LIKE '${w}%'`).join(" OR ");
+// ⚠️ Категорія мусить ІСНУВАТИ: `COALESCE(..., 0)` зробив би рефандом будь-яке надходження
+// без категорії — зокрема вхідний P2P «Від: Кирило», який є справжнім доходом. Некатегоризований
+// рефанд ловиться другою ознакою (описом), а не відсутністю категорії.
+// ⚠️ Бакет «Перекази і зняття» (13) теж має is_income=0, тож без явного виключення сюди
+// потрапляли б «З Білої картки» / «Поповнення рахунку Банки» — це рух ВЛАСНИХ коштів,
+// а не повернення покупки (звірено на remote).
+export const IS_REFUND =
+  `(t.amount > 0 AND ${EFF_CAT_ID} IS NOT ${TRANSFER_CAT}
+    AND ((${EFF_CAT_ID} IS NOT NULL AND ${EFF_CAT_IS_INCOME} = 0) OR ${REFUND_DESC}))`;
+
 // Канонічний фільтр витрати. `IS NOT 13` (а не `!= 13`) — щоб NULL-категорія (без
 // категорії) все одно рахувалась як витрата; лише явний бакет 13 виключається.
 // Holds НЕ виключаємо: monobank надсилає лише реальні (виконані) операції, а коли hold
 // закривається — той самий id перезаписується (repo.ts). Тому held-рядок = справжня
 // витрата; інакше свіжий тиждень/місяць у репорті/Статистиці порожній, хоча в списку
 // транзакцій операції є (той список holds показує). Прапорець `hold` лишається для UI-бейджа.
+// §REFUND: рефанд теж проходить сюди — з ДОДАТНОЮ сумою, тож `amountSum`/`spendSum`
+// (вони рахують `-EFF_AMOUNT`) віднімають його від витрат категорії. Це і є «чисті витрати».
 export const SPEND_WHERE = `
-  ${EFF_AMOUNT} < 0
+  (${EFF_AMOUNT} < 0 OR ${IS_REFUND})
   AND t.transfer_pair_id IS NULL
   AND NOT (t.is_transfer = 1 AND t.real_category_id IS NULL)
   AND ${EFF_CAT_ID} IS NOT ${TRANSFER_CAT}`;
 
 // Канонічний фільтр доходу: надходження, не пара-переказ, не рух власних (holds — див. SPEND_WHERE).
+// §REFUND: повернення коштів сюди НЕ входить — це не заробіток, а відкат власної витрати.
+// ⚠️ Так само виключено бакет «Перекази і зняття» (13) — симетрично до `SPEND_WHERE`.
+// Без цього надходження з категорією 13, у яких `is_transfer=0` (виплата банки, «З Білої
+// картки»), рахувались ДОХОДОМ: рух власних грошей роздував і дохід, і норму заощаджень.
 export const INCOME_WHERE = `
-  t.amount > 0 AND t.transfer_pair_id IS NULL AND t.is_transfer = 0`;
+  t.amount > 0 AND t.transfer_pair_id IS NULL AND t.is_transfer = 0
+  AND ${EFF_CAT_ID} IS NOT ${TRANSFER_CAT} AND NOT ${IS_REFUND}`;
 
 // Множник зведення в ₴ для поточного рядка (inline CASE з курсів). 980→1.0; кожен
 // відомий код → його курс (₴ за одиницю-мінор, як у toUAHMinor); невідомий → 0.
@@ -78,7 +113,10 @@ export function spendSum(mult: string): string {
 export function incomeSum(mult: string): string {
   return `CAST(ROUND(COALESCE(SUM(CASE WHEN ${INCOME_WHERE} THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
 }
-export const SPEND_COUNT = `SUM(CASE WHEN ${SPEND_WHERE} THEN 1 ELSE 0 END)`;
+// §REFUND: рахуємо лише реальні ВІДТОКИ. Рефанд проходить SPEND_WHERE (щоб відняти суму),
+// але як «операція-витрата» він не рахується — інакше середній чек ділився б на більшу
+// кількість і виходив заниженим.
+export const SPEND_COUNT = `SUM(CASE WHEN (${SPEND_WHERE}) AND ${EFF_AMOUNT} < 0 THEN 1 ELSE 0 END)`;
 export const INCOME_COUNT = `SUM(CASE WHEN ${INCOME_WHERE} THEN 1 ELSE 0 END)`;
 // Сума однієї канонічної гілки (byCategory/byMerchant — SPEND_WHERE уже у WHERE рядка).
 export function amountSum(mult: string): string {
@@ -205,7 +243,10 @@ export async function categoryMonthlyLevels(
     // (не хапаємо випадковий пік останнього місяця). Крок ренти визнається за 2-3 міс нового рівня.
     const recentNz = series.slice(-3).filter((v) => v > 0);
     const fixed = recentNz.length >= 2 && cvOf(recentNz) <= 0.12;
-    const level = fixed ? Math.round(recentNz.reduce((s, v) => s + v, 0) / recentNz.length) : mean;
+    // §REFUND: місяць може вийти ВІД'ЄМНИМ (повернення перевищило витрати — напр. скасували
+    // велику покупку минулого місяця). Рівень «мінус 400 ₴/міс» безглуздий і тягнув би burn
+    // униз, тож підлога 0.
+    const level = Math.max(0, fixed ? Math.round(recentNz.reduce((s, v) => s + v, 0) / recentNz.length) : mean);
     out.set(id, { level, mean, last, active_months: activeMonths, cv: Math.round(cvOf(series.filter((v) => v > 0)) * 100) / 100, fixed });
   }
 
