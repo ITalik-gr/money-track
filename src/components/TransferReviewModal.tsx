@@ -11,6 +11,7 @@ import type { SelectOption } from "./Select.tsx";
 import { MerchantLogo } from "./MerchantLogo.tsx";
 import { formatMinor, formatDate, currencySign } from "../lib/format.ts";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 import type { Category } from "../../shared/types.ts";
 
 // §R2-ST4 + §C1/§C2: інтерактивний попап-рев'ю реальної категорії переказів/знять.
@@ -57,7 +58,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
       setRemaining(r.remaining);
       setRan(true);
     } catch (e) {
-      toast.error(String(e));
+      toast.error(errText(e));
     }
   }
 
@@ -81,7 +82,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
       toast.success("AI переглянув з урахуванням опису");
     } catch (e) {
       patchRow(row.id, { rerunning: false });
-      toast.error(String(e));
+      toast.error(errText(e));
     }
   }
 
@@ -91,7 +92,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
       toast.success(`Збережено ${rows.length} операцій`);
       onClose();
     } catch (e) {
-      toast.error(String(e));
+      toast.error(errText(e));
     }
   }
 

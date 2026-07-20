@@ -62,6 +62,18 @@ app.route("/api", api);
 // Everything else -> static SPA assets (index.html fallback via not_found_handling).
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
+// Глобальний обробник помилок. Без нього будь-який неспійманий throw (напр. SQL-помилка D1)
+// повертав порожній 500 text/plain → клієнт показував «[object Object]». Тепер завжди JSON
+// `{ error, detail }`, який `errText()` на клієнті вміє розгорнути в людський текст.
+// Лише для /api та /ingest — статика має віддавати свої помилки як є.
+app.onError((err, c) => {
+  const path = new URL(c.req.url).pathname;
+  if (!path.startsWith("/api") && !path.startsWith("/ingest")) throw err;
+  const msg = err instanceof Error ? err.message : String(err);
+  console.error(`[api] ${c.req.method} ${path} failed:`, msg, err instanceof Error ? err.stack : "");
+  return c.json({ error: msg || "internal_error", detail: `${c.req.method} ${path}` }, 500);
+});
+
 export default {
   fetch: app.fetch,
 

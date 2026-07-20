@@ -61,7 +61,7 @@ export function EnvelopeGrid() {
               <span className="env-name"><span className="d" style={{ background: e.color }} />{e.name}</span>
               <span className={`env-pct ${state}`}>{e.pct}%</span>
             </div>
-            <div className="env-bar"><span style={{ width: `${Math.min(e.pct, 100)}%`, background: bar }} /></div>
+            <div className="env-bar"><span style={{ transform: `scaleX(${Math.min(e.pct, 100) / 100})`, background: bar }} /></div>
             <div className="env-sub">
               <span><Money minor={e.spent} decimals={false} /> з <Money minor={e.budget} decimals={false} /></span>
               <span className="env-remain">

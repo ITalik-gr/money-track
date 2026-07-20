@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import { api, useAddTransactionMutation, useGetAccountsQuery, useGetCategoriesQuery } from "../store/api.ts";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 
 interface ParsedText {
   merchant: string;
@@ -64,7 +65,7 @@ export function Add() {
       // the dashboard total and the recent-transactions list.
       dispatch(api.util.invalidateTags(["Tx", "Summary"]));
     } catch (e) {
-      toast.error(String(e));
+      toast.error(errText(e));
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = "";
@@ -83,7 +84,7 @@ export function Add() {
       if (!res.ok || data.error) throw new Error(data.error ?? "parse failed");
       setParsed(data.result!);
     } catch (e) {
-      toast.error(String(e));
+      toast.error(errText(e));
     } finally {
       setParsing(false);
     }

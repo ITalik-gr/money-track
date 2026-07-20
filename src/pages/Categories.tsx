@@ -5,6 +5,7 @@ import { CategoryModal } from "../components/CategoryModal.tsx";
 import { Select, type SelectOption } from "../components/Select.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 import type { Category } from "../../shared/types.ts";
 
 const TRANSFER_CAT = 13; // «Перекази і зняття» — захищена
@@ -30,7 +31,7 @@ export function Categories() {
       } else {
         setDel({ cat, usage });
       }
-    } catch (e) { toast.error(String(e)); }
+    } catch (e) { toast.error(errText(e)); }
   }
 
   return (
@@ -67,7 +68,7 @@ export function Categories() {
             try {
               await deleteCategory({ id: del.cat.id, reassign }).unwrap();
               toast.success(`Категорію «${del.cat.name}» видалено`);
-            } catch (e) { toast.error(String(e)); }
+            } catch (e) { toast.error(errText(e)); }
             setDel(null);
           }} />
       )}

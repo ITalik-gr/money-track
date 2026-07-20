@@ -272,7 +272,9 @@ export interface IncomeAnalytics {
 
 export interface UpcomingSubs {
   days: number; total: number;
-  items: { id: number; title: string; amount: number; at: number; days_until: number }[];
+  // §CUR-PLAN: `amount` — у валюті плану (показуємо як є, «$5»), `amount_uah` — зведення
+  // для підсумків; `total` уже в ₴.
+  items: { id: number; title: string; amount: number; currency_code: number; amount_uah: number; at: number; days_until: number }[];
 }
 
 export interface ReceiptItemsAnalytics {
@@ -333,7 +335,8 @@ export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; co
 // Спарклайни: 6-міс місячні витрати (копійки) на категорію (ключ=id) і мерчанта (ключ=назва).
 export interface SparkData { buckets: string[]; categories: Record<string, number[]>; merchants: Record<string, number[]> }
 // Cashflow-календар: очікувані списання по днях + стартова подушка (для проєкції балансу).
-export interface CashflowItem { at: number; date: string; title: string; amount: number; category_id: number | null; kind: string }
+// §CUR-PLAN: `amount` — у ₴ (його сумують і віднімають від подушки), оригінал — у `amount_orig`.
+export interface CashflowItem { at: number; date: string; title: string; amount: number; amount_orig: number; currency_code: number; category_id: number | null; kind: string }
 export interface CashflowCalendar { from: number; to: number; now: number; cushion: number; items: CashflowItem[] }
 // §SPLIT: частина розділеної транзакції (копійки, знак як у tx). Порожній список = не розділено.
 export interface TxSplit { id: number; category_id: number; amount: number; category_name: string | null; category_color: string | null }

@@ -820,9 +820,9 @@ api.get("/analytics/overview", async (c) => {
     // Групи: спрощений фільтр (події можуть містити перекази); зведено в ₴.
     c.env.DB.prepare(
       `SELECT e.id AS event_id, e.name AS event_name, e.color AS event_color,
-              ${amountSum(mult)} AS spent, COUNT(*) AS n
-       FROM transactions t JOIN event_groups e ON e.id = t.event_id
-       WHERE t.time >= ? AND t.time <= ? AND t.amount < 0 AND t.is_transfer = 0${curFilter}
+              ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
+       FROM transactions t ${STATS_JOINS} JOIN event_groups e ON e.id = t.event_id
+       WHERE t.time >= ? AND t.time <= ? AND ${EFF_AMOUNT} < 0 AND t.is_transfer = 0${curFilter}
        GROUP BY t.event_id ORDER BY spent DESC`,
     ).bind(from, to).all(),
     // §6 Вагомість: частка обов'язкових/бажаних/необов'язкових витрат (канонічно, зведено).
@@ -862,8 +862,11 @@ api.get("/analytics/safe-to-spend", async (c) => {
      FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?`,
   ).bind(monthStart, now).first<{ spend: number; income: number; essential: number; subs_paid: number }>();
 
+  // §CUR-PLAN: зводимо в ₴ по currency_code плану — інакше підписка $5 важить 5 ₴
+  // і safe-to-spend завищується.
   const subs = await c.env.DB.prepare(
-    "SELECT COALESCE(SUM(period_amount), 0) AS planned FROM planned_payments WHERE is_active = 1",
+    `SELECT CAST(ROUND(COALESCE(SUM(period_amount * ${uahMult(rates, "currency_code")}), 0)) AS INTEGER) AS planned
+     FROM planned_payments WHERE is_active = 1`,
   ).first<{ planned: number }>();
 
   const income = tot?.income ?? 0;
@@ -1097,15 +1100,21 @@ api.get("/analytics/forecast", async (c) => {
   const projectedHigh = projectedSpend + band;
 
   // Майбутні планові платежі, що спишуться до кінця місяця (інформативно).
-  const { nextChargeUnix } = await import("../lib/subscriptions.ts");
+  const { nextChargeUnix, plannedUAH } = await import("../lib/subscriptions.ts");
+  const fxRates = await getRates(c.env.DB);
   const planned = await c.env.DB.prepare(
-    "SELECT id, title, kind, period_amount, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
-  ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null }>();
+    "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
+  ).all<{ id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null }>();
 
+  // §CUR-PLAN: суми зводимо в ₴ — вони йдуть в один ряд із витратами місяця (теж ₴).
   const monthEnd = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() / 1000);
   const upcomingItems = (planned.results ?? [])
     .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
-    .map((p) => ({ title: p.title, amount: p.period_amount ?? 0, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now) }))
+    .map((p) => ({
+      title: p.title,
+      amount: plannedUAH(p.period_amount, p.currency_code, fxRates),
+      at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now),
+    }))
     .filter((p) => p.amount > 0 && p.at < monthEnd)
     .sort((a, b) => a.at - b.at);
   const upcomingPlanned = upcomingItems.reduce((s, p) => s + p.amount, 0);
@@ -1199,19 +1208,29 @@ api.get("/planned/upcoming", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const horizon = now + days * 86400;
 
-  const { nextChargeUnix } = await import("../lib/subscriptions.ts");
+  const { nextChargeUnix, plannedUAH } = await import("../lib/subscriptions.ts");
+  const rates = await getRates(c.env.DB);
   const planned = await c.env.DB.prepare(
-    "SELECT id, title, kind, period_amount, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
-  ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>();
+    "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
+  ).all<{ id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>();
 
+  // §CUR-PLAN: `amount` лишається у ВАЛЮТІ ПЛАНУ (щоб показати «$5», а не «≈208 ₴»),
+  // `amount_uah` — зведення для підсумків. Раніше валюта губилась і $5 ставало 5 ₴.
   const items = (planned.results ?? [])
     .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
-    .map((p) => ({ id: p.id, title: p.title, amount: p.period_amount ?? 0, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now), days_until: 0 }))
+    .map((p) => ({
+      id: p.id, title: p.title,
+      amount: p.period_amount ?? 0,
+      currency_code: p.currency_code ?? 980,
+      amount_uah: plannedUAH(p.period_amount, p.currency_code, rates),
+      at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now),
+      days_until: 0,
+    }))
     .filter((p) => p.amount > 0 && p.at <= horizon)
     .map((p) => ({ ...p, days_until: Math.max(0, Math.round((p.at - now) / 86400)) }))
     .sort((a, b) => a.at - b.at);
 
-  return c.json({ days, total: items.reduce((s, p) => s + p.amount, 0), items });
+  return c.json({ days, total: items.reduce((s, p) => s + p.amount_uah, 0), items });
 });
 
 // Cashflow-календар: ВСІ очікувані списання (підписки/розстрочки) по днях у вікні [from,to]
@@ -1227,24 +1246,28 @@ api.get("/analytics/cashflow-calendar", async (c) => {
   const from = Number(url.searchParams.get("from") ?? defFrom);
   const to = Number(url.searchParams.get("to") ?? defTo);
 
-  const { nextChargeUnix } = await import("../lib/subscriptions.ts");
+  const { nextChargeUnix, plannedUAH } = await import("../lib/subscriptions.ts");
   const { fundsBreakdown } = await import("../lib/advisor.ts");
-  const [planned, funds] = await Promise.all([
+  const [planned, funds, rates] = await Promise.all([
     c.env.DB.prepare(
-      "SELECT id, title, kind, period_amount, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
-    ).all<{ id: number; title: string; kind: string; period_amount: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>(),
+      "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
+    ).all<{ id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>(),
     fundsBreakdown(c.env),
+    getRates(c.env.DB),
   ]);
 
   const iso = (u: number) => new Date(u * 1000).toISOString().slice(0, 10);
-  const items: { at: number; date: string; title: string; amount: number; category_id: number | null; kind: string }[] = [];
+  // §CUR-PLAN: `amount` — у ₴, бо його сумують по днях і віднімають від подушки (теж ₴).
+  // Оригінал лишаємо в `amount_orig`/`currency_code`, щоб UI показав «$5» поряд.
+  const items: { at: number; date: string; title: string; amount: number; amount_orig: number; currency_code: number; category_id: number | null; kind: string }[] = [];
   for (const p of planned.results ?? []) {
     const amt = p.period_amount ?? 0;
     if (amt <= 0) continue;
+    const uah = plannedUAH(amt, p.currency_code, rates);
     let t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, from - 1);
     for (let guard = 0; guard < 400 && t <= to; guard++) {
       if (p.end_date != null && t > p.end_date) break; // розстрочка добігла кінця
-      items.push({ at: t, date: iso(t), title: p.title, amount: amt, category_id: p.category_id, kind: p.kind });
+      items.push({ at: t, date: iso(t), title: p.title, amount: uah, amount_orig: amt, currency_code: p.currency_code ?? 980, category_id: p.category_id, kind: p.kind });
       t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, t);
     }
   }
@@ -1444,13 +1467,13 @@ api.get("/analytics/category", async (c) => {
     const [subs, merchants, txs] = await Promise.all([
       c.env.DB.prepare(
         `SELECT t.real_category_id AS category_id, COALESCE(rc.name, 'не визначено') AS name, rc.color AS color,
-                ${amountSum(mult)} AS spent, COUNT(*) AS n
-         FROM transactions t LEFT JOIN categories c ON c.id = t.category_id LEFT JOIN categories rc ON rc.id = t.real_category_id
+                ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
+         FROM transactions t ${STATS_JOINS}
          WHERE ${base} GROUP BY t.real_category_id ORDER BY spent DESC`,
       ).bind(from, to).all(),
       c.env.DB.prepare(
-        `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(*) AS n
-         FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+        `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
+         FROM transactions t ${STATS_JOINS}
          WHERE ${base} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
       ).bind(from, to).all(),
       c.env.DB.prepare(

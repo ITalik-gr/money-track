@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { useGetReportsQuery, useGetReportQuery, useGenerateReportMutation, useDeleteReportMutation } from "../store/api.ts";
 import type { ReportListItem, FinancialReport } from "../store/api.ts";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { formatMinor } from "../lib/format.ts";
@@ -43,7 +44,7 @@ export function Reports() {
       const r = await generate({ type, force: true, scope: "current" }).unwrap();
       toast.success("Репорт готовий");
       navigate(`/reports/${r.id}`);
-    } catch (e) { toast.error(String(e)); }
+    } catch (e) { toast.error(errText(e)); }
     finally { setBusy(null); }
   };
 
@@ -53,7 +54,7 @@ export function Reports() {
     e.stopPropagation();
     if (!confirm("Видалити цей репорт?")) return;
     try { await deleteReport(id).unwrap(); toast.success("Репорт видалено"); }
-    catch (err) { toast.error(String(err)); }
+    catch (err) { toast.error(errText(err)); }
   };
 
   return (

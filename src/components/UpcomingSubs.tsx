@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useGetUpcomingSubsQuery } from "../store/api.ts";
 import { MerchantLogo } from "./MerchantLogo.tsx";
 import { Money } from "./Money.tsx";
+import { formatMinor } from "../lib/format.ts";
 
 // §4 «Скоро спишеться»: планові платежі/підписки у горизонті 30 днів — лого бренду,
 // дата, «через N дн». Перетинає межу місяця (на відміну від прогнозу місяця).
@@ -38,7 +39,14 @@ export function UpcomingSubs() {
                   <span className="us-name">{s.title}</span>
                   <span className={`us-when ${w.urgent ? "urgent" : ""}`}>{w.text} · {fmtDay.format(s.at * 1000)}</span>
                 </div>
-                <span className="us-amt"><Money minor={s.amount} decimals={false} /></span>
+                {/* Показуємо у ВАЛЮТІ ПЛАНУ («$5»), а не сирим числом із ₴-значком —
+                    саме через це CLOUDFLARE $5 виглядав як 5 ₴. ₴-еквівалент — підписом. */}
+                <span className="us-amt">
+                  <Money minor={s.amount} currency={s.currency_code} decimals={false} />
+                  {s.currency_code !== 980 && (
+                    <span className="us-amt-uah">≈ {formatMinor(s.amount_uah, { decimals: false })} ₴</span>
+                  )}
+                </span>
               </div>
             );
           })}

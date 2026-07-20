@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useChatAdviceMutation, useGetTransactionsQuery } from "../store/api.ts";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { errText } from "../lib/errors.ts";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type Attached = { id: string; label: string };
@@ -111,8 +112,10 @@ export function Chat() {
     try {
       const res = await chat({ messages: history, attachedTxIds }).unwrap();
       if (mounted.current) { pinTo.current = "user"; setMessages((m) => [...m, { role: "assistant", content: res.reply }]); }
-    } catch {
-      if (mounted.current) { pinTo.current = "bottom"; setMessages((m) => [...m, { role: "assistant", content: "Не вдалося відповісти. Спробуй ще раз." }]); }
+    } catch (e) {
+      // Реальна причина, не глухе «спробуй ще раз» (див. `lib/errors.ts`).
+      const msg = `⚠️ Не вдалося відповісти: ${errText(e)}`;
+      if (mounted.current) { pinTo.current = "bottom"; setMessages((m) => [...m, { role: "assistant", content: msg }]); }
     }
   }
 

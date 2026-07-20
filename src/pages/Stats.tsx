@@ -17,6 +17,7 @@ import { HoverTip } from "../components/HoverTip.tsx";
 import { InfoTip } from "../components/InfoTip.tsx";
 import { Select } from "../components/Select.tsx";
 import { Icon } from "../components/Icon.tsx";
+import { ErrorNote } from "../components/ErrorNote.tsx";
 import { cardKind, cardKindLabel, cardLast4 } from "../lib/merchant.ts";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../lib/importance.ts";
 
@@ -108,7 +109,7 @@ export function Stats() {
   const [setPeriodMode] = useSetPeriodModeMutation();
   const mode = pm?.mode ?? "calendar";
 
-  const { data, isFetching } = useGetOverviewQuery({ preset: range, currency });
+  const { data, isFetching, error, refetch } = useGetOverviewQuery({ preset: range, currency });
   const sign = currencySign(currency ?? 980);
 
   // Межі періоду беремо з відповіді (сервер рахує за period_mode) — узгоджено з Головною.
@@ -174,6 +175,9 @@ export function Stats() {
 
       <div className="stack" style={{ gap: 18 }}>
         {!data && isFetching && <div className="empty">Рахуємо…</div>}
+        {/* Без цієї гілки впалий запит давав просто порожню сторінку без пояснення. */}
+        <ErrorNote error={error} what="Статистику" onRetry={refetch} />
+        {!data && !isFetching && !error && <div className="empty">Немає даних за цей період.</div>}
 
         {data && (
           <>
@@ -819,7 +823,9 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
               }>
                 <button type="button" className={`wd-col ${openWd === i ? "open" : ""}`}
                   onClick={() => setOpenWd(openWd === i ? null : i)}>
-                  <div className="wd-bar-wrap"><div className="wd-bar" style={{ height: `${(v / wdMax) * 100}%`, background: i === topWd || i === openWd ? "var(--accent)" : "var(--line-strong)" }} /></div>
+                  {/* scaleY замість height (layout-thrash). Мінімум 0.02 — щоб дуже малий
+                      день лишався видимим: min-height трансформ не рятує. */}
+                  <div className="wd-bar-wrap"><div className="wd-bar" style={{ transform: `scaleY(${Math.max(0.02, v / wdMax)})`, background: i === topWd || i === openWd ? "var(--accent)" : "var(--line-strong)" }} /></div>
                   <span className="wd-lbl">{WD[i]}</span>
                 </button>
               </HoverTip>

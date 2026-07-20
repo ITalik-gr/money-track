@@ -292,12 +292,27 @@ function BudgetCard({
     <div className={`budget-card ${state}`}>
       <div className="bc-head">
         <span className="bc-name"><span className="d" style={{ background: dot }} />{name}</span>
+        {/* Перенесений залишок — видимий бейдж, а не рядок у лейблі чекбокса:
+            він змінює ліміт цього місяця, тож має читатись відразу. */}
+        {carry > 0 && (
+          <span className="bc-carry" title="Невитрачений залишок минулого місяця, доданий до ліміту">
+            +<Money minor={carry} decimals={false} /> з минулого
+          </span>
+        )}
         {limit > 0
           ? <span className={`bc-pct ${state}`}>{pct}%</span>
           : <button className="bc-set" onClick={() => setEditing(true)}>+ ліміт</button>}
       </div>
 
-      <div className="bc-bar"><span style={{ width: `${Math.min(pct, 100)}%`, background: barColor }} /></div>
+      <div className="bc-bar">
+        <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: barColor }} />
+        {/* Засічка на межі БАЗОВОГО ліміту — видно, де закінчується «свій» місяць
+            і починається перенесене. Без неї смуга мовчки розтягується. */}
+        {carry > 0 && effLimit > 0 && (
+          <i className="bc-tick" style={{ left: `${Math.min(99, (limit / effLimit) * 100)}%` }}
+            title={`Базовий ліміт: ${Math.round(limit / 100)} ₴`} />
+        )}
+      </div>
 
       <div className="bc-foot">
         <span className="bc-spent"><Money minor={spent} decimals={false} /> витрачено</span>
@@ -319,9 +334,9 @@ function BudgetCard({
       </div>
 
       {limit > 0 && (
-        <label className="bc-roll" title="Переносити невитрачений залишок минулого місяця">
+        <label className="bc-roll" title="Невитрачений залишок минулого місяця додається до ліміту цього">
           <input type="checkbox" checked={rollover} onChange={(e) => onSave(limit, e.target.checked)} />
-          <span>rollover{rollover && carry > 0 ? <> · +<Money minor={carry} decimals={false} /> з минулого</> : null}</span>
+          <span>переносити залишок</span>
         </label>
       )}
     </div>

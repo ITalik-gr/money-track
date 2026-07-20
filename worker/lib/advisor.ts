@@ -4,8 +4,8 @@ import type { Env } from "../env.ts";
 import { type AdviceResult, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type ChatTool, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
 import { getState, setState } from "./repo.ts";
 import { getRates, toUAHMinor } from "./finance.ts";
-import { nextChargeUnix } from "./subscriptions.ts";
-import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels } from "./stats.ts";
+import { nextChargeUnix, plannedUAH } from "./subscriptions.ts";
+import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels } from "./stats.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -172,8 +172,9 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
        GROUP BY t.merchant ORDER BY spent DESC LIMIT 8`,
     ).bind(from90).all<{ merchant: string; spent: number }>(),
     env.DB.prepare(
-      `SELECT e.name AS name, ${amountSum(mult)} AS spent FROM transactions t JOIN event_groups e ON e.id = t.event_id
-       WHERE t.time >= ? AND t.amount < 0 AND t.is_transfer = 0
+      `SELECT e.name AS name, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS} JOIN event_groups e ON e.id = t.event_id
+       WHERE t.time >= ? AND ${EFF_AMOUNT} < 0 AND t.is_transfer = 0
        GROUP BY t.event_id ORDER BY spent DESC LIMIT 6`,
     ).bind(from90).all<{ name: string; spent: number }>(),
     // §6: розподіл витрат за вагомістю — щоб AI радив, що безпечно різати (необов'язкове).
@@ -200,15 +201,17 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
        WHERE t.time >= ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}`,
     ).bind(monthStart).all<{ id: number; spent: number }>(),
     // §2: фіксовані зобовʼязання — сума активних підписок на місяць.
+    // §CUR-PLAN: зведено в ₴ по валюті плану — інакше $5-підписка йшла в AI-контекст як 5 ₴.
     env.DB.prepare(
-      `SELECT COALESCE(SUM(period_amount), 0) AS planned, COUNT(*) AS n FROM planned_payments WHERE is_active = 1`,
+      `SELECT CAST(ROUND(COALESCE(SUM(period_amount * ${uahMult(rates, "currency_code")}), 0)) AS INTEGER) AS planned,
+              COUNT(*) AS n FROM planned_payments WHERE is_active = 1`,
     ).first<{ planned: number; n: number }>(),
     // §E1/C: разові vs регулярні за поточний місяць — щоб AI не проектував разове як норму.
     recurringOneoffSplit(env, monthStart, now, mult),
     // §CTX: найближчі планові списання (для «коли платити») — рахуємо nextChargeUnix у JS.
     env.DB.prepare(
-      `SELECT title, period, period_count, start_date, period_amount, kind FROM planned_payments WHERE is_active = 1`,
-    ).all<{ title: string; period: string; period_count: number; start_date: number; period_amount: number | null; kind: string }>(),
+      `SELECT title, period, period_count, start_date, period_amount, currency_code, kind FROM planned_payments WHERE is_active = 1`,
+    ).all<{ title: string; period: string; period_count: number; start_date: number; period_amount: number | null; currency_code: number | null; kind: string }>(),
   ]);
 
   const ownFunds = funds.net;
@@ -234,7 +237,9 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
   // §CTX: списання в найближчі 30 днів — щоб AI радив пріоритет/тайминг платежів.
   const in30 = now + 30 * 86400;
   const upcoming = (upcomingRows.results ?? [])
-    .map((p) => ({ title: p.title, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now), amount_uah: Math.round((p.period_amount ?? 0) / 100), kind: p.kind }))
+    // §CUR-PLAN: поле зветься amount_uah, тож і має бути в ₴ — раніше тут ділили на 100
+    // БЕЗ конверсії, і $5-підписка їхала в AI як «5 ₴».
+    .map((p) => ({ title: p.title, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now), amount_uah: Math.round(plannedUAH(p.period_amount, p.currency_code, rates) / 100), kind: p.kind }))
     .filter((p) => p.at <= in30)
     .sort((a, b) => a.at - b.at)
     .slice(0, 12)

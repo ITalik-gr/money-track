@@ -4,7 +4,7 @@ import type { Env } from "../env.ts";
 import { generateInsight, briefUsage, logUsage, type StructuredInsight, type AiUsageBrief } from "./ai.ts";
 import { getState, setState } from "./repo.ts";
 import { getRates } from "./finance.ts";
-import { STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "./stats.ts";
+import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "./stats.ts";
 
 const DAY = 86400;
 const PERIOD_KEY = "insight_period_days";
@@ -66,8 +66,9 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
        WHERE t.time >= ? AND t.time < ?`,
     ).bind(from, now).first<{ total: number | null }>(),
     env.DB.prepare(
-      `SELECT e.name AS name, ${amountSum(mult)} AS spent FROM transactions t JOIN event_groups e ON e.id = t.event_id
-       WHERE t.time >= ? AND t.time < ? AND t.amount < 0 AND t.is_transfer = 0
+      `SELECT e.name AS name, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS} JOIN event_groups e ON e.id = t.event_id
+       WHERE t.time >= ? AND t.time < ? AND ${EFF_AMOUNT} < 0 AND t.is_transfer = 0
        GROUP BY t.event_id ORDER BY spent DESC LIMIT 6`,
     ).bind(from, now).all<{ name: string; spent: number }>(),
     env.DB.prepare(

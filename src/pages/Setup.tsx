@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 import { Icon } from "../components/Icon.tsx";
 import {
   useBackfillStartMutation,
@@ -215,7 +216,7 @@ function ProfileCard() {
       />
       <div className="row" style={{ justifyContent: "flex-end" }}>
         <button className="btn primary" disabled={isLoading}
-          onClick={async () => { try { await saveProfile(text).unwrap(); toast.success("Збережено"); } catch (e) { toast.error(String(e)); } }}>
+          onClick={async () => { try { await saveProfile(text).unwrap(); toast.success("Збережено"); } catch (e) { toast.error(errText(e)); } }}>
           {isLoading ? "Зберігаю…" : "Зберегти профіль"}
         </button>
       </div>

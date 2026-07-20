@@ -8,6 +8,7 @@ import { TransactionList } from "../components/TransactionList.tsx";
 import { GROUP_KINDS } from "../components/GroupModal.tsx";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 
 const kindLabel = (k: string | null) => GROUP_KINDS.find((x) => x.value === k)?.label ?? "Група";
 
@@ -73,7 +74,7 @@ function GroupAiPanel({ eventId, groupName }: { eventId: number; groupName: stri
 
   async function runEval() {
     try { setEvalResult(await evaluate(eventId).unwrap()); }
-    catch (e) { toast.error(String(e)); }
+    catch (e) { toast.error(errText(e)); }
   }
 
   async function send(text?: string) {

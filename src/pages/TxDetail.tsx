@@ -13,6 +13,7 @@ import { Money } from "../components/Money.tsx";
 import { MerchantLogo } from "../components/MerchantLogo.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 import { currencySign } from "../lib/format.ts";
 import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
 import { Select } from "../components/Select.tsx";
@@ -149,7 +150,7 @@ export function TxDetail() {
         toast.success("Збережено");
       }
     } catch (e) {
-      toast.error(String(e));
+      toast.error(errText(e));
     }
   }
 
@@ -158,7 +159,7 @@ export function TxDetail() {
     try {
       await editTx({ id, body: { lock_name: false } }).unwrap();
       toast.success("AI зможе оновлювати назву");
-    } catch (e) { toast.error(String(e)); }
+    } catch (e) { toast.error(errText(e)); }
   }
 
   return (
@@ -240,7 +241,7 @@ export function TxDetail() {
               <button className="btn ai-recognize" disabled={enriching}
                 onClick={async () => {
                   try { await enrich(id).unwrap(); toast.success("AI оновив назву й категорію"); }
-                  catch (e) { toast.error(String(e)); }
+                  catch (e) { toast.error(errText(e)); }
                 }}>{enriching ? "Аналізую…" : "Розпізнати"}</button>
             </div>
 
@@ -494,8 +495,10 @@ function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
       if (r.applied?.category_name) toast.success(`AI оновив категорію → ${r.applied.category_name}`);
       if (r.applied?.is_transfer) toast.success("AI позначив як переказ між своїми");
       if (r.applied?.understanding) toast.success("AI оновив розуміння операції");
-    } catch {
-      setMessages((m) => [...m, { role: "assistant", content: "Не вдалося відповісти. Спробуй ще раз." }]);
+    } catch (e) {
+      // Показуємо РЕАЛЬНУ причину (ліміт, ключ, збій моделі), а не глухе «спробуй ще раз» —
+      // інакше діагностувати AI-помилку неможливо (див. `lib/errors.ts`).
+      setMessages((m) => [...m, { role: "assistant", content: `⚠️ Не вдалося відповісти: ${errText(e)}` }]);
     } finally { sending.current = false; }
   }
 

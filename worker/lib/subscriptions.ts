@@ -1,3 +1,5 @@
+import { toUAHMinor, type Rates } from "./finance.ts";
+
 // Детерміністичне співставлення операцій із оголошеними підписками (planned_payments).
 // Мета: якщо є активна підписка (напр. «Apple» $1/міс у категорії Підписки), то нове
 // списання того самого мерчанта на ту саму суму автоматично отримує КАТЕГОРІЮ підписки
@@ -27,6 +29,22 @@ async function activeSubs(db: D1Database): Promise<SubRow[]> {
 // у майбутнє. ЄДИНЕ джерело для воркера (ендпоінти/proactive) — дзеркалиться фронтовим
 // Subscriptions.nextCharge. Раніше частина ендпоінтів ігнорувала period_count, тож
 // квартальна підписка помилково «спливала» щомісяця.
+// §CUR-PLAN (2026-07-20): ЄДИНЕ джерело «скільки коштує план у ₴».
+// Раніше кожен ендпоінт сумував `period_amount` НАПРЯМУ, ігноруючи `currency_code` —
+// підписка $5 рахувалась як 5 ₴ (у «Скоро спишеться», прогнозі, календарі та в
+// AI-контексті порадника). Будь-яке зведення планів у ₴ — лише через ці хелпери.
+export function plannedUAH(amountMinor: number | null, code: number | null, rates: Rates): number {
+  return toUAHMinor(amountMinor ?? 0, code ?? 980, rates);
+}
+
+// Сума планів у ₴. Приймає будь-які рядки з сумою+валютою (не лише SubRow).
+export function sumPlannedUAH(
+  plans: { period_amount: number | null; currency_code?: number | null }[],
+  rates: Rates,
+): number {
+  return plans.reduce((s, p) => s + plannedUAH(p.period_amount, p.currency_code ?? 980, rates), 0);
+}
+
 export function nextChargeUnix(startDate: number, period: string, count = 1, now = Math.floor(Date.now() / 1000)): number {
   const n = Math.max(1, Math.round(count || 1));
   if (period === "week") { let t = startDate; while (t <= now) t += 7 * 86400 * n; return t; }

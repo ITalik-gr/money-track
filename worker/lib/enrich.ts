@@ -39,6 +39,21 @@ async function manualAliasFor(env: Env, rawDesc: string | null): Promise<boolean
   return !!row;
 }
 
+// §FK-GUARD (2026-07-20): AI повертає id категорії, якого може не існувати.
+// Категорій 45, але id доходять до 54 — у діапазоні є дірки від видалених, тож
+// «правдоподібний» id від моделі влучає в неіснуючий рядок і будь-який запис
+// (transactions.category_id / transaction_tags / merchant_aliases) валиться з
+// `D1_ERROR: FOREIGN KEY constraint failed`, а користувач бачить лише «не вдалось».
+// Правило: КОЖЕН id категорії, що прийшов від AI, проганяй через це перед записом.
+async function existingCategoryIds(env: Env, ids: (number | null | undefined)[]): Promise<Set<number>> {
+  const want = [...new Set(ids.filter((x): x is number => typeof x === "number" && Number.isFinite(x)))];
+  if (!want.length) return new Set();
+  const rows = await env.DB.prepare(
+    `SELECT id FROM categories WHERE id IN (${want.map(() => "?").join(",")})`,
+  ).bind(...want).all<{ id: number }>();
+  return new Set((rows.results ?? []).map((r) => r.id));
+}
+
 // Записати/оновити навчений alias по сирому опису — але НІКОЛИ не перетерти ручний (source='manual').
 // Нові записи від AI позначаємо source='ai'.
 async function writeAiAlias(
@@ -167,15 +182,20 @@ async function applyEnrichment(
         merchant: cleanName, description: rawDescForSub, amount: tx.amount, currency_code: tx.currency_code,
       })
     : null;
-  const finalCategory = sub?.category_id ?? result.category_id ?? null;
+  // §FK-GUARD: перевіряємо ВСІ id від AI одним запитом. Категорія підписки (`sub`) —
+  // з нашої ж БД, тож надійна; валідації потребує саме те, що вигадала модель.
+  const aiIds = [result.category_id, ...(result.tag_ids ?? [])];
+  const ok = await existingCategoryIds(env, aiIds);
+  const aiCategory = result.category_id != null && ok.has(result.category_id) ? result.category_id : null;
+  const finalCategory = sub?.category_id ?? aiCategory ?? null;
 
   // §R7: name_locked → зберігаємо ручну назву (AI уточнює лише категорію/переказ/note).
   await env.DB.prepare(
     "UPDATE transactions SET merchant = CASE WHEN name_locked = 1 THEN merchant ELSE ? END, category_id = COALESCE(?, category_id), is_transfer = ?, ai_note = ?, planned_id = COALESCE(?, planned_id), ai_enriched = 1 WHERE id = ?",
   ).bind(cleanName, finalCategory, isTransfer, result.note?.trim() || null, sub?.planned_id ?? null, tx.id).run();
 
-  // Теги (вторинні категорії), до 3, без дублю основної.
-  const tags = (result.tag_ids ?? []).filter((t) => t && t !== result.category_id).slice(0, 3);
+  // Теги (вторинні категорії), до 3, без дублю основної. Неіснуючі id відкидаємо (§FK-GUARD).
+  const tags = (result.tag_ids ?? []).filter((t) => t && t !== aiCategory && ok.has(t)).slice(0, 3);
   for (const t of tags) {
     await env.DB.prepare(
       "INSERT OR IGNORE INTO transaction_tags (transaction_id, category_id) VALUES (?, ?)",
@@ -186,7 +206,7 @@ async function applyEnrichment(
   // Idempotent + §Хвіст: writeAiAlias не перетирає ручний alias і позначає запис source='ai'.
   const rawDesc = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description?.trim() : null;
   if (tx.source === "mono" && rawDesc) {
-    await writeAiAlias(env, rawDesc, cleanName, result.category_id ?? null, isTransfer);
+    await writeAiAlias(env, rawDesc, cleanName, aiCategory, isTransfer); // §FK-GUARD: лише перевірений id
   }
 }
 

@@ -15,6 +15,7 @@ import { Money } from "../components/Money.tsx";
 import { MerchantLogo } from "../components/MerchantLogo.tsx";
 import { CashflowCalendar } from "../components/CashflowCalendar.tsx";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 import { Select } from "../components/Select.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
@@ -183,14 +184,28 @@ export function Subscriptions() {
                     if (!a || a.count === 0) return null;
                     const up = a.price_change_pct != null && a.price_change_pct >= 5;
                     const down = a.price_change_pct != null && a.price_change_pct <= -5;
+                    // Абсолютна дельта в грошах + вплив на рік — «+50 ₴ (600 ₴/рік)» переконує
+                    // сильніше за голий відсоток. Рік = дельта × кількість списань на рік.
+                    const cur = a.currency_code ?? p.currency_code ?? 980;
+                    const delta = a.last_amount != null ? a.last_amount - (p.period_amount ?? 0) : null;
+                    const perYear = delta != null ? Math.round(delta * (p.period === "week" ? 52 : 12) / pcount(p)) : null;
                     return (
-                      <div className="sub-card-fx" style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      <div className="sub-card-fx sub-fact">
                         <span>факт: {a.count}× списань</span>
                         {a.last_amount != null && (
-                          <span>· останнє <Money minor={a.last_amount} currency={a.currency_code ?? p.currency_code ?? 980} decimals={false} /></span>
+                          <span>· останнє <Money minor={a.last_amount} currency={cur} decimals={false} /></span>
                         )}
-                        {up && <span className="sub-badge" style={{ background: "var(--c-rose, #e5484d)", color: "#fff" }}>↑ подорожчало {a.price_change_pct}%</span>}
-                        {down && <span className="sub-badge">↓ {Math.abs(a.price_change_pct as number)}% дешевше</span>}
+                        {up && delta != null && (
+                          <span className="sub-badge up" title={`План ${Math.round((p.period_amount ?? 0) / 100)} → факт ${Math.round(a.last_amount! / 100)}`}>
+                            ↑ +<Money minor={delta} currency={cur} decimals={false} />
+                            {perYear != null && <span className="sub-badge-sub"> · +<Money minor={perYear} currency={cur} decimals={false} />/рік</span>}
+                          </span>
+                        )}
+                        {down && delta != null && (
+                          <span className="sub-badge down">
+                            ↓ <Money minor={Math.abs(delta)} currency={cur} decimals={false} /> дешевше
+                          </span>
+                        )}
                       </div>
                     );
                   })()}
@@ -395,7 +410,7 @@ function AddForm() {
       }).unwrap();
       setTitle(""); setPeriodAmount(""); setTotalAmount(""); setPeriodCount("1");
       toast.success("Додано");
-    } catch (e) { toast.error(String(e)); }
+    } catch (e) { toast.error(errText(e)); }
   }
 
   return (

@@ -25,6 +25,7 @@ import { renderRich } from "../lib/citations.tsx";
 import { formatMinor } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
 
 // AI-порадник: числа (runway) + структуровані поради + інтерактивне «запитай/опиши».
 // Профіль «про мене» редагується лише в Налаштуваннях — AI його й так знає в усіх викликах.
@@ -44,10 +45,10 @@ export function Advisor() {
     try {
       await generate().unwrap();
     } catch (e) {
-      const raw = (e as { data?: { error?: string } })?.data?.error ?? String(e);
+      const raw = errText(e);
       const friendly = raw.includes("not set")
         ? "AI-ключ не налаштовано на цьому середовищі."
-        : "Не вдалося отримати поради. Спробуй ще раз.";
+        : `Не вдалося отримати поради: ${raw}`;
       setGenError(friendly);
       toast.error(friendly);
     }
