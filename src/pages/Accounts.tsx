@@ -12,12 +12,8 @@ import { Money } from "../components/Money.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { Select } from "../components/Select.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
+import { accountTypeLabel } from "../lib/merchant.ts";
 import type { Account } from "../../shared/types.ts";
-
-const KIND_LABEL: Record<string, string> = {
-  black: "Чорна", white: "Біла", platinum: "Platinum", fop: "ФОП",
-  jar: "Банка", cash: "Готівка", manual_card: "Картка", crypto: "Крипта",
-};
 
 const CURRENCIES: { code: number; label: string }[] = [
   { code: 980, label: "₴ UAH" },
@@ -118,7 +114,7 @@ function AccountCard({ a, rates, muted, editable, renameable }: {
   const uah = code !== 980 ? toUAHMinor(shown, code, rates) : null;
 
   const showManualTitle = a.type === "cash" || a.type === "manual_card" || a.type === "crypto";
-  const title = a.type === "jar" || showManualTitle ? (a.title || KIND_LABEL[kind]) : (KIND_LABEL[kind] ?? kind);
+  const title = a.type === "jar" || showManualTitle ? (a.title || accountTypeLabel(kind)) : (accountTypeLabel(kind) ?? kind);
   const subLabel = credit ? "власних коштів"
     : a.type === "jar" ? "накопичено"
     : a.type === "crypto" ? "оцінка (вручну)"

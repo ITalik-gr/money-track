@@ -951,19 +951,19 @@ api.get("/analytics/overview", async (c) => {
     // Розбивка по ЕФЕКТИВНІЙ категорії (готівка/зняття за реальною суттю; рол-ап у батька).
     c.env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS category_id, ${EFF_CAT_NAME} AS category_name,
-              ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent, COUNT(*) AS n
+              ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
        GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
     ).bind(from, to).all(),
     c.env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(*) AS n
+      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter} AND t.merchant IS NOT NULL
        GROUP BY t.merchant ORDER BY spent DESC LIMIT 10`,
     ).bind(from, to).all(),
     c.env.DB.prepare(
-      `SELECT t.account_id, a.title AS account_title, a.type AS account_type, ${amountSum(mult)} AS spent, COUNT(*) AS n
+      `SELECT t.account_id, a.title AS account_title, a.type AS account_type, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS} LEFT JOIN accounts a ON a.id = t.account_id
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
        GROUP BY t.account_id ORDER BY spent DESC`,
@@ -978,7 +978,7 @@ api.get("/analytics/overview", async (c) => {
     ).bind(from, to).all(),
     // §6 Вагомість: частка обов'язкових/бажаних/необов'язкових витрат (канонічно, зведено).
     c.env.DB.prepare(
-      `SELECT ${EFF_IMPORTANCE} AS importance, ${amountSum(mult)} AS spent, COUNT(*) AS n
+      `SELECT ${EFF_IMPORTANCE} AS importance, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
        GROUP BY ${EFF_IMPORTANCE}`,
@@ -1223,7 +1223,7 @@ api.get("/analytics/merchant", async (c) => {
 
   const [agg, byMonth, topCat, txs] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT ${amountSum(mult)} AS total, COUNT(*) AS n, MIN(t.time) AS first_at, MAX(t.time) AS last_at
+      `SELECT ${amountSum(mult)} AS total, COUNT(DISTINCT t.id) AS n, MIN(t.time) AS first_at, MAX(t.time) AS last_at
        FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?`,
     ).bind(name).first<{ total: number; n: number; first_at: number | null; last_at: number | null }>(),
     c.env.DB.prepare(
@@ -1648,7 +1648,7 @@ api.get("/analytics/patterns", async (c) => {
       `SELECT ${EFF_CAT_ID} AS id,
               CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS recurring,
               CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN 0 ELSE (-${EFF_AMOUNT}) * ${mult} END), 0)) AS INTEGER) AS oneoff,
-              COUNT(*) AS n,
+              COUNT(DISTINCT t.id) AS n,
               CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER) AS biggest
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
@@ -1750,12 +1750,12 @@ api.get("/analytics/category", async (c) => {
   const [subs, merchants, txs] = await Promise.all([
     c.env.DB.prepare(
       `SELECT COALESCE(rc.id, c.id) AS category_id, COALESCE(rc.name, c.name, 'без категорії') AS name,
-              COALESCE(rc.color, c.color) AS color, ${amountSum(mult)} AS spent, COUNT(*) AS n
+              COALESCE(rc.color, c.color) AS color, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE ${base} GROUP BY COALESCE(rc.id, c.id) ORDER BY spent DESC`,
     ).bind(from, to, parent).all(),
     c.env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(*) AS n
+      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE ${base} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
     ).bind(from, to, parent).all(),
@@ -1804,7 +1804,7 @@ api.get("/analytics/slice", async (c) => {
 
   const [summary, txs] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT ${amountSum(mult)} AS spent, COUNT(*) AS n
+      `SELECT ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS} WHERE ${base}`,
     ).bind(...binds).first<{ spent: number; n: number }>(),
     c.env.DB.prepare(
@@ -1836,7 +1836,7 @@ api.get("/analytics/by-category", async (c) => {
   const { mult } = valueMode(rates, null);
   const rows = await c.env.DB.prepare(
     `SELECT ${EFF_CAT_ID} AS category_id, ${EFF_CAT_NAME} AS category_name, ${EFF_CAT_COLOR} AS color,
-            ${amountSum(mult)} AS spent, COUNT(*) AS n
+            ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,

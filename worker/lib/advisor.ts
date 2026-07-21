@@ -744,12 +744,12 @@ export async function runFinanceTool(env: Env, name: string, input: Record<strin
       const grp = group === "category" ? EFF_CAT_ID : sel;
       const order = group === "month" ? "label ASC" : "amt DESC";
       const rows = await env.DB.prepare(
-        `SELECT ${sel} AS label, ${sumExpr} AS amt, COUNT(*) AS n FROM transactions t ${STATS_JOINS} WHERE ${where} GROUP BY ${grp} ORDER BY ${order} LIMIT 24`,
+        `SELECT ${sel} AS label, ${sumExpr} AS amt, COUNT(DISTINCT t.id) AS n FROM transactions t ${STATS_JOINS} WHERE ${where} GROUP BY ${grp} ORDER BY ${order} LIMIT 24`,
       ).bind(...binds).all<{ label: string; amt: number; n: number }>();
       return { flow, from_date: input.from_date, to_date: input.to_date, currency: "UAH", groups: (rows.results ?? []).map((r) => ({ label: r.label, amount_uah: Math.round(r.amt / 100), count: r.n })) };
     }
     const tot = await env.DB.prepare(
-      `SELECT ${sumExpr} AS amt, COUNT(*) AS n FROM transactions t ${STATS_JOINS} WHERE ${where}`,
+      `SELECT ${sumExpr} AS amt, COUNT(DISTINCT t.id) AS n FROM transactions t ${STATS_JOINS} WHERE ${where}`,
     ).bind(...binds).first<{ amt: number; n: number }>();
     return { flow, from_date: input.from_date, to_date: input.to_date, currency: "UAH", total_uah: Math.round((tot?.amt ?? 0) / 100), count: tot?.n ?? 0 };
   }

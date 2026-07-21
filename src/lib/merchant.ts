@@ -19,6 +19,18 @@ export function cardKindLabel(kind: CardKind): string {
   return CARD_KIND_LABEL[kind];
 }
 
+// Людська назва за ТИПОМ рахунку (`account.type`) — коротка форма для списку Рахунків.
+// Домен ширший за CardKind (є crypto/cash/manual_card/platinum) і навмисно коротший
+// («Чорна», не «Чорна картка»): у списку тип уже в контексті картки. Єдине джерело
+// вокабуляру типів рахунків — тут (був дубльований інлайном у Accounts.tsx).
+const ACCOUNT_TYPE_LABEL: Record<string, string> = {
+  black: "Чорна", white: "Біла", platinum: "Platinum", fop: "ФОП",
+  jar: "Банка", cash: "Готівка", manual_card: "Картка", crypto: "Крипта",
+};
+export function accountTypeLabel(type: string): string | undefined {
+  return ACCOUNT_TYPE_LABEL[type];
+}
+
 // account_title з бекенду — конкатенація "<type> <··маскований PAN>" (repo.ts titleFor).
 // Дістаємо останні 4 цифри для компактного бейджа картки (·· 4932).
 export function cardLast4(title: string | null | undefined): string | null {

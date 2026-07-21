@@ -266,7 +266,8 @@ export function Transactions() {
 
         <div className="tx-main">
           {isFetching && <div className="label" style={{ margin: "0 2px 8px" }}>завантаження…</div>}
-          <TransactionList rows={rows} selectable={selectMode} selected={selected} onToggle={toggle} />
+          <TransactionList rows={rows} selectable={selectMode} selected={selected} onToggle={toggle}
+            empty={anyFilter ? "Немає операцій за цим фільтром. Спробуй скинути фільтри." : "Ще немає операцій."} />
           {hasMore && (
             <div className="tx-more">
               <button className="tx-more-btn" disabled={isFetching} onClick={() => setLimit((l) => l + 100)}>

@@ -1,3 +1,7 @@
+<!-- Свідомо лишено (рішення 2026-07-21): цей файл активує caveman для агентів, що читають
+     конвенцію AGENTS.md (Codex/Cursor тощо). Claude Code отримує ті самі правила через
+     SessionStart-хук, тож для НЬОГО це дубль — але для інших інструментів це єдине джерело. -->
+
 Respond terse like smart caveman. All technical substance stay. Only fluff die.
 
 Rules:

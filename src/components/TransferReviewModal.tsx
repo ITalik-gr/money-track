@@ -9,6 +9,7 @@ import {
 import { Select } from "./Select.tsx";
 import type { SelectOption } from "./Select.tsx";
 import { MerchantLogo } from "./MerchantLogo.tsx";
+import { Icon } from "./Icon.tsx";
 import { formatMinor, formatDate, currencySign } from "../lib/format.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
@@ -102,7 +103,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
     <div className="modal-overlay" onMouseDown={onClose}>
       <div className="modal modal-review" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>✨ Рев'ю реальних категорій переказів</h3>
+          <h3 className="h-ico"><Icon name="spark" size={17} />Рев'ю реальних категорій переказів</h3>
           <button className="modal-x" onClick={onClose} aria-label="Закрити">✕</button>
         </div>
 
@@ -150,7 +151,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
                     onKeyDown={(e) => e.key === "Enter" && reRun(r)}
                   />
                   <button className="btn ghost" disabled={!r.hint.trim() || r.rerunning} onClick={() => reRun(r)}>
-                    {r.rerunning ? "…" : "✨ AI"}
+                    {r.rerunning ? "…" : <><Icon name="spark" size={14} />AI</>}
                   </button>
                 </div>
 

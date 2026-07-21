@@ -33,7 +33,7 @@ async function resolvePeriodDays(env: Env, override?: number): Promise<number> {
 // Канонічна розбивка по ефективній категорії, зведено в ₴ (як Статистика/репорти).
 async function spendByCategory(env: Env, from: number, to: number, mult: string) {
   const r = await env.DB.prepare(
-    `SELECT ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent, COUNT(*) AS n
+    `SELECT ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 8`,
@@ -53,7 +53,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
     spendByCategory(env, from, now, mult),
     spendByCategory(env, prevFrom, from, mult),
     env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(*) AS n FROM transactions t ${STATS_JOINS}
+      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE} AND t.merchant IS NOT NULL
        GROUP BY t.merchant ORDER BY spent DESC LIMIT 6`,
     ).bind(from, now).all<{ merchant: string; spent: number; n: number }>(),
@@ -72,7 +72,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
        GROUP BY t.event_id ORDER BY spent DESC LIMIT 6`,
     ).bind(from, now).all<{ name: string; spent: number }>(),
     env.DB.prepare(
-      `SELECT ${EFF_IMPORTANCE} AS imp, ${amountSum(mult)} AS spent, COUNT(*) AS n FROM transactions t ${STATS_JOINS}
+      `SELECT ${EFF_IMPORTANCE} AS imp, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE} GROUP BY imp`,
     ).bind(from, now).all<{ imp: string; spent: number; n: number }>(),
     recurringOneoffSplit(env, from, now, mult),

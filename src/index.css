@@ -444,7 +444,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 }
 /* Ліву кольор-смугу прибрано (side-stripe = AI-tell, DESIGN.md рішення 2026-07-11):
    колір рахунку несе `.acct2-badge` у шапці. */
-.acct2:hover { border-color: var(--muted); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) { .acct2:hover { border-color: var(--muted); transform: translateY(-1px); } }
 .acct2.muted-acct { background: var(--surface-2); }
 .acct2-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .acct2-badge { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
@@ -487,7 +487,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
   text-decoration: none; color: inherit; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out);
 }
-.env-item:hover { border-color: var(--muted); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) { .env-item:hover { border-color: var(--muted); transform: translateY(-1px); } }
 .env-item.over { border-color: color-mix(in srgb, var(--neg) 40%, var(--line)); }
 .env-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .env-name { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -699,7 +699,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   display: flex; flex-direction: column; gap: 6px;
   transition: border-color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
 }
-.group-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) { .group-card:hover { border-color: var(--line-strong); transform: translateY(-1px); } }
 .group-top { display: flex; align-items: flex-start; justify-content: space-between; }
 .group-ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; }
 .group-del { border: none; background: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; }
@@ -923,6 +923,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .btn.ghost:hover { background: var(--surface-2); border-color: transparent; }
 /* Компактний розмір — для дій у заголовках секцій, рядках, чіпах (не переважає текст поруч) */
 .btn.sm { padding: 6px 12px; font-size: 13px; border-radius: var(--radius-xs); gap: 6px; }
+.btn.xs { padding: 4px 10px; font-size: 12px; border-radius: var(--radius-xs); gap: 5px; }
 
 /* ---- reusable Select (проєктний) ---------------------------------------- */
 .sel { position: relative; width: 100%; }
@@ -1289,7 +1290,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* Ціле — посилання: усе, що тут показано, детальніше живе на «Стані фінансів»,
    тож клікабельним має бути весь блок, а не дрібне «детальніше →». */
 .hm { display: flex; align-items: center; gap: var(--sp-4); }
-.hm:hover { border-color: var(--line-strong); }
+@media (hover: hover) and (pointer: fine) { .hm:hover { border-color: var(--line-strong); } }
 .hm-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .hm-label { font-size: var(--fs-sm); color: var(--muted); }
 .hm-band { font-size: var(--fs-lg); font-weight: 600; }
@@ -1513,7 +1514,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .kpi-ic.income { background: var(--pos-soft); color: var(--pos); }
 .kpi-tile .kpi-title { font-size: 13.5px; color: var(--ink-2); font-weight: 500; }
 .kpi-tile.kpi-click { cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
-.kpi-tile.kpi-click:hover { border-color: var(--muted); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) { .kpi-tile.kpi-click:hover { border-color: var(--muted); transform: translateY(-1px); } }
 .kpi-tile.kpi-click.open { border-color: var(--accent); }
 .kpi-tile .kpi-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .kpi-tile .kpi-info { flex-shrink: 0; margin-top: 1px; }
@@ -1808,7 +1809,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 }
 /* §1: клікабельний факт (напр. «Найдорожчий день ›» — розкриває операції того дня) */
 .fact.fact-click { cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
-.fact.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) { .fact.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); } }
 .fact.fact-click.open { border-color: var(--accent); }
 .fact.fact-click:disabled { cursor: default; opacity: 0.65; }
 .stat-facts .fact-label-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
@@ -1974,7 +1975,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .runway-metric .label { margin-bottom: 3px; }
 .runway-val { font-size: 22px; }
 .runway-comment { grid-column: 1 / -1; margin: 6px 0 0; font-size: 14px; line-height: 1.55; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-2); }
-.gauge { position: relative; width: 130px; height: 130px; flex-shrink: 0; }
+.gauge { position: relative; flex-shrink: 0; line-height: 0; }
 .gauge-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .gauge-val { font-size: 30px; line-height: 1; }
 
@@ -2408,7 +2409,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .imp-seg-lbl { font-size: 11.5px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
 .imp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
 .imp-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-width: 0; text-align: left; font: inherit; cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
-.imp-card.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) { .imp-card.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); } }
 .imp-card.fact-click.open { border-color: var(--accent); }
 .imp-card:disabled { cursor: default; opacity: 0.6; }
 .imp-card-top { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
@@ -2463,7 +2464,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
  text-decoration: none; color: inherit; transition: border-color .12s, transform .12s;
 }
-.report-card:hover { border-color: var(--muted); transform: translateY(-1px); }
+@media (hover: hover) and (pointer: fine) { .report-card:hover { border-color: var(--muted); transform: translateY(-1px); } }
 .rc-del {
   position: absolute; top: 10px; right: 10px; display: grid; place-items: center;
   width: 28px; height: 28px; padding: 0; border: none; border-radius: 8px;
@@ -2578,6 +2579,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .ai-block-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ai-block-title { font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
 .ai-block-title svg { color: var(--accent); flex-shrink: 0; }
+/* Іконка на початку заголовка секції/модалки (замість емоджі-префікса) — вирівнювання + акцент. */
+.h-ico { display: inline-flex; align-items: center; gap: 8px; }
+.h-ico svg { color: var(--accent); flex-shrink: 0; }
 .ai-recognize { padding: 7px 14px; border-color: var(--accent); color: var(--accent); background: var(--surface); font-weight: 500; }
 .ai-recognize:hover:not(:disabled) { background: var(--accent-soft); }
 .ai-block-hint { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 0; }

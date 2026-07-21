@@ -13,6 +13,7 @@ import {
 } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
 import { MerchantLogo } from "../components/MerchantLogo.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { CashflowCalendar } from "../components/CashflowCalendar.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
@@ -239,6 +240,12 @@ export function Subscriptions() {
           </div>
         )}
 
+        {list.length === 0 && (
+          <div className="card empty" style={{ padding: 28 }}>
+            Активних підписок і планових платежів ще нема. Додай нижче — або дай AI знайти їх у твоїй історії.
+          </div>
+        )}
+
         {topExpensive.length >= 3 && (
           <div className="card top-subs-card">
             <div className="section-head"><h2>Найдорожчі</h2><span className="label">на місяць</span></div>
@@ -287,7 +294,7 @@ function AiDetect() {
   return (
     <section>
       <div className="section-head">
-        <h2>✨ Знайти підписку через AI</h2>
+        <h2 className="h-ico"><Icon name="spark" size={16} />Знайти підписку через AI</h2>
         <span className="label">опиши словами — знайду в історії</span>
       </div>
       <div className="card sub-ai-block">
@@ -317,7 +324,7 @@ function AiDetect() {
                   </div>
                 </div>
                 <div className="s-amt"><Money minor={c.period_amount} currency={c.currency_code} decimals={false} /></div>
-                <button className="btn primary" style={{ padding: "6px 10px" }}
+                <button className="btn primary sm"
                   onClick={() => addPlanned(plannedFromCandidate(c))}>+ додати</button>
               </div>
             ))}
@@ -369,7 +376,7 @@ function Detected() {
                 </div>
               </div>
               <div className="s-amt"><Money minor={c.amount} currency={c.currency_code ?? 980} decimals={false} /></div>
-              <button className="btn primary" style={{ padding: "6px 10px" }} disabled={isLoading}
+              <button className="btn primary sm" disabled={isLoading}
                 onClick={() => addPlanned(plannedFromCandidate({
                   title: c.merchant, period_amount: c.amount, currency_code: c.currency_code,
                   avg_interval_days: c.avg_interval_days, last_time: c.last_time, category_id: c.category_id,

@@ -30,7 +30,7 @@ export function EventDetail() {
   return (
     <>
       <div className="section-head">
-        <button className="btn ghost" style={{ padding: "4px 8px", marginLeft: -8 }} onClick={() => navigate(-1)}>← назад</button>
+        <button className="btn ghost xs" style={{ marginLeft: -8 }} onClick={() => navigate(-1)}>← назад</button>
       </div>
 
       <div className="card group-detail-head" style={{ "--group-color": color } as React.CSSProperties}>
@@ -100,7 +100,7 @@ function GroupAiPanel({ eventId, groupName }: { eventId: number; groupName: stri
     <div className="card grp-ai">
       <p className="grp-ai-hint">AI оцінить цю групу — скільки коштувала, як вдарила по бюджету, чи дорого — і відповість на питання саме про неї.</p>
       <button className="btn primary" style={{ width: "100%" }} disabled={evaluating} onClick={runEval}>
-        {evaluating ? "Аналізую…" : evalResult ? "✨ Оцінити ще раз" : "✨ Оцінити групу"}
+        {evaluating ? "Аналізую…" : <><Icon name="spark" size={15} />{evalResult ? "Оцінити ще раз" : "Оцінити групу"}</>}
       </button>
 
       {evalResult && (

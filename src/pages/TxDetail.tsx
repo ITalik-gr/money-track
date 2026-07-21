@@ -165,8 +165,8 @@ export function TxDetail() {
   return (
     <>
       <div className="section-head" style={{ justifyContent: "space-between" }}>
-        <button className="btn ghost" style={{ padding: "4px 8px", marginLeft: -8 }} onClick={() => navigate(-1)}>← назад</button>
-        <button className="btn ghost" style={{ padding: "4px 10px" }}
+        <button className="btn ghost xs" style={{ marginLeft: -8 }} onClick={() => navigate(-1)}>← назад</button>
+        <button className="btn ghost xs"
           onClick={async () => {
             try { await navigator.clipboard.writeText(buildTxDump(tx)); toast.success("Скопійовано"); }
             catch { toast.error("Не вдалося скопіювати"); }
@@ -237,7 +237,7 @@ export function TxDetail() {
           {/* Окремий AI-блок: що AI знає + розпізнавання + нотатка + інлайн-чат */}
           <div className="card ai-block">
             <div className="ai-block-head">
-              <span className="ai-block-title">✨ AI про цю операцію</span>
+              <span className="ai-block-title"><Icon name="spark" size={16} />AI про цю операцію</span>
               <button className="btn ai-recognize" disabled={enriching}
                 onClick={async () => {
                   try { await enrich(id).unwrap(); toast.success("AI оновив назву й категорію"); }

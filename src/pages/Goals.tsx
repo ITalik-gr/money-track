@@ -51,7 +51,7 @@ export function Goals() {
                 <span className="goal-target">без цілі</span>
               </div>
               <div className="goal-bar"><div className="goal-fill" style={{ width: "0%" }} /></div>
-              <button className="btn" style={{ padding: "7px 12px", fontSize: 13 }}
+              <button className="btn sm"
                 onClick={() => setModal({ open: true, goal: null, accountId: a.id, name: a.title || "Банка" })}>
                 Задати ціль
               </button>

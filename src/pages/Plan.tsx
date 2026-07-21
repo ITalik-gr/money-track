@@ -9,6 +9,7 @@ import {
   useSetBudgetMutation,
 } from "../store/api.ts";
 import { Money } from "../components/Money.tsx";
+import { Icon } from "../components/Icon.tsx";
 import { AutoBudget } from "../components/AutoBudget.tsx";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
@@ -110,7 +111,7 @@ function BudgetChat() {
           <div className="bch-proposals">
             <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
               <span className="label">Пропоновані ліміти</span>
-              <button className="btn primary" style={{ padding: "5px 12px", fontSize: 13 }} onClick={acceptAll}>Прийняти всі</button>
+              <button className="btn primary sm" onClick={acceptAll}>Прийняти всі</button>
             </div>
             {proposals.map((p) => (
               <div key={p.category_id} className="bch-prop">
@@ -118,7 +119,7 @@ function BudgetChat() {
                   <div className="bch-prop-name">{catName(p.category_id)} · <b><Money minor={p.limit_uah * 100} decimals={false} /></b></div>
                   {p.reason && <div className="bch-prop-reason">{p.reason}</div>}
                 </div>
-                <button className="btn" style={{ padding: "5px 11px", fontSize: 13 }} onClick={() => accept(p)}>Прийняти</button>
+                <button className="btn sm" onClick={() => accept(p)}>Прийняти</button>
               </div>
             ))}
           </div>
@@ -154,8 +155,8 @@ function BudgetPlanner() {
     <section>
       <div className="section-head">
         <h2>AI-план бюджету</h2>
-        <button className="btn primary" style={{ padding: "7px 14px" }} onClick={() => propose()} disabled={isLoading}>
-          {isLoading ? "Аналізую…" : data ? "Оновити" : "✨ Запропонувати ліміти"}
+        <button className="btn primary sm" onClick={() => propose()} disabled={isLoading}>
+          {isLoading ? "Аналізую…" : data ? "Оновити" : <><Icon name="spark" size={15} />Запропонувати ліміти</>}
         </button>
       </div>
 

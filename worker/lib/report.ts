@@ -77,7 +77,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
     cats(env, from, to, mult),
     cats(env, prevFrom, prevTo, mult),
     env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(*) AS n
+      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND t.merchant IS NOT NULL
        GROUP BY t.merchant ORDER BY spent DESC LIMIT 10`,

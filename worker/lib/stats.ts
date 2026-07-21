@@ -170,7 +170,7 @@ export async function recurringOneoffSplit(
   const [split, items] = await Promise.all([
     env.DB.prepare(
       `SELECT CASE WHEN ${recur} THEN 'recurring' ELSE 'oneoff' END AS kind,
-              ${amountSum(mult)} AS spent, COUNT(*) AS n
+              ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
        GROUP BY kind`,

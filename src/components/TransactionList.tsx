@@ -6,10 +6,12 @@ interface Props {
   selectable?: boolean;
   selected?: Set<string>;
   onToggle?: (id: string) => void;
+  /** Осмислена порожнеча (напр. фільтр-залежна). Дефолт — нейтральне «Порожньо». */
+  empty?: string;
 }
 
-export function TransactionList({ rows, selectable, selected, onToggle }: Props) {
-  if (!rows.length) return <div className="card empty">Порожньо</div>;
+export function TransactionList({ rows, selectable, selected, onToggle, empty }: Props) {
+  if (!rows.length) return <div className="card empty">{empty ?? "Порожньо"}</div>;
   return (
     <div className="ledger rows">
       {rows.map((t) => (
