@@ -150,6 +150,10 @@ export interface Overview {
   byEvent: { event_id: number; event_name: string; event_color: string | null; spent: number; n: number }[];
   byImportance: { importance: string; spent: number; n: number }[];
 }
+export interface MonthlyHistory { months: { month: string; spend: number; income: number }[] }
+// §R3: розбивка коштів (₴-мінор). cushion/debt/investment/net — канон fundsBreakdown (= Порадник).
+export interface AccountFunds { title: string | null; type: string | null; role: "liquid" | "investment"; own_uah: number; note: string | null }
+export interface FundsBreakdown { cushion: number; debt: number; investment: number; net: number; accounts: AccountFunds[] }
 export type PeriodMode = "calendar" | "rolling";
 export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group" | "notify";
 export type AiModelToken = "haiku" | "sonnet" | "opus";
@@ -390,7 +394,18 @@ export const api = createApi({
     }),
     getSummary: b.query<Summary, void>({ query: () => "/summary", providesTags: ["Summary"] }),
     getAccounts: b.query<Account[], void>({ query: () => "/accounts", providesTags: ["Account"] }),
-    addManualAccount: b.mutation<{ ok: boolean; id: string }, { type: "manual_card" | "crypto"; title: string; currency_code: number; balance: number }>({
+    getArchivedAccounts: b.query<Account[], void>({ query: () => "/accounts/archived", providesTags: ["Account"] }),
+    getFunds: b.query<FundsBreakdown, void>({ query: () => "/accounts/funds", providesTags: ["Account", "Summary"] }),
+    getAccountsHistory: b.query<{ history: Record<string, number[]> }, void>({ query: () => "/accounts/history", providesTags: ["Account"] }),
+    setAccountActive: b.mutation<unknown, { id: string; active: boolean }>({
+      query: ({ id, active }) => ({ url: `/accounts/${id}/active`, method: "PATCH", body: { active } }),
+      invalidatesTags: ["Account", "Summary"],
+    }),
+    deleteAccount: b.mutation<unknown, string>({
+      query: (id) => ({ url: `/accounts/${id}`, method: "DELETE" }),
+      invalidatesTags: ["Account", "Summary"],
+    }),
+    addManualAccount: b.mutation<{ ok: boolean; id: string }, { type: string; title: string; currency_code: number; balance: number; role?: "liquid" | "investment"; credit_limit?: number; ai_note?: string }>({
       query: (body) => ({ url: "/accounts/manual", method: "POST", body }),
       invalidatesTags: ["Account", "Summary"],
     }),
@@ -403,7 +418,7 @@ export const api = createApi({
       invalidatesTags: ["Account"],
     }),
     // §R3: роль рахунку (ліквідний/інвестиційний) + опис для AI.
-    setAccountMeta: b.mutation<unknown, { id: string; role?: "liquid" | "investment"; ai_note?: string }>({
+    setAccountMeta: b.mutation<unknown, { id: string; role?: "liquid" | "investment"; ai_note?: string; statement_day?: number | null; payment_day?: number | null; min_payment?: number | null }>({
       query: ({ id, ...body }) => ({ url: `/accounts/${id}/meta`, method: "PATCH", body }),
       invalidatesTags: ["Account", "Summary"],
     }),
@@ -725,6 +740,10 @@ export const api = createApi({
     getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
     // Спарклайни (6-міс тренд у списках категорій/мерчантів). Оновлюється з новими операціями.
     getSpark: b.query<SparkData, void>({ query: () => "/analytics/spark", providesTags: ["Summary"] }),
+    getMonthlyHistory: b.query<MonthlyHistory, { months?: number } | void>({
+      query: (a) => `/analytics/monthly-history?months=${a?.months ?? 6}`,
+      providesTags: ["Tx"],
+    }),
     getAutoBudget: b.query<AutoBudget, { trim?: number } | void>({
       query: (a) => `/budgets/auto?trim=${a?.trim ?? 10}`,
       providesTags: ["Budget", "Tx"],
@@ -816,10 +835,15 @@ export const {
   useLogoutMutation,
   useGetSummaryQuery,
   useGetAccountsQuery,
+  useGetArchivedAccountsQuery,
+  useGetFundsQuery,
+  useGetAccountsHistoryQuery,
   useAddManualAccountMutation,
   useEditManualAccountMutation,
   useSetAccountTitleMutation,
   useSetAccountMetaMutation,
+  useSetAccountActiveMutation,
+  useDeleteAccountMutation,
   useGetRatesQuery,
   useGetCategoriesQuery,
   useCreateCategoryMutation,
@@ -850,6 +874,7 @@ export const {
   useGetCapitalTrendQuery,
   useGetMerchantQuery,
   useGetOverviewQuery,
+  useGetMonthlyHistoryQuery,
   useGetCurrenciesQuery,
   useGetForecastQuery,
   useGetIncomeAnalyticsQuery,

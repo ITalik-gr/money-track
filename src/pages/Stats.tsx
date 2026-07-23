@@ -8,6 +8,9 @@ import { currencySign, formatMinor, formatDate } from "../lib/format.ts";
 import { CashflowChart } from "../components/CashflowChart.tsx";
 import { CumulativeChart } from "../components/CumulativeChart.tsx";
 import { IncomeBreakdown } from "../components/IncomeBreakdown.tsx";
+import { MonthlyHistory } from "../components/MonthlyHistory.tsx";
+import { SpendDonut } from "../components/SpendDonut.tsx";
+import { StatsSkeleton, SkeletonRows } from "../components/Skeleton.tsx";
 import { ReceiptItems } from "../components/ReceiptItems.tsx";
 import { PriceDrift } from "../components/PriceDrift.tsx";
 import { AiInsightCard } from "../components/AiInsightCard.tsx";
@@ -175,7 +178,7 @@ export function Stats() {
       </div>
 
       <div className="stack" style={{ gap: 18 }}>
-        {!data && isFetching && <div className="empty">Рахуємо…</div>}
+        {!data && isFetching && <StatsSkeleton />}
         {/* Без цієї гілки впалий запит давав просто порожню сторінку без пояснення. */}
         <ErrorNote error={error} what="Статистику" onRetry={refetch} />
         {!data && !isFetching && !error && <div className="empty">Немає даних за цей період.</div>}
@@ -234,9 +237,13 @@ export function Stats() {
                 <section>
                   <div className="section-head"><h2>Витрати по категоріях</h2><InfoTip>Підкатегорії згорнуто в батьківську. Готівка й зняття зараховані за реальною категорією; перекази між своїми виключені. Клік — деталі категорії.</InfoTip><span className="label">клік — деталі</span></div>
                   {data.byCategory.length ? (
-                    <CategoryBreakdown rows={data.byCategory} from={from} to={to} currency={currency} sign={sign} />
+                    <div className="cat-with-donut">
+                      <SpendDonut rows={data.byCategory} sign={sign} />
+                      <CategoryBreakdown rows={data.byCategory} from={from} to={to} currency={currency} sign={sign} />
+                    </div>
                   ) : <div className="card empty">Немає витрат за період.</div>}
                 </section>
+                <AvgCheckByCategory rows={data.byCategory} sign={sign} />
                 <ReceiptItems from={from} to={to} sign={sign} />
                 <PriceDrift />
                 <PeriodCompare range={range} mode={mode} currency={currency} sign={sign} />
@@ -245,10 +252,12 @@ export function Stats() {
 
             {tab === "trends" && (
               <>
+                <MonthlyHistory />
                 <section>
                   <div className="section-head"><h2>Динаміка</h2><span className="label">по днях/тижнях періоду</span></div>
                   <div className="card cashflow"><CashflowChart rows={rows} height={240} /></div>
                 </section>
+                <TopSpendDays series={data.series} sign={sign} from={from} to={to} currency={currency} />
                 <section>
                   <div className="section-head">
                     <h2>Кумулятивний потік</h2>
@@ -399,7 +408,7 @@ function SecondaryHeader() {
 
 function CatDrill({ category, from, to, currency, sign }: { category: number; from: number; to: number; currency: Cur; sign: string }) {
   const { data, isFetching } = useGetCategoryDrillQuery({ category, from, to, currency });
-  if (isFetching) return <div className="cat-drill"><span className="muted" style={{ fontSize: 12.5 }}>Завантаження…</span></div>;
+  if (isFetching) return <div className="cat-drill"><SkeletonRows n={4} /></div>;
   if (!data) return null;
   // Коли в категорії немає власних підкатегорій, сервер повертає один "підкатегорійний"
   // рядок = сама категорія — дублює заголовок бару один-в-один. Ховаємо цей шум.
@@ -583,7 +592,7 @@ function SliceDrillPanel({ dim, value, type, from, to, currency, sign, embedded 
   from: number; to: number; currency: Cur; sign: string; embedded?: boolean;
 }) {
   const { data, isFetching } = useGetSliceDrillQuery({ dim, value, type, from, to, currency, limit: dim === "all" ? 300 : 60 });
-  if (isFetching) return <div className="cat-drill"><span className="muted" style={{ fontSize: 12.5 }}>Завантаження…</span></div>;
+  if (isFetching) return <div className={embedded ? "" : "cat-drill"}><SkeletonRows n={5} /></div>;
   if (!data) return null;
   if (!data.transactions.length) return <div className="cat-drill"><span className="muted" style={{ fontSize: 12.5 }}>Немає операцій за період.</span></div>;
   const cap = dim === "all" ? 300 : 60;
@@ -1164,6 +1173,68 @@ function SpendingPatterns() {
         </section>
       )}
     </>
+  );
+}
+
+// Середній чек по категоріях (spent ÷ n). Відповідає на «де окремі покупки найдорожчі» —
+// категорія з малою сумою, але великим чеком (напр. техніка) інакше губиться в загальному топі.
+// Клієнтський розрахунок із byCategory (канонічні suми/кількості з overview).
+function AvgCheckByCategory({ rows, sign }: { rows: Overview["byCategory"]; sign: string }) {
+  const items = rows
+    .filter((r) => !isSecondaryCat(r.category_name) && r.n > 0 && r.spent > 0)
+    .map((r, i) => ({ name: r.category_name ?? "без категорії", color: r.color ?? FALLBACK[i % FALLBACK.length], avg: Math.round(r.spent / r.n), n: r.n }))
+    .sort((a, b) => b.avg - a.avg)
+    .slice(0, 8);
+  if (items.length < 2) return null;
+  const max = Math.max(...items.map((x) => x.avg), 1);
+  return (
+    <section>
+      <div className="section-head"><h2>Середній чек по категоріях</h2><InfoTip>Середня сума однієї операції в категорії: витрати ÷ кількість операцій. Показує, де окремі покупки найдорожчі (не плутати з часткою в бюджеті).</InfoTip><span className="label">сума / кількість</span></div>
+      <div className="card flush"><div className="catbars">
+        {items.map((it, i) => (
+          <div key={i} className="catbar">
+            <span className="cb-name"><span className="d" style={{ background: it.color }} />{it.name}</span>
+            <span className="cb-track"><span className="cb-fill" style={{ width: `${(it.avg / max) * 100}%`, background: it.color }} /></span>
+            <span className="cb-val">{formatMinor(it.avg, { decimals: false })} {sign}</span>
+            <span className="cb-pct">{it.n} оп.</span>
+          </div>
+        ))}
+      </div></div>
+    </section>
+  );
+}
+
+// Топ-5 найдорожчих днів періоду (з денних бакетів series). Клік — операції того дня.
+// Розширює одиничний «найдорожчий день» у Глибшій аналітиці до рейтингу.
+function TopSpendDays({ series, sign, from, to, currency }: {
+  series: Overview["series"]; sign: string; from: number; to: number; currency: Cur;
+}) {
+  const [open, setOpen] = useState<string | null>(null);
+  const daily = series.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket) && s.spend > 0);
+  if (daily.length < 3) return null;
+  const top = [...daily].sort((a, b) => b.spend - a.spend).slice(0, 5);
+  const max = top[0]?.spend || 1;
+  const dfmt = new Intl.DateTimeFormat("uk-UA", { weekday: "short", day: "numeric", month: "short" });
+  return (
+    <section>
+      <div className="section-head"><h2>Найдорожчі дні</h2><span className="label">клік — операції за день</span></div>
+      <div className="card flush"><div className="catbars">
+        {top.map((s) => {
+          const isOpen = open === s.bucket;
+          const d = new Date(s.bucket + "T00:00:00");
+          return (
+            <div key={s.bucket}>
+              <button type="button" className={`catbar catbar-btn ${isOpen ? "open" : ""}`} onClick={() => setOpen(isOpen ? null : s.bucket)}>
+                <span className="cb-name">{dfmt.format(d)}</span>
+                <span className="cb-track"><span className="cb-fill" style={{ width: `${(s.spend / max) * 100}%`, background: "var(--accent)" }} /></span>
+                <span className="cb-val">{formatMinor(s.spend, { decimals: false })} {sign}</span>
+              </button>
+              {isOpen && <SliceDrillPanel dim="day" value={s.bucket} from={from} to={to} currency={currency} sign={sign} />}
+            </div>
+          );
+        })}
+      </div></div>
+    </section>
   );
 }
 

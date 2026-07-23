@@ -30,6 +30,10 @@ export interface Account {
   updated_at: number | null;
   role: AccountRole | null;
   ai_note: string | null;
+  // Умови кредитки (для credit_limit>0): числа місяця 1..31 + мін. платіж (копійки). NULL = не задано.
+  statement_day: number | null;
+  payment_day: number | null;
+  min_payment: number | null;
 }
 
 export interface Category {

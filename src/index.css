@@ -430,9 +430,12 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 
 .acct-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 14px;
   margin-bottom: 10px;
+  /* start, НЕ stretch: інакше низька картка (без кредит-блоку) розтягується під найвищу
+     в рядку й лишає велику пустоту. Кожна картка = за своїм контентом. */
+  align-items: start;
 }
 /* Чисті плитки в стилі проекту (не «фізичні картки») — фідбек 2026-07-05. */
 .acct2 {
@@ -456,7 +459,8 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   display: grid; place-items: center; cursor: pointer;
 }
 .acct2-edit:hover { background: var(--surface-2); color: var(--ink); }
-.acct2-sublabel { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 2px; }
+/* Sentence-case, НЕ uppercase-letterspaced (DESIGN §Типографіка / фідбек #2). */
+.acct2-sublabel { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
 .acct2-bal { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 29px; letter-spacing: -0.02em; line-height: 1.05; }
 .acct2-fx { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
 /* §R3: бейдж інвест-рахунку + опис для AI на картці */
@@ -2503,7 +2507,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .fh-unit { font-size: 16px; font-weight: 500; color: var(--ink-2); }
 .fh-note { margin: 14px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
 .report-donut { position: relative; }
-.donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+/* Центр-лейбл — під тултіпом. Він у DOM ПІСЛЯ графіка, тож без z-index малювався б поверх
+   темного тултіпа (герой-сума проступала крізь нього). Тултіп recharts підіймаємо вище. */
+.donut-center { position: absolute; inset: 0; z-index: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.report-donut .recharts-tooltip-wrapper { z-index: 5; }
 .donut-center .dc-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
 .donut-center .dc-lbl { font-size: 11px; color: var(--muted); }
 
@@ -2989,6 +2996,105 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   .nt-row { padding: var(--sp-3) var(--sp-4); }
   .nt-time { display: none; }
 }
+
+/* ===== Skeleton (плейсхолдери на час фетчу) ============================== */
+.skeleton {
+  display: block;
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  position: relative;
+  overflow: hidden;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 60%, transparent), transparent);
+  animation: sk-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes sk-shimmer { 100% { transform: translateX(100%); } }
+.sk-rows { display: flex; flex-direction: column; gap: 13px; padding: 12px 2px; }
+.sk-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* ===== Історія по місяцях (6-міс тренд) ================================= */
+.mh-card { display: flex; flex-direction: column; }
+.mh-rates { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.mh-rates-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.mh-rate-bars { display: flex; gap: 8px; }
+.mh-rate-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.mh-rate-track { position: relative; width: 100%; height: 54px; background: var(--surface-2); border-radius: var(--radius-xs); }
+.mh-rate-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--line-strong); }
+.mh-rate-fill { position: absolute; left: 18%; right: 18%; border-radius: 3px; min-height: 2px; }
+.mh-rate-fill.pos { bottom: 50%; background: var(--pos); }
+.mh-rate-fill.neg { top: 50%; background: var(--neg); }
+.mh-rate-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.mh-rate-val.pos { color: var(--pos); }
+.mh-rate-val.neg { color: var(--neg); }
+.mh-rate-lbl { font-size: 11px; color: var(--muted); }
+
+/* ===== Донат витрат по категоріях + легенда ============================= */
+.cat-with-donut { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
+.spend-donut-card { display: flex; flex-direction: column; gap: 12px; }
+.donut-legend { display: flex; flex-direction: column; gap: 7px; }
+.dl-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dl-item .dl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.dl-item .dl-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+@media (max-width: 860px) { .cat-with-donut { grid-template-columns: 1fr; } }
+
+/* ===== Рахунки: огляд коштів + секції ==================================== */
+.funds-overview { margin-bottom: 16px; }
+.funds-stats { display: flex; flex-wrap: wrap; gap: 20px 32px; }
+.funds-stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.funds-stat.net { padding-right: 16px; border-right: 1px solid var(--line); }
+.funds-stat .fs-lbl { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.funds-stat .fs-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.funds-stat .fs-val.num-hero { font-size: 26px; }
+.funds-stat .fs-val.neg { color: var(--neg); }
+.funds-stat .fs-sub { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.funds-bar { display: flex; height: 10px; margin-top: 16px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-2); gap: 2px; }
+.funds-bar > span { min-width: 3px; }
+.funds-bar > span:first-child { border-top-left-radius: var(--radius-pill); border-bottom-left-radius: var(--radius-pill); }
+.funds-bar > span:last-child { border-top-right-radius: var(--radius-pill); border-bottom-right-radius: var(--radius-pill); }
+
+.section-head .acct-sec-sum { margin-left: auto; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+
+.acct-danger { display: flex; gap: 8px; margin-top: 10px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+.acct-danger .btn.sm { display: inline-flex; align-items: center; gap: 5px; }
+.btn.ghost.danger-text { color: var(--neg); }
+.btn.ghost.danger-text:hover { background: color-mix(in srgb, var(--neg) 10%, transparent); border-color: color-mix(in srgb, var(--neg) 40%, var(--line-strong)); }
+.archived-acct { opacity: 0.72; }
+
+/* Умови кредитки — форма редактора + рядок на картці */
+.credit-terms { border-top: 1px solid var(--line); padding-top: 10px; }
+.credit-terms .ct-title { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.credit-terms .ct-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.credit-terms .ct-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.credit-terms .ct-grid input { width: 100%; }
+.acct2-credit-terms { display: flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+/* Тренд балансу на картці (спарклайн на всю ширину) */
+.acct2-spark { margin-top: 8px; }
+.acct2-spark svg { width: 100%; height: 26px; display: block; }
+
+/* Пресети типу в модалці додавання рахунку */
+.kind-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.kind-btn { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 9px 11px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out); }
+.kind-btn:hover { border-color: var(--muted); }
+.kind-btn.on { border-color: var(--accent); background: var(--accent-soft); }
+.kind-btn .kb-label { font-size: 13.5px; font-weight: 600; }
+.kind-btn .kb-hint { font-size: 11px; color: var(--muted); }
+
+/* Розподіл активів по валютах */
+.cur-split { margin-bottom: 16px; }
+.cur-split-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.cur-split-bar { display: flex; height: 10px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-2); gap: 2px; }
+.cur-split-bar > span { min-width: 4px; border-radius: 2px; }
+.cur-split-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; }
+.cur-split-legend .cs-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.cur-split-legend .cs-cur { font-weight: 600; }
+.cur-split-legend .cs-val { font-variant-numeric: tabular-nums; }
+.cur-split-legend .cs-pct { font-size: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

@@ -32,6 +32,53 @@ api.get("/accounts", async (c) => {
   return c.json(rows.results);
 });
 
+// Канонічна розбивка коштів (§R3) — ТА САМА, що бачить Порадник. Огляд на сторінці Рахунків
+// бере її, а не рахує композицію на клієнті, щоб «подушка/борг/інвестиції» тут = у Пораднику.
+api.get("/accounts/funds", async (c) => {
+  const { fundsBreakdown } = await import("../lib/advisor.ts");
+  return c.json(await fundsBreakdown(c.env));
+});
+
+// Архівовані рахунки (is_active=0) — для секції «Архів». Історія операцій лишається.
+api.get("/accounts/archived", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT * FROM accounts WHERE is_active = 0 ORDER BY is_manual, type",
+  ).all();
+  return c.json(rows.results);
+});
+
+// Історія балансу ручних рахунків по місяцях — для міні-спарклайнів на картках. Значення у
+// ВАЛЮТІ рахунку (для тренду валюта не важлива); крок = останній зріз ≤ кінець місяця (carry-forward).
+api.get("/accounts/history", async (c) => {
+  const url = new URL(c.req.url);
+  const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
+  let rows: { acc: string; balance: number; at: number }[] = [];
+  try {
+    const r = await c.env.DB.prepare(
+      "SELECT account_id AS acc, balance, recorded_at AS at FROM account_balance_history ORDER BY account_id, recorded_at",
+    ).all<{ acc: string; balance: number; at: number }>();
+    rows = r.results ?? [];
+  } catch { return c.json({ history: {} }); } // таблиця може ще не бути на remote (0026)
+  const byAcc = new Map<string, { at: number; balance: number }[]>();
+  for (const r of rows) (byAcc.get(r.acc) ?? byAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
+  const now = new Date();
+  const ends: number[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    // кінець i-го місяця назад; для поточного (i=0) — «зараз», бо кінець місяця ще попереду.
+    ends.push(i === 0 ? Math.floor(Date.now() / 1000) : Math.floor(new Date(now.getFullYear(), now.getMonth() - i + 1, 1).getTime() / 1000) - 1);
+  }
+  const out: Record<string, number[]> = {};
+  for (const [acc, hist] of byAcc) {
+    if (!hist.length) continue;
+    out[acc] = ends.map((t) => {
+      let v = hist[0].balance;
+      for (const p of hist) { if (p.at <= t) v = p.balance; else break; }
+      return Math.round(v / 100);
+    });
+  }
+  return c.json({ history: out });
+});
+
 // ---- net-worth summary (§5 credit-limit handling) ---------------------------
 
 api.get("/summary", async (c) => {
@@ -997,6 +1044,35 @@ api.get("/analytics/overview", async (c) => {
   });
 });
 
+// Довготривала історія по МІСЯЦЯХ (канонічно, зведено в ₴): spend/income за N останніх
+// місяців. Доповнює періодні вкладки Статистики довгим трендом (6-12 міс) для графіка
+// «витрати/надходження/чистий» і норми заощаджень. Останній місяць — поточний (частковий).
+api.get("/analytics/monthly-history", async (c) => {
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
+  const now = new Date();
+  const from = Math.floor(new Date(now.getFullYear(), now.getMonth() - (months - 1), 1).getTime() / 1000);
+  const rows = await c.env.DB.prepare(
+    `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS month,
+            ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ?
+     GROUP BY month ORDER BY month`,
+  ).bind(from).all<{ month: string; spend: number; income: number }>();
+  // Пропущені місяці (без операцій) заповнюємо нулями — щоб вісь була рівна й безперервна.
+  const map = new Map((rows.results ?? []).map((r) => [r.month, r]));
+  const out: { month: string; spend: number; income: number }[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const r = map.get(key);
+    out.push({ month: key, spend: r?.spend ?? 0, income: r?.income ?? 0 });
+  }
+  return c.json({ months: out });
+});
+
 // §4 Safe-to-spend: скільки вільно до кінця календарного місяця.
 // = дохід(міс) − витрачено(міс) − прийдешні підписки(залишок міс). Розбивка по вагомості (§6).
 api.get("/analytics/safe-to-spend", async (c) => {
@@ -1119,6 +1195,25 @@ api.get("/analytics/networth", async (c) => {
   const roleOf = (a: typeof accs[number]): "liquid" | "investment" => (a.role === "investment" ? "investment" : "liquid");
   const iso = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
 
+  // Історія ручних балансів (§Історія ручних балансів): ручні/крипто-рахунки не мають tx-дельт,
+  // тож без цього назад лишались би плоскими. Крокуємо по зафіксованих зрізах.
+  const histByAcc = new Map<string, { at: number; balance: number }[]>();
+  try {
+    const hist = await c.env.DB.prepare(
+      "SELECT account_id AS acc, balance, recorded_at AS at FROM account_balance_history ORDER BY account_id, recorded_at",
+    ).all<{ acc: string; balance: number; at: number }>();
+    for (const r of hist.results ?? []) (histByAcc.get(r.acc) ?? histByAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
+  } catch { /* таблиця може ще не бути на remote (0026) — деградуємо до плоского */ }
+  // Баланс ручного рахунку на момент t: останній зріз ≤ t; до першого зрізу — найраніший відомий
+  // (не сьогоднішній, щоб не малювати рух там, де його не знали). null = історії взагалі нема.
+  const manualBalanceAt = (accId: string, t: number): number | null => {
+    const h = histByAcc.get(accId);
+    if (!h || !h.length) return null;
+    let val = h[0].balance;
+    for (const p of h) { if (p.at <= t) val = p.balance; else break; }
+    return val;
+  };
+
   // Дати всіх майбутніх точок рахуємо ЗАЗДАЛЕГІДЬ, щоб одним запитом узяти курси на ці дати
   // (§Історія курсів). Інакше довелось би або бити по базі в циклі, або (як було) міряти
   // минулі залишки сьогоднішнім курсом.
@@ -1136,7 +1231,10 @@ api.get("/analytics/networth", async (c) => {
   const snapshot = (t: number, at: Rates) => {
     let cushion = 0, debt = 0, investment = 0;
     for (const a of accs) {
-      const uah = toUAHMinor(own.get(a.id) ?? 0, a.currency_code, at);
+      // Ручний рахунок з історією — беремо зріз на t; інакше tx-реконструйований `own`.
+      const hb = a.is_manual === 1 ? manualBalanceAt(a.id, t) : null;
+      const ownMinor = hb != null ? hb - (a.credit_limit ?? 0) : (own.get(a.id) ?? 0);
+      const uah = toUAHMinor(ownMinor, a.currency_code, at);
       if (roleOf(a) === "investment") { if (uah > 0) investment += uah; else debt += -uah; }
       else { if (uah >= 0) cushion += uah; else debt += -uah; }
     }
@@ -1169,7 +1267,8 @@ api.get("/analytics/networth", async (c) => {
   if (!covered) {
     caveats.push("Для частини періоду історії курсів ще нема — ті місяці перераховано поточним курсом, тож рух курсу там виглядає як рух грошей. Історія накопичується щодоби.");
   }
-  const flat = accs.filter((a) => a.is_manual === 1).map((a) => a.title ?? a.type ?? a.id);
+  // Плоскі назад — лише ручні БЕЗ жодного зрізу історії. Ті, що мають історію, тепер крокують.
+  const flat = accs.filter((a) => a.is_manual === 1 && !(histByAcc.get(a.id)?.length)).map((a) => a.title ?? a.type ?? a.id);
   if (flat.length) {
     caveats.push(`Рахунки без історії операцій (${flat.join(", ")}) назад показані плоскими — їхній баланс це ручний зріз «на зараз».`);
   }
@@ -2400,13 +2499,23 @@ api.post("/budgets/chat", async (c) => {
 
 // ---- manual accounts (позамоно картка / крипта, §5) -------------------------
 
+const MANUAL_TYPES = new Set(["manual_card", "crypto", "cash", "jar"]);
 api.post("/accounts/manual", async (c) => {
-  const b = await c.req.json<{ type: "manual_card" | "crypto"; title: string; currency_code: number; balance: number }>();
+  const b = await c.req.json<{
+    type: string; title: string; currency_code: number; balance: number;
+    role?: "liquid" | "investment"; credit_limit?: number; ai_note?: string;
+  }>();
+  const type = MANUAL_TYPES.has(b.type) ? b.type : "manual_card";
+  const role = b.role === "investment" ? "investment" : "liquid";
+  const creditLimit = typeof b.credit_limit === "number" && b.credit_limit > 0 ? Math.round(b.credit_limit) : 0;
+  const aiNote = b.ai_note?.trim() || null;
   const id = crypto.randomUUID();
+  const nowS = Math.floor(Date.now() / 1000);
   await c.env.DB.prepare(
-    `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, is_manual, is_active, updated_at)
-     VALUES (?, ?, ?, ?, ?, 0, 1, 1, ?)`,
-  ).bind(id, b.type, b.title, b.currency_code, b.balance, Math.floor(Date.now() / 1000)).run();
+    `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, role, ai_note, is_manual, is_active, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
+  ).bind(id, type, b.title, b.currency_code, b.balance, creditLimit, role, aiNote, nowS).run();
+  await recordBalance(c.env.DB, id, b.balance, nowS);
   return c.json({ ok: true, id });
 });
 
@@ -2417,11 +2526,26 @@ api.patch("/accounts/manual/:id", async (c) => {
   if (b.balance !== undefined) { sets.push("balance = ?"); binds.push(b.balance); }
   if (b.title !== undefined) { sets.push("title = ?"); binds.push(b.title); }
   if (!sets.length) return c.json({ ok: true });
-  sets.push("updated_at = ?"); binds.push(Math.floor(Date.now() / 1000));
+  const nowS = Math.floor(Date.now() / 1000);
+  sets.push("updated_at = ?"); binds.push(nowS);
   await c.env.DB.prepare(`UPDATE accounts SET ${sets.join(", ")} WHERE id = ? AND is_manual = 1`)
     .bind(...binds, c.req.param("id")).run();
+  // Зріз балансу в історію → нетворт крокує по ньому назад (не плоский). Лише коли баланс змінили.
+  if (b.balance !== undefined) await recordBalance(c.env.DB, c.req.param("id"), b.balance, nowS);
   return c.json({ ok: true });
 });
+
+// Зафіксувати зріз балансу ручного рахунку. Один запис на день (перезаписуємо останній того ж
+// дня), щоб серія лишалась охайною при кількох правках поспіль.
+async function recordBalance(db: D1Database, accountId: string, balance: number, at: number): Promise<void> {
+  const dayStart = at - (at % 86400);
+  await db.prepare(
+    "DELETE FROM account_balance_history WHERE account_id = ? AND recorded_at >= ? AND recorded_at < ?",
+  ).bind(accountId, dayStart, dayStart + 86400).run();
+  await db.prepare(
+    "INSERT INTO account_balance_history (account_id, balance, recorded_at, created_at) VALUES (?, ?, ?, ?)",
+  ).bind(accountId, balance, at, at).run();
+}
 
 // Cached rates map (currency code → UAH per unit) + last-updated, for client-side
 // ≈₴ conversion of FX cards/jars. Same source computeSummary uses.
@@ -2444,14 +2568,42 @@ api.patch("/accounts/:id/title", async (c) => {
 });
 
 // §R3: роль рахунку (ліквідний/інвестиційний) + опис для AI. Для будь-якого рахунку.
+// + умови кредитки (statement_day/payment_day/min_payment) — живлять нагадування про платіж.
 api.patch("/accounts/:id/meta", async (c) => {
-  const b = await c.req.json<{ role?: "liquid" | "investment"; ai_note?: string }>();
+  const b = await c.req.json<{ role?: "liquid" | "investment"; ai_note?: string; statement_day?: number | null; payment_day?: number | null; min_payment?: number | null }>();
   const sets: string[] = [];
   const binds: unknown[] = [];
+  // День місяця валідуємо 1..31; порожнє/некоректне → NULL (умову знято).
+  const dayOrNull = (v: number | null | undefined) => (typeof v === "number" && v >= 1 && v <= 31 ? Math.trunc(v) : null);
   if (b.role !== undefined) { sets.push("role = ?"); binds.push(b.role === "investment" ? "investment" : "liquid"); }
   if (b.ai_note !== undefined) { sets.push("ai_note = ?"); binds.push(b.ai_note.trim() || null); }
+  if (b.statement_day !== undefined) { sets.push("statement_day = ?"); binds.push(dayOrNull(b.statement_day)); }
+  if (b.payment_day !== undefined) { sets.push("payment_day = ?"); binds.push(dayOrNull(b.payment_day)); }
+  if (b.min_payment !== undefined) { sets.push("min_payment = ?"); binds.push(typeof b.min_payment === "number" && b.min_payment > 0 ? Math.round(b.min_payment) : null); }
   if (!sets.length) return c.json({ ok: true });
   await c.env.DB.prepare(`UPDATE accounts SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, c.req.param("id")).run();
+  return c.json({ ok: true });
+});
+
+// Архів/відновлення рахунку (is_active). Схований рахунок не показується й не входить у
+// підсумки/подушку/нетворт. Історію операцій НЕ чіпаємо — лише ховаємо рахунок зі списку.
+api.patch("/accounts/:id/active", async (c) => {
+  const { active } = await c.req.json<{ active: boolean }>();
+  await c.env.DB.prepare("UPDATE accounts SET is_active = ? WHERE id = ?")
+    .bind(active ? 1 : 0, c.req.param("id")).run();
+  return c.json({ ok: true });
+});
+
+// Видалення РУЧНОГО рахунку — лише якщо на ньому немає операцій (інакше лишились би
+// сирітські tx / FK). Для mono-рахунків видалення нема — тільки архів вище.
+api.delete("/accounts/:id", async (c) => {
+  const id = c.req.param("id");
+  const acc = await c.env.DB.prepare("SELECT is_manual FROM accounts WHERE id = ?").bind(id).first<{ is_manual: number }>();
+  if (!acc) return c.json({ error: "рахунок не знайдено" }, 404);
+  if (!acc.is_manual) return c.json({ error: "лише ручний рахунок можна видалити; mono — архівуй" }, 400);
+  const cnt = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ?").bind(id).first<{ n: number }>();
+  if ((cnt?.n ?? 0) > 0) return c.json({ error: "на рахунку є операції — заархівуй замість видалення" }, 400);
+  await c.env.DB.prepare("DELETE FROM accounts WHERE id = ? AND is_manual = 1").bind(id).run();
   return c.json({ ok: true });
 });
 
