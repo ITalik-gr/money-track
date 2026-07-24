@@ -2,13 +2,14 @@
 // Telegram-бот (routes/telegram.ts): створення готівкової транзакції, підсумок
 // власних коштів (§5, кредитний ліміт) і останні транзакції. Одне джерело правди.
 import type { Env } from "../env.ts";
+import type { AppDb } from "./db-shim.ts";
 
 // §R2-CUR2: єдине джерело правди для зведення сум у гривню. rates — мапа
 // «код валюти → скільки ₴ за 1 одиницю» (див. cron/rates). Суми в мінімальних
 // одиницях (копійки/центи); множення на курс дає ₴-копійки без ділення на 100.
 export type Rates = Record<string, number>;
 
-export async function getRates(db: D1Database): Promise<Rates> {
+export async function getRates(db: AppDb): Promise<Rates> {
   const raw = await db
     .prepare("SELECT value FROM app_state WHERE key = 'rates'")
     .first<{ value: string }>();
@@ -22,7 +23,7 @@ export async function getRates(db: D1Database): Promise<Rates> {
  * Навіщо: без історії ретроспективні перерахунки (нетворт) беруть СЬОГОДНІШНІЙ курс на
  * минулі залишки, і коливання курсу читається як рух грошей.
  */
-export async function snapshotRates(db: D1Database, now = Math.floor(Date.now() / 1000)): Promise<number> {
+export async function snapshotRates(db: AppDb, now = Math.floor(Date.now() / 1000)): Promise<number> {
   const rates = await getRates(db);
   const day = new Date(now * 1000).toISOString().slice(0, 10);
   const entries = Object.entries(rates).filter(([code, rate]) => Number(code) > 0 && rate > 0);
@@ -42,7 +43,7 @@ export async function snapshotRates(db: D1Database, now = Math.floor(Date.now() 
  * Повертає {день: Rates} + `covered` — чи всі дати покриті історією (для чесного caveat).
  */
 export async function ratesForDays(
-  db: D1Database, days: string[],
+  db: AppDb, days: string[],
 ): Promise<{ byDay: Map<string, Rates>; covered: boolean }> {
   const current = await getRates(db);
   const byDay = new Map<string, Rates>();
@@ -84,7 +85,7 @@ export function toUAHMinor(amountMinor: number, code: number, rates: Rates): num
 }
 
 // Find or create the dedicated cash account so cash entries never land on a card.
-export async function ensureCashAccount(db: D1Database, currency = 980): Promise<string> {
+export async function ensureCashAccount(db: AppDb, currency = 980): Promise<string> {
   const existing = await db.prepare("SELECT id FROM accounts WHERE type = 'cash' LIMIT 1").first<{ id: string }>();
   if (existing) return existing.id;
   const id = crypto.randomUUID();
@@ -107,7 +108,7 @@ export interface NewTxInput {
 }
 
 // Create a manual/cash transaction. source='cash' routes to the cash account.
-export async function createCashTx(db: D1Database, b: NewTxInput): Promise<string> {
+export async function createCashTx(db: AppDb, b: NewTxInput): Promise<string> {
   const source = b.source ?? "cash";
   const accountId = source === "cash"
     ? await ensureCashAccount(db, b.currency_code ?? 980)
@@ -176,7 +177,7 @@ export interface RecentTx {
 }
 
 // Latest settled transactions (excludes holds) — for /last and quick lists.
-export async function recentTransactions(db: D1Database, limit = 10): Promise<RecentTx[]> {
+export async function recentTransactions(db: AppDb, limit = 10): Promise<RecentTx[]> {
   const rows = await db.prepare(
     `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment, t.is_transfer,
             c.name AS category_name

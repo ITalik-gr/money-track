@@ -1,4 +1,5 @@
 import { toUAHMinor, type Rates } from "./finance.ts";
+import type { AppDb } from "./db-shim.ts";
 
 // Детерміністичне співставлення операцій із оголошеними підписками (planned_payments).
 // Мета: якщо є активна підписка (напр. «Apple» $1/міс у категорії Підписки), то нове
@@ -16,7 +17,7 @@ export interface SubRow {
 }
 
 // Активні підписки з категорією й сумою — лише вони придатні для авто-категоризації.
-async function activeSubs(db: D1Database): Promise<SubRow[]> {
+async function activeSubs(db: AppDb): Promise<SubRow[]> {
   const rows = await db.prepare(
     `SELECT id, title, period_amount, currency_code, category_id, note
      FROM planned_payments
@@ -82,7 +83,7 @@ function firstToken(title: string): string | null {
 
 // Знайти активну підписку, під яку підпадає операція (валюта + назва + сума). Без AI.
 export async function matchActiveSubscription(
-  db: D1Database,
+  db: AppDb,
   input: { merchant: string | null; description: string | null; amount: number; currency_code: number },
 ): Promise<{ category_id: number; title: string; planned_id: number } | null> {
   const subs = await activeSubs(db);
@@ -103,7 +104,7 @@ export async function matchActiveSubscription(
 // для AI (коли сума НЕ збіглась і детермінований матч не спрацював). Порожньо, якщо
 // нічого не перегукується — тоді AI не отримує зайвих токенів (тримаємо вартість рівною).
 export async function relatedSubsHint(
-  db: D1Database,
+  db: AppDb,
   input: { merchant: string | null; description: string | null },
 ): Promise<string | null> {
   const subs = await activeSubs(db);
@@ -134,7 +135,7 @@ export interface PlannedActual {
   price_change_pct: number | null; // % відхилення останньої суми від плану (+ = подорожчало)
 }
 
-export async function plannedActuals(db: D1Database): Promise<PlannedActual[]> {
+export async function plannedActuals(db: AppDb): Promise<PlannedActual[]> {
   const subs = await db.prepare(
     "SELECT id, period_amount FROM planned_payments WHERE is_active = 1",
   ).all<{ id: number; period_amount: number | null }>();
@@ -176,7 +177,7 @@ function descOf(rawJson: string | null): string {
   try { return (JSON.parse(rawJson) as { description?: string }).description ?? ""; } catch { return ""; }
 }
 
-export async function applySubscriptionCategories(db: D1Database): Promise<{ fixed: number }> {
+export async function applySubscriptionCategories(db: AppDb): Promise<{ fixed: number }> {
   const subs = await activeSubs(db);
   const since = Math.floor(Date.now() / 1000) - 240 * 86400;
   let fixed = 0;

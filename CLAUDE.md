@@ -28,7 +28,14 @@ Rules:
 3. **Доробив задачу** → (а) видали пункт з `ROADMAP.md`; (б) якщо це змінює «як усе працює» (новий інваріант, нове канонічне визначення, новий ops-крок) — онови відповідний розділ `CLAUDE.md`.
 4. **Гроші/статистика** → будь-яка нова аналітика рахується ТІЛЬКИ через `worker/lib/stats.ts` (єдине джерело). Не дублюй SQL-фільтри в ендпоінтах.
 5. **Green-бар перед «готово»:** `npm run check` (tsc app+worker **+ SQL-лінт**) + `npm run build`. Канонічний SQL — валідуй на D1.
-   `npm run check` тепер ганяє `scripts/check-stats-sql.mjs`: запит, що згадує канонічний хелпер
+   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/gen-migrations.mjs --check`.
+   Остання (2026-07-24, платформа-фаза) падає, якщо `migrations/*.sql` змінились, а ембед для
+   Durable Object (`worker/do/migrations.generated.ts`) не перегенеровано — інакше нова міграція
+   мовчки не доїхала б у БД юзера. Перегенерувати: `node scripts/gen-migrations.mjs`.
+   ⚠️ **Локально перевіряти лише через `npm run dev` (Vite).** `wrangler dev` бере застарілий
+   redirected-конфіг зі `dist/money_track/wrangler.json` і не бачить нових біндів — виглядає
+   як «роут не зареєструвався» (SPA-фолбек замість JSON).
+   `scripts/check-stats-sql.mjs`: запит, що згадує канонічний хелпер
    (`amountSum`/`SPEND_WHERE`/`EFF_*`…), МУСИТЬ мати `STATS_JOINS` — інакше падає в рантаймі
    (`no such column: sp.amount`), а `tsc` цього не бачить (SQL = рядок). Див. §Обробка помилок.
 6. **Деплой/жива перевірка — рутина КОРИСТУВАЧА** (див. §Ops). Секрети й реальний API-ключ — не в мене.
@@ -495,6 +502,12 @@ title+body мусить знайтися в payload знімка (допуск 1
    `accounts.statement_day/payment_day/min_payment` — умови кредитки + нагадування про платіж**) (0018 `accounts.role`+`accounts.ai_note` §R3; 0019 `transactions.name_locked` §R7; 0020 `facts` §A1; **0021 `tx_splits` — спліт транзакції §SPLIT; 0022 `health_history` — тренд індексу здоров'я**) включно перед деплоєм: `npm run db:migrate:remote`. ⚠️ Локальний `db:migrate:local` зараз падає на переприкладанні 0018 (`role` вже є — розсинхрон стану local D1); нові таблиці валідовано напряму через `wrangler d1 execute --local`. (Решта останніх фіч — AI 3.0/4.0-наратив, аналітичне ядро, бюджети — **міграцій не потребують**, крім 0018/0019/0020.)
 2. **Деплой:** `npm run deploy` (потрібен `wrangler login`).
 3. **Секрети** (`npx wrangler secret put`): `MONO_TOKEN`, `ANTHROPIC_API_KEY`, `WEBHOOK_SECRET`, `APP_PASSWORD`; бот — `TG_BOT_TOKEN`, `TG_SECRET`, `TG_CHAT_ID`.
+   **Платформа-фаза (P0.1, 2026-07-24):** + `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+   `SESSION_SECRET`, `OWNER_EMAIL` (див. `.dev.vars.example`). Плюс окрема БД:
+   `wrangler d1 create directory` → `database_id` у `wrangler.jsonc` → `npm run db:dir:migrate:remote`.
+   ⚠️ **`OWNER_EMAIL` мусить збігатись із твоїм Google-акаунтом** — інакше перший вхід через
+   Google скаже «not_invited», а вся історія лишиться під owner-id.
+   Стан фази — **`PROGRESS.md`** (що зроблено, що чекає, здобуті заміри).
 4. **Перший запуск даних** (Налаштування): рахунки → вебхук → бекфіл ~90 дн (1 req/60с) → курси → перекази.
 5. **Стан (звірено 2026-07-20):** git ініціалізовано, гілка `main`, робоче дерево чисте.
    Міграції **0020/0021/0022 вже застосовані на remote** (`facts`/`tx_splits`/`health_history` — перевірено

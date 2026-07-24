@@ -8,3 +8,20 @@ ANTHROPIC_API_KEY=
 WEBHOOK_SECRET=
 # Пароль для входу в застосунок (гейт у воркері)
 APP_PASSWORD=
+
+# --- Мультиюзер (PLATFORM.md §3) ---------------------------------------------
+# Google OAuth: створити проєкт у Google Cloud Console, OAuth client type "Web
+# application", redirect URI = https://<worker>/auth/google/callback
+# (локально — http://127.0.0.1:8799/auth/google/callback).
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+# Ключ підпису сесійної куки. Окремий від APP_PASSWORD, щоб зміна пароля не
+# розлогінювала всіх, і щоб сесії пережили прибирання парольного входу.
+SESSION_SECRET=
+# Пошта власника інсталяції — під нею заводиться owner-рядок у directory.
+# ⚠️ Мусить збігатись із Google-акаунтом власника, інакше перший вхід через
+# Google скаже «not_invited», а дані лишаться під owner-id.
+OWNER_EMAIL=
+# Шифрує per-user ключі (mono/Anthropic) у базі юзера. `openssl rand -hex 32`.
+# ⚠️ Втрата/ротація = збережені ключі юзерів треба вводити заново.
+SECRETS_MASTER_KEY=

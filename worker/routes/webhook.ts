@@ -1,5 +1,10 @@
-// Monobank webhook. Secret path segment guards against blind third-party POSTs (§9).
-// Mono first does GET and requires a clean 200, then POSTs StatementItem events.
+// Monobank webhook — the handler half. Runs INSIDE the user's Durable Object.
+//
+// Authentication happened in the Worker, which verified the signed path segment and resolved
+// which user it belongs to before forwarding the request here (see `index.ts`). By the time
+// this file runs, `c.env.DB` is already the right person's database, so there is nothing left
+// to check: re-checking a secret here would be checking it against the wrong thing anyway,
+// since the secret is per-user and this object holds no notion of "the" secret.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import type { MonoStatementItem } from "../lib/mono.ts";
@@ -15,15 +20,11 @@ interface WebhookEvent {
 
 export const webhook = new Hono<{ Bindings: Env }>();
 
-// Mono validation ping — must return a bare 200.
-webhook.get("/:secret", (c) => {
-  if (c.req.param("secret") !== c.env.WEBHOOK_SECRET) return c.text("forbidden", 403);
-  return c.text("ok", 200);
-});
+// Mono validation ping — must return a bare 200. Answered by the Worker without waking the
+// Durable Object; this route exists only so a stray GET here is not a 404.
+webhook.get("/:token", (c) => c.text("ok", 200));
 
-webhook.post("/:secret", async (c) => {
-  if (c.req.param("secret") !== c.env.WEBHOOK_SECRET) return c.text("forbidden", 403);
-
+webhook.post("/:token", async (c) => {
   let body: WebhookEvent;
   try {
     body = await c.req.json<WebhookEvent>();

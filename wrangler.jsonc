@@ -21,6 +21,45 @@
 			"database_name": "finance",
 			"database_id": "843a4f84-a5f5-4a6d-83c7-48b35c521c4b",
 			"migrations_dir": "./migrations"
+		},
+		// Directory: the ONLY shared storage in the multi-user design (PLATFORM.md §2).
+		// Identity and invites live here; every financial row lives in the user's own
+		// Durable Object. Kept as a D1 (not a directory-DO) so the registry stays
+		// inspectable with `wrangler d1 execute` while debugging invites/logins.
+		// ⚠️ database_id below is a placeholder — run `wrangler d1 create directory` and
+		// paste the real id before the first remote deploy (see CLAUDE.md §Ops).
+		{
+			"binding": "DIRECTORY",
+			"database_name": "directory",
+			"database_id": "00000000-0000-4000-8000-00000000d1e0",
+			"migrations_dir": "./migrations-directory"
+		},
+		// P0.0 spike only: scratch database used as the D1 reference when comparing D1
+		// against the DO's SQLite on identical fixtures. Local-only — this binding and
+		// worker/routes/spike.ts come out together once the shim is proven (PROGRESS.md).
+		{
+			"binding": "SPIKE_DB",
+			"database_name": "spike",
+			"database_id": "00000000-0000-4000-8000-000000000001"
+		}
+	],
+	// Durable Object: one per user, holds that user's whole finance database (PLATFORM.md §2).
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "USER_DO",
+				"class_name": "UserDO"
+			}
+		]
+	},
+	// `new_sqlite_classes` (not `new_classes`) — the DO must be SQLite-backed; the key-value
+	// backend has no `ctx.storage.sql` and the whole approach depends on it.
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": [
+				"UserDO"
+			]
 		}
 	],
 	// R2: bucket created via `wrangler r2 bucket create finance-receipts`.
@@ -31,14 +70,17 @@
 		}
 	],
 	// Weekly insight + weekly AI report (Mon 09:00), monthly AI report (1st 09:00),
-	// and a minute-cron that advances an in-progress backfill one paced step at a
-	// time (mono limit 1 req/60s). The minute-cron no-ops when no backfill is active.
+	// daily notification feed + rates (06:00 UTC ≈ 08:00 Kyiv). Each fires a fan-out to every
+	// user's Durable Object (worker/lib/cron.ts).
+	//
+	// The former minute-cron is GONE: it existed to pace the backfill (mono allows 1 req/60s),
+	// and that now lives in `UserDO.alarm()`. As a global cron it would have woken every user's
+	// object 1440 times a day just to find nothing to do.
 	"triggers": {
 		"crons": [
 			"0 9 * * 1",
 			"0 9 1 * *",
-			"0 6 * * *",
-			"* * * * *"
+			"0 6 * * *"
 		]
 	},
 	"vars": {

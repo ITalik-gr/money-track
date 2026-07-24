@@ -1,0 +1,276 @@
+// One Durable Object per user: holds that user's entire finance database.
+//
+// WHY a DO instead of `user_id` columns (PLATFORM.md §2): isolation becomes physical rather
+// than a filter every query has to remember. There is no `WHERE user_id` to forget, and the
+// canonical SQL in `lib/stats.ts` — dozens of queries built on STATS_JOINS/SPEND_WHERE —
+// stays byte-identical, reached through the D1-shaped facade in `lib/db-shim.ts`.
+import { DurableObject } from "cloudflare:workers";
+import { DoDatabase, type AppDb, type AppResult } from "../lib/db-shim.ts";
+import { runMigrations, type MigrationReport } from "./migrate.ts";
+import { userApp } from "../user-app.ts";
+import { getSecret } from "../lib/secrets.ts";
+import { USER_HEADER } from "../lib/forward.ts";
+import type { ImportReport } from "./import-legacy.ts";
+import type { Env } from "../env.ts";
+
+export class UserDO extends DurableObject<Env> {
+  /** `env.DB` replacement for everything running inside this object. */
+  readonly db: AppDb;
+  private readonly raw: DoDatabase;
+  private migration: MigrationReport = { applied: [], skipped: 0 };
+  private credentials: { MONO_TOKEN: string; ANTHROPIC_API_KEY: string } | null = null;
+
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    this.raw = new DoDatabase(ctx);
+    this.db = this.raw;
+    // Schema must exist before any request is served, and `blockConcurrencyWhile` is the
+    // only thing that guarantees it: the DO can be created by a concurrent burst of
+    // requests, and without the gate the second one would hit half-built tables.
+    ctx.blockConcurrencyWhile(async () => {
+      this.migration = runMigrations(ctx.storage.sql);
+    });
+  }
+
+  /**
+   * Serves a forwarded API request against THIS user's database.
+   *
+   * The Worker authenticates, resolves `userId` and forwards the untouched Request here; the
+   * application then runs with `env.DB` pointing at local SQLite, so no query crosses the
+   * network. See `user-app.ts` for why the handlers live in here rather than in the Worker.
+   */
+  override async fetch(request: Request): Promise<Response> {
+    // Hono wants an ExecutionContext; a DO has the equivalent on its state. `waitUntil` here
+    // keeps the object alive until background work settles, which is what the callers assume.
+    const execCtx = {
+      waitUntil: (p: Promise<unknown>) => this.ctx.waitUntil(p),
+      passThroughOnException: () => {},
+      props: {},
+    } as unknown as ExecutionContext;
+    // Only the Worker can reach this object, and it overwrites the header rather than merging
+    // it, so the user id cannot be spoofed by a client.
+    const env = await this.appEnv(request.headers.get(USER_HEADER) ?? undefined);
+    return userApp.fetch(request, env, execCtx);
+  }
+
+  /**
+   * Every binding the application expects, with the database and the credentials swapped for
+   * this user's own.
+   *
+   * Swapping `env` rather than threading arguments through ~427 database call sites and ~40
+   * API-key checks is what keeps the whole multi-user migration mechanical: not one handler
+   * and not one SQL string had to be edited.
+   */
+  private async appEnv(userId?: string): Promise<Env> {
+    return {
+      ...this.env,
+      DB: this.db,
+      ...(await this.userCredentials()),
+      USER_ID: userId,
+      onSecretsChanged: () => this.invalidateCredentials(),
+      scheduleBackfillStep: (delayMs: number) => this.ctx.storage.setAlarm(Date.now() + delayMs),
+    };
+  }
+
+  /**
+   * Scheduled work for THIS user, driven by the Worker's cron fan-out (`lib/cron.ts`).
+   *
+   * Every branch is isolated: a thrown report generator must not stop notifications from being
+   * written. That rule predates multi-user — it is why the old `scheduled()` wrapped each job
+   * in its own try/catch — and the fan-out keeps it, returning the failures instead of
+   * swallowing them so the cron log says which user's which job broke.
+   *
+   * `ratesJson` comes from the shared cache: rates are a fact about the world, so the Worker
+   * fetches them once and every object copies the value into its own `app_state`.
+   */
+  async runCron(kind: "daily" | "weekly" | "monthly", ratesJson: string | null): Promise<{ ran: string[]; failed: string[] }> {
+    const env = await this.appEnv();
+    const ran: string[] = [];
+    const failed: string[] = [];
+    const step = async (name: string, fn: () => Promise<unknown>) => {
+      try {
+        await fn();
+        ran.push(name);
+      } catch (e) {
+        failed.push(`${name}: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    };
+
+    if (ratesJson) {
+      await step("rates", async () => {
+        const { setState } = await import("../lib/repo.ts");
+        await setState(this.db, "rates", ratesJson);
+        // Snapshot the daily rate BEFORE anything reads it: the net-worth history recomputes
+        // past points with the rate of their day, and one missed day is a permanent hole.
+        const { snapshotRates } = await import("../lib/finance.ts");
+        await snapshotRates(this.db);
+      });
+    }
+
+    if (kind === "daily") {
+      await step("notifications", async () => {
+        const { generateNotifications } = await import("../lib/notify.ts");
+        await generateNotifications(env);
+      });
+    }
+
+    if (kind === "weekly") {
+      if (env.ANTHROPIC_API_KEY) {
+        await step("insight", async () => {
+          const { buildAndStoreInsight } = await import("../lib/insight.ts");
+          await buildAndStoreInsight(env);
+        });
+        await step("weekly_report", async () => {
+          const { generateAndStoreReport } = await import("../lib/report.ts");
+          await generateAndStoreReport(env, "week");
+        });
+      }
+      await step("tg_proactive", async () => {
+        const { runWeeklyProactive } = await import("../lib/proactive.ts");
+        await runWeeklyProactive(env);
+      });
+    }
+
+    if (kind === "monthly" && env.ANTHROPIC_API_KEY) {
+      await step("monthly_report", async () => {
+        const { generateAndStoreReport } = await import("../lib/report.ts");
+        await generateAndStoreReport(env, "month"); // idempotent per period
+      });
+    }
+
+    return { ran, failed };
+  }
+
+  /**
+   * Paces the ~90-day statement backfill: monobank allows one statement request per 60s.
+   *
+   * This is the one job that stays an alarm rather than joining the cron fan-out. It ticks
+   * every minute and only for whoever is actually backfilling — as a global minute-cron it
+   * would wake every user's object 1440 times a day to learn there is nothing to do.
+   * The cursor lives in `app_state`, so a restart or an eviction mid-run resumes rather than
+   * starting over.
+   */
+  override async alarm(): Promise<void> {
+    const env = await this.appEnv();
+    try {
+      const { stepBackfill } = await import("../lib/backfill.ts");
+      const res = await stepBackfill(env);
+      // Reschedule while there is work left. `retry` means monobank rate-limited us, which is
+      // expected pacing rather than an error — same 60s wait either way.
+      if (res && !res.done) this.ctx.storage.setAlarm(Date.now() + 60_000);
+    } catch {
+      // Keep the chain alive: dropping the alarm on one bad step would silently abandon a
+      // half-finished backfill, and nothing else would ever pick it up.
+      this.ctx.storage.setAlarm(Date.now() + 60_000);
+    }
+  }
+
+  /**
+   * This user's own monobank token and Anthropic key (PLATFORM.md §4), decrypted.
+   *
+   * Cached in memory for the object's lifetime: a Durable Object serves exactly one user, so
+   * the values cannot change under it except through `invalidateCredentials()`, which the
+   * endpoint that writes them calls. Without the cache every request would pay two AES-GCM
+   * decrypts plus two queries for values that never change.
+   *
+   * Falls back to the deployment-wide secrets while they still exist. That fallback is what
+   * lets the owner keep working through the whole migration; it disappears with the global
+   * `MONO_TOKEN`/`ANTHROPIC_API_KEY` bindings.
+   */
+  private async userCredentials(): Promise<{ MONO_TOKEN: string; ANTHROPIC_API_KEY: string }> {
+    if (!this.credentials) {
+      const master = this.env.SECRETS_MASTER_KEY;
+      const [mono, anthropic] = await Promise.all([
+        getSecret(this.db, master, "mono_token"),
+        getSecret(this.db, master, "anthropic_api_key"),
+      ]);
+      this.credentials = {
+        MONO_TOKEN: mono ?? this.env.MONO_TOKEN ?? "",
+        ANTHROPIC_API_KEY: anthropic ?? this.env.ANTHROPIC_API_KEY ?? "",
+      };
+    }
+    return this.credentials;
+  }
+
+  /** Drops the credential cache. Called by the endpoint that stores or clears a secret. */
+  invalidateCredentials(): void {
+    this.credentials = null;
+  }
+
+  /**
+   * P0.7 — pulls the old single-user D1 into this object. Owner-only; the check lives in the
+   * Worker, where the directory says who the owner is.
+   *
+   * `this.env.DB` is still the ORIGINAL D1 binding in here — `appEnv()` only swaps it for the
+   * application. That is what makes this a local copy instead of a dump-and-upload dance.
+   */
+  async importLegacyData(): Promise<ImportReport> {
+    const { importLegacy } = await import("./import-legacy.ts");
+    return importLegacy(
+      this.env.DB,
+      this.db,
+      (fn) => this.ctx.storage.transactionSync(fn),
+      (sql, ...binds) => {
+        this.ctx.storage.sql.exec(sql, ...(binds as SqlStorageValue[]));
+      },
+    );
+  }
+
+  /** Migration outcome from the last cold start — used by the P0.0 spike report. */
+  async migrationReport(): Promise<MigrationReport> {
+    return this.migration;
+  }
+
+  /**
+   * Runs one statement through the shim and returns its D1-shaped result.
+   *
+   * Exists for the P0.0 spike (comparing this backend against D1 on identical SQL). Normal
+   * application code does NOT go through here — it keeps calling `env.DB.prepare(...)`,
+   * with `env.DB` swapped for `this.db` by the request middleware.
+   */
+  async query<T = Record<string, unknown>>(sql: string, binds: unknown[] = []): Promise<AppResult<T>> {
+    return this.db.prepare(sql).bind(...binds).all<T>();
+  }
+
+  /** Multi-statement script (fixtures, ad-hoc setup). No bind parameters — see `execScript`. */
+  async script(sql: string): Promise<void> {
+    this.raw.execScript(sql);
+  }
+
+  /**
+   * Runs the P0.0 comparison probe against this object's own database and returns plain
+   * JSON. It has to execute in here because a database handle cannot cross RPC. Spike-only.
+   */
+  async spikeProbe(): Promise<Record<string, unknown>> {
+    const { probe } = await import("./spike-probe.ts");
+    return probe(this.db);
+  }
+
+  /**
+   * Wipes the object back to an empty schema so the spike can re-seed a known state.
+   * Spike-only.
+   *
+   * Two findings from the spike are baked in here:
+   *   • the DO enforces foreign keys — `DROP TABLE categories` raised while `transactions`
+   *     still referenced it — so drops run under `PRAGMA defer_foreign_keys` inside one
+   *     transaction instead of requiring a topological sort of the FK graph;
+   *   • `storage.deleteAll()` is NOT a usable reset here: it left the user tables in place
+   *     while clearing the migration ledger, so the next run re-applied 0001 onto an
+   *     existing schema ("table categories already exists").
+   */
+  async reset(): Promise<void> {
+    const sql = this.ctx.storage.sql;
+    const tables = sql
+      .exec<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
+      )
+      .toArray();
+    this.ctx.storage.transactionSync(() => {
+      // Deferring FK checks to commit time lets the drops happen in any order; by then no
+      // table is left to violate anything.
+      sql.exec("PRAGMA defer_foreign_keys = ON");
+      for (const t of tables) sql.exec(`DROP TABLE IF EXISTS "${t.name}"`);
+    });
+    this.migration = runMigrations(sql);
+  }
+}

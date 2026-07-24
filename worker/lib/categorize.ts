@@ -2,6 +2,7 @@
 // Returns the resolved category and a human display name when an alias overrides it.
 
 import { matchActiveSubscription } from "./subscriptions.ts";
+import type { AppDb } from "./db-shim.ts";
 
 export interface CategorizeInput {
   mcc: number | null;
@@ -19,7 +20,7 @@ export interface CategorizeResult {
 }
 
 export async function categorize(
-  db: D1Database,
+  db: AppDb,
   input: CategorizeInput,
 ): Promise<CategorizeResult> {
   const desc = (input.description ?? "").trim();

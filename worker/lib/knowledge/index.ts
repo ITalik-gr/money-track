@@ -6,6 +6,7 @@ import { investing } from "./investing.ts";
 
 export type { KnowledgeDoc, KnowledgeRow, KnowledgeMetaItem } from "./types.ts";
 export { DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS } from "./types.ts";
+import type { AppDb } from "../db-shim.ts";
 
 // Вбудований корпус знань (§A5) — стабільний довідник для AI. Порядок фіксований: він впливає
 // на байт-ідентичність кешованого блока (cache_control), тож НЕ сортувати динамічно.
@@ -28,7 +29,7 @@ function render(docs: { title: string; body: string }[]): string {
 // на remote, чат має працювати по-старому, а не падати.
 export const KNOWLEDGE_CORPUS: string = [PREAMBLE, render(KNOWLEDGE_DOCS)].join("\n\n---\n\n");
 
-async function loadRows(db: D1Database): Promise<KnowledgeRow[]> {
+async function loadRows(db: AppDb): Promise<KnowledgeRow[]> {
   try {
     const r = await db
       .prepare("SELECT id, kind, title, summary, body, enabled, created_at, updated_at FROM knowledge_docs ORDER BY created_at, id")
@@ -49,7 +50,7 @@ const isLocked = (id: string) => KNOWLEDGE_DOCS.some((d) => d.id === id && d.loc
  * на кожному виклику. Текст міняється лише коли користувач реально відредагував документ —
  * тоді кеш прогрівається наново один раз, це нормально.
  */
-export async function buildKnowledgeCorpus(db: D1Database): Promise<string> {
+export async function buildKnowledgeCorpus(db: AppDb): Promise<string> {
   const rows = await loadRows(db);
   const byId = new Map(rows.map((r) => [r.id, r]));
 
@@ -70,7 +71,7 @@ export async function buildKnowledgeCorpus(db: D1Database): Promise<string> {
 }
 
 // Метадані для UI (картка «Корпус знань») — без важкого body.
-export async function knowledgeMeta(db: D1Database): Promise<{ docs: KnowledgeMetaItem[]; user_chars: number; user_limit: number; doc_limit: number }> {
+export async function knowledgeMeta(db: AppDb): Promise<{ docs: KnowledgeMetaItem[]; user_chars: number; user_limit: number; doc_limit: number }> {
   const rows = await loadRows(db);
   const byId = new Map(rows.map((r) => [r.id, r]));
 
@@ -107,7 +108,7 @@ export async function knowledgeMeta(db: D1Database): Promise<{ docs: KnowledgeMe
 }
 
 // Тіло документа для редактора: override → збережене, інакше — вбудоване.
-export async function knowledgeBody(db: D1Database, id: string): Promise<{ id: string; title: string; summary: string; body: string; kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean } | null> {
+export async function knowledgeBody(db: AppDb, id: string): Promise<{ id: string; title: string; summary: string; body: string; kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean } | null> {
   const rows = await loadRows(db);
   const row = rows.find((r) => r.id === id);
   const base = KNOWLEDGE_DOCS.find((d) => d.id === id);
@@ -131,7 +132,7 @@ export async function knowledgeBody(db: D1Database, id: string): Promise<{ id: s
 
 // Скільки символів займають ВЛАСНІ доки без урахування `exceptId` — щоб редагування наявного
 // доку не рахувало його ж старий розмір проти ліміту.
-export async function userCharsExcept(db: D1Database, exceptId?: string): Promise<number> {
+export async function userCharsExcept(db: AppDb, exceptId?: string): Promise<number> {
   const rows = await loadRows(db);
   return rows.filter((r) => r.kind === "user" && r.id !== exceptId).reduce((s, r) => s + r.body.length, 0);
 }

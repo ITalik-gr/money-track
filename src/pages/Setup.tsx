@@ -22,6 +22,8 @@ import {
   useSyncAccountsMutation,
 } from "../store/api.ts";
 import type { AiTask, AiModelToken } from "../store/api.ts";
+import { CredentialsCard } from "../components/CredentialsCard.tsx";
+import { CsvImportCard } from "../components/CsvImportCard.tsx";
 
 // Крок бекфілу раз на 60с (ліміт моно 1/60с), клієнт веде таймінг і показує прогрес (§5).
 const STEP_INTERVAL_MS = 60_000;
@@ -74,6 +76,8 @@ export function Setup() {
       <div className="settings-grid">
         <ProfileCard />
         <AiUsageCard />
+        <CredentialsCard />
+        <CsvImportCard />
 
         <div className="card set-card">
           <div className="set-card-h"><Icon name="stats" size={16} />Стан бази</div>

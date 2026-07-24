@@ -3,8 +3,9 @@
 import type { MonoAccount, MonoClientInfo, MonoJar, MonoStatementItem } from "./mono.ts";
 import { categorize } from "./categorize.ts";
 import { descriptionIsTransfer } from "./transfers.ts";
+import type { AppDb, AppPreparedStatement } from "./db-shim.ts";
 
-export async function getState(db: D1Database, key: string): Promise<string | null> {
+export async function getState(db: AppDb, key: string): Promise<string | null> {
   const row = await db
     .prepare("SELECT value FROM app_state WHERE key = ?")
     .bind(key)
@@ -12,7 +13,7 @@ export async function getState(db: D1Database, key: string): Promise<string | nu
   return row?.value ?? null;
 }
 
-export async function setState(db: D1Database, key: string, value: string): Promise<void> {
+export async function setState(db: AppDb, key: string, value: string): Promise<void> {
   await db
     .prepare(
       "INSERT INTO app_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -27,9 +28,9 @@ function accountTitle(a: MonoAccount): string {
 }
 
 /** Upsert mono cards + jars into accounts. One card may appear per currency. */
-export async function syncAccounts(db: D1Database, info: MonoClientInfo): Promise<void> {
+export async function syncAccounts(db: AppDb, info: MonoClientInfo): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
-  const stmts: D1PreparedStatement[] = [];
+  const stmts: AppPreparedStatement[] = [];
 
   for (const a of info.accounts) {
     stmts.push(
@@ -67,7 +68,7 @@ export async function syncAccounts(db: D1Database, info: MonoClientInfo): Promis
 
 /** Idempotent upsert of a mono statement item; runs categorisation on insert. */
 export async function upsertMonoTx(
-  db: D1Database,
+  db: AppDb,
   accountId: string,
   item: MonoStatementItem,
 ): Promise<void> {

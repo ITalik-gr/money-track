@@ -4,8 +4,8 @@
 // spacing and shows progress. Cursor lives in app_state so it survives interruption.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { getClientInfo, MonoRateLimit } from "../lib/mono.ts";
-import { getState, setState, syncAccounts } from "../lib/repo.ts";
+import { MonoRateLimit } from "../lib/mono.ts";
+import { getState, setState } from "../lib/repo.ts";
 import { type Cursor, CURSOR_KEY, startBackfill, stepBackfill } from "../lib/backfill.ts";
 
 export const setup = new Hono<{ Bindings: Env }>();
@@ -13,9 +13,12 @@ export const setup = new Hono<{ Bindings: Env }>();
 setup.post("/sync-accounts", async (c) => {
   if (!c.env.MONO_TOKEN) return c.json({ error: "MONO_TOKEN not set" }, 400);
   try {
-    const info = await getClientInfo(c.env.MONO_TOKEN);
-    await syncAccounts(c.env.DB, info);
-    return c.json({ ok: true, accounts: info.accounts.length, jars: info.jars?.length ?? 0 });
+    // Through the registry rather than calling mono directly: the day a second bank exists,
+    // this endpoint must not be the place that still knows one bank's name (PLATFORM.md §5).
+    const { getProvider } = await import("../lib/banks/index.ts");
+    const provider = getProvider("mono")!;
+    const res = await provider.syncAccounts!(c.env.DB, c.env.MONO_TOKEN);
+    return c.json({ ok: true, ...res });
   } catch (e) {
     if (e instanceof MonoRateLimit) return c.json({ error: "rate_limited", retryAfter: 60 }, 429);
     return c.json({ error: String(e) }, 502);
@@ -24,11 +27,18 @@ setup.post("/sync-accounts", async (c) => {
 
 setup.post("/register-webhook", async (c) => {
   if (!c.env.MONO_TOKEN) return c.json({ error: "MONO_TOKEN not set" }, 400);
-  const { setWebhook } = await import("../lib/mono.ts");
   const origin = new URL(c.req.url).origin;
-  const url = `${origin}/webhook/${c.env.WEBHOOK_SECRET}`;
+  // Per-user webhook path (PLATFORM.md §5). `USER_ID` is injected by the Durable Object from
+  // the header the Worker set; the fallback to the deployment-wide secret keeps this working
+  // for the single-user deployment until the owner re-registers.
+  const { webhookToken } = await import("../lib/auth.ts");
+  const segment = c.env.USER_ID
+    ? await webhookToken(c.env, c.env.USER_ID)
+    : c.env.WEBHOOK_SECRET;
+  const url = `${origin}/webhook/${segment}`;
   try {
-    await setWebhook(c.env.MONO_TOKEN, url);
+    const { getProvider } = await import("../lib/banks/index.ts");
+    await getProvider("mono")!.registerWebhook!(c.env.MONO_TOKEN, url);
     await setState(c.env.DB, "webhook_url", url);
     return c.json({ ok: true, url });
   } catch (e) {
@@ -56,6 +66,10 @@ setup.post("/register-telegram", async (c) => {
 // The minute-cron also advances it, so it finishes even if the tab is closed.
 setup.post("/backfill/start", async (c) => {
   const cursor = await startBackfill(c.env);
+  // Hand the pacing to the object's alarm so the run finishes even with the tab closed. The
+  // client still steps it too, for immediate feedback — both paths advance the same cursor,
+  // and a step that arrives while monobank is rate-limiting simply reports `retry`.
+  c.env.scheduleBackfillStep?.(60_000);
   return c.json({ ok: true, total: cursor.total, estimateMinutes: cursor.total });
 });
 

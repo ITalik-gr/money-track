@@ -9,6 +9,7 @@ import {
   recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels,
   type PeriodMode, type Preset,
 } from "../lib/stats.ts";
+import type { AppDb } from "../lib/db-shim.ts";
 
 export const api = new Hono<{ Bindings: Env }>();
 
@@ -2213,7 +2214,7 @@ const RB_LABEL = `COALESCE(NULLIF(TRIM(t.merchant), ''), NULLIF(TRIM(t.comment),
 
 // Перерахунок обох денормалізованих сум із таблиці розподілів. ЄДИНЕ місце, де вони пишуться —
 // інакше `reimbursed`/`reimburses_total` розійшлися б із `tx_reimbursements`, а канон читає саме їх.
-function rbRecalc(db: D1Database, ids: string[]) {
+function rbRecalc(db: AppDb, ids: string[]) {
   return ids.map((txId) =>
     db.prepare(
       `UPDATE transactions SET
@@ -2443,7 +2444,7 @@ api.put("/notifications/prefs", async (c) => {
 const FILTERS_KEY = "saved_filters";
 interface SavedFilter { id: string; name: string; query: string }
 
-async function readFilters(db: D1Database): Promise<SavedFilter[]> {
+async function readFilters(db: AppDb): Promise<SavedFilter[]> {
   const raw = await getState(db, FILTERS_KEY);
   if (!raw) return [];
   try {
@@ -2803,7 +2804,7 @@ api.patch("/accounts/manual/:id", async (c) => {
 
 // Зафіксувати зріз балансу ручного рахунку. Один запис на день (перезаписуємо останній того ж
 // дня), щоб серія лишалась охайною при кількох правках поспіль.
-async function recordBalance(db: D1Database, accountId: string, balance: number, at: number): Promise<void> {
+async function recordBalance(db: AppDb, accountId: string, balance: number, at: number): Promise<void> {
   const dayStart = at - (at % 86400);
   await db.prepare(
     "DELETE FROM account_balance_history WHERE account_id = ? AND recorded_at >= ? AND recorded_at < ?",

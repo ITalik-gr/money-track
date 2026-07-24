@@ -411,9 +411,17 @@ export type NotifPrefs = Record<NotifKind, boolean>
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials"],
   endpoints: (b) => ({
-    getMe: b.query<{ authenticated: boolean }, void>({ query: () => "/me", providesTags: ["Me"] }),
+    // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
+    // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
+    getMe: b.query<
+      {
+        authenticated: boolean;
+        user?: { id: string; email: string; name: string | null; picture: string | null; is_owner: boolean };
+      },
+      void
+    >({ query: () => "/me", providesTags: ["Me"] }),
     login: b.mutation<{ ok: boolean }, string>({
       query: (password) => ({ url: "/login", method: "POST", body: { password } }),
       invalidatesTags: ["Me", "Tx", "Account", "Summary", "Setup"],
@@ -492,6 +500,35 @@ export const api = createApi({
     getPlanned: b.query<PlannedPayment[], void>({ query: () => "/planned", providesTags: ["Planned"] }),
     // §Хвіст C: глобальний лічильник витрат AI (сьогодні/місяць/за весь час).
     getAiUsage: b.query<AiUsageStats, void>({ query: () => "/ai-usage", providesTags: ["Tx"] }),
+    // §PLATFORM P0.4 — свої ключі (mono / Anthropic). Значення НІКОЛИ не приходить назад,
+    // лише статус: сервер не має способу віддати секрет клієнту, і це навмисно.
+    getCredentials: b.query<{ secrets: { name: string; set: boolean; updated_at: number | null; last_ok_at: number | null }[] }, void>({
+      query: () => "/credentials",
+      providesTags: ["Credentials"],
+    }),
+    putCredential: b.mutation<{ ok: true; verified: boolean; detail: string | null }, { name: string; value: string }>({
+      query: ({ name, value }) => ({ url: `/credentials/${name}`, method: "PUT", body: { value } }),
+      invalidatesTags: ["Credentials", "Setup"],
+    }),
+    deleteCredential: b.mutation<{ ok: true }, string>({
+      query: (name) => ({ url: `/credentials/${name}`, method: "DELETE" }),
+      invalidatesTags: ["Credentials", "Setup"],
+    }),
+    // §PLATFORM P1.2 — CSV-імпорт. Два кроки навмисно: preview нічого не пише.
+    csvPreview: b.mutation<{
+      delimiter: string; headers: string[]; sample: string[][]; total_rows: number;
+      mapping: { date?: number; amount?: number; description?: number; comment?: number | null; mcc?: number | null };
+      complete: boolean; parsed?: number; duplicates?: number;
+      skipped?: { line: number; reason: string }[]; skipped_total?: number;
+      preview?: { time: number; amount: number; description: string | null }[];
+    }, { text: string; account_id?: string; mapping?: Record<string, number | null | undefined> }>({
+      query: (body) => ({ url: "/import/csv/preview", method: "POST", body }),
+    }),
+    csvCommit: b.mutation<{ ok: true; inserted: number; duplicates: number; skipped: number },
+      { text: string; account_id: string; mapping?: Record<string, number | null | undefined> }>({
+      query: (body) => ({ url: "/import/csv/commit", method: "POST", body }),
+      invalidatesTags: ["Tx", "Summary", "Account", "Setup"],
+    }),
     // §Хвіст: факт vs план по підписках.
     getPlannedActuals: b.query<PlannedActual[], void>({ query: () => "/planned/actuals", providesTags: ["Planned", "Tx"] }),
     // §Аналітика 2.0 — AI-репорти.
@@ -917,6 +954,11 @@ export const {
   useGetBudgetsQuery,
   useGetPlannedQuery,
   useGetAiUsageQuery,
+  useGetCredentialsQuery,
+  usePutCredentialMutation,
+  useDeleteCredentialMutation,
+  useCsvPreviewMutation,
+  useCsvCommitMutation,
   useGetPlannedActualsQuery,
   useGetPeriodModeQuery,
   useSetPeriodModeMutation,
