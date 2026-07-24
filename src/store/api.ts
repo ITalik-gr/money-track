@@ -58,6 +58,8 @@ export interface TxDetail extends TxRow {
   is_transfer?: number;
   ai_enriched?: number;
   name_locked?: number;             // §R7: ручну назву зафіксовано — AI не перезаписує
+  reimbursed?: number | null;       // §COMPENSATION: скільки з цієї витрати компенсували
+  reimburses_id?: string | null;    // §COMPENSATION: ця операція — компенсація за витрату X
   ai_note?: string | null;          // розуміння AI «що це» (§R5)
   planned_id?: number | null;       // зв'язок із підпискою
   planned_title?: string | null;    // назва підписки, якщо прив'язано
@@ -334,8 +336,14 @@ export interface FactInput {
   category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
   adjust_value?: number | null; confirm?: boolean;
 }
-// §A5: метадані вбудованого документа корпусу знань (для картки на рейлі Порадника).
-export interface KnowledgeMeta { id: string; title: string; summary: string; chars: number }
+// §A5: документ корпусу знань. `builtin` — заводський (може бути переписаний або вимкнений,
+// крім `locked`); `user` — власна нотатка користувача.
+export interface KnowledgeMeta {
+  id: string; title: string; summary: string; chars: number;
+  kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean; updated_at: number | null;
+}
+export interface KnowledgeList { docs: KnowledgeMeta[]; user_chars: number; user_limit: number; doc_limit: number }
+export interface KnowledgeDocFull { id: string; title: string; summary: string; body: string; kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean }
 // §H: детермінований Індекс фінздоров'я (без AI) — 4 складові + зважений скор 0..100.
 export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
 export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[]; trend?: { day: string; score: number }[] }
@@ -361,10 +369,32 @@ export interface SearchResults {
   transactions: { id: string; time: number; amount: number; currency_code: number; merchant: string | null; category_name: string | null }[];
 }
 // Нетворт у часі: активи (подушка + інвест) − борг, на кінець кожного місяця. Копійки.
-export interface NetworthPoint { t: number; cushion: number; debt: number; investment: number; assets: number; net: number }
+// `ym` (`YYYY-MM`) — канонічний місяць точки. Підпис осі рахуємо з нього, а НЕ з `t`:
+// `t` кінця місяця = 23:59:59 UTC, у Києві (+3) це вже 1-ше наступного місяця.
+export interface NetworthPoint { t: number; ym: string; cushion: number; debt: number; investment: number; assets: number; net: number }
 export interface Networth { months: number; points: NetworthPoint[]; now: NetworthPoint | null; caveats: string[] }
 // §SPLIT: частина розділеної транзакції (копійки, знак як у tx). Порожній список = не розділено.
 export interface TxSplit { id: number; category_id: number; amount: number; category_name: string | null; category_color: string | null }
+// §COMPENSATION: стан «мені скинули за це» + кандидати на привʼязку (надходження поруч у часі).
+// `label` збирає сервер (мерчант → коментар → нотатка → рахунок): у вхідних P2P мерчант часто
+// порожній, і рядок лишався б без назви.
+// `available` — скільки з надходження ще не роздано по витратах; `allocated_here` — скільки з
+// нього вже пішло саме на цю витрату. Одне надходження може покривати кілька витрат.
+export interface ReimbursementTx {
+  id: string; label: string; account_title: string | null;
+  amount: number; currency_code: number; time: number;
+  available: number; allocated_here: number;
+}
+export interface Reimbursement {
+  tx: { id: string; amount: number; currency_code: number; reimbursed: number };
+  linked: ReimbursementTx[];
+  candidates: ReimbursementTx[];
+}
+// Зворотний бік: куди пішло це надходження і скільки з нього ще вільно.
+export interface ReimbursementUsage {
+  used: { id: string; amount: number; label: string; time: number; expense_amount: number }[];
+  allocated: number; available: number; currency_code?: number;
+}
 // Центр сповіщень: стрічка того, що система «хоче сказати» (репорти/дедлайни/аномалії/…).
 export type NotifKind =
   | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
@@ -381,7 +411,7 @@ export type NotifPrefs = Record<NotifKind, boolean>
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge"],
   endpoints: (b) => ({
     getMe: b.query<{ authenticated: boolean }, void>({ query: () => "/me", providesTags: ["Me"] }),
     login: b.mutation<{ ok: boolean }, string>({
@@ -734,8 +764,19 @@ export const api = createApi({
     // §A1: шар фактів. Підтвердження/видалення факту з коригуванням рухає burn/runway →
     // інвалідуємо Tx/Summary/Advice, щоб цифри всюди перерахувались.
     getFacts: b.query<Fact[], void>({ query: () => "/facts", providesTags: ["Fact"] }),
-    // §A5: метадані вбудованого корпусу знань (статичне; сам текст живе в промті чату).
-    getKnowledge: b.query<KnowledgeMeta[], void>({ query: () => "/knowledge" }),
+    // §A5: корпус знань — заводські доки + власні нотатки користувача.
+    getKnowledge: b.query<KnowledgeList, void>({ query: () => "/knowledge", providesTags: ["Knowledge"] }),
+    getKnowledgeDoc: b.query<KnowledgeDocFull, string>({ query: (id) => `/knowledge/${encodeURIComponent(id)}`, providesTags: ["Knowledge"] }),
+    createKnowledgeDoc: b.mutation<{ ok: boolean; id: string }, { title: string; summary?: string; body: string }>({
+      query: (body) => ({ url: "/knowledge", method: "POST", body }), invalidatesTags: ["Knowledge"],
+    }),
+    saveKnowledgeDoc: b.mutation<{ ok: boolean }, { id: string; title?: string; summary?: string; body: string; enabled?: boolean }>({
+      query: ({ id, ...body }) => ({ url: `/knowledge/${encodeURIComponent(id)}`, method: "PUT", body }), invalidatesTags: ["Knowledge"],
+    }),
+    // Для власної нотатки — видалення; для заводського доку — повернення до заводського тексту.
+    deleteKnowledgeDoc: b.mutation<{ ok: boolean }, string>({
+      query: (id) => ({ url: `/knowledge/${encodeURIComponent(id)}`, method: "DELETE" }), invalidatesTags: ["Knowledge"],
+    }),
     // §H: детермінований Індекс фінздоров'я. Провайдить Advice → перерахунок при зміні фактів/порад.
     getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
     // Спарклайни (6-міс тренд у списках категорій/мерчантів). Оновлюється з новими операціями.
@@ -780,6 +821,24 @@ export const api = createApi({
     getTxSplits: b.query<TxSplit[], string>({ query: (id) => `/transactions/${id}/splits`, providesTags: (_r, _e, id) => [{ type: "Tx", id }] }),
     setTxSplits: b.mutation<{ ok: boolean; count: number }, { id: string; splits: { category_id: number; amount: number }[] }>({
       query: ({ id, splits }) => ({ url: `/transactions/${id}/splits`, method: "PUT", body: { splits } }),
+      invalidatesTags: (_r, _e, { id }) => ["Tx", { type: "Tx", id }, "Summary", "Advice"],
+    }),
+    // §COMPENSATION: «мені скинули за це гроші». Міняє суму витрати в аналітиці → інвалідуємо
+    // те саме, що й спліт (Tx/Summary/Advice), інакше Головна й Порадник лишились би зі старим числом.
+    getReimbursement: b.query<Reimbursement, string>({
+      query: (id) => `/transactions/${id}/reimbursement`,
+      providesTags: (_r, _e, id) => [{ type: "Tx", id }],
+    }),
+    getReimbursementUsage: b.query<ReimbursementUsage, string>({
+      query: (id) => `/transactions/${id}/reimbursement-usage`,
+      providesTags: (_r, _e, id) => [{ type: "Tx", id }],
+    }),
+    // Розподіл міняє суму витрати І дохід джерела → інвалідуємо весь Tx, не лише цю операцію.
+    setReimbursement: b.mutation<
+      { ok: boolean; reimbursed: number },
+      { id: string; manual_amount?: number | null; allocations: { source_id: string; amount?: number | null }[] }
+    >({
+      query: ({ id, ...body }) => ({ url: `/transactions/${id}/reimbursement`, method: "PUT", body }),
       invalidatesTags: (_r, _e, { id }) => ["Tx", { type: "Tx", id }, "Summary", "Advice"],
     }),
     addFact: b.mutation<{ id: number | null }, FactInput>({
@@ -934,6 +993,10 @@ export const {
   useChatTxMutation,
   useGetFactsQuery,
   useGetKnowledgeQuery,
+  useLazyGetKnowledgeDocQuery,
+  useCreateKnowledgeDocMutation,
+  useSaveKnowledgeDocMutation,
+  useDeleteKnowledgeDocMutation,
   useGetHealthQuery,
   useGetSparkQuery,
   useGetNetworthQuery,
@@ -946,6 +1009,9 @@ export const {
   useGetCashflowCalendarQuery,
   useGetTxSplitsQuery,
   useSetTxSplitsMutation,
+  useGetReimbursementQuery,
+  useGetReimbursementUsageQuery,
+  useSetReimbursementMutation,
   useAddFactMutation,
   useConfirmFactMutation,
   useDeleteFactMutation,

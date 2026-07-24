@@ -1225,6 +1225,9 @@ api.get("/analytics/networth", async (c) => {
       pointDays.push({ day, t: day * 86400 - 1 });
     }
   }
+  // Рівно `months` точок: `months-1` кінців місяця + «зараз». Без обрізки в масив потрапляв
+  // ще й кінець місяця ПЕРЕД вікном (13 точок на запит «12 міс»).
+  pointDays.splice(months - 1);
   const { byDay, covered } = await ratesForDays(c.env.DB, [...pointDays.map((p) => iso(p.t)), iso(now)].sort());
 
   // Зводимо стан рахунків у cushion/debt/investment — правило `fundsBreakdown`.
@@ -1240,6 +1243,11 @@ api.get("/analytics/networth", async (c) => {
     }
     return {
       t,
+      // Місяць точки віддаємо ЯВНО (`YYYY-MM`), бо `t` для кінця місяця = 23:59:59 UTC, і клієнт,
+      // форматуючи його в Києві (+3), отримував 1-ше число НАСТУПНОГО місяця: підпис кінця червня
+      // ставав «лип.» і збігався з підписом точки «зараз» → дубль категорії на осі X, крива
+      // зсунута на місяць, а тултіп поточного місяця показував дані попереднього.
+      ym: new Date(t * 1000).toISOString().slice(0, 7),
       cushion: Math.round(cushion), debt: Math.round(debt), investment: Math.round(investment),
       assets: Math.round(cushion + investment),
       net: Math.round(cushion + investment - debt),
@@ -2174,6 +2182,9 @@ api.put("/transactions/:id/splits", async (c) => {
   if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
   if (splits.length > 0) {
     if (tx.amount >= 0) return c.json({ error: "Ділити можна лише витрату" }, 400);
+    // Дзеркало перевірки в `/reimbursement`: спліт і компенсація взаємовиключні (див. там же).
+    const r = await c.env.DB.prepare("SELECT reimbursed FROM transactions WHERE id = ?").bind(id).first<{ reimbursed: number | null }>();
+    if ((r?.reimbursed ?? 0) > 0) return c.json({ error: "На операції вказано компенсацію — прибери її, щоб поділити на категорії" }, 400);
     if (splits.length < 2) return c.json({ error: "Потрібно щонайменше 2 частини" }, 400);
     if (splits.some((p) => !p.category_id || !Number.isFinite(p.amount) || p.amount >= 0)) {
       return c.json({ error: "Кожна частина: категорія + сума < 0" }, 400);
@@ -2188,6 +2199,188 @@ api.put("/transactions/:id/splits", async (c) => {
   }
   await c.env.DB.batch(stmts);
   return c.json({ ok: true, count: splits.length });
+});
+
+// ---- §COMPENSATION: «мені скинули за це гроші» (міграція 0029) ----------------
+// Витрата стає ЧАСТКОВО чужою: у статистику йде лише те, що реально твоє
+// (`EFF_AMOUNT = t.amount + t.reimbursed`, stats.ts), а привʼязані надходження перестають
+// рахуватись і доходом, і поверненням. Тут лише транспорт + валідація.
+
+// Підпис збираємо на СЕРВЕРІ: у вхідних P2P `merchant` часто порожній, і рядок-кандидат
+// виходив без назви — сама дата й сума, зрозуміти неможливо. Черга: мерчант → коментар
+// банку → нотатка → назва рахунку.
+const RB_LABEL = `COALESCE(NULLIF(TRIM(t.merchant), ''), NULLIF(TRIM(t.comment), ''), NULLIF(TRIM(t.user_note), ''), a.title, 'Надходження')`;
+
+// Перерахунок обох денормалізованих сум із таблиці розподілів. ЄДИНЕ місце, де вони пишуться —
+// інакше `reimbursed`/`reimburses_total` розійшлися б із `tx_reimbursements`, а канон читає саме їх.
+function rbRecalc(db: D1Database, ids: string[]) {
+  return ids.map((txId) =>
+    db.prepare(
+      `UPDATE transactions SET
+         reimbursed = COALESCE((SELECT SUM(r.amount) FROM tx_reimbursements r WHERE r.expense_id = ?), 0),
+         reimburses_total = COALESCE((SELECT SUM(r.amount) FROM tx_reimbursements r WHERE r.source_tx_id = ?), 0)
+       WHERE id = ?`,
+    ).bind(txId, txId, txId),
+  );
+}
+
+// Поточний стан + кандидати. Кандидат — надходження в межах ±21 дня, у якого ЛИШИВСЯ вільний
+// залишок: одне надходження може покривати кілька витрат («скинули 2400 — 1870 за одне,
+// решта за інше»), тож вичерпаність рахуємо по `reimburses_total`, а не по факту привʼязки.
+api.get("/transactions/:id/reimbursement", async (c) => {
+  const id = c.req.param("id");
+  const tx = await c.env.DB.prepare(
+    "SELECT id, amount, currency_code, time, reimbursed FROM transactions WHERE id = ?",
+  ).bind(id).first<{ id: string; amount: number; currency_code: number; time: number; reimbursed: number | null }>();
+  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
+
+  type RbTx = {
+    id: string; label: string; account_title: string | null;
+    amount: number; currency_code: number; time: number;
+    available: number;            // скільки з надходження ще не роздано
+    allocated_here: number;       // скільки з нього вже пішло саме на цю витрату
+  };
+  const SELECT_TX = `
+    SELECT t.id, ${RB_LABEL} AS label, a.title AS account_title, t.amount, t.currency_code, t.time,
+           t.amount - COALESCE(t.reimburses_total, 0) AS available,
+           COALESCE((SELECT r.amount FROM tx_reimbursements r WHERE r.source_tx_id = t.id AND r.expense_id = ?), 0) AS allocated_here
+    FROM transactions t LEFT JOIN accounts a ON a.id = t.account_id`;
+
+  const linked = await c.env.DB.prepare(
+    `${SELECT_TX} WHERE t.id IN (SELECT source_tx_id FROM tx_reimbursements WHERE expense_id = ?) ORDER BY t.time`,
+  ).bind(id, id).all<RbTx>();
+
+  const WINDOW = 21 * 86400;
+  const candidates = await c.env.DB.prepare(
+    `${SELECT_TX}
+     WHERE t.amount > 0 AND t.transfer_pair_id IS NULL AND t.currency_code = ?
+       AND t.time BETWEEN ? AND ?
+       AND t.amount - COALESCE(t.reimburses_total, 0) > 0
+       AND t.id NOT IN (SELECT source_tx_id FROM tx_reimbursements WHERE expense_id = ?)
+     ORDER BY ABS(t.time - ?) LIMIT 12`,
+  ).bind(id, tx.currency_code, tx.time - WINDOW, tx.time + WINDOW, id, tx.time).all<RbTx>();
+
+  return c.json({
+    tx: { id: tx.id, amount: tx.amount, currency_code: tx.currency_code, reimbursed: tx.reimbursed ?? 0 },
+    linked: linked.results ?? [],
+    candidates: candidates.results ?? [],
+  });
+});
+
+// Замінити стан цілком. `allocations` — скільки саме взяти з кожного надходження; якщо сума не
+// вказана, беремо стільки, скільки треба й скільки є (min(вільний залишок, непокрита частина)).
+// `manual_amount` — компенсація без надходження в базі (віддали готівкою). Порожньо = зняти все.
+api.put("/transactions/:id/reimbursement", async (c) => {
+  const id = c.req.param("id");
+  type RbBody = { manual_amount?: number | null; allocations?: { source_id: string; amount?: number | null }[] };
+  const body = await c.req.json<RbBody>().catch((): RbBody => ({}));
+  const wanted = (body.allocations ?? []).filter((a) => a?.source_id);
+
+  const tx = await c.env.DB.prepare(
+    "SELECT amount, currency_code FROM transactions WHERE id = ?",
+  ).bind(id).first<{ amount: number; currency_code: number }>();
+  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
+  if (tx.amount >= 0) return c.json({ error: "Компенсацію можна вказати лише для витрати" }, 400);
+  const expenseTotal = -tx.amount;
+
+  // §SPLIT×§COMPENSATION: свідомо взаємовиключні. Компенсація каже «скільки з цього моє»,
+  // спліт — «на що пішло»; накласти одне на одне означало б ділити компенсацію по частинах
+  // з округленням, і сума частин перестала б сходитись із сумою операції.
+  const hasSplits = await c.env.DB.prepare("SELECT 1 FROM tx_splits WHERE tx_id = ? LIMIT 1").bind(id).first();
+  if (hasSplits && (wanted.length || body.manual_amount)) {
+    return c.json({ error: "Операція вже поділена на категорії — прибери поділ, щоб указати компенсацію" }, 400);
+  }
+
+  const rows: { source_id: string; amount: number }[] = [];
+  let running = 0;
+
+  if (wanted.length) {
+    const ids = [...new Set(wanted.map((a) => String(a.source_id)))];
+    const ph = ids.map(() => "?").join(",");
+    // `available` рахуємо БЕЗ урахування того, що вже віддано ЦІЙ витраті: інакше редагування
+    // наявного розподілу впиралося б у власний же залишок і зменшити суму було б неможливо.
+    const found = (await c.env.DB.prepare(
+      `SELECT t.id, t.amount, t.currency_code,
+              t.amount - COALESCE(t.reimburses_total, 0)
+                + COALESCE((SELECT r.amount FROM tx_reimbursements r WHERE r.source_tx_id = t.id AND r.expense_id = ?), 0) AS available
+       FROM transactions t WHERE t.id IN (${ph})`,
+    ).bind(id, ...ids).all<{ id: string; amount: number; currency_code: number; available: number }>()).results ?? [];
+    if (found.length !== ids.length) return c.json({ error: "Частину операцій не знайдено" }, 400);
+    const byId = new Map(found.map((r) => [r.id, r]));
+
+    for (const a of wanted) {
+      const r = byId.get(String(a.source_id))!;
+      if (r.id === id) return c.json({ error: "Операція не може компенсувати сама себе" }, 400);
+      if (r.amount <= 0) return c.json({ error: "Компенсацією може бути лише надходження" }, 400);
+      // Валюти не зводимо: компенсація живе в тій самій валюті, що й витрата (`reimbursed`
+      // додається до `t.amount` напряму). Інакше курс мовчки спотворив би суму витрати.
+      if (r.currency_code !== tx.currency_code) return c.json({ error: "Надходження має бути в тій самій валюті, що й витрата" }, 400);
+
+      // Без явної суми беремо рівно стільки, скільки ще треба і скільки лишилось у джерела.
+      const need = Math.max(0, expenseTotal - running);
+      const take = a.amount == null ? Math.min(r.available, need) : Math.round(Number(a.amount));
+      if (!Number.isFinite(take) || take < 0) return c.json({ error: "Сума розподілу має бути ≥ 0" }, 400);
+      if (take === 0) continue;
+      if (take > r.available) {
+        return c.json({ error: `З надходження лишилось ${(r.available / 100).toFixed(2)} — не можна взяти ${(take / 100).toFixed(2)}` }, 400);
+      }
+      running += take;
+      rows.push({ source_id: r.id, amount: take });
+    }
+  }
+
+  const manual = body.manual_amount == null ? 0 : Math.round(Number(body.manual_amount));
+  if (!Number.isFinite(manual) || manual < 0) return c.json({ error: "Сума компенсації має бути ≥ 0" }, 400);
+  const total = running + manual;
+  // Стеля — сума самої витрати. Компенсація більша за витрату зробила б `EFF_AMOUNT` додатним,
+  // і рядок випав би з аналітики взагалі (ні витрата, ні дохід).
+  if (total > expenseTotal) {
+    return c.json({ error: `Компенсація ${(total / 100).toFixed(2)} перевищує суму витрати ${(expenseTotal / 100).toFixed(2)}` }, 400);
+  }
+
+  // Джерела, яких торкаємось: старі (їх треба перерахувати після видалення) + нові.
+  const prev = (await c.env.DB.prepare(
+    "SELECT source_tx_id FROM tx_reimbursements WHERE expense_id = ?",
+  ).bind(id).all<{ source_tx_id: string }>()).results ?? [];
+  const touched = [...new Set([id, ...prev.map((p) => p.source_tx_id), ...rows.map((r) => r.source_id)])];
+
+  const now = Math.floor(Date.now() / 1000);
+  const stmts = [c.env.DB.prepare("DELETE FROM tx_reimbursements WHERE expense_id = ?").bind(id)];
+  for (const r of rows) {
+    stmts.push(c.env.DB.prepare(
+      "INSERT INTO tx_reimbursements (expense_id, source_tx_id, amount, created_at) VALUES (?, ?, ?, ?)",
+    ).bind(id, r.source_id, r.amount, now));
+  }
+  stmts.push(...rbRecalc(c.env.DB, touched));
+  // Ручна компенсація не має рядка-джерела, тож `reimbursed` після перерахунку треба добити нею.
+  if (manual > 0) {
+    stmts.push(c.env.DB.prepare("UPDATE transactions SET reimbursed = reimbursed + ? WHERE id = ?").bind(manual, id));
+  }
+  await c.env.DB.batch(stmts);
+
+  return c.json({ ok: true, reimbursed: total, allocations: rows.length, manual });
+});
+
+// Зворотний бік: куди пішло ЦЕ надходження. Потрібно, щоб побачити нерозподілений залишок
+// («скинули 2400, використано 1870 — 530 ще вільні») і дійти звідси до інших витрат.
+api.get("/transactions/:id/reimbursement-usage", async (c) => {
+  const id = c.req.param("id");
+  const tx = await c.env.DB.prepare(
+    "SELECT id, amount, currency_code, reimburses_total FROM transactions WHERE id = ?",
+  ).bind(id).first<{ id: string; amount: number; currency_code: number; reimburses_total: number | null }>();
+  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
+  if (tx.amount <= 0) return c.json({ used: [], allocated: 0, available: 0 });
+
+  const used = (await c.env.DB.prepare(
+    `SELECT e.id, r.amount,
+            COALESCE(NULLIF(TRIM(e.merchant), ''), NULLIF(TRIM(e.comment), ''), 'Витрата') AS label,
+            e.time, e.amount AS expense_amount
+     FROM tx_reimbursements r JOIN transactions e ON e.id = r.expense_id
+     WHERE r.source_tx_id = ? ORDER BY e.time`,
+  ).bind(id).all<{ id: string; amount: number; label: string; time: number; expense_amount: number }>()).results ?? [];
+
+  const allocated = tx.reimburses_total ?? 0;
+  return c.json({ used, allocated, available: tx.amount - allocated, currency_code: tx.currency_code });
 });
 
 // ---- Центр сповіщень (ROADMAP §Черга 2, v1 in-app) ---------------------------
@@ -2337,10 +2530,83 @@ api.get("/search", async (c) => {
   });
 });
 
-// §A5: вбудований корпус знань — метадані для UI (сам текст іде в промт чату, не сюди).
+// §A5: корпус знань — вбудовані доки + користувацький шар (`knowledge_docs`, міграція 0028).
+// Тут лише транспорт; злиття/ліміти/локи — у `worker/lib/knowledge/index.ts`.
 api.get("/knowledge", async (c) => {
   const { knowledgeMeta } = await import("../lib/knowledge/index.ts");
-  return c.json(knowledgeMeta());
+  return c.json(await knowledgeMeta(c.env.DB));
+});
+
+// Повний текст документа — для редактора. Для вбудованого без заміни віддає вбудований текст,
+// щоб «редагувати» починалося з реального вмісту, а не з порожнечі.
+api.get("/knowledge/:id", async (c) => {
+  const { knowledgeBody } = await import("../lib/knowledge/index.ts");
+  const doc = await knowledgeBody(c.env.DB, c.req.param("id"));
+  if (!doc) return c.json({ error: "Документ не знайдено" }, 404);
+  return c.json(doc);
+});
+
+// Створити власну нотатку. Ліміти — щоб корпус (він їде в КОЖЕН виклик чату) не розповзався.
+api.post("/knowledge", async (c) => {
+  const { DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS, userCharsExcept } = await import("../lib/knowledge/index.ts");
+  const b = await c.req.json<{ title?: string; summary?: string; body?: string }>();
+  const title = (b.title ?? "").trim();
+  const body = (b.body ?? "").trim();
+  if (!title) return c.json({ error: "Потрібна назва документа" }, 400);
+  if (!body) return c.json({ error: "Документ порожній" }, 400);
+  if (body.length > DOC_MAX_CHARS) return c.json({ error: `Задовгий документ: ${body.length} символів, максимум ${DOC_MAX_CHARS}` }, 400);
+  const used = await userCharsExcept(c.env.DB);
+  if (used + body.length > USER_TOTAL_MAX_CHARS) {
+    return c.json({ error: `Не влазить у корпус: власні документи займуть ${used + body.length} символів із ${USER_TOTAL_MAX_CHARS}. Скороти або вимкни щось.` }, 400);
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const id = `user:${now}:${Math.random().toString(36).slice(2, 7)}`;
+  await c.env.DB.prepare(
+    "INSERT INTO knowledge_docs (id, kind, title, summary, body, enabled, created_at, updated_at) VALUES (?, 'user', ?, ?, ?, 1, ?, ?)",
+  ).bind(id, title, (b.summary ?? "").trim().slice(0, 200), body, now, now).run();
+  return c.json({ ok: true, id });
+});
+
+// Зберегти: власну нотатку — як є; вбудований док — як override (крім locked).
+api.put("/knowledge/:id", async (c) => {
+  const { KNOWLEDGE_DOCS, DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS, userCharsExcept, isLocked } = await import("../lib/knowledge/index.ts");
+  const id = c.req.param("id");
+  const b = await c.req.json<{ title?: string; summary?: string; body?: string; enabled?: boolean }>();
+  const base = KNOWLEDGE_DOCS.find((d) => d.id === id);
+  // Канон розрахунків не редагується: інакше AI пояснював би цифри не так, як їх рахує код.
+  if (isLocked(id)) return c.json({ error: "Цей документ описує канон розрахунків застосунку — його не можна змінити" }, 400);
+  if (!base && !id.startsWith("user:")) return c.json({ error: "Документ не знайдено" }, 404);
+
+  const body = (b.body ?? "").trim();
+  if (!body) return c.json({ error: "Документ порожній" }, 400);
+  if (body.length > DOC_MAX_CHARS) return c.json({ error: `Задовгий документ: ${body.length} символів, максимум ${DOC_MAX_CHARS}` }, 400);
+  if (!base) {
+    const used = await userCharsExcept(c.env.DB, id);
+    if (used + body.length > USER_TOTAL_MAX_CHARS) {
+      return c.json({ error: `Не влазить у корпус: власні документи займуть ${used + body.length} символів із ${USER_TOTAL_MAX_CHARS}.` }, 400);
+    }
+  }
+  const now = Math.floor(Date.now() / 1000);
+  const title = (b.title ?? base?.title ?? "").trim();
+  if (!title) return c.json({ error: "Потрібна назва документа" }, 400);
+  const kind = base ? "override" : "user";
+  const enabled = b.enabled === false ? 0 : 1;
+  await c.env.DB.prepare(
+    `INSERT INTO knowledge_docs (id, kind, title, summary, body, enabled, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET title = excluded.title, summary = excluded.summary,
+       body = excluded.body, enabled = excluded.enabled, updated_at = excluded.updated_at`,
+  ).bind(id, kind, title, (b.summary ?? base?.summary ?? "").trim().slice(0, 200), body, enabled, now, now).run();
+  return c.json({ ok: true, id });
+});
+
+// Видалити власну нотатку АБО повернути вбудований док до заводського тексту.
+api.delete("/knowledge/:id", async (c) => {
+  const { isLocked } = await import("../lib/knowledge/index.ts");
+  const id = c.req.param("id");
+  if (isLocked(id)) return c.json({ error: "Цей документ не можна прибрати" }, 400);
+  await c.env.DB.prepare("DELETE FROM knowledge_docs WHERE id = ?").bind(id).run();
+  return c.json({ ok: true });
 });
 
 // Спарклайни: 6-міс місячні витрати на КАТЕГОРІЮ й на МЕРЧАНТА (канон stats.ts, зведено в ₴).

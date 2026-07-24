@@ -648,6 +648,45 @@ async function draftTodo(env: Env, now: number): Promise<Draft[]> {
  * різниця з «тупими алертами» й водночас запобіжник: вигадану цифру тут ніде взяти,
  * бо в промті прямо заборонено рахувати нові числа.
  */
+/**
+ * 🔒 Детермінований запобіжник проти вигаданих сум.
+ *
+ * Промт уже забороняє рахувати нові числа — і цього НЕ ВИСТАЧИЛО: на реальних даних модель
+ * видала «8 підписок дають 3354 ₴/міс», а в тілі того ж сповіщення — «це 3600+ ₴/міс»
+ * (дві різні суми про одне й те саме, друга взята зі стелі) плюс вигаданий період
+ * «1070 ₴ за 27 днів». Інструкція — не гарантія; гарантія — перевірка.
+ *
+ * Правило: КОЖНЕ число ≥ 100 у тексті мусить знайтися в payload. Дрібні (< 100) пропускаємо
+ * свідомо — це кількості, дні, місяці, відсотки («8 підписок», «на 1-2 місяці»), і вимагати
+ * для них джерела означало б глушити нормальні формулювання. Гроші — те, що бреше дорого.
+ * Допуск 1% (модель округлює 3354.2 → 3354).
+ *
+ * Спостереження з непідтвердженим числом ВІДКИДАЄМО цілком, а не чистимо текст: фраза без
+ * своєї цифри втрачає сенс, а стрічка з правилом «мовчання краще за шум» це витримує.
+ */
+function collectNumbers(v: unknown, out: Set<number>, depth = 0): void {
+  if (depth > 6 || out.size > 5000) return;
+  if (typeof v === "number") { if (Number.isFinite(v)) out.add(Math.abs(v)); return; }
+  if (typeof v === "string") { const n = Number(v.replace(",", ".")); if (v.trim() && Number.isFinite(n)) out.add(Math.abs(n)); return; }
+  if (Array.isArray(v)) { for (const x of v) collectNumbers(x, out, depth + 1); return; }
+  if (v && typeof v === "object") { for (const x of Object.values(v)) collectNumbers(x, out, depth + 1); }
+}
+
+export function numbersAreGrounded(text: string, known: Set<number>): boolean {
+  // Пробіли/нерозривні пробіли всередині числа — це розрядні роздільники («3 354»).
+  const found = text.match(/\d[\d\s  ]*(?:[.,]\d+)?/g) ?? [];
+  for (const raw of found) {
+    const n = Math.abs(Number(raw.replace(/[\s  ]/g, "").replace(",", ".")));
+    if (!Number.isFinite(n) || n < 100) continue;
+    let ok = false;
+    for (const k of known) {
+      if (Math.abs(n - k) <= Math.max(1, k * 0.01)) { ok = true; break; }
+    }
+    if (!ok) return false;
+  }
+  return true;
+}
+
 async function draftAiObservations(env: Env, now: number): Promise<Draft[]> {
   if (!env.ANTHROPIC_API_KEY) return [];
   const day = isoDay(now);
@@ -667,8 +706,18 @@ async function draftAiObservations(env: Env, now: number): Promise<Draft[]> {
   const snap = await collectFinanceSnapshot(env);
   const { result } = await generateNotifyObservations(env, snap.context);
 
+  // Числа з payload — еталон для перевірки нижче.
+  const known = new Set<number>();
+  collectNumbers(snap.context, known);
+
   return (result.observations ?? [])
     .filter((o) => o.title?.trim())
+    // 🔒 Відкидаємо спостереження з сумою, якої в знімку нема (див. `numbersAreGrounded`).
+    .filter((o) => {
+      const ok = numbersAreGrounded(`${o.title ?? ""} ${o.body ?? ""}`, known);
+      if (!ok) console.warn("notify/ai: відкинуто спостереження з непідтвердженим числом:", o.title);
+      return ok;
+    })
     .slice(0, 2)   // ліміт на добу — стрічка не має тонути в балачках моделі
     .map((o, i) => ({
       kind: "ai" as const,

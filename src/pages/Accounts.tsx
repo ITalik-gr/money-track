@@ -57,6 +57,8 @@ export function Accounts() {
   const manual = src.filter((a) => a.type === "cash" || a.type === "manual_card" || a.type === "crypto");
   const jars = src.filter((a) => a.type === "jar");
 
+  const curRows = currencyRows(accounts ?? [], rates);
+
   return (
     <>
       <div className="page-head">
@@ -76,7 +78,6 @@ export function Accounts() {
       </div>
 
       <FundsOverview />
-      <CurrencyBreakdown accounts={accounts ?? []} rates={rates} />
 
       {!accounts?.length && (
         <div className="card empty" style={{ marginBottom: 16 }}>
@@ -84,14 +85,27 @@ export function Accounts() {
         </div>
       )}
 
-      <Section title="Гривневі картки" accounts={uahCards} rates={rates} history={history} />
-      <Section title="Валютні картки" accounts={fxCards} rates={rates} history={history} />
-      <Section title="ФОП" accounts={fop} rates={rates} history={history} />
-      <Section title="Готівка та ручні" accounts={manual} rates={rates} history={history} manual />
-      <Section title="Банки (накопичення)" accounts={jars} rates={rates} history={history} muted renameable />
+      {/* Секції йдуть у кілька колонок (`.acct-sections`), а не стовпчиком: секція з двома
+          картками раніше займала лише лівий край сітки, і сторінка тягнулась удвічі довше.
+          Рахунки — головне на сторінці, тож на ВСЮ ширину; підсумки-довідники (валюти,
+          історія, архів) ідуть під ними, а не сайдбаром, який відрізав би від рахунків 320px. */}
+      <div className="acct-sections">
+        <Section title="Гривневі картки" accounts={uahCards} rates={rates} history={history} />
+        <Section title="Валютні картки" accounts={fxCards} rates={rates} history={history} />
+        <Section title="ФОП" accounts={fop} rates={rates} history={history} />
+        <Section title="Готівка та ручні" accounts={manual} rates={rates} history={history} manual />
+        <Section title="Банки (накопичення)" accounts={jars} rates={rates} history={history} muted renameable />
+      </div>
+
+      {curRows.length >= 2 && (
+        <section className="acct-tail">
+          <div className="section-head"><h2>Розподіл по валютах</h2><span className="label">у ₴-еквіваленті</span></div>
+          <CurrencyBreakdown rows={curRows} />
+        </section>
+      )}
 
       {(accounts?.length ?? 0) > 1 && (
-        <section style={{ marginTop: 4 }}>
+        <section className="acct-tail">
           <div className="section-head"><h2>Історія капіталу</h2><span className="label">склад нетворту 12 міс</span></div>
           <NetworthCard months={12} />
         </section>
@@ -105,20 +119,24 @@ export function Accounts() {
 }
 
 // Розподіл активів по валютах (₴-величина кожної валюти) — швидка відповідь «скільки в чому».
-function CurrencyBreakdown({ accounts, rates }: { accounts: Account[]; rates: Record<string, number> }) {
+// Розрахунок винесено окремо, бо сторінка мусить знати про наявність рядків ДО рендера рейла.
+function currencyRows(accounts: Account[], rates: Record<string, number>): [number, number][] {
   const byCur = new Map<number, number>();
   for (const a of accounts) {
     const code = a.currency_code ?? 980;
     const v = uahValue(a, rates);
     if (v > 0) byCur.set(code, (byCur.get(code) ?? 0) + v);
   }
-  const rows = [...byCur.entries()].sort((a, b) => b[1] - a[1]);
+  return [...byCur.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
   if (rows.length < 2) return null;
   const total = rows.reduce((s, [, v]) => s + v, 0) || 1;
   const COLORS = ["var(--accent)", "var(--c-teal)", "var(--c-ochre)", "var(--c-plum)", "var(--c-pine)"];
+  // Заголовок несе `section-head` сторінки — тут лише смуга + легенда (інакше два заголовки поспіль).
   return (
     <div className="card cur-split">
-      <div className="cur-split-head"><span className="label">Розподіл по валютах</span><span className="muted" style={{ fontSize: 12 }}>у ₴-еквіваленті</span></div>
       <div className="cur-split-bar">
         {rows.map(([code, v], i) => (
           <span key={code} style={{ width: `${(v / total) * 100}%`, background: COLORS[i % COLORS.length] }} title={`${currencySign(code)}: ${formatMinor(v, { decimals: false })} ₴`} />
@@ -190,7 +208,7 @@ function Section({ title, accounts, rates, history, muted, manual, renameable }:
   const sorted = [...accounts].sort((a, b) => uahValue(b, rates) - uahValue(a, rates));
   const subtotal = sorted.reduce((s, a) => s + uahValue(a, rates), 0);
   return (
-    <>
+    <section className="acct-sec">
       <div className="section-head">
         <h2>{title}</h2>
         <span className="acct-sec-sum">≈ {formatMinor(subtotal, { decimals: false })} ₴</span>
@@ -201,7 +219,7 @@ function Section({ title, accounts, rates, history, muted, manual, renameable }:
             editable={manual && !!a.is_manual} renameable={renameable} />
         ))}
       </div>
-    </>
+    </section>
   );
 }
 

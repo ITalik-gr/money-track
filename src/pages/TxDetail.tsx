@@ -18,6 +18,7 @@ import { currencySign } from "../lib/format.ts";
 import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
 import { Select } from "../components/Select.tsx";
 import { TxSplitEditor } from "../components/TxSplitEditor.tsx";
+import { TxReimbursement, TxReimbursementUsage } from "../components/TxReimbursement.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 import type { SelectOption } from "../components/Select.tsx";
 import type { Category } from "../../shared/types.ts";
@@ -232,6 +233,16 @@ export function TxDetail() {
           {/* §SPLIT: поділ витрати на кілька категорій (не для переказів/надходжень) */}
           {tx.amount < 0 && !looksTransfer && (
             <TxSplitEditor txId={id} amount={tx.amount} currency={tx.currency_code} cats={cats} />
+          )}
+
+          {/* §COMPENSATION: «мені скинули за це» — у витратах лишається лише своя частина */}
+          {tx.amount < 0 && !looksTransfer && (
+            <TxReimbursement txId={id} amount={tx.amount} currency={tx.currency_code} />
+          )}
+
+          {/* Зворотний бік для надходження: куди воно пішло і скільки з нього ще вільно */}
+          {tx.amount > 0 && (
+            <TxReimbursementUsage txId={id} amount={tx.amount} currency={tx.currency_code} />
           )}
 
           {/* Окремий AI-блок: що AI знає + розпізнавання + нотатка + інлайн-чат */}

@@ -440,7 +440,8 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 /* Чисті плитки в стилі проекту (не «фізичні картки») — фідбек 2026-07-05. */
 .acct2 {
   position: relative; overflow: hidden;
-  padding: 20px; border-radius: var(--radius);
+  /* 16 замість 20: картки тепер стоять у вужчих колонках, а сторінка була надто довгою. */
+  padding: 16px; border-radius: var(--radius);
   border: 1px solid var(--line-strong); background: var(--surface);
   display: flex; flex-direction: column; gap: 4px;
   transition: border-color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
@@ -461,7 +462,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .acct2-edit:hover { background: var(--surface-2); color: var(--ink); }
 /* Sentence-case, НЕ uppercase-letterspaced (DESIGN §Типографіка / фідбек #2). */
 .acct2-sublabel { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
-.acct2-bal { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 29px; letter-spacing: -0.02em; line-height: 1.05; }
+.acct2-bal { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 25px; letter-spacing: -0.02em; line-height: 1.05; }
 .acct2-fx { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
 /* §R3: бейдж інвест-рахунку + опис для AI на картці */
 .acct2-role { flex-shrink: 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-plum, #7a3e9d) 16%, transparent); color: var(--c-plum, #7a3e9d); }
@@ -980,6 +981,15 @@ input, select, textarea {
   color: var(--ink);
   width: 100%;
 }
+/* ⚠️ Правило вище писалось під ТЕКСТОВІ поля, але `input` ловить і чекбокси/радіо: вони
+   отримували `width:100%` + падінг + рамку й розпливались у повноширинний бокс, з якого
+   галочка малювалась десь посередині, а сусідній текст вилітав за межі рядка. Це вилазило
+   щоразу з новим компонентом і кожного разу гасилось локальним `input { width: auto }`
+   (`.rev-learn`, `.doc-toggle`) — тож глушимо в корені. Специфічність 0,1,1 навмисно вища
+   за базове `input`, щоб працювало незалежно від порядку в файлі. */
+input[type="checkbox"], input[type="radio"] {
+  width: auto; padding: 0; border: none; background: none; accent-color: var(--accent);
+}
 input::placeholder, textarea::placeholder { color: var(--muted); }
 textarea { resize: vertical; }
 /* М'який фокус для полів (без жорсткого outline) — border + тонке кільце, як у Select. */
@@ -1387,7 +1397,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   flex: 1; min-width: 0; border: none; background: none; padding: 0;
   font: inherit; font-size: var(--fs-lg); color: var(--ink);
 }
-.cmdk-input input:focus { outline: none; }
+/* Поле палітри — безрамкове, воно частина шапки. Глобальне `input:focus` вішає на будь-який
+   інпут border-color + кільце `box-shadow`, і тут це малювало синю рамку навколо тексту,
+   хоча фокус і так очевидний (палітра щойно відкрилась саме заради вводу). */
+.cmdk-input input:focus { outline: none; box-shadow: none; border-color: transparent; }
 .cmdk-input kbd {
   flex: none; font-size: 11px; padding: 2px 6px; border-radius: var(--radius-xs);
   border: 1px solid var(--line-strong); background: var(--surface-2); color: var(--muted);
@@ -1992,7 +2005,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* Таб «Стан фінансів»: індекс на всю ширину (gauge+складові), під ним Факти | Корпус знань. */
 .advisor-state { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; margin-top: 18px; }
 .advisor-state > * { min-width: 0; }
-.advisor-state > .health-card, .advisor-state > .cf-card { grid-column: 1 / -1; }
+/* Індекс здоров'я, календар потоку і НЕТВОРТ — на всю ширину: це графіки з віссю часу,
+   у півколонці підписи місяців зливались, а нетворт узагалі стояв на 50% (фідбек користувача). */
+.advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card { grid-column: 1 / -1; }
 @media (max-width: 760px) { .advisor-state { grid-template-columns: 1fr; } }
 
 /* §SPLIT: редактор поділу транзакції на категорії */
@@ -2012,9 +2027,53 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .split-amt-in input { width: 100%; padding: 8px 24px 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; text-align: right; }
 .split-amt-in input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .split-sign { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: var(--fs-sm); pointer-events: none; }
+/* «решта» — досипати незакритий залишок у цей рядок (3+ частин, де автодоведення неоднозначне) */
+.split-rest { position: absolute; right: 4px; bottom: -17px; padding: 0 4px; border: none; background: none; color: var(--accent); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+.split-rest:hover { text-decoration: underline; }
+.split-rows:has(.split-rest) { gap: 22px; }
+
+/* Повзунок пропорції (лише для двох частин): рухає одну межу, тож сума сходиться завжди. */
+.split-slider { margin: 2px 0 12px; }
+.split-slider input[type="range"] { width: 100%; accent-color: var(--accent); }
+.split-slider-marks { display: flex; gap: 6px; margin-top: 4px; }
+.split-slider-marks button { padding: 3px 9px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+.split-slider-marks button:hover { border-color: var(--muted); color: var(--ink); }
 .split-remainder { margin: 10px 0; font-size: var(--fs-sm); color: var(--neg); font-variant-numeric: tabular-nums; }
 .split-remainder.ok { color: var(--pos); }
+/* «ще нічого не введено» — не помилка й не успіх; зелений тут читався б як «готово». */
+.split-remainder.idle { color: var(--muted); }
 .split-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+
+/* §COMPENSATION: «тобі компенсували» — своя частина vs повернене. Ділить сумку картки
+   `.split-card`, бо це той самий жанр: «ця операція не така проста, як виглядає». */
+.rb-summary { display: flex; gap: 28px; margin-bottom: 10px; }
+.rb-fig { display: flex; flex-direction: column; gap: 2px; }
+.rb-mine, .rb-back { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.rb-back { color: var(--pos); }
+.rb-bar { height: 8px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--pos) 28%, var(--surface-2)); overflow: hidden; }
+.rb-bar-mine { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--ink); }
+.rb-cands { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 4px; }
+.rb-cand { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: var(--fs-sm); }
+.rb-cand:hover { background: var(--surface-2); }
+.rb-cand.on { border-color: var(--accent); background: var(--accent-soft); }
+.rb-cand-pick { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.rb-cand-pick > input { flex: none; }
+/* Скільки взяти саме з цього надходження (v2: одне надходження — на кілька витрат) */
+.rb-take { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px 26px; }
+.rb-take .split-amt-in { width: 120px; }
+.rb-take .split-amt-in input { padding: 6px 22px 6px 8px; font-size: var(--fs-sm); }
+.rb-take-err { font-size: var(--fs-xs); color: var(--neg); }
+/* Назва+дата однією колонкою: раніше вони були окремими флекс-дітьми, і коли мерчант
+   порожній (типово для вхідного P2P) рядок лишався з самим чекбоксом посеред пустоти. */
+.rb-cand-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rb-cand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-cand-sub { font-size: var(--fs-xs); color: var(--muted); }
+.rb-cand-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--pos); flex-shrink: 0; }
+.rb-modes { display: flex; gap: 4px; margin: 4px 0 12px; padding: 3px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.rb-mode { flex: 1; padding: 6px 10px; border: none; border-radius: var(--radius-xs); background: none; color: var(--muted); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.rb-mode.on { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: var(--shadow-sm); }
+.rb-preview { margin: 12px 0 2px; }
+.rb-preview .split-remainder { margin-bottom: 0; }
 
 /* Інлайн-помилка завантаження (ErrorNote) — ставиться замість мовчазної порожнечі. */
 .err-note { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; padding: 11px 13px;
@@ -2885,6 +2944,30 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .corpus-doc-sum { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top: 2px; }
 .corpus-hint { margin: 12px 0 0; font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; }
 
+/* §A5 lvl-up: доки стали клікабельними (редактор), з'явився шар власних нотаток.
+   Падінг по боках + рівний відʼємний маргін: підсвітка ховера ширша за текст (він не
+   впирається в її край), але сам текст лишається вирівняним по контенту картки. Без цього
+   бекграунд ішов рівно по тексту й читався як обрізаний. */
+.corpus-doc { width: calc(100% + 20px); margin: 0 -10px; text-align: left; background: none; border: none; border-top: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; color: inherit; font: inherit; align-items: center; padding: 9px 10px; }
+.corpus-doc:hover { background: var(--surface-2); }
+.corpus-doc > svg:last-child { margin-left: auto; transform: rotate(-90deg); color: var(--muted); }
+.corpus-doc.off { opacity: 0.5; }
+.corpus-tag { margin-left: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 5px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--muted); }
+.corpus-tag.edited { background: var(--accent-soft); color: var(--accent); }
+.corpus-sec { display: flex; align-items: baseline; justify-content: space-between; margin: 14px 0 4px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+.corpus-quota { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ⚠️ Специфічність `.modal.doc-modal` обовʼязкова: нижче у файлі є друга декларація
+   `.modal { max-width: 480px }` (мобільний bottom-sheet), яка інакше перебиває `.modal-wide`
+   — саме через це модалка документа їхала вузькою. Той самий трюк, що в `.modal.modal-review`.
+   Падінг зверху менший за бічний: заголовок і так відбитий `margin-bottom` шапки. */
+.modal.doc-modal { max-width: 760px; padding: 14px 20px 20px; }
+.doc-modal .doc-body { width: 100%; resize: vertical; min-height: 260px; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.5; }
+.doc-modal .doc-body.over { border-color: var(--neg); }
+.doc-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.doc-toggle { display: flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; font-size: var(--fs-sm); color: var(--ink-2); }
+.doc-toggle input { width: auto; }
+
 /* Підписки: річна вартість, топ-найдорожчі, детект «мертвих» */
 .sub-hero-year { margin-top: 4px; color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .sub-badge.dead { background: color-mix(in srgb, var(--neg) 14%, var(--surface)); color: var(--neg); border: 1px solid color-mix(in srgb, var(--neg) 35%, var(--line)); }
@@ -3041,6 +3124,21 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .dl-item .dl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
 .dl-item .dl-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
 @media (max-width: 860px) { .cat-with-donut { grid-template-columns: 1fr; } }
+
+/* ===== Рахунки: розкладка сторінки ======================================
+   Було: секції одна під одною, кожна — сітка `auto-fill` на всю ширину. Секція з двома
+   картками займала лише лівий край п'ятиколонкової сітки → права половина екрана порожня,
+   а сторінка вдвічі довша, ніж потрібно. Стало: секції — плитки в кілька колонок НА ВСЮ
+   ШИРИНУ; довідники (валюти, історія капіталу, архів) — під ними, а не сайдбаром: рахунки
+   тут головні, і рейл відрізав би від них 320px заради зведення на два рядки. */
+.acct-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 0 24px; align-items: start; }
+.acct-sec { min-width: 0; }
+/* :first-child не спрацює для другої колонки — у сітці «перша» лише одна секція, а верхній
+   ряд має вирівнятись увесь. Тому відступ заголовка задаємо явно. */
+.acct-sec .section-head { margin-top: 18px; }
+/* Усередині вужчої колонки картки мають бути щільнішими, інакше в колонку влазить одна. */
+.acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 12px; margin-bottom: 6px; }
+.acct-tail { margin-top: 4px; }
 
 /* ===== Рахунки: огляд коштів + секції ==================================== */
 .funds-overview { margin-bottom: 16px; }

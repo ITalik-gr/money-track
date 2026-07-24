@@ -76,6 +76,13 @@ export function Advisor() {
         </div>
         <div className="page-head-actions">
           <Link to="/chat" className="btn ghost">Запитати в чаті →</Link>
+          {/* Головна дія сторінки — у шапці, а не всередині секції порад: там її не було видно
+              (фідбек користувача). З вкладки «Стан фінансів» перекидає на «Поради», бо саме
+              там з'явиться результат. */}
+          <button className="btn primary" onClick={() => { setTab("advice"); void runAdvice(); }} disabled={generating}>
+            <Icon name="spark" size={15} />
+            {generating ? "Аналізую…" : advice ? "Оновити поради" : "Отримати поради"}
+          </button>
         </div>
       </div>
 
@@ -131,11 +138,9 @@ export function Advisor() {
         <div className="advisor-grid">
           {/* Головна колонка — структуровані поради */}
           <section className="advisor-main">
+            {/* Кнопку генерації прибрано звідси — вона тепер у шапці сторінки (одна дія, одне місце). */}
             <div className="section-head">
               <h2>Поради на твоїх числах</h2>
-              <button className="btn primary sm" onClick={runAdvice} disabled={generating}>
-                {generating ? "Аналізую…" : advice ? "Оновити" : "Отримати"}
-              </button>
             </div>
 
             {advice?.suggestions?.length ? (
@@ -174,7 +179,7 @@ export function Advisor() {
             ) : genError ? (
               <div className="card empty">{genError} <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={runAdvice} disabled={generating}>Ще раз</button></div>
             ) : (
-              <div className="card empty">Натисни «Отримати» — AI врахує твої числа, цілі й профіль із Налаштувань.</div>
+              <div className="card empty">Натисни «Отримати поради» вгорі — AI врахує твої числа, цілі й профіль із Налаштувань.</div>
             )}
           </section>
 

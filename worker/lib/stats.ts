@@ -24,7 +24,23 @@ export const STATS_JOINS = `
   LEFT JOIN categories scp ON scp.id = sc.parent_id`;
 
 // §SPLIT: ефективна сума рядка = сума частини (якщо tx розділено), інакше сума tx. Копійки, знак tx.
-export const EFF_AMOUNT = "COALESCE(sp.amount, t.amount)";
+// §COMPENSATION (0029/0030): якщо частину витрати компенсували («скинули за вечерю»), своєю є
+// лише решта — тому до суми tx додається `reimbursed` (додатне, а сума витрати відʼємна → модуль
+// меншає). Компенсація навмисно НЕ розподіляється по частинах спліту: спліт відповідає на
+// «на що пішли гроші», компенсація — на «скільки з цього моє», і змішувати їх в одному рядку
+// означало б ділити компенсацію пропорційно з округленням на кожну частину. Тому запис
+// компенсації на спліт-tx заборонено на рівні ендпоінта (`/reimbursement`), і `sp.amount`
+// тут безпечно виграє.
+// `t.reimbursed` — денормалізована сума розподілів із `tx_reimbursements` (єдиний писар —
+// ендпоінт). Саме тому найгарячіший вираз проєкту не отримує жодного нового JOIN.
+export const EFF_AMOUNT = "COALESCE(sp.amount, t.amount + COALESCE(t.reimbursed, 0))";
+
+// §COMPENSATION v2 (0030): дохід рахується від ЗАЛИШКУ надходження, а не «все або нічого».
+// Знайдено на реальних даних: «Від: Михайло +2400 ₴» покривав витрату −1870 ₴. Стара модель
+// виключала з доходу ВСЕ надходження, тож 530 ₴ не потрапляли ні у витрати, ні в дохід —
+// гроші зникали зі статистики. Тепер компенсацією є лише розподілена частина
+// (`reimburses_total`), а нерозподілений залишок — справжній дохід.
+export const EFF_INCOME = "(t.amount - COALESCE(t.reimburses_total, 0))";
 
 // Ефективна категорія (рол-ап у батька): спершу частина спліту (sc/scp), тоді реальна (для
 // зняття/переказів), інакше звичайна. NULL = без категорії (рахуємо як витрату).
@@ -72,9 +88,14 @@ export const IS_REFUND =
 // транзакцій операції є (той список holds показує). Прапорець `hold` лишається для UI-бейджа.
 // §REFUND: рефанд теж проходить сюди — з ДОДАТНОЮ сумою, тож `amountSum`/`spendSum`
 // (вони рахують `-EFF_AMOUNT`) віднімають його від витрат категорії. Це і є «чисті витрати».
+// §COMPENSATION: надходження, з якого хоч щось розподілено на витрати, не може бути ще й
+// «відʼємною витратою» — його ефект уже сидить у `reimbursed` тих витрат. Без цього рядка
+// компенсація, якій користувач дав витратну категорію («Кафе»), проходила б як `IS_REFUND`
+// і віднімалась удруге. Нерозподілений залишок ловить `INCOME_WHERE` (див. `EFF_INCOME`).
 export const SPEND_WHERE = `
   (${EFF_AMOUNT} < 0 OR ${IS_REFUND})
   AND t.transfer_pair_id IS NULL
+  AND COALESCE(t.reimburses_total, 0) = 0
   AND NOT (t.is_transfer = 1 AND t.real_category_id IS NULL)
   AND ${EFF_CAT_ID} IS NOT ${TRANSFER_CAT}`;
 
@@ -83,8 +104,13 @@ export const SPEND_WHERE = `
 // ⚠️ Так само виключено бакет «Перекази і зняття» (13) — симетрично до `SPEND_WHERE`.
 // Без цього надходження з категорією 13, у яких `is_transfer=0` (виплата банки, «З Білої
 // картки»), рахувались ДОХОДОМ: рух власних грошей роздував і дохід, і норму заощаджень.
+// §COMPENSATION: гроші, які тобі скинули за спільну витрату, — це НЕ заробіток. Розподілена
+// частина вже зменшила ту витрату через `reimbursed`; порахувати її ще й доходом означало б
+// покращити норму заощаджень на рівному місці. Але НЕрозподілений залишок доходом Є —
+// тому фільтр дивиться на `EFF_INCOME > 0`, а не виключає надходження цілком.
 export const INCOME_WHERE = `
-  t.amount > 0 AND t.transfer_pair_id IS NULL AND t.is_transfer = 0
+  t.amount > 0 AND ${EFF_INCOME} > 0
+  AND t.transfer_pair_id IS NULL AND t.is_transfer = 0
   AND ${EFF_CAT_ID} IS NOT ${TRANSFER_CAT} AND NOT ${IS_REFUND}`;
 
 // Множник зведення в ₴ для поточного рядка (inline CASE з курсів). 980→1.0; кожен
@@ -110,8 +136,10 @@ export function valueMode(rates: Rates, currency?: number | null): { mult: strin
 export function spendSum(mult: string): string {
   return `CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
 }
+// §COMPENSATION v2: сумуємо `EFF_INCOME`, а не `t.amount` — інакше частково розподілене
+// надходження зайшло б у дохід повною сумою, хоч частина вже пішла на покриття витрати.
 export function incomeSum(mult: string): string {
-  return `CAST(ROUND(COALESCE(SUM(CASE WHEN ${INCOME_WHERE} THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
+  return `CAST(ROUND(COALESCE(SUM(CASE WHEN ${INCOME_WHERE} THEN ${EFF_INCOME} * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
 }
 // §REFUND: рахуємо лише реальні ВІДТОКИ. Рефанд проходить SPEND_WHERE (щоб відняти суму),
 // але як «операція-витрата» він не рахується — інакше середній чек ділився б на більшу

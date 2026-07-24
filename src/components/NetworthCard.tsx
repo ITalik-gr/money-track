@@ -9,8 +9,16 @@ import { ErrorNote } from "./ErrorNote.tsx";
 import { CHART_ANIM } from "../lib/motion.ts";
 
 const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
-const mLabel = new Intl.DateTimeFormat("uk-UA", { month: "short", year: "2-digit" });
 const minor = (v: number) => fmt0.format(Math.round(v / 100));
+
+const MONTHS_SHORT = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
+// Підпис місяця рахуємо з `ym` (`YYYY-MM`), а не з `t`. Форматування `t` через Intl у київському
+// поясі зсувало кінець місяця на наступний → дубль категорії на осі X із точкою «зараз».
+function monthLabel(ym: string): string {
+  const [y, m] = ym.split("-");
+  const i = Number(m) - 1;
+  return `${MONTHS_SHORT[i] ?? m} ${y.slice(2)}`;
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function NwTooltip(props: any) {
@@ -19,7 +27,7 @@ function NwTooltip(props: any) {
   const p = payload[0].payload;
   return (
     <div className="chart-tip">
-      <div className="tip-lbl">{p.label}</div>
+      <div className="tip-lbl">{p.label}{p.partial ? " · поточний, неповний" : ""}</div>
       <div className="r"><span className="d" style={{ background: "var(--accent)" }} />Подушка: {minor(p.cushion)} ₴</div>
       {p.investment > 0 && <div className="r"><span className="d" style={{ background: "var(--pos)" }} />Інвестиції: {minor(p.investment)} ₴</div>}
       {p.debt > 0 && <div className="r"><span className="d" style={{ background: "var(--neg)" }} />Борг: −{minor(p.debt)} ₴</div>}
@@ -35,13 +43,20 @@ export function NetworthCard({ months = 12 }: { months?: number }) {
   if (error) return <div className="card"><ErrorNote error={error} what="нетворт" onRetry={refetch} /></div>;
   if (points.length < 2) return null;
 
-  const rows = points.map((p) => ({ ...p, label: mLabel.format(p.t * 1000), debtNeg: -p.debt }));
+  // Остання точка — «зараз» (місяць ще не завершений), позначаємо це і в підписі, і в тултіпі:
+  // інакше вона читається як повний місяць і виглядає провалом наприкінці ряду.
+  const rows = points.map((p, i) => ({
+    ...p,
+    label: monthLabel(p.ym),
+    partial: i === points.length - 1,
+    debtNeg: -p.debt,
+  }));
   const first = points[0].net;
   const last = points[points.length - 1].net;
   const delta = last - first;
 
   return (
-    <div className="card cashflow">
+    <div className="card cashflow nw-card">
       <div className="cashflow-head">
         <div>
           <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
@@ -62,10 +77,14 @@ export function NetworthCard({ months = 12 }: { months?: number }) {
 
       <div className="chart-wrap" style={{ height: 240 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={rows} margin={{ top: 8, right: 6, left: -6, bottom: 0 }} stackOffset="sign">
+          {/* right:14 — щоб остання точка («зараз») не впиралась у край: інакше її курсор/тултіп
+              ловився важко, а маркер зрізався. */}
+          <ComposedChart data={rows} margin={{ top: 8, right: 14, left: -6, bottom: 0 }} stackOffset="sign">
             <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
-            <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={24}
-              tick={{ fontSize: 11, fill: "var(--muted)" }} />
+            {/* interval=preserveStartEnd + малий minTickGap: підписи місяців короткі (`лип 26`),
+                тож влазять усі; головне — щоб крайні (перший і «зараз») лишались завжди. */}
+            <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={6}
+              interval="preserveStartEnd" tick={{ fontSize: 11, fill: "var(--muted)" }} />
             <YAxis tickLine={false} axisLine={false} width={54} tickCount={5}
               tick={{ fontSize: 11, fill: "var(--muted)" }} tickFormatter={(v: number) => fmt0.format(Math.round(v / 100))} />
             <Tooltip content={<NwTooltip />} cursor={{ stroke: "var(--line-strong)" }} />
@@ -78,7 +97,14 @@ export function NetworthCard({ months = 12 }: { months?: number }) {
               stroke="var(--pos)" fill="var(--pos)" fillOpacity={0.16} isAnimationActive={CHART_ANIM.isAnimationActive} animationDuration={CHART_ANIM.animationDuration} />
             <Area type="monotone" dataKey="debtNeg" name="Борг" stackId="nw"
               stroke="var(--neg)" fill="var(--neg)" fillOpacity={0.16} isAnimationActive={CHART_ANIM.isAnimationActive} animationDuration={CHART_ANIM.animationDuration} />
-            <Line type="monotone" dataKey="net" name="Нетворт" stroke="var(--ink)" strokeWidth={2} dot={false}
+            {/* Крапка лише на останній точці — «зараз». Ряд закінчується неповним місяцем,
+                без маркера це читається як завершений місяць. */}
+            <Line type="monotone" dataKey="net" name="Нетворт" stroke="var(--ink)" strokeWidth={2}
+              dot={(p: { cx?: number; cy?: number; index?: number; key?: React.Key | null }) =>
+                p.index === rows.length - 1 && p.cx != null && p.cy != null
+                  ? <circle key={p.key ?? "nw-now"} cx={p.cx} cy={p.cy} r={3.5} fill="var(--ink)" stroke="var(--surface)" strokeWidth={2} />
+                  : <g key={p.key ?? `nw-${p.index}`} />}
+              activeDot={{ r: 4 }}
               isAnimationActive={CHART_ANIM.isAnimationActive} animationDuration={CHART_ANIM.animationDuration} />
           </ComposedChart>
         </ResponsiveContainer>
