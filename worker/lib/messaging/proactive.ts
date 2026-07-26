@@ -1,10 +1,10 @@
 // Telegram Фаза 3 — проактивність (§ROADMAP): раз на тиждень пушимо в TG свіжий
 // інсайт і попереджаємо про перевищені/майже вичерпані бюджети-конверти. Гейт —
 // налаштовані TG-секрети (TG_BOT_TOKEN + TG_CHAT_ID). Викликається з кроном.
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 import { sendMessage } from "./telegram.ts";
-import { getStoredInsight, buildAndStoreInsight, type StoredInsight } from "./insight.ts";
-import { nextChargeUnix } from "./subscriptions.ts";
+import { getStoredInsight, buildAndStoreInsight, type StoredInsight } from "../ai/insight.ts";
+import { nextChargeUnix } from "../finance/subscriptions.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const uah = (minor: number) => Math.round(minor / 100).toLocaleString("uk-UA");
@@ -79,6 +79,9 @@ export async function runWeeklyProactive(env: Env): Promise<{ sent: boolean; rea
   const token = env.TG_BOT_TOKEN;
   const chatId = env.TG_CHAT_ID;
   if (!token || !chatId) return { sent: false, reason: "TG not configured" };
+  // Owner-only: `TG_CHAT_ID` is a single global chat (the owner's), and this runs in EVERY
+  // user's object. See `notify.pushPendingToTelegram` for the leak this prevents.
+  if (!env.IS_OWNER) return { sent: false, reason: "TG push is owner-only (single global chat)" };
 
   // Інсайт: беремо збережений, або будуємо, якщо є AI-ключ.
   let ins = await getStoredInsight(env);

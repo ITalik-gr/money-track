@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import { useGetSafeToSpendQuery } from "../store/api.ts";
-import { Money } from "./Money.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetSafeToSpendQuery } from "../../store/api.ts";
+import { Money } from "../ui/Money.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // §4 Safe-to-spend: скільки вільно до кінця місяця = дохід − витрачено − прийдешні підписки.
 // Розбивка (обов'язкові/бажані) — з вагомості §6. Клік по підписках → /subs.

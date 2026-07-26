@@ -13,7 +13,7 @@ import {
   parseCsv,
   toCanonical,
   type ColumnMapping,
-} from "../lib/banks/csv.ts";
+} from "../lib/bank/providers/csv.ts";
 
 export const importRoutes = new Hono<{ Bindings: Env }>();
 
@@ -129,7 +129,7 @@ importRoutes.post("/csv/commit", async (c) => {
   // Imported rows can complete a transfer pair with rows that came from the bank webhook.
   // Best-effort: a failure here must not undo a successful import.
   try {
-    const { detectTransfers } = await import("../lib/transfers.ts");
+    const { detectTransfers } = await import("../lib/finance/transfers.ts");
     await detectTransfers(c.env);
   } catch {
     /* transfer detection is best-effort */

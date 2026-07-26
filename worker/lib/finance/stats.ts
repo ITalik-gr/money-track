@@ -7,7 +7,7 @@
 //     інакше рол-ап звичайної category_id;
 //   • зведення валют у ₴ через курси (inline CASE), опційно — «чиста» валюта.
 import type { Rates } from "./finance.ts";
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 
 export const TRANSFER_CAT = 13; // «Перекази і зняття» (+ діти через рол-ап)
 

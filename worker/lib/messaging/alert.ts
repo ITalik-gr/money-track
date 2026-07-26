@@ -5,10 +5,10 @@
 //
 // Тригер — вебхук monobank (реальний час, best-effort у waitUntil) + ручний/крон-скан.
 // Гейт — налаштовані TG-секрети. Дедуп — прапорець transactions.alerted (міграція 0010).
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 import { sendMessage, type InlineKeyboard } from "./telegram.ts";
-import { proposeTransferCategory, logUsage } from "./ai.ts";
-import { TRANSFER_CAT } from "./enrich.ts";
+import { proposeTransferCategory, logUsage } from "../ai/ai.ts";
+import { TRANSFER_CAT } from "../ai/enrich.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const uah = (minor: number) => (minor / 100).toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -70,6 +70,9 @@ function link(origin: string | undefined, id: string): string {
 export async function maybeAlertTransaction(env: Env, txId: string, origin?: string): Promise<boolean> {
   const token = env.TG_BOT_TOKEN, chatId = env.TG_CHAT_ID;
   if (!token || !chatId) return false;
+  // Owner-only: one global chat id, but this runs for every user's incoming transaction (the
+  // bank webhook path). See `notify.pushPendingToTelegram`.
+  if (!env.IS_OWNER) return false;
 
   const tx = await env.DB.prepare(
     `SELECT t.*, c.parent_id AS parent_id, c.name AS category_name
@@ -145,6 +148,7 @@ export async function maybeAlertTransaction(env: Env, txId: string, origin?: str
 // Обмежуємо кількістю, щоб не завалити чат.
 export async function scanAlerts(env: Env, origin?: string, max = 5): Promise<{ sent: number }> {
   if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) return { sent: 0 };
+  if (!env.IS_OWNER) return { sent: 0 }; // same single-global-chat gate as maybeAlertTransaction
   const since = Math.floor(Date.now() / 1000) - 14 * 86400;
   const rows = await env.DB.prepare(
     `SELECT id FROM transactions

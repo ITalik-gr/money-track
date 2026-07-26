@@ -9,8 +9,8 @@
 // that works, and the user would go hunting through the app for the wrong bug.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { getClientInfo, MonoRateLimit } from "../lib/mono.ts";
-import { deleteSecret, putSecret, secretStatuses, SECRET_NAMES, type SecretName } from "../lib/secrets.ts";
+import { getClientInfo, MonoRateLimit } from "../lib/bank/mono.ts";
+import { deleteSecret, putSecret, secretStatuses, SECRET_NAMES, type SecretName } from "../lib/platform/secrets.ts";
 
 export const credentials = new Hono<{ Bindings: Env }>();
 

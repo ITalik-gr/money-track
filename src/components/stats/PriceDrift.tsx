@@ -1,7 +1,7 @@
-import { useGetPriceDriftQuery } from "../store/api.ts";
-import { formatMinor } from "../lib/format.ts";
-import { HoverTip } from "./HoverTip.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetPriceDriftQuery } from "../../store/api.ts";
+import { formatMinor } from "../../lib/format.ts";
+import { HoverTip } from "../ui/HoverTip.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // §E4: дрейф цін / персональна інфляція — як змінилась юніт-ціна позицій із чеків у часі.
 // Ховається, якщо ще нема достатньо історії чеків. Індекс кошика — медіана змін.

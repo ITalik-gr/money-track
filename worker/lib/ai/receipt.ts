@@ -1,9 +1,9 @@
 // Спільна логіка розбору чека (§6.1): зберегти оригінал у R2, розпізнати через Haiku,
 // причепити до наявної mono-транзакції за сумою+датою (±2 дні) або створити готівкову.
 // Викликається з HTTP-інгесту (routes/ingest.ts) і Telegram-бота (routes/telegram.ts).
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 import { readReceipt, type ReceiptResult, type AiUsageBrief, briefUsage } from "./ai.ts";
-import { ensureCashAccount } from "./finance.ts";
+import { ensureCashAccount } from "../finance/finance.ts";
 
 const toMinor = (major: number): number => Math.round(major * 100);
 
@@ -28,7 +28,13 @@ export interface IngestReceiptResult {
 export async function ingestReceipt(
   env: Env, bytes: Uint8Array, mediaType: string,
 ): Promise<IngestReceiptResult> {
-  const key = `receipts/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}`;
+  // Namespaced per user (2026-07-26, security review). One bucket holds everyone's receipt
+  // images, and nothing serves them today — but the day a "view receipt" route is added, a flat
+  // key space makes "check this object belongs to the caller" an extra thing to remember, and
+  // forgetting it leaks another user's receipt. With the prefix the ownership check is the path.
+  // Existing objects keep their old keys; nothing reads them by pattern.
+  const owner = (env.USER_ID ?? "unknown").replace(/[^a-zA-Z0-9:_-]/g, "");
+  const key = `receipts/${owner}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}`;
   await env.RECEIPTS.put(key, bytes, { httpMetadata: { contentType: mediaType } });
 
   const base64 = toBase64(bytes);

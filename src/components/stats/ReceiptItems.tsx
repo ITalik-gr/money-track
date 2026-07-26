@@ -1,7 +1,7 @@
-import { useGetReceiptItemsQuery } from "../store/api.ts";
-import { formatMinor } from "../lib/format.ts";
-import { HoverTip } from "./HoverTip.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetReceiptItemsQuery } from "../../store/api.ts";
+import { formatMinor } from "../../lib/format.ts";
+import { HoverTip } from "../ui/HoverTip.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // Аналітика позицій чека: топ товарів за сумою (з OCR-чеків) за період. Ховається, якщо чеків нема.
 export function ReceiptItems({ from, to, sign }: { from: number; to: number; sign: string }) {

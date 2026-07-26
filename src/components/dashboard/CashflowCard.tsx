@@ -1,9 +1,9 @@
-import { useGetOverviewQuery } from "../store/api.ts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { CashflowChart } from "./CashflowChart.tsx";
-import { InfoTip } from "./InfoTip.tsx";
-import { monthShort } from "../lib/format.ts";
-import { useT } from "../i18n/index.ts";
+import { useGetOverviewQuery } from "../../store/api.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { CashflowChart } from "../stats/CashflowChart.tsx";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { monthShort } from "../../lib/format.ts";
+import { useT } from "../../i18n/index.ts";
 
 // Огляд: грошовий потік за 6 місяців (DESIGN.md §7 F1, DeliFin R1).
 

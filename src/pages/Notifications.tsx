@@ -11,8 +11,8 @@ import {
   useClearNotificationsMutation, useGenerateNotificationsMutation,
 } from "../store/api.ts";
 import type { Notification, NotifKind } from "../store/api.ts";
-import { Icon } from "../components/Icon.tsx";
-import { ErrorNote } from "../components/ErrorNote.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { renderNotif, type NotifLocale, type NotifParams } from "../../shared/notif-i18n.ts";

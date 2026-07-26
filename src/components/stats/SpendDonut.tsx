@@ -1,9 +1,9 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { CHART_ANIM } from "../lib/motion.ts";
-import { formatMinor } from "../lib/format.ts";
-import type { Overview } from "../store/api.ts";
-import { useT, translate } from "../i18n/index.ts";
-import { getLocale } from "../i18n/locale.ts";
+import { CHART_ANIM } from "../../lib/motion.ts";
+import { formatMinor } from "../../lib/format.ts";
+import type { Overview } from "../../store/api.ts";
+import { useT, translate } from "../../i18n/index.ts";
+import { getLocale } from "../../i18n/locale.ts";
 
 const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e", "#127c86", "#6b7a74", "#8a5a2b"];
 const isSecondary = (name: string | null) => /переказ|зняття/i.test(name ?? "");

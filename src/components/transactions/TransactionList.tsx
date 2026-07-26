@@ -1,6 +1,6 @@
 import { TxItem } from "./TxItem.tsx";
-import type { TxRow } from "../store/api.ts";
-import { useT } from "../i18n/index.ts";
+import type { TxRow } from "../../store/api.ts";
+import { useT } from "../../i18n/index.ts";
 
 interface Props {
   rows: TxRow[];

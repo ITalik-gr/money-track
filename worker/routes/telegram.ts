@@ -7,17 +7,17 @@
 // receipt, ai), щоб TG і HTTP-API робили однакове.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { getState, setState } from "../lib/repo.ts";
-import { computeSummary, createCashTx, recentTransactions, type Summary } from "../lib/finance.ts";
-import { ingestReceipt } from "../lib/receipt.ts";
-import { parseText, type AiFact, type ChatMsg } from "../lib/ai.ts";
-import { buildAndStoreInsight, getStoredInsight } from "../lib/insight.ts";
-import { buildAdvice, chatReply, getStoredAdvice } from "../lib/advisor.ts";
+import { getState, setState } from "../lib/finance/repo.ts";
+import { computeSummary, createCashTx, recentTransactions, type Summary } from "../lib/finance/finance.ts";
+import { ingestReceipt } from "../lib/ai/receipt.ts";
+import { parseText, type AiFact, type ChatMsg } from "../lib/ai/ai.ts";
+import { buildAndStoreInsight, getStoredInsight } from "../lib/ai/insight.ts";
+import { buildAdvice, chatReply, getStoredAdvice } from "../lib/ai/advisor.ts";
 import {
   answerCallbackQuery, editMessageText, getFileBytes, sendChatAction, sendMessage,
   type InlineKeyboard, type TgUpdate,
-} from "../lib/telegram.ts";
-import { applyAlertRealCategory, applyAlertCategory, applyAlertTransfer } from "../lib/alert.ts";
+} from "../lib/messaging/telegram.ts";
+import { applyAlertRealCategory, applyAlertCategory, applyAlertTransfer } from "../lib/messaging/alert.ts";
 
 export const telegram = new Hono<{ Bindings: Env }>();
 

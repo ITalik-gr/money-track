@@ -1,8 +1,9 @@
 import { Link } from "react-router-dom";
-import { useGetOverviewQuery } from "../store/api.ts";
-import { formatMinor } from "../lib/format.ts";
-import { InfoTip } from "./InfoTip.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetOverviewQuery } from "../../store/api.ts";
+import { formatMinor } from "../../lib/format.ts";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { EmptyCard } from "../ui/EmptyCard.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // §4 Пульс місяця для Головної: норма заощаджень + топ-категорії міні (календарний місяць,
 // зведено в ₴). Одна вибірка overview → обидва блоки. Клік по категорії → дриль у Статистиці.
@@ -19,7 +20,12 @@ export function MonthPulse() {
   const rate = income > 0 ? Math.round((net / income) * 100) : null;
   const top = (data.byCategory ?? []).slice(0, 4);
   const topMax = Math.max(...top.map((c) => c.spent), 1);
-  if (income === 0 && spend === 0) return null;
+  // ROADMAP L3: a month with no movement still owes its half of the `.dash-pair` a card —
+  // returning null left safe-to-spend stranded next to an empty column.
+  if (income === 0 && spend === 0) {
+    return <EmptyCard icon="stats" title={t("empty.pulse.title")} hint={t("empty.pulse.hint")}
+      to="/add" action={t("empty.pulse.action")} />;
+  }
 
   // Тон норми заощаджень: ≥20% добре, 0–20 помірно, <0 у мінусі.
   const rateTone = rate == null ? "" : rate >= 20 ? "pos" : rate < 0 ? "neg" : "warn";

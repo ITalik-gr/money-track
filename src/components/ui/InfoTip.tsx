@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { HoverTip } from "./HoverTip.tsx";
 import { Icon } from "./Icon.tsx";
-import { useT } from "../i18n/index.ts";
+import { useT } from "../../i18n/index.ts";
 
 // Малий інфо-індикатор для карток/KPI: ховер (і фокус — клавіатура/тач) показує
 // пояснення метрики. Використовується поруч із заголовком плитки (верхній правий кут).

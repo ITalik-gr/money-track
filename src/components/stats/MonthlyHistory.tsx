@@ -1,11 +1,11 @@
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useT } from "../i18n/index.ts";
-import { CHART_ANIM } from "../lib/motion.ts";
-import { useGetMonthlyHistoryQuery } from "../store/api.ts";
-import { HoverTip } from "./HoverTip.tsx";
-import { InfoTip } from "./InfoTip.tsx";
-import { monthShort } from "../lib/format.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useT } from "../../i18n/index.ts";
+import { CHART_ANIM } from "../../lib/motion.ts";
+import { useGetMonthlyHistoryQuery } from "../../store/api.ts";
+import { HoverTip } from "../ui/HoverTip.tsx";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { monthShort } from "../../lib/format.ts";
 
 const monLbl = (m: string) => monthShort(Number(m.split("-")[1]) - 1) ?? m;
 const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });

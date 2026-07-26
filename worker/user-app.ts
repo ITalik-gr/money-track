@@ -33,7 +33,12 @@ export const userApp = new Hono<{ Bindings: Env }>();
 // OUTSIDE the sandbox or touch secrets — connecting a bank, storing API keys, importing legacy
 // data, owner admin — while leaving every read open so the demo's Settings page still renders.
 // (AI cost caps are a separate concern handled in P4.3.)
-const DEMO_BLOCKED_PREFIXES = ["/api/credentials", "/api/setup", "/api/import", "/api/admin"];
+//
+// `/ingest` added 2026-07-26 after an audit: it was open to demo visitors, and it is the only
+// route that writes a stranger's FILE into our R2 bucket (receipt image, no size limit) before
+// any AI cap can apply. Storage abuse and hosting unknown uploads are not risks a sandbox needs
+// to carry — the demo already ships pre-baked receipts to show the feature.
+const DEMO_BLOCKED_PREFIXES = ["/api/credentials", "/api/setup", "/api/import", "/api/admin", "/ingest"];
 userApp.use("*", async (c, next) => {
   const isDemo = (c.env.USER_ID ?? "").startsWith("demo:");
   if (isDemo && c.req.method !== "GET") {

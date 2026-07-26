@@ -2,14 +2,14 @@
 // «Ліміти = мій звичний рівень мінус N%». Поруч живе AI-план: той пояснює й враховує
 // профіль, цей — миттєвий, безкоштовний і передбачуваний. Різні інструменти, обидва потрібні.
 import { useState } from "react";
-import { useLazyGetAutoBudgetQuery, useApplyAutoBudgetMutation } from "../store/api.ts";
-import type { AutoBudgetItem } from "../store/api.ts";
-import { Money } from "./Money.tsx";
-import { Icon } from "./Icon.tsx";
-import { ErrorNote } from "./ErrorNote.tsx";
-import { toast } from "../lib/toast.ts";
-import { errText } from "../lib/errors.ts";
-import { useT } from "../i18n/index.ts";
+import { useLazyGetAutoBudgetQuery, useApplyAutoBudgetMutation } from "../../store/api.ts";
+import type { AutoBudgetItem } from "../../store/api.ts";
+import { Money } from "../ui/Money.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
+import { toast } from "../../lib/toast.ts";
+import { errText } from "../../lib/errors.ts";
+import { useT } from "../../i18n/index.ts";
 
 const TRIMS = [0, 5, 10, 15, 20];
 

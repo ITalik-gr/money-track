@@ -1,9 +1,9 @@
-import { Gauge } from "./Gauge.tsx";
-import { InfoTip } from "./InfoTip.tsx";
-import { Icon } from "./Icon.tsx";
-import { Sparkline } from "./Sparkline.tsx";
-import { useGetHealthQuery } from "../store/api.ts";
-import { useT } from "../i18n/index.ts";
+import { Gauge } from "../ui/Gauge.tsx";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { Sparkline } from "../ui/Sparkline.tsx";
+import { useGetHealthQuery } from "../../store/api.ts";
+import { useT } from "../../i18n/index.ts";
 
 // §H: Індекс фінздоров'я — детермінований (без AI), джерело worker/lib/advisor.ts financeHealth.
 // 4 складові (runway / норма заощаджень / борг-дохід / стабільність) → зважений скор 0..100.

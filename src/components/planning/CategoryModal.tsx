@@ -3,13 +3,13 @@ import {
   useCreateCategoryMutation,
   useUpdateCategoryMutation,
   useGetCategoriesQuery,
-} from "../store/api.ts";
-import { CategoryIcon, ICON_SLUGS } from "./CategoryIcon.tsx";
-import { Select } from "./Select.tsx";
-import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
-import { useT, translate } from "../i18n/index.ts";
-import { getLocale } from "../i18n/locale.ts";
-import type { Category } from "../../shared/types.ts";
+} from "../../store/api.ts";
+import { CategoryIcon, ICON_SLUGS } from "../ui/CategoryIcon.tsx";
+import { Select } from "../ui/Select.tsx";
+import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../../lib/importance.ts";
+import { useT, translate } from "../../i18n/index.ts";
+import { getLocale } from "../../i18n/locale.ts";
+import type { Category } from "../../../shared/types.ts";
 
 const PALETTE = [
   "#2e6be6", "#127c86", "#1f6e4c", "#7a3e9d", "#c2417a", "#b23a2e",

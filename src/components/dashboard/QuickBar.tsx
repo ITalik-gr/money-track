@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import { Icon } from "./Icon.tsx";
-import { useT } from "../i18n/index.ts";
-import type { TranslationKey } from "../i18n/index.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { useT } from "../../i18n/index.ts";
+import type { TranslationKey } from "../../i18n/index.ts";
 
 // Головна: компактний рядок швидких переходів на розділи, яких немає в нижній
 // таб-навігації мобілки. «Додати» живе в hero-картці балансу (не дублюємо тут);

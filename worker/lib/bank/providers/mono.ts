@@ -2,9 +2,9 @@
 // the rate-limit error and the statement shape all stay in `lib/mono.ts`, which has been in
 // production long enough to be worth not disturbing.
 import type { BankProvider, CanonicalAccount } from "./provider.ts";
-import type { AppDb } from "../db-shim.ts";
+import type { AppDb } from "../../platform/db-shim.ts";
 import { getClientInfo, setWebhook } from "../mono.ts";
-import { syncAccounts as writeAccounts } from "../repo.ts";
+import { syncAccounts as writeAccounts } from "../../finance/repo.ts";
 
 export const monoProvider: BankProvider = {
   id: "mono",

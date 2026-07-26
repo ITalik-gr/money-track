@@ -5,8 +5,8 @@
 import { Hono } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
-import { createSession, SESSION_COOKIE, signShortLived, verifyShortLived } from "../lib/auth.ts";
-import { ensureOwner, loginWithGoogle } from "../lib/directory.ts";
+import { createSession, SESSION_COOKIE, signShortLived, verifyShortLived } from "../lib/platform/auth.ts";
+import { ensureOwner, loginWithGoogle } from "../lib/platform/directory.ts";
 
 export const auth = new Hono<{ Bindings: Env }>();
 

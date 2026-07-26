@@ -9,7 +9,7 @@
 // project has had came from a second place deciding what a number meant. A provider that
 // normalises in its fetch path and again in its webhook path will eventually disagree with
 // itself, and the disagreement shows up months later as money that does not add up.
-import type { AppDb } from "../db-shim.ts";
+import type { AppDb } from "../../platform/db-shim.ts";
 
 /** Canonical account, provider-agnostic. Mirrors the `accounts` table. */
 export interface CanonicalAccount {

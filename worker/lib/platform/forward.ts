@@ -15,8 +15,20 @@
  */
 export const USER_HEADER = "x-mt-user";
 
-export function withUserHeader(req: Request, userId: string): Request {
+/**
+ * Marks the request as belonging to the deployment OWNER.
+ *
+ * Needed because the deployment-wide `MONO_TOKEN` / `ANTHROPIC_API_KEY` secrets are the owner's
+ * personal credentials, and only the owner may fall back to them (see `UserDO.appEnv`). The DO
+ * cannot work this out for itself: ownership lives in the directory database, which is the
+ * Worker's to read. Set — never merged — exactly like `USER_HEADER`.
+ */
+export const OWNER_HEADER = "x-mt-owner";
+
+export function withUserHeader(req: Request, userId: string, isOwner = false): Request {
   const headers = new Headers(req.headers);
   headers.set(USER_HEADER, userId);
+  // Always written, including the "0" case: a stale value from the client must not survive.
+  headers.set(OWNER_HEADER, isOwner ? "1" : "0");
   return new Request(req, { headers });
 }

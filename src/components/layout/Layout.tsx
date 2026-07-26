@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { NavLink, Outlet, Link } from "react-router-dom";
-import { Icon } from "./Icon.tsx";
-import { Toaster } from "./Toaster.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { Toaster } from "../ui/Toaster.tsx";
 import { CommandPalette, openCommandPalette } from "./CommandPalette.tsx";
-import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation } from "../store/api.ts";
-import { useLocale, useT } from "../i18n/index.ts";
-import type { Locale } from "../i18n/index.ts";
-import type { TranslationKey } from "../i18n/index.ts";
+import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation } from "../../store/api.ts";
+import { useLocale, useT } from "../../i18n/index.ts";
+import type { Locale } from "../../i18n/index.ts";
+import type { TranslationKey } from "../../i18n/index.ts";
 
 // Пункти навігації. desktop=сайдбар (усі), mobile=нижній таб-бар (тільки core).
 // `label` is a translation key resolved at render (see PLATFORM.md §12) — not a literal.
@@ -129,6 +129,7 @@ export function Layout() {
   const t = useT();
   const { data: me } = useGetMeQuery();
   const isDemo = me?.demo === true;
+  const accountName = (me?.user?.name ?? "").trim().split(/\s+/)[0] || t("layout.account");
 
   return (
     <div className={`shell${isDemo ? " has-demo-banner" : ""}`}>
@@ -182,9 +183,11 @@ export function Layout() {
             <TopSearch />
             <NotifBell />
             <Link to="/setup" className="avatar-chip">
-              <span className="avatar">{isDemo ? "D" : "В"}</span>
+              {/* Name and initial come from the signed-in account — they were hardcoded to the
+                  owner, so every other user (and every demo visitor) saw "Віталій". */}
+              <span className="avatar">{isDemo ? "D" : (accountName[0] ?? "?").toUpperCase()}</span>
               <span className="who2">
-                <b>{isDemo ? t("demo.badge") : "Віталій"}</b>
+                <b>{isDemo ? t("demo.badge") : accountName}</b>
                 <small>{isDemo ? t("demo.aiLimited") : t("layout.personal")}</small>
               </span>
             </Link>

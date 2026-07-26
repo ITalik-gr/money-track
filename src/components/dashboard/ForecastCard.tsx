@@ -1,8 +1,8 @@
-import { useGetForecastQuery } from "../store/api.ts";
-import { Money } from "./Money.tsx";
-import { formatMinor } from "../lib/format.ts";
-import { InfoTip } from "./InfoTip.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetForecastQuery } from "../../store/api.ts";
+import { Money } from "../ui/Money.tsx";
+import { formatMinor } from "../../lib/format.ts";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // Прогноз кінця місяця (§7): скільки витратимо за поточним темпом + майбутні планові
 // платежі. Сильна фіча для runway — видно ще до кінця місяця, чи вкладаєшся.

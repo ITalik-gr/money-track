@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useDeleteEventMutation, useGetEventsQuery } from "../store/api.ts";
-import { Money } from "../components/Money.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { GroupModal, GROUP_KINDS } from "../components/GroupModal.tsx";
-import { EventBudgetBar } from "../components/EventBudget.tsx";
+import { Money } from "../components/ui/Money.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { GroupModal, GROUP_KINDS } from "../components/planning/GroupModal.tsx";
+import { EventBudgetBar } from "../components/planning/EventBudget.tsx";
 import { useT, translate } from "../i18n/index.ts";
 import { getLocale } from "../i18n/locale.ts";
 

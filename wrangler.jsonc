@@ -76,7 +76,7 @@
 	],
 	// Weekly insight + weekly AI report (Mon 09:00), monthly AI report (1st 09:00),
 	// daily notification feed + rates (06:00 UTC ≈ 08:00 Kyiv). Each fires a fan-out to every
-	// user's Durable Object (worker/lib/cron.ts).
+	// user's Durable Object (worker/lib/platform/cron.ts).
 	//
 	// The former minute-cron is GONE: it existed to pace the backfill (mono allows 1 req/60s),
 	// and that now lives in `UserDO.alarm()`. As a global cron it would have woken every user's

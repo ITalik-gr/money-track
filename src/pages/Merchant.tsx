@@ -3,9 +3,9 @@ import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useGetMerchantQuery } from "../store/api.ts";
-import { MerchantLogo } from "../components/MerchantLogo.tsx";
-import { TxItem } from "../components/TxItem.tsx";
-import { InfoTip } from "../components/InfoTip.tsx";
+import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
+import { TxItem } from "../components/transactions/TxItem.tsx";
+import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { formatMinor } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 

@@ -1,8 +1,8 @@
 // Спільна бізнес-логіка фінансів, яку викликають і HTTP-API (routes/api.ts), і
 // Telegram-бот (routes/telegram.ts): створення готівкової транзакції, підсумок
 // власних коштів (§5, кредитний ліміт) і останні транзакції. Одне джерело правди.
-import type { Env } from "../env.ts";
-import type { AppDb } from "./db-shim.ts";
+import type { Env } from "../../env.ts";
+import type { AppDb } from "../platform/db-shim.ts";
 
 // §R2-CUR2: єдине джерело правди для зведення сум у гривню. rates — мапа
 // «код валюти → скільки ₴ за 1 одиницю» (див. cron/rates). Суми в мінімальних

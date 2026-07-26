@@ -1,25 +1,30 @@
 import { Link } from "react-router-dom";
 import { getLocale, localeTag } from "../i18n/locale.ts";
-import { BalanceCard } from "../components/BalanceCard.tsx";
-import { KpiRow } from "../components/KpiRow.tsx";
-import { CashflowCard } from "../components/CashflowCard.tsx";
-import { CapitalTrendCard } from "../components/CapitalTrendCard.tsx";
-import { ForecastCard } from "../components/ForecastCard.tsx";
-import { CreditBanner } from "../components/CreditBanner.tsx";
-import { HealthMini } from "../components/HealthMini.tsx";
-import { EnvelopeGrid } from "../components/EnvelopeGrid.tsx";
-import { SafeToSpend } from "../components/SafeToSpend.tsx";
-import { MonthPulse } from "../components/MonthPulse.tsx";
-import { UpcomingSubs } from "../components/UpcomingSubs.tsx";
-import { QuickBar } from "../components/QuickBar.tsx";
-import { TransactionList } from "../components/TransactionList.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { useGetTransactionsQuery } from "../store/api.ts";
+import { BalanceCard } from "../components/dashboard/BalanceCard.tsx";
+import { KpiRow } from "../components/dashboard/KpiRow.tsx";
+import { CashflowCard } from "../components/dashboard/CashflowCard.tsx";
+import { CapitalTrendCard } from "../components/dashboard/CapitalTrendCard.tsx";
+import { ForecastCard } from "../components/dashboard/ForecastCard.tsx";
+import { CreditBanner } from "../components/dashboard/CreditBanner.tsx";
+import { HealthMini } from "../components/dashboard/HealthMini.tsx";
+import { EnvelopeGrid } from "../components/planning/EnvelopeGrid.tsx";
+import { SafeToSpend } from "../components/dashboard/SafeToSpend.tsx";
+import { MonthPulse } from "../components/dashboard/MonthPulse.tsx";
+import { UpcomingSubs } from "../components/dashboard/UpcomingSubs.tsx";
+import { QuickBar } from "../components/dashboard/QuickBar.tsx";
+import { TransactionList } from "../components/transactions/TransactionList.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
 import { useT } from "../i18n/index.ts";
 
 export function Dashboard() {
   const t = useT();
   const { data: rows = [] } = useGetTransactionsQuery({ limit: 8 });
+  const { data: me } = useGetMeQuery();
+  // The greeting used to hardcode the owner's name, so every demo visitor was welcomed as
+  // "Vitalii". Take the first name from the signed-in account; a demo sandbox has no real
+  // identity, so it gets the plain greeting.
+  const firstName = me?.demo ? null : (me?.user?.name ?? "").trim().split(/\s+/)[0] || null;
   // Computed per render so it follows a live language switch (a module-level const would lock
   // the locale at import time).
   const todayLabel = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "long", year: "numeric" }).format(new Date());
@@ -28,7 +33,7 @@ export function Dashboard() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">{t("dash.greet")}</div>
+          <div className="greet">{firstName ? t("dash.greetNamed", { name: firstName }) : t("dash.greet")}</div>
           <div className="sub">{t("dash.sub")}</div>
         </div>
         <div className="page-head-actions">

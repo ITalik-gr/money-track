@@ -423,11 +423,12 @@ const app_state = [
   { key: "rates", value: JSON.stringify(RATES) },
   { key: "locale", value: "en" }, // demo audience is English (§12)
   { key: "period_mode", value: "calendar" },
+  // PLAIN TEXT, not JSON: `finance_profile` is read straight into the About-me textarea and into
+  // every AI prompt (advisor.ts getProfile). Seeding `{"about":"…"}` showed the raw JSON to the
+  // visitor and fed the model a wrapper it then had to guess at.
   {
     key: "finance_profile",
-    value: JSON.stringify({
-      about: "Software engineer, ~34k UAH/mo net salary plus occasional USD freelance. Renting an apartment. Wants a longer runway and to stop leaking money on subscriptions.",
-    }),
+    value: "Software engineer, ~34k UAH/mo net salary plus occasional USD freelance. Renting an apartment. Wants a longer runway and to stop leaking money on subscriptions.",
   },
   // Pre-baked AI so the Advisor page is full before any (capped) live generation (P4.3).
   { key: "advisor", value: JSON.stringify(advisor) },

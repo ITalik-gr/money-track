@@ -11,18 +11,18 @@ import {
   useGetTransactionQuery,
 } from "../store/api.ts";
 import { renderMarkdown } from "../lib/markdown.tsx";
-import { Money } from "../components/Money.tsx";
-import { MerchantLogo } from "../components/MerchantLogo.tsx";
-import { Icon } from "../components/Icon.tsx";
+import { Money } from "../components/ui/Money.tsx";
+import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { currencySign } from "../lib/format.ts";
 import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
-import { Select } from "../components/Select.tsx";
-import { TxSplitEditor } from "../components/TxSplitEditor.tsx";
-import { TxReimbursement, TxReimbursementUsage } from "../components/TxReimbursement.tsx";
+import { Select } from "../components/ui/Select.tsx";
+import { TxSplitEditor } from "../components/transactions/TxSplitEditor.tsx";
+import { TxReimbursement, TxReimbursementUsage } from "../components/transactions/TxReimbursement.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
-import type { SelectOption } from "../components/Select.tsx";
+import type { SelectOption } from "../components/ui/Select.tsx";
 import type { Category } from "../../shared/types.ts";
 import type { TxDetail } from "../store/api.ts";
 

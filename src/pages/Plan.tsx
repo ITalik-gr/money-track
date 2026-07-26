@@ -9,9 +9,9 @@ import {
   useBudgetChatMutation,
   useSetBudgetMutation,
 } from "../store/api.ts";
-import { Money } from "../components/Money.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { AutoBudget } from "../components/AutoBudget.tsx";
+import { Money } from "../components/ui/Money.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { AutoBudget } from "../components/planning/AutoBudget.tsx";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { toast } from "../lib/toast.ts";

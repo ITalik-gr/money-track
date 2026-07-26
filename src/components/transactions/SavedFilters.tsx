@@ -4,11 +4,11 @@
 import { useState } from "react";
 import {
   useGetSavedFiltersQuery, useSaveFilterMutation, useDeleteSavedFilterMutation,
-} from "../store/api.ts";
-import { Icon } from "./Icon.tsx";
-import { toast } from "../lib/toast.ts";
-import { errText } from "../lib/errors.ts";
-import { useT } from "../i18n/index.ts";
+} from "../../store/api.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { toast } from "../../lib/toast.ts";
+import { errText } from "../../lib/errors.ts";
+import { useT } from "../../i18n/index.ts";
 
 interface Props {
   /** Поточний query-рядок сторінки (`params.toString()`). */

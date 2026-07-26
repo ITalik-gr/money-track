@@ -2,12 +2,12 @@
 // Свідомо повторює мову конвертів (`ok`/`warn`/`over`, заливка scaleX) — це той самий
 // патерн «ліміт і скільки з нього з'їдено», і вигадувати для нього другий вигляд не можна.
 import { useState } from "react";
-import { useSetEventBudgetMutation } from "../store/api.ts";
-import { Money } from "./Money.tsx";
-import { Icon } from "./Icon.tsx";
-import { toast } from "../lib/toast.ts";
-import { errText } from "../lib/errors.ts";
-import { useT } from "../i18n/index.ts";
+import { useSetEventBudgetMutation } from "../../store/api.ts";
+import { Money } from "../ui/Money.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { toast } from "../../lib/toast.ts";
+import { errText } from "../../lib/errors.ts";
+import { useT } from "../../i18n/index.ts";
 
 function state(ratio: number): "ok" | "warn" | "over" {
   if (ratio >= 1) return "over";

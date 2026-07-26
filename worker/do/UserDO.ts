@@ -5,11 +5,11 @@
 // canonical SQL in `lib/stats.ts` — dozens of queries built on STATS_JOINS/SPEND_WHERE —
 // stays byte-identical, reached through the D1-shaped facade in `lib/db-shim.ts`.
 import { DurableObject } from "cloudflare:workers";
-import { DoDatabase, type AppDb } from "../lib/db-shim.ts";
+import { DoDatabase, type AppDb } from "../lib/platform/db-shim.ts";
 import { runMigrations } from "./migrate.ts";
 import { userApp } from "../user-app.ts";
-import { getSecret } from "../lib/secrets.ts";
-import { USER_HEADER } from "../lib/forward.ts";
+import { getSecret } from "../lib/platform/secrets.ts";
+import { OWNER_HEADER, USER_HEADER } from "../lib/platform/forward.ts";
 import type { ImportReport } from "./import-legacy.ts";
 import type { Env } from "../env.ts";
 
@@ -18,6 +18,8 @@ export class UserDO extends DurableObject<Env> {
   readonly db: AppDb;
   private readonly raw: DoDatabase;
   private credentials: { MONO_TOKEN: string; ANTHROPIC_API_KEY: string } | null = null;
+  /** null = not looked up yet in this isolate. See `rememberOwner`. */
+  private ownerFlag: boolean | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -46,9 +48,14 @@ export class UserDO extends DurableObject<Env> {
       passThroughOnException: () => {},
       props: {},
     } as unknown as ExecutionContext;
-    // Only the Worker can reach this object, and it overwrites the header rather than merging
-    // it, so the user id cannot be spoofed by a client.
-    const env = await this.appEnv(request.headers.get(USER_HEADER) ?? undefined);
+    // Only the Worker can reach this object, and it overwrites both headers rather than merging
+    // them, so neither the user id nor the owner flag can be spoofed by a client.
+    const isOwner = request.headers.get(OWNER_HEADER) === "1";
+    // Remember it: `alarm()` (the paced backfill) runs with no request and therefore no header,
+    // but it needs the same credentials the request that started it had. Only this
+    // Worker-authenticated path ever writes the flag.
+    if (isOwner) await this.rememberOwner();
+    const env = await this.appEnv(request.headers.get(USER_HEADER) ?? undefined, isOwner);
     return userApp.fetch(request, env, execCtx);
   }
 
@@ -60,14 +67,24 @@ export class UserDO extends DurableObject<Env> {
    * API-key checks is what keeps the whole multi-user migration mechanical: not one handler
    * and not one SQL string had to be edited.
    */
-  private async appEnv(userId?: string): Promise<Env> {
-    const creds = await this.userCredentials();
+  private async appEnv(userId?: string, isOwner = false): Promise<Env> {
+    const creds = await this.userCredentials(isOwner);
     // Demo sandbox: run AI on the dedicated demo key (P4.3), and null out the mono token so a
     // sandbox can never reach the real bank even if a guard were ever missed (it also never has a
     // user of its own). The spend caps + forced-Haiku still apply on top (see lib/demo.ts).
     const isDemo = (userId ?? "").startsWith("demo:");
+    if (isDemo && !this.env.DEMO_ANTHROPIC_KEY) {
+      // Loud on purpose: without the dedicated key, strangers' demo AI is billed to the OWNER's
+      // key, and the only thing between them and the invoice is lib/demo.ts's caps. The fallback
+      // is kept (a demo with no AI at all shows less than the app does), but it must be visible.
+      console.warn("[demo] DEMO_ANTHROPIC_KEY is not set — demo AI falls back to the platform key");
+    }
+    // The platform key is named explicitly here, not inherited from `creds`: a demo is never the
+    // owner, so the owner-only fallback above gives it nothing. Keeping this fallback is a
+    // deliberate product call — a demo with no AI shows less than the app does — and it is the
+    // one place strangers can reach our billing, which is why lib/demo.ts caps it in dollars.
     const demoOverride = isDemo
-      ? { ANTHROPIC_API_KEY: this.env.DEMO_ANTHROPIC_KEY || creds.ANTHROPIC_API_KEY, MONO_TOKEN: "" }
+      ? { ANTHROPIC_API_KEY: this.env.DEMO_ANTHROPIC_KEY || this.env.ANTHROPIC_API_KEY || "", MONO_TOKEN: "" }
       : {};
     return {
       ...this.env,
@@ -75,6 +92,7 @@ export class UserDO extends DurableObject<Env> {
       ...creds,
       ...demoOverride,
       USER_ID: userId,
+      IS_OWNER: isOwner,
       onSecretsChanged: () => this.invalidateCredentials(),
       scheduleBackfillStep: (delayMs: number) => this.ctx.storage.setAlarm(Date.now() + delayMs),
     };
@@ -91,8 +109,10 @@ export class UserDO extends DurableObject<Env> {
    * `ratesJson` comes from the shared cache: rates are a fact about the world, so the Worker
    * fetches them once and every object copies the value into its own `app_state`.
    */
-  async runCron(kind: "daily" | "weekly" | "monthly", ratesJson: string | null): Promise<{ ran: string[]; failed: string[] }> {
-    const env = await this.appEnv();
+  async runCron(kind: "daily" | "weekly" | "monthly", ratesJson: string | null, isOwner = false): Promise<{ ran: string[]; failed: string[] }> {
+    // `isOwner` comes from the directory row the fan-out already read — the deployment-wide
+    // API keys are the owner's, so only the owner's cron may use them (see `userCredentials`).
+    const env = await this.appEnv(undefined, isOwner || (await this.storedOwnerFlag()));
     const ran: string[] = [];
     const failed: string[] = [];
     const step = async (name: string, fn: () => Promise<unknown>) => {
@@ -106,18 +126,18 @@ export class UserDO extends DurableObject<Env> {
 
     if (ratesJson) {
       await step("rates", async () => {
-        const { setState } = await import("../lib/repo.ts");
+        const { setState } = await import("../lib/finance/repo.ts");
         await setState(this.db, "rates", ratesJson);
         // Snapshot the daily rate BEFORE anything reads it: the net-worth history recomputes
         // past points with the rate of their day, and one missed day is a permanent hole.
-        const { snapshotRates } = await import("../lib/finance.ts");
+        const { snapshotRates } = await import("../lib/finance/finance.ts");
         await snapshotRates(this.db);
       });
     }
 
     if (kind === "daily") {
       await step("notifications", async () => {
-        const { generateNotifications } = await import("../lib/notify.ts");
+        const { generateNotifications } = await import("../lib/messaging/notify.ts");
         await generateNotifications(env);
       });
     }
@@ -125,23 +145,23 @@ export class UserDO extends DurableObject<Env> {
     if (kind === "weekly") {
       if (env.ANTHROPIC_API_KEY) {
         await step("insight", async () => {
-          const { buildAndStoreInsight } = await import("../lib/insight.ts");
+          const { buildAndStoreInsight } = await import("../lib/ai/insight.ts");
           await buildAndStoreInsight(env);
         });
         await step("weekly_report", async () => {
-          const { generateAndStoreReport } = await import("../lib/report.ts");
+          const { generateAndStoreReport } = await import("../lib/ai/report.ts");
           await generateAndStoreReport(env, "week");
         });
       }
       await step("tg_proactive", async () => {
-        const { runWeeklyProactive } = await import("../lib/proactive.ts");
+        const { runWeeklyProactive } = await import("../lib/messaging/proactive.ts");
         await runWeeklyProactive(env);
       });
     }
 
     if (kind === "monthly" && env.ANTHROPIC_API_KEY) {
       await step("monthly_report", async () => {
-        const { generateAndStoreReport } = await import("../lib/report.ts");
+        const { generateAndStoreReport } = await import("../lib/ai/report.ts");
         await generateAndStoreReport(env, "month"); // idempotent per period
       });
     }
@@ -173,7 +193,7 @@ export class UserDO extends DurableObject<Env> {
     const stmts = buildDemoStatements(nowSec);
     await this.db.batch(stmts.map((s) => this.db.prepare(s.sql).bind(...s.binds)));
 
-    const { setState } = await import("../lib/repo.ts");
+    const { setState } = await import("../lib/finance/repo.ts");
     const expiresAt = nowSec + 24 * 3600;
     // The marker doubles as "this is a demo object" for `alarm()` — a real user never has it.
     await setState(this.db, "demo_expires_at", String(expiresAt));
@@ -184,16 +204,16 @@ export class UserDO extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     // A demo sandbox's alarm is its 24h self-destruct, not a backfill tick (a demo has no mono
     // token to backfill). Distinguished by the marker `seedDemo` wrote; real users never have it.
-    const { getState } = await import("../lib/repo.ts");
+    const { getState } = await import("../lib/finance/repo.ts");
     const demoExpires = await getState(this.db, "demo_expires_at");
     if (demoExpires != null) {
       if (Date.now() / 1000 >= Number(demoExpires)) await this.reset(); // wipe back to empty schema
       return;
     }
 
-    const env = await this.appEnv();
+    const env = await this.appEnv(undefined, await this.storedOwnerFlag());
     try {
-      const { stepBackfill } = await import("../lib/backfill.ts");
+      const { stepBackfill } = await import("../lib/bank/backfill.ts");
       const res = await stepBackfill(env);
       // Reschedule while there is work left. `retry` means monobank rate-limited us, which is
       // expected pacing rather than an error — same 60s wait either way.
@@ -213,11 +233,21 @@ export class UserDO extends DurableObject<Env> {
    * endpoint that writes them calls. Without the cache every request would pay two AES-GCM
    * decrypts plus two queries for values that never change.
    *
-   * Falls back to the deployment-wide secrets while they still exist. That fallback is what
-   * lets the owner keep working through the whole migration; it disappears with the global
-   * `MONO_TOKEN`/`ANTHROPIC_API_KEY` bindings.
+   * ⚠️ The deployment-wide `MONO_TOKEN` / `ANTHROPIC_API_KEY` fallback is OWNER-ONLY (fixed
+   * 2026-07-26, security review). Those secrets are the owner's personal credentials, so
+   * applying them to every user was two live defects at once:
+   *   - an invited user with no bank token of their own who pressed "sync accounts" would pull
+   *     the OWNER'S accounts and statement into THEIR database — a cross-tenant data leak
+   *     through a button in the normal UI, no attack required;
+   *   - every invited user's AI ran on the owner's Anthropic key, unmetered (the spend caps in
+   *     lib/demo.ts cover demo sandboxes only).
+   * A non-owner with no key now simply has none: the endpoints already answer
+   * "ANTHROPIC_API_KEY not set" / "MONO_TOKEN not set", which is the honest state.
+   *
+   * The cache is keyed on nothing, because a DO serves exactly one user and `isOwner` is a
+   * property of that user — it cannot differ between two requests to the same object.
    */
-  private async userCredentials(): Promise<{ MONO_TOKEN: string; ANTHROPIC_API_KEY: string }> {
+  private async userCredentials(isOwner: boolean): Promise<{ MONO_TOKEN: string; ANTHROPIC_API_KEY: string }> {
     if (!this.credentials) {
       const master = this.env.SECRETS_MASTER_KEY;
       const [mono, anthropic] = await Promise.all([
@@ -225,8 +255,8 @@ export class UserDO extends DurableObject<Env> {
         getSecret(this.db, master, "anthropic_api_key"),
       ]);
       this.credentials = {
-        MONO_TOKEN: mono ?? this.env.MONO_TOKEN ?? "",
-        ANTHROPIC_API_KEY: anthropic ?? this.env.ANTHROPIC_API_KEY ?? "",
+        MONO_TOKEN: mono ?? (isOwner ? this.env.MONO_TOKEN ?? "" : ""),
+        ANTHROPIC_API_KEY: anthropic ?? (isOwner ? this.env.ANTHROPIC_API_KEY ?? "" : ""),
       };
     }
     return this.credentials;
@@ -235,6 +265,27 @@ export class UserDO extends DurableObject<Env> {
   /** Drops the credential cache. Called by the endpoint that stores or clears a secret. */
   invalidateCredentials(): void {
     this.credentials = null;
+  }
+
+  /** Persist "this object belongs to the owner" so context-free entry points (`alarm`) can also
+   *  decide whether the deployment-wide secrets apply. Written once, from the authenticated
+   *  request path only — never from anything a client controls. */
+  private async rememberOwner(): Promise<void> {
+    if (this.ownerFlag === true) return; // already known in this isolate
+    const { getState, setState } = await import("../lib/finance/repo.ts");
+    this.ownerFlag = (await getState(this.db, "is_owner")) === "1";
+    if (!this.ownerFlag) {
+      await setState(this.db, "is_owner", "1");
+      this.ownerFlag = true;
+    }
+  }
+
+  /** Cached answer to "is this the owner's object", for the entry points without a request. */
+  private async storedOwnerFlag(): Promise<boolean> {
+    if (this.ownerFlag != null) return this.ownerFlag;
+    const { getState } = await import("../lib/finance/repo.ts");
+    this.ownerFlag = (await getState(this.db, "is_owner")) === "1";
+    return this.ownerFlag;
   }
 
   /**

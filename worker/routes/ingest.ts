@@ -3,10 +3,13 @@
 // to a structured record and return it for the client to confirm/save.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { parseText } from "../lib/ai.ts";
-import { ingestReceipt } from "../lib/receipt.ts";
+import { parseText } from "../lib/ai/ai.ts";
+import { ingestReceipt } from "../lib/ai/receipt.ts";
 
 export const ingest = new Hono<{ Bindings: Env }>();
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+const MAX_TEXT_CHARS = 4000; // a hand-typed expense note; anything longer is a paste-bomb
 
 function requireKey(env: Env): string | null {
   return env.ANTHROPIC_API_KEY ? null : "ANTHROPIC_API_KEY not set — див. інструкцію в README";
@@ -19,6 +22,11 @@ ingest.post("/receipt", async (c) => {
   const form = await c.req.formData();
   const file = form.get("image");
   if (!(file instanceof File)) return c.json({ error: "image file required" }, 400);
+  // Anthropic rejects images over 5 MB anyway, so anything larger is money spent on an R2 write
+  // for a request that cannot succeed. Refusing before the upload keeps the bucket clean too.
+  if (file.size > MAX_IMAGE_BYTES) {
+    return c.json({ error: `image too large (max ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB)` }, 413);
+  }
 
   const bytes = new Uint8Array(await file.arrayBuffer());
   const out = await ingestReceipt(c.env, bytes, file.type || "image/jpeg");
@@ -30,7 +38,7 @@ ingest.post("/text", async (c) => {
   if (err) return c.json({ error: err }, 400);
   const { text } = await c.req.json<{ text: string }>();
   if (!text?.trim()) return c.json({ error: "text required" }, 400);
-  const { result, usage } = await parseText(c.env, text);
+  const { result, usage } = await parseText(c.env, text.slice(0, MAX_TEXT_CHARS));
   // Return parsed record for the client to confirm before saving.
   return c.json({ ok: true, result, usage });
 });

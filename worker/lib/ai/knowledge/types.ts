@@ -3,6 +3,12 @@ export type KnowledgeDoc = {
   id: string;
   title: string;
   summary: string;
+  // English label for the UI card (P3.4-style resolution, see knowledgeMeta). ONLY the label:
+  // `body` stays Ukrainian on purpose. The body is model input, not UI — the assistant already
+  // answers in the reader's locale via `replyLangDirective`, and duplicating ~26k chars of
+  // corpus per language would double the maintenance and split the prompt cache in two.
+  titleEn?: string;
+  summaryEn?: string;
   body: string;
   // locked=true — доку не можна ні переписати, ні вимкнути. Ставиться ЛИШЕ там, де текст
   // описує канон розрахунків самого застосунку: якщо його підмінити, AI почне пояснювати

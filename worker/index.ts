@@ -8,9 +8,9 @@ import { admin } from "./routes/admin.ts";
 import {
   SESSION_COOKIE, verifySession, verifyWebhookToken,
   DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId,
-} from "./lib/auth.ts";
-import { withUserHeader } from "./lib/forward.ts";
-import { ensureOwner, findUserById, registerDemoSession } from "./lib/directory.ts";
+} from "./lib/platform/auth.ts";
+import { withUserHeader } from "./lib/platform/forward.ts";
+import { ensureOwner, findUserById, registerDemoSession } from "./lib/platform/directory.ts";
 
 // Resolve who a request belongs to: a real signed-in user, or an ephemeral demo sandbox. Demo
 // objects live under a `demo:`-prefixed DO name, physically disjoint from real users (bare hex),
@@ -25,11 +25,92 @@ async function resolveRequestUser(env: Env, cookieHeader: {
   return null;
 }
 
+// Directory facts the request path needs on EVERY call: is this account still allowed in, and is
+// it the owner (see `UserDO.userCredentials` — the deployment-wide API keys are the owner's).
+//
+// Cached per isolate for a minute rather than read per request. A signed cookie alone used to be
+// enough to pass the guard, which meant `status='disabled'` did nothing for the 30-day life of
+// the cookie: the UI signed the user out (`/api/me` does check) while the API kept serving them.
+// A 60s window between "disable" and "locked out" is the price of not putting a D1 read in front
+// of every single API call; an outright revocation still needs the cookie to expire, which is the
+// known trade-off of stateless sessions.
+const ACCESS_TTL_MS = 60_000;
+const accessCache = new Map<string, { at: number; ok: boolean; isOwner: boolean }>();
+async function userAccess(env: Env, userId: string): Promise<{ ok: boolean; isOwner: boolean }> {
+  const hit = accessCache.get(userId);
+  if (hit && Date.now() - hit.at < ACCESS_TTL_MS) return { ok: hit.ok, isOwner: hit.isOwner };
+  const user = await findUserById(env.DIRECTORY, userId);
+  const val = { ok: !!user && user.status !== "disabled", isOwner: user?.is_owner === 1 };
+  accessCache.set(userId, { at: Date.now(), ...val });
+  return val;
+}
+
 // One Durable Object per user (PLATFORM.md §2). Must be exported from the worker entry for
 // the runtime to find the class named in wrangler.jsonc.
 export { UserDO } from "./do/UserDO.ts";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// ---- security response headers (added 2026-07-26, security review) ----------------------
+//
+// The app had none. It renders model-authored text and bank data in the same document as a
+// session cookie, so the two that matter most are:
+//   - `frame-ancestors 'none'` — nothing may embed this page, which is what makes clickjacking
+//     ("click here" over an invisible Money Track button) impossible;
+//   - a real CSP — even if a future component ever renders unescaped HTML, an injected script
+//     has no origin it is allowed to run from and nowhere to send what it stole.
+//
+// `script-src 'self'` with NO 'unsafe-inline' is only viable because the one inline script
+// (theme-before-paint) moved to `/theme.js`. Keep it that way: adding an inline <script> back
+// silently breaks the page under this policy.
+// `style-src` does need 'unsafe-inline' — React writes `style` attributes all over the app
+// (chart geometry, bar widths), and those are inline styles as far as CSP is concerned.
+// `connect-src 'self'`: the client talks to its own API only; Anthropic is called server-side.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join("; ");
+
+const SECURITY_HEADERS: Record<string, string> = {
+  "content-security-policy": CSP,
+  // Stops a response typed `text/plain` from being sniffed into script/HTML.
+  "x-content-type-options": "nosniff",
+  // Legacy twin of frame-ancestors, for anything that predates CSP level 2.
+  "x-frame-options": "DENY",
+  // Full URLs of an app whose paths carry transaction ids are nobody else's business.
+  "referrer-policy": "strict-origin-when-cross-origin",
+  // Features this app never uses. Camera is deliberately NOT blocked: the receipt input uses
+  // `capture`, and browsers that gate that on Permissions-Policy would break photo upload.
+  "permissions-policy": "geolocation=(), microphone=(), payment=(), usb=()",
+};
+
+// Applied to EVERY response, including the API and the DO's, so a JSON endpoint opened
+// directly in a tab is covered by the same rules as the app shell.
+app.use("*", async (c, next) => {
+  await next();
+  // `ASSETS.fetch` returns an immutable response; `c.res = new Response(...)` is how Hono
+  // hands back a copy whose headers can be written.
+  const res = new Response(c.res.body, c.res);
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+  // CSP is skipped on localhost: `npm run dev` serves Vite's own inline preamble and HMR client,
+  // which `script-src 'self'` would block — the dev server would come up blank and the cause
+  // would look like a build error. The header still ships everywhere that is not localhost,
+  // which is every deployed environment.
+  const host = new URL(c.req.url).hostname;
+  if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") {
+    res.headers.delete("content-security-policy");
+  }
+  c.res = res;
+});
+
 
 app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now() }));
 
@@ -88,6 +169,17 @@ app.get("/demo", async (c) => {
   const existing = await verifyDemoToken(c.env, getCookie(c, DEMO_COOKIE));
   if (existing) return c.redirect("/", 302);
 
+  // Creating a sandbox is unauthenticated and writes a seeded Durable Object, so it needs its
+  // own daily ceiling — see `demoSandboxAllowed`. Checked BEFORE the object is created.
+  const { demoSandboxAllowed } = await import("./lib/platform/demo.ts");
+  if (!(await demoSandboxAllowed(c.env))) {
+    return c.text(
+      "The demo has reached today's limit of new sandboxes. Please try again tomorrow.",
+      429,
+      { "retry-after": "3600" },
+    );
+  }
+
   const demoId = newDemoId();
   const nowSec = Math.floor(Date.now() / 1000);
   const stub = c.env.USER_DO.get(c.env.USER_DO.idFromName(`demo:${demoId}`));
@@ -114,12 +206,21 @@ app.get("/demo", async (c) => {
 //
 // The guard also publishes `userId` on the context: from here on, "authenticated" and
 // "whose database" are the same fact, and P0.3 resolves the Durable Object from it.
-const guard = createMiddleware<{ Bindings: Env; Variables: { userId: string } }>(async (c, next) => {
+const guard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>(async (c, next) => {
   const resolved = await resolveRequestUser(c.env, { session: getCookie(c, SESSION_COOKIE), demo: getCookie(c, DEMO_COOKIE) });
   if (!resolved) return c.json({ error: "unauthorized" }, 401);
   // Both real and demo users flow through the same forward path; the DO learns it is a demo from
   // its own `demo:`-prefixed name (see user-app's demo guard), so nothing extra rides along here.
+  // A demo has no directory row, so the access check applies to real sessions only.
+  let isOwner = false;
+  if (!resolved.isDemo) {
+    const access = await userAccess(c.env, resolved.userId);
+    // A valid signature for a disabled or deleted account is not an authenticated request.
+    if (!access.ok) return c.json({ error: "unauthorized" }, 401);
+    isOwner = access.isOwner;
+  }
   c.set("userId", resolved.userId);
+  c.set("isOwner", isOwner);
   await next();
 });
 app.use("/api/*", guard);
@@ -153,7 +254,10 @@ app.post("/webhook/:token", async (c) => {
   const userId = await webhookUserId(c.env, c.req.param("token"));
   if (!userId) return c.text("forbidden", 403);
   const ns = c.env.USER_DO;
-  return ns.get(ns.idFromName(userId)).fetch(withUserHeader(c.req.raw, userId));
+  // Bank callbacks need the account's own bank credentials; only the owner may fall back to the
+  // deployment-wide token, so pass the real answer rather than assuming either way.
+  const { isOwner } = await userAccess(c.env, userId);
+  return ns.get(ns.idFromName(userId)).fetch(withUserHeader(c.req.raw, userId, isOwner));
 });
 
 // Telegram webhook — open like the mono webhook; guarded by its own secret path
@@ -166,7 +270,7 @@ app.post("/webhook/:token", async (c) => {
 app.all("/tg/*", async (c) => {
   const owner = await ensureOwner(c.env.DIRECTORY, c.env.OWNER_EMAIL || "owner@localhost");
   const ns = c.env.USER_DO;
-  return ns.get(ns.idFromName(owner.id)).fetch(withUserHeader(c.req.raw, owner.id));
+  return ns.get(ns.idFromName(owner.id)).fetch(withUserHeader(c.req.raw, owner.id, true));
 });
 // Owner-only whitelist management; behind the guard above, so `c.var.userId` is set.
 app.route("/api/admin", admin);
@@ -177,10 +281,12 @@ app.route("/api/admin", admin);
 //
 // The whole Request is forwarded untouched, and the handlers execute next to the data —
 // see `user-app.ts` for why that beats handing a remote `db` proxy to a Worker-side handler.
-const toUserDo = createMiddleware<{ Bindings: Env; Variables: { userId: string } }>(async (c) => {
+const toUserDo = createMiddleware<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>(async (c) => {
   const ns = c.env.USER_DO;
   const userId = c.get("userId");
-  return ns.get(ns.idFromName(userId)).fetch(withUserHeader(c.req.raw, userId));
+  // The owner flag rides along because the deployment-wide MONO_TOKEN / ANTHROPIC_API_KEY are
+  // the OWNER's personal credentials — see `UserDO.userCredentials` for what went wrong without it.
+  return ns.get(ns.idFromName(userId)).fetch(withUserHeader(c.req.raw, userId, c.get("isOwner")));
 });
 app.all("/api/*", toUserDo);
 app.all("/ingest/*", toUserDo);
@@ -224,27 +330,27 @@ export default {
         // permanent hole in that series — it is only ever written forward.
         let ratesJson: string | null = null;
         try {
-          const { refreshSharedRates, readSharedRates } = await import("./lib/cron.ts");
+          const { refreshSharedRates, readSharedRates } = await import("./lib/platform/cron.ts");
           await refreshSharedRates(env);
           ratesJson = await readSharedRates(env);
         } catch (e) {
           console.error("[cron] shared rates refresh failed:", e instanceof Error ? e.message : e);
           try {
-            const { readSharedRates } = await import("./lib/cron.ts");
+            const { readSharedRates } = await import("./lib/platform/cron.ts");
             ratesJson = await readSharedRates(env); // stale beats nothing
           } catch {
             /* directory migration may not be applied yet */
           }
         }
 
-        const { listUsers } = await import("./lib/directory.ts");
+        const { listUsers } = await import("./lib/platform/directory.ts");
         const users = (await listUsers(env.DIRECTORY)).filter((u) => u.status !== "disabled");
         for (const u of users) {
           // Sequential on purpose. With ~10-50 users this costs seconds once a day, and it
           // keeps one slow or failing object from being lost in a Promise.all rejection.
           try {
             const stub = env.USER_DO.get(env.USER_DO.idFromName(u.id));
-            const res = await stub.runCron(kind, ratesJson);
+            const res = await stub.runCron(kind, ratesJson, u.is_owner === 1);
             if (res.failed.length) console.error(`[cron] ${kind} ${u.id}:`, res.failed.join(" | "));
           } catch (e) {
             console.error(`[cron] ${kind} ${u.id} unreachable:`, e instanceof Error ? e.message : e);
@@ -255,7 +361,7 @@ export default {
         // eviction can drop that alarm, so once a day we wipe any sandbox already past expiry.
         if (kind === "daily") {
           try {
-            const { listExpiredDemoSessions, deleteDemoSession } = await import("./lib/directory.ts");
+            const { listExpiredDemoSessions, deleteDemoSession } = await import("./lib/platform/directory.ts");
             for (const demoId of await listExpiredDemoSessions(env.DIRECTORY)) {
               try {
                 await env.USER_DO.get(env.USER_DO.idFromName(`demo:${demoId}`)).reset();

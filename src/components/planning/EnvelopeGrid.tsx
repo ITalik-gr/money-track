@@ -1,9 +1,9 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useGetBudgetsQuery, useGetByCategoryQuery, useGetCategoriesQuery } from "../store/api.ts";
-import { startOfMonthUnix } from "../lib/format.ts";
-import { Money } from "./Money.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetBudgetsQuery, useGetByCategoryQuery, useGetCategoriesQuery } from "../../store/api.ts";
+import { startOfMonthUnix } from "../../lib/format.ts";
+import { Money } from "../ui/Money.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // Конверти: кожна бюджетна категорія — кишеня, що спорожняється в міру витрат (§8).
 export function EnvelopeGrid() {

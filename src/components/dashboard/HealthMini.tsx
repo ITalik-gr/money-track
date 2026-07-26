@@ -3,11 +3,11 @@
 // лише «скільки» + «куди рухається», щоб дашборд відповідав на питання за пів секунди.
 // Той самий ендпоінт і той самий скор — двох різних «індексів здоровʼя» бути не може.
 import { Link } from "react-router-dom";
-import { useGetHealthQuery } from "../store/api.ts";
-import { Gauge } from "./Gauge.tsx";
-import { Sparkline } from "./Sparkline.tsx";
-import { useT } from "../i18n/index.ts";
-import type { TranslationKey } from "../i18n/index.ts";
+import { useGetHealthQuery } from "../../store/api.ts";
+import { Gauge } from "../ui/Gauge.tsx";
+import { Sparkline } from "../ui/Sparkline.tsx";
+import { useT } from "../../i18n/index.ts";
+import type { TranslationKey } from "../../i18n/index.ts";
 
 const BAND_KEY: Record<string, TranslationKey> = { good: "band.good", ok: "band.ok", risk: "band.risk" };
 

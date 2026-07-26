@@ -1,8 +1,8 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { CHART_ANIM } from "../lib/motion.ts";
-import { translate } from "../i18n/index.ts";
-import { useT } from "../i18n/index.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { CHART_ANIM } from "../../lib/motion.ts";
+import { translate } from "../../i18n/index.ts";
+import { useT } from "../../i18n/index.ts";
 
 // Спільний dual-line графік: витрати + надходження (DESIGN.md §7 F1).
 export interface CfRow { label: string; spend: number; income: number }

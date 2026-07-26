@@ -6,7 +6,7 @@
 // differ per bank. Guessing wrong does not fail loudly; it silently produces a month of wrong
 // numbers. So: the delimiter is detected, the mapping is GUESSED but shown to the user for
 // confirmation, and every row is previewed before anything is written.
-import type { AppDb } from "../db-shim.ts";
+import type { AppDb } from "../../platform/db-shim.ts";
 import type { BankProvider, CanonicalTx } from "./provider.ts";
 
 // ---- parsing ---------------------------------------------------------------------------
@@ -283,7 +283,7 @@ export interface ImportResult {
  * file before?" bookkeeping, which would be wrong anyway the moment two exports overlap.
  */
 export async function importTransactions(db: AppDb, txs: CanonicalTx[]): Promise<ImportResult> {
-  const { categorize } = await import("../categorize.ts");
+  const { categorize } = await import("../../finance/categorize.ts");
   const now = Math.floor(Date.now() / 1000);
   let inserted = 0;
 

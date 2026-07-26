@@ -16,7 +16,7 @@
 //     holds the seeded categories from 0002. The real data must win over the seed.
 //   • Idempotent by construction: running it twice lands the same rows. It refuses to run when
 //     the object already holds transactions, so a stray second call cannot mix two histories.
-import type { AppDb } from "../lib/db-shim.ts";
+import type { AppDb } from "../lib/platform/db-shim.ts";
 
 /** Tables copied verbatim. `user_secrets` is excluded: those are per-user, and the old
  *  single-user deployment kept its credentials in Worker secrets, not in this table. */

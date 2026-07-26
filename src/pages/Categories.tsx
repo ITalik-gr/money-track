@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { useGetCategoriesQuery, useDeleteCategoryMutation, useLazyGetCategoryUsageQuery } from "../store/api.ts";
-import { CategoryIcon } from "../components/CategoryIcon.tsx";
-import { CategoryModal } from "../components/CategoryModal.tsx";
-import { Select, type SelectOption } from "../components/Select.tsx";
-import { Icon } from "../components/Icon.tsx";
+import { CategoryIcon } from "../components/ui/CategoryIcon.tsx";
+import { CategoryModal } from "../components/planning/CategoryModal.tsx";
+import { Select, type SelectOption } from "../components/ui/Select.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { useT } from "../i18n/index.ts";

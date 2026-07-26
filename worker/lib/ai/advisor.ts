@@ -1,11 +1,11 @@
 // AI-порадник (структурований): рахуємо runway із власних коштів і місячного burn,
 // подаємо разом із профілем ситуації в Haiku → поради-картки. Кешуємо в app_state.
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 import { type AdviceResult, type AiFact, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type ChatTool, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
-import { getState, setState } from "./repo.ts";
-import { getRates, toUAHMinor } from "./finance.ts";
-import { nextChargeUnix, plannedUAH } from "./subscriptions.ts";
-import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels } from "./stats.ts";
+import { getState, setState } from "../finance/repo.ts";
+import { getRates, toUAHMinor } from "../finance/finance.ts";
+import { nextChargeUnix, plannedUAH } from "../finance/subscriptions.ts";
+import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels } from "../finance/stats.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }

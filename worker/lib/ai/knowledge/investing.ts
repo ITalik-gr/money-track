@@ -6,6 +6,8 @@ export const investing: KnowledgeDoc = {
   id: "investing",
   title: "Інвестиції та крипта (база)",
   summary: "Роль інвест-резерву, горизонт і ризик, диверсифікація, DCA, крипта, складний відсоток.",
+  titleEn: "Investing and crypto (basics)",
+  summaryEn: "Role of the investment reserve, horizon and risk, diversification, DCA, crypto, compounding.",
   body: `
 Це загальні принципи, не поради «купуй/продавай конкретний актив». Рішення завжди за користувачем; наголошуй на ризику.
 

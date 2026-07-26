@@ -13,13 +13,13 @@ import {
   useGetPlannedActualsQuery,
   useGetRatesQuery,
 } from "../store/api.ts";
-import { Money } from "../components/Money.tsx";
-import { MerchantLogo } from "../components/MerchantLogo.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { CashflowCalendar } from "../components/CashflowCalendar.tsx";
+import { Money } from "../components/ui/Money.tsx";
+import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { CashflowCalendar } from "../components/stats/CashflowCalendar.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
-import { Select } from "../components/Select.tsx";
+import { Select } from "../components/ui/Select.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
 

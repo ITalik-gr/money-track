@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useT } from "../i18n/index.ts";
-import { useGetCashflowCalendarQuery } from "../store/api.ts";
-import { formatMinor, currencySign } from "../lib/format.ts";
-import { InfoTip } from "./InfoTip.tsx";
-import { Icon } from "./Icon.tsx";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useT } from "../../i18n/index.ts";
+import { useGetCashflowCalendarQuery } from "../../store/api.ts";
+import { formatMinor, currencySign } from "../../lib/format.ts";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { Icon } from "../ui/Icon.tsx";
 
 // Cashflow-календар: місячна сітка очікуваних списань (підписки/розстрочки) по днях +
 // проєкція ліквідної подушки «наперед» → видно провали ліквідності. Дані — /analytics/cashflow-calendar.

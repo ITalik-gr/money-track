@@ -4,9 +4,9 @@
 // spacing and shows progress. Cursor lives in app_state so it survives interruption.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { MonoRateLimit } from "../lib/mono.ts";
-import { getState, setState } from "../lib/repo.ts";
-import { type Cursor, CURSOR_KEY, startBackfill, stepBackfill } from "../lib/backfill.ts";
+import { MonoRateLimit } from "../lib/bank/mono.ts";
+import { getState, setState } from "../lib/finance/repo.ts";
+import { type Cursor, CURSOR_KEY, startBackfill, stepBackfill } from "../lib/bank/backfill.ts";
 
 export const setup = new Hono<{ Bindings: Env }>();
 
@@ -15,7 +15,7 @@ setup.post("/sync-accounts", async (c) => {
   try {
     // Through the registry rather than calling mono directly: the day a second bank exists,
     // this endpoint must not be the place that still knows one bank's name (PLATFORM.md §5).
-    const { getProvider } = await import("../lib/banks/index.ts");
+    const { getProvider } = await import("../lib/bank/providers/index.ts");
     const provider = getProvider("mono")!;
     const res = await provider.syncAccounts!(c.env.DB, c.env.MONO_TOKEN);
     return c.json({ ok: true, ...res });
@@ -31,13 +31,13 @@ setup.post("/register-webhook", async (c) => {
   // Per-user webhook path (PLATFORM.md §5). `USER_ID` is injected by the Durable Object from
   // the header the Worker set; the fallback to the deployment-wide secret keeps this working
   // for the single-user deployment until the owner re-registers.
-  const { webhookToken } = await import("../lib/auth.ts");
+  const { webhookToken } = await import("../lib/platform/auth.ts");
   const segment = c.env.USER_ID
     ? await webhookToken(c.env, c.env.USER_ID)
     : c.env.WEBHOOK_SECRET;
   const url = `${origin}/webhook/${segment}`;
   try {
-    const { getProvider } = await import("../lib/banks/index.ts");
+    const { getProvider } = await import("../lib/bank/providers/index.ts");
     await getProvider("mono")!.registerWebhook!(c.env.MONO_TOKEN, url);
     await setState(c.env.DB, "webhook_url", url);
     return c.json({ ok: true, url });
@@ -49,8 +49,11 @@ setup.post("/register-webhook", async (c) => {
 // Register the Telegram webhook once: points TG at /tg/<TG_SECRET> and sets the
 // secret_token so incoming updates carry X-Telegram-Bot-Api-Secret-Token = TG_SECRET.
 setup.post("/register-telegram", async (c) => {
+  // Owner-only: the bot is ONE global installation, so this button reconfigures a resource that
+  // is not the caller's. Everything else in this file acts on the caller's own bank credentials.
+  if (!c.env.IS_OWNER) return c.json({ error: "owner_only" }, 403);
   if (!c.env.TG_BOT_TOKEN || !c.env.TG_SECRET) return c.json({ error: "TG_BOT_TOKEN / TG_SECRET not set" }, 400);
-  const { setWebhook } = await import("../lib/telegram.ts");
+  const { setWebhook } = await import("../lib/messaging/telegram.ts");
   const origin = new URL(c.req.url).origin;
   const url = `${origin}/tg/${c.env.TG_SECRET}`;
   try {
@@ -82,6 +85,20 @@ setup.post("/backfill/step", async (c) => {
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }
+});
+
+// ROADMAP L5: names the model transliterated before the prompt forbade it («Сільпо» over a
+// `SILPO` statement line) split one merchant's history in two. GET previews, POST applies —
+// a rename across hundreds of rows is not something to fire blind. Deterministic, no AI:
+// the Latin original is already in `raw_json.description`. Details in lib/merchants.ts.
+setup.get("/merchants/translit", async (c) => {
+  const { planTranslitFixes } = await import("../lib/finance/merchants.ts");
+  return c.json({ fixes: await planTranslitFixes(c.env) });
+});
+
+setup.post("/merchants/translit", async (c) => {
+  const { applyTranslitFixes } = await import("../lib/finance/merchants.ts");
+  return c.json({ ok: true, ...(await applyTranslitFixes(c.env)) });
 });
 
 setup.get("/status", async (c) => {

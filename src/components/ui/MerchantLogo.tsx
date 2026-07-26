@@ -1,4 +1,4 @@
-import { matchBrand, BRAND_MARKS } from "../lib/brands.tsx";
+import { matchBrand, BRAND_MARKS } from "../../lib/brands.tsx";
 import { CategoryIcon } from "./CategoryIcon.tsx";
 
 // Плитка операції — локальна, без зовнішніх запитів (приватність). Пріоритет:

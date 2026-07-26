@@ -1,10 +1,10 @@
 // AI-збагачення транзакцій (гібрид). Застосовує результат Haiku до транзакції,
 // вчить merchant_alias по сирому опису (повтори застосуються без AI), проставляє
 // теги (вторинні категорії) і прапорець переказу для kind transfer/withdrawal.
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 import { MODEL_SMART, enrichTransaction, proposeTransferCategory, logUsage } from "./ai.ts";
-import { getState } from "./repo.ts";
-import { relatedSubsHint, matchActiveSubscription } from "./subscriptions.ts";
+import { getState } from "../finance/repo.ts";
+import { relatedSubsHint, matchActiveSubscription } from "../finance/subscriptions.ts";
 
 // Seeded id категорії «Перекази і зняття» (0002). Її діти теж рахуємо через COALESCE(parent_id).
 export const TRANSFER_CAT = 13;

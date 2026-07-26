@@ -1,5 +1,5 @@
-import type { AiUsageBrief } from "../store/api.ts";
-import { useT } from "../i18n/index.ts";
+import type { AiUsageBrief } from "../../store/api.ts";
+import { useT } from "../../i18n/index.ts";
 
 // Приблизна вартість виклику (Haiku 4.5: $1/$5 за млн вх/вих, кеш-читання $0.10/млн).
 function cost(u: AiUsageBrief): number {

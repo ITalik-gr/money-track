@@ -2,10 +2,10 @@
 // full category list + few-shot) is marked with cache_control so we don't pay for it
 // on every call. NOTE (§6.7): Haiku's min cacheable prefix is 4096 tokens — the
 // category taxonomy + examples must stay large enough or the cache silently no-ops.
-import type { Env } from "../env.ts";
-import { getState, setState } from "./repo.ts";
+import type { Env } from "../../env.ts";
+import { getState, setState } from "../finance/repo.ts";
 import { buildKnowledgeCorpus } from "./knowledge/index.ts";
-import { demoAiGate, isDemoEnv } from "./demo.ts";
+import { demoAiGate, demoRecordSpend, isDemoEnv } from "../platform/demo.ts";
 
 // Гібрид (рішення користувача 2026-07-06): масові/фонові задачі — дешевий Haiku;
 // розумні user-facing (чат по операції, поради, розуміння підписок, рев'ю) — Sonnet 5.
@@ -41,6 +41,31 @@ export async function getTaskModel(env: Env, task: AiTask): Promise<string> {
   const saved = await getState(env.DB, `ai_model_${task}`);
   if (saved && MODEL_BY_TOKEN[saved]) return MODEL_BY_TOKEN[saved];
   return AI_TASK_DEFAULTS[task];
+}
+
+// Demo request clamp — ONE choke point, applied inside the three functions that actually POST
+// to Anthropic (2026-07-26).
+//
+// WHY NOT AT THE CALL SITES: `getTaskModel` already forced Haiku for demo, and three call sites
+// still reached Sonnet because they pass a model constant directly — enrich with a user note
+// (`ai.ts` enrichTransaction), transfer-category review (`enrich.ts`), and `/planned/ai-detect`.
+// All three are reachable by a demo visitor (only credentials/setup/import/admin are blocked for
+// writes). Per the project rule "перевірка > інструкція": a guard that every future call site has
+// to remember is not a guard. Clamping where the fetch happens cannot be forgotten.
+//
+// Three things are clamped: the model (Haiku only — a visitor must never point our billing at
+// Opus/Sonnet), the output ceiling, and server-side tools (`web_search` is billed per search on
+// top of tokens, and a sandbox has no business browsing on our key).
+const DEMO_MAX_OUTPUT_TOKENS = 900;
+function demoClamp(
+  env: Env,
+  req: { model: string; maxTokens: number; tools?: unknown[] },
+): { model: string; maxTokens: number; tools?: unknown[] } {
+  if (!isDemoEnv(env)) return req;
+  // Client tools are `{name, description, input_schema}`; server tools carry a `type`
+  // (`web_search_*`, `web_fetch_*`). Dropping by shape keeps this correct for tools added later.
+  const tools = req.tools?.filter((t) => typeof (t as { type?: unknown })?.type !== "string");
+  return { model: MODEL_FAST, maxTokens: Math.min(req.maxTokens, DEMO_MAX_OUTPUT_TOKENS), tools };
 }
 
 // Sonnet/Opus вмикають adaptive-thinking, коли поле thinking відсутнє — для наших легких
@@ -156,6 +181,10 @@ async function recordUsage(env: Env, model: string, u: AnthropicUsage): Promise<
   try {
     const now = Math.floor(Date.now() / 1000);
     const cost = callCostUsd(model, u, now);
+    // Demo sandboxes also book the cost against the shared budget (lib/demo.ts). Done here rather
+    // than at the call sites for the same reason as `demoClamp`: this is the one place every
+    // Anthropic response passes through, so it cannot be forgotten by a future feature.
+    await demoRecordSpend(env, cost);
     const raw = await getState(env.DB, "ai_usage");
     const store: UsageStore = raw
       ? (JSON.parse(raw) as UsageStore)
@@ -206,10 +235,11 @@ async function callHaiku(
   env: Env,
   system: AnthropicContentBlock[],
   userContent: unknown[],
-  maxTokens = 1024,
-  model: string = MODEL_FAST,
+  maxTokensIn = 1024,
+  modelIn: string = MODEL_FAST,
 ): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
   await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
+  const { model, maxTokens } = demoClamp(env, { model: modelIn, maxTokens: maxTokensIn });
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -245,10 +275,11 @@ async function callHaikuMessages(
   env: Env,
   system: AnthropicContentBlock[],
   messages: ChatMsg[],
-  maxTokens = 700,
-  model: string = MODEL_FAST,
+  maxTokensIn = 700,
+  modelIn: string = MODEL_FAST,
 ): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
   await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
+  const { model, maxTokens } = demoClamp(env, { model: modelIn, maxTokens: maxTokensIn });
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -278,11 +309,12 @@ async function callMessagesRaw(
   env: Env,
   system: AnthropicContentBlock[],
   messages: RawMsg[],
-  maxTokens: number,
-  model: string,
-  tools?: unknown[], // client-side ChatTool[] та/або серверні блоки (web_search)
+  maxTokensIn: number,
+  modelIn: string,
+  toolsIn?: unknown[], // client-side ChatTool[] та/або серверні блоки (web_search)
 ): Promise<{ content: RawBlock[]; usage: AnthropicUsage; stop: string | null }> {
   await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
+  const { model, maxTokens, tools } = demoClamp(env, { model: modelIn, maxTokens: maxTokensIn, tools: toolsIn });
   const res = await fetch(API, {
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -350,16 +382,22 @@ export async function chatAdvice(
   opts?: { tools?: ChatTool[]; executor?: ToolExecutor },
 ): Promise<{ text: string; usage: AnthropicUsage }> {
   const today = new Date().toISOString().slice(0, 10);
+  // Demo: no server-side web_search (billed per search on top of tokens) and a shorter tool loop.
+  // The prompt must match what is actually sent — describing a tool the request does not carry
+  // makes the model try to call it and waste a turn. `demoClamp` still strips it as a backstop.
+  const demo = isDemoEnv(env);
   const toolNote = opts?.tools?.length
     ? `Сьогодні ${today}. У тебе Є ІНСТРУМЕНТИ (tools) для запитів до ПОВНОЇ бази операцій користувача (не лише контекст вище): ` +
       "query_spend (сума витрат/доходу за період з фільтром по категорії/мерчанту й групуванням), find_transactions (знайти конкретні " +
       "операції), list_categories (перелік категорій). ВИКОРИСТОВУЙ їх, коли фіксованого контексту не вистачає — напр. питання про " +
       "конкретний період/категорію/мерчанта в минулому («скільки на таксі влітку торік», «мої найбільші покупки в грудні»). Сам обчислюй " +
       "дати періодів (YYYY-MM-DD) відносно сьогодні. НЕ вигадуй числа — якщо треба точні дані поза контекстом, виклич інструмент. " +
-      "Операції з інструментів теж можна цитувати як [tx:ID|підпис]. Ще Є web_search — пошук в " +
-      "офіційних джерелах (курс НБУ, тарифи, податки, ціни) для АКТУАЛЬНИХ фактів про світ, яких нема " +
-      "в тренувальних даних; використовуй його ЛИШЕ для зовнішніх фактів (не для особистих операцій " +
-      "користувача) і посилайся на джерело. "
+      "Операції з інструментів теж можна цитувати як [tx:ID|підпис]. " +
+      (demo
+        ? ""
+        : "Ще Є web_search — пошук в офіційних джерелах (курс НБУ, тарифи, податки, ціни) для АКТУАЛЬНИХ фактів " +
+          "про світ, яких нема в тренувальних даних; використовуй його ЛИШЕ для зовнішніх фактів (не для особистих " +
+          "операцій користувача) і посилайся на джерело. ")
     : "";
   // §A5: стабільний блок (корпус знань + персона/правила) з cache_control ttl:1h — байт-ідентичний
   // між викликами й користувачами, тож читається з кешу ≈0.1×. Динамічний контекст — окремим блоком
@@ -408,8 +446,11 @@ export async function chatAdvice(
   // §AGENT: якщо передано інструменти — ведемо агентний діалог; інакше звичайний виклик.
   if (opts?.tools?.length && opts.executor) {
     // §A3: додаємо серверний web_search (варіант за моделлю) — актуальні курси/тарифи/ціни.
-    const serverTools = [webSearchTool(model)];
-    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model, 6, serverTools);
+    const serverTools = demo ? [] : [webSearchTool(model)];
+    // Each turn is a separate billed request AND a separate `demoAiGate` hit, so a demo sandbox
+    // gets a shorter loop: 6 turns of one question could eat half its whole session allowance.
+    const maxTurns = demo ? 3 : 6;
+    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model, maxTurns, serverTools);
     return { text: text.trim(), usage };
   }
   // §R6/§CTX: детальні відповіді менеджера — більший ліміт виводу.

@@ -3,9 +3,9 @@
 // (рахунок × місячне вікно), по одному запиту. Курсор у app_state — переживає
 // перерву. Крок викликається і клієнтом (миттєвий фідбек), і хвилинним кроном
 // (щоб довести до кінця навіть із закритою вкладкою).
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 import { getStatement, MonoRateLimit } from "./mono.ts";
-import { getState, setState, upsertMonoTx } from "./repo.ts";
+import { getState, setState, upsertMonoTx } from "../finance/repo.ts";
 
 export const CURSOR_KEY = "backfill_cursor";
 const BACKFILL_DAYS = 90;
@@ -65,7 +65,7 @@ export async function stepBackfill(env: Env): Promise<StepResult | null> {
   // Наприкінці — раз позначити внутрішні перекази серед підтягнутого.
   if (done) {
     try {
-      const { detectTransfers } = await import("./transfers.ts");
+      const { detectTransfers } = await import("../finance/transfers.ts");
       await detectTransfers(env);
     } catch {
       /* best-effort */

@@ -2,13 +2,13 @@
 // Мета — дістатись будь-куди без навігації мишею. Сторінки й дії статичні (фільтруються
 // на клієнті), дані з бази — через `/search` (дебаунс, бо панель смикає його на кожен ввід).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useT, type TranslationKey } from "../i18n/index.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useT, type TranslationKey } from "../../i18n/index.ts";
 import { useNavigate } from "react-router-dom";
-import { useLazySearchQuery } from "../store/api.ts";
-import type { SearchResults } from "../store/api.ts";
-import { Icon } from "./Icon.tsx";
-import { formatMinor } from "../lib/format.ts";
+import { useLazySearchQuery } from "../../store/api.ts";
+import type { SearchResults } from "../../store/api.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { formatMinor } from "../../lib/format.ts";
 
 interface Item {
   key: string;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChatAdviceMutation, useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
 import { renderMarkdown } from "../lib/markdown.tsx";
-import { Icon } from "../components/Icon.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
 import { errText } from "../lib/errors.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { getLocale } from "../i18n/locale.ts";

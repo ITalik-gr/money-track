@@ -6,7 +6,7 @@
 // stays in their own DO, and the door simply stops opening.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { findUserById, inviteUser, listUsers, setUserStatus, type UserStatus } from "../lib/directory.ts";
+import { findUserById, inviteUser, listUsers, setUserStatus, type UserStatus } from "../lib/platform/directory.ts";
 
 export const admin = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 

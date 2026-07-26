@@ -88,7 +88,7 @@ This is the part I'd actually want reviewed. The project was built with heavy AI
 central engineering problem was not *generating* code — it was **stopping the AI (and myself) from
 quietly making the numbers wrong.** The rule throughout: *a check beats an instruction.*
 
-- **One source of truth for every number.** All money math lives in `worker/lib/stats.ts`
+- **One source of truth for every number.** All money math lives in `worker/lib/finance/stats.ts`
   (`SPEND_WHERE`, `EFF_AMOUNT`, the ₴ roll-up, importance, recurring vs one-off). The AI advisor and
   chat consume the *same* `collectFinanceSnapshot()` the UI does — so the chat's figures always
   equal the dashboard's. The most expensive bugs in this project all came from a *second* place

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { useT } from "../i18n/index.ts";
-import { Icon } from "./Icon.tsx";
-import { InfoTip } from "./InfoTip.tsx";
-import { ErrorNote } from "./ErrorNote.tsx";
+import { useT } from "../../i18n/index.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import {
   useGetKnowledgeQuery,
   useLazyGetKnowledgeDocQuery,
@@ -10,9 +10,9 @@ import {
   useSaveKnowledgeDocMutation,
   useDeleteKnowledgeDocMutation,
   type KnowledgeMeta,
-} from "../store/api.ts";
-import { errText } from "../lib/errors.ts";
-import { toast } from "../lib/toast.ts";
+} from "../../store/api.ts";
+import { errText } from "../../lib/errors.ts";
+import { toast } from "../../lib/toast.ts";
 
 // Корпус знань (§A5): те, що AI-чат читає як стабільний контекст ПОВЕРХ даних користувача.
 // Два шари: заводські доки (у коді) і власні нотатки/заміни (таблиця `knowledge_docs`).

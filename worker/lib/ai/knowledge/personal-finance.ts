@@ -6,6 +6,8 @@ export const personalFinance: KnowledgeDoc = {
   id: "personal-finance",
   title: "Принципи особистих фінансів",
   summary: "Подушка, runway, пріоритети грошей, погашення боргу, норма заощаджень, sinking funds.",
+  titleEn: "Personal finance principles",
+  summaryEn: "Emergency fund, runway, money priorities, debt payoff, savings rate, sinking funds.",
   body: `
 ### Подушка безпеки (emergency fund)
 - Ліквідний резерв на непередбачене (втрата доходу, ремонт, здоров'я). Тримати ЛІКВІДНО (готівка/картки/банки), не в інвестиціях чи криптовалюті.

@@ -6,6 +6,8 @@ export const appMethodology: KnowledgeDoc = {
   id: "app-methodology",
   title: "Як Money Track рахує цифри",
   summary: "Подушка/борг/інвест, burn і рівні категорій, runway, вагомість, спліт, повернення, факти, періоди.",
+  titleEn: "How Money Track computes its numbers",
+  summaryEn: "Cushion/debt/investments, burn and category levels, runway, importance, splits, refunds, facts, periods.",
   // 🔒 locked: цей документ описує КАНОН розрахунків. Якщо дозволити його переписати, AI почне
   // пояснювати цифри не так, як їх рахує код — рівно той розсинхрон «UI ≠ AI», який проєкт
   // тримає інваріантом. Оновлювати його можна ЛИШЕ тут, разом зі зміною самих розрахунків.

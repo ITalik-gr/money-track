@@ -1,6 +1,6 @@
-import { useGetSummaryQuery } from "../store/api.ts";
-import { Money } from "./Money.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetSummaryQuery } from "../../store/api.ts";
+import { Money } from "../ui/Money.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // Кредитний ліміт чорної (§5): власне / борг — ніколи не зливаємо. Стиль проекту.
 export function CreditBanner() {

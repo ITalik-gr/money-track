@@ -9,15 +9,15 @@
 //    й не має плодити ту саму подію. Ключ містить «період актуальності» (місяць/дату),
 //    щоб подія все ж повторилась наступного разу, коли це справді нова новина.
 //  • Ліміт на прохід (`MAX_PER_RUN`) — стрічка не має перетворюватись на спам.
-import type { Env } from "../env.ts";
-import { getRates } from "./finance.ts";
-import { nextChargeUnix, plannedUAH, plannedActuals } from "./subscriptions.ts";
+import type { Env } from "../../env.ts";
+import { getRates } from "../finance/finance.ts";
+import { nextChargeUnix, plannedUAH, plannedActuals } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
   categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom,
-} from "./stats.ts";
-import { getState, setState } from "./repo.ts";
-import { renderNotif, type NotifTemplateKey, type NotifParams, type NotifLocale } from "../../shared/notif-i18n.ts";
+} from "../finance/stats.ts";
+import { getState, setState } from "../finance/repo.ts";
+import { renderNotif, type NotifTemplateKey, type NotifParams, type NotifLocale } from "../../../shared/notif-i18n.ts";
 
 export type NotifKind =
   | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
@@ -421,7 +421,7 @@ async function draftPriceUps(env: Env): Promise<Draft[]> {
 
 /** Провал ліквідності: подушка мінус усі планові списання йде в мінус у вікні 45 днів. */
 async function draftLiquidity(env: Env, now: number): Promise<Draft[]> {
-  const { fundsBreakdown } = await import("./advisor.ts");
+  const { fundsBreakdown } = await import("../ai/advisor.ts");
   const [funds, rates, plans] = await Promise.all([
     fundsBreakdown(env),
     getRates(env.DB),
@@ -725,8 +725,8 @@ async function draftAiObservations(env: Env, now: number): Promise<Draft[]> {
   ).bind(`ai:${day}:%`).first<{ x: number }>();
   if (already) return [];
 
-  const { collectFinanceSnapshot } = await import("./advisor.ts");
-  const { generateNotifyObservations } = await import("./ai.ts");
+  const { collectFinanceSnapshot } = await import("../ai/advisor.ts");
+  const { generateNotifyObservations } = await import("../ai/ai.ts");
 
   // ЄДИНЕ джерело контексту — той самий знімок, що бачать Порадник і Чат (§Інваріанти).
   // Не будувати збіднений контекст вручну: саме це колись дало «домислену подушку $780».
@@ -769,6 +769,11 @@ const tgEsc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").repl
 export async function pushPendingToTelegram(env: Env): Promise<{ sent: number; reason?: string }> {
   const token = env.TG_BOT_TOKEN, chatId = env.TG_CHAT_ID;
   if (!token || !chatId) return { sent: 0, reason: "TG not configured" };
+  // ⚠️ `TG_CHAT_ID` is ONE global chat — the owner's. Every user's Durable Object runs this same
+  // cron branch, so without this gate an invited friend's notifications ("ти витратив 3 400 ₴ на
+  // Продукти") were delivered to the OWNER's Telegram: their data, someone else's phone.
+  // Per-user bots are a separate feature (PLATFORM.md §10); until then, owner only.
+  if (!env.IS_OWNER) return { sent: 0, reason: "TG push is owner-only (single global chat)" };
 
   const rows = await env.DB.prepare(
     `SELECT id, kind, title, body, notif_key, notif_params, severity FROM notifications

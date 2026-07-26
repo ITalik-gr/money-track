@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { useT } from "../i18n/index.ts";
-import { Select } from "./Select.tsx";
-import { Icon } from "./Icon.tsx";
-import { formatMinor, currencySign } from "../lib/format.ts";
-import { toast } from "../lib/toast.ts";
-import { useGetTxSplitsQuery, useSetTxSplitsMutation } from "../store/api.ts";
-import type { Category } from "../../shared/types.ts";
+import { useT } from "../../i18n/index.ts";
+import { Select } from "../ui/Select.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { formatMinor, currencySign } from "../../lib/format.ts";
+import { toast } from "../../lib/toast.ts";
+import { useGetTxSplitsQuery, useSetTxSplitsMutation } from "../../store/api.ts";
+import type { Category } from "../../../shared/types.ts";
 
 // §SPLIT: поділ витрати на кілька категорій (напр. супермаркет: продукти + побутхімія).
 // Суми в ГРН (позитивні), сходяться до |суми операції|; зберігаємо як від'ємні копійки.

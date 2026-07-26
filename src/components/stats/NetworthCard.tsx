@@ -3,13 +3,13 @@
 // подушка, скільки інвестиції, скільки з'їдає борг. Саме розклад відповідає на «чому нетворт
 // не росте» — часто активи ростуть, а борг росте швидше.
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useT } from "../i18n/index.ts";
-import { useGetNetworthQuery } from "../store/api.ts";
-import { InfoTip } from "./InfoTip.tsx";
-import { ErrorNote } from "./ErrorNote.tsx";
-import { CHART_ANIM } from "../lib/motion.ts";
-import { monthShort } from "../lib/format.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useT } from "../../i18n/index.ts";
+import { useGetNetworthQuery } from "../../store/api.ts";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
+import { CHART_ANIM } from "../../lib/motion.ts";
+import { monthShort } from "../../lib/format.ts";
 
 const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
 const minor = (v: number) => fmt0.format(Math.round(v / 100));

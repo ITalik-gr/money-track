@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useT, translate } from "../i18n/index.ts";
-import { Icon } from "./Icon.tsx";
-import { InfoTip } from "./InfoTip.tsx";
-import { Select } from "./Select.tsx";
-import { formatMinor } from "../lib/format.ts";
-import { toast } from "../lib/toast.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useT, translate } from "../../i18n/index.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { Select } from "../ui/Select.tsx";
+import { formatMinor } from "../../lib/format.ts";
+import { toast } from "../../lib/toast.ts";
 import {
   useGetFactsQuery, useAddFactMutation, useConfirmFactMutation, useDeleteFactMutation,
   useGetCategoriesQuery, type Fact,
-} from "../store/api.ts";
+} from "../../store/api.ts";
 
 // §A1 (AI 4.0): шар фактів про світ. Користувач пише факт («метро подорожчало 8→30 ₴»),
 // система його пам'ятає, пояснює й — ЯКЩО підтверджено — рахує з ним (burn/runway).

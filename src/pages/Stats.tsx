@@ -3,26 +3,27 @@ import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { useSearchParams, Link } from "react-router-dom";
 import { useGetCurrenciesQuery, useGetOverviewQuery, useGetCategoryDrillQuery, useGetSliceDrillQuery, useGetTransfersStatusQuery, useGetCompareQuery, useGetPatternsQuery, useGetPeriodModeQuery, useSetPeriodModeMutation, useGetSparkQuery } from "../store/api.ts";
-import { Sparkline } from "../components/Sparkline.tsx";
+import { Sparkline } from "../components/ui/Sparkline.tsx";
 import type { Overview, DrillTx } from "../store/api.ts";
-import { TransferReviewModal } from "../components/TransferReviewModal.tsx";
+import { TransferReviewModal } from "../components/transactions/TransferReviewModal.tsx";
 import { currencySign, formatMinor, formatDate, monthShort } from "../lib/format.ts";
-import { CashflowChart } from "../components/CashflowChart.tsx";
-import { CumulativeChart } from "../components/CumulativeChart.tsx";
-import { IncomeBreakdown } from "../components/IncomeBreakdown.tsx";
-import { MonthlyHistory } from "../components/MonthlyHistory.tsx";
-import { SpendDonut } from "../components/SpendDonut.tsx";
-import { StatsSkeleton, SkeletonRows } from "../components/Skeleton.tsx";
-import { ReceiptItems } from "../components/ReceiptItems.tsx";
-import { PriceDrift } from "../components/PriceDrift.tsx";
-import { AiInsightCard } from "../components/AiInsightCard.tsx";
-import { MerchantLogo } from "../components/MerchantLogo.tsx";
-import { TxItem } from "../components/TxItem.tsx";
-import { HoverTip } from "../components/HoverTip.tsx";
-import { InfoTip } from "../components/InfoTip.tsx";
-import { Select } from "../components/Select.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { ErrorNote } from "../components/ErrorNote.tsx";
+import { CashflowChart } from "../components/stats/CashflowChart.tsx";
+import { CumulativeChart } from "../components/stats/CumulativeChart.tsx";
+import { IncomeBreakdown } from "../components/stats/IncomeBreakdown.tsx";
+import { MonthlyHistory } from "../components/stats/MonthlyHistory.tsx";
+import { SpendDonut } from "../components/stats/SpendDonut.tsx";
+import { StatsSkeleton, SkeletonRows } from "../components/ui/Skeleton.tsx";
+import { ReceiptItems } from "../components/stats/ReceiptItems.tsx";
+import { PriceDrift } from "../components/stats/PriceDrift.tsx";
+import { AiInsightCard } from "../components/advisor/AiInsightCard.tsx";
+import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
+import { EmptyCard } from "../components/ui/EmptyCard.tsx";
+import { TxItem } from "../components/transactions/TxItem.tsx";
+import { HoverTip } from "../components/ui/HoverTip.tsx";
+import { InfoTip } from "../components/ui/InfoTip.tsx";
+import { Select } from "../components/ui/Select.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { cardKind, cardKindLabel, cardLast4 } from "../lib/merchant.ts";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../lib/importance.ts";
 
@@ -543,7 +544,17 @@ function EventsBlock({ data, from, to, currency, sign }: {
 }) {
   const t = useT();
   const [open, setOpen] = useState<number | null>(null);
-  if (!data.byEvent || data.byEvent.length === 0) return null;
+  // ROADMAP L3: this block shares a `.stats-2col` row with the merchants block, so returning
+  // null left the whole right half of the tab blank — read as broken layout, not as "no groups".
+  if (!data.byEvent || data.byEvent.length === 0) {
+    return (
+      <section>
+        <div className="section-head"><h2>{t("stats.events.title")}</h2><span className="label">{t("stats.events.sub")}</span></div>
+        <EmptyCard icon="folder" title={t("empty.events.title")} hint={t("empty.events.hint")}
+          to="/events" action={t("empty.events.action")} />
+      </section>
+    );
+  }
   const max = Math.max(...data.byEvent.map((e) => e.spent), 1);
   return (
     <section>

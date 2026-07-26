@@ -1,5 +1,5 @@
 import { toUAHMinor, type Rates } from "./finance.ts";
-import type { AppDb } from "./db-shim.ts";
+import type { AppDb } from "../platform/db-shim.ts";
 
 // Детерміністичне співставлення операцій із оголошеними підписками (planned_payments).
 // Мета: якщо є активна підписка (напр. «Apple» $1/міс у категорії Підписки), то нове

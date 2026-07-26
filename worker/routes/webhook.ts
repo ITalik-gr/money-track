@@ -7,8 +7,8 @@
 // since the secret is per-user and this object holds no notion of "the" secret.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import type { MonoStatementItem } from "../lib/mono.ts";
-import { upsertMonoTx } from "../lib/repo.ts";
+import type { MonoStatementItem } from "../lib/bank/mono.ts";
+import { upsertMonoTx } from "../lib/finance/repo.ts";
 
 interface WebhookEvent {
   type: string;
@@ -49,7 +49,7 @@ webhook.post("/:token", async (c) => {
 
   // Pair this event with its counterpart if it's an internal card-to-card transfer.
   try {
-    const { detectTransfers } = await import("../lib/transfers.ts");
+    const { detectTransfers } = await import("../lib/finance/transfers.ts");
     await detectTransfers(c.env);
   } catch {
     /* transfer detection is best-effort */
@@ -64,7 +64,7 @@ webhook.post("/:token", async (c) => {
       // Enrich holds too — вони тепер рахуються як витрата (stats.ts), тож мають мати
       // категорію одразу, а не лише після сеттлменту. Опис у hold-події вже повний.
       if (row && row.category_id == null && !row.ai_enriched) {
-        const { enrichOne } = await import("../lib/enrich.ts");
+        const { enrichOne } = await import("../lib/ai/enrich.ts");
         await enrichOne(c.env, statementItem.id);
       }
     }
@@ -78,7 +78,7 @@ webhook.post("/:token", async (c) => {
   c.executionCtx.waitUntil(
     (async () => {
       try {
-        const { maybeAlertTransaction } = await import("../lib/alert.ts");
+        const { maybeAlertTransaction } = await import("../lib/messaging/alert.ts");
         await maybeAlertTransaction(c.env, statementItem.id, origin);
       } catch {
         /* alert is best-effort */

@@ -2,8 +2,8 @@
 // показала б порожнечу без пояснення (Статистика, Порадник, дрили). Текст помилки —
 // завжди через `errText()`, ніколи `String(e)` (див. `lib/errors.ts`).
 import { Icon } from "./Icon.tsx";
-import { errText } from "../lib/errors.ts";
-import { useT } from "../i18n/index.ts";
+import { errText } from "../../lib/errors.ts";
+import { useT } from "../../i18n/index.ts";
 
 interface Props {
   /** Помилка з RTK Query (`error` з хука) або будь-що з catch. */

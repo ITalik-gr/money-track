@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
-import { formatDate } from "../lib/format.ts";
-import { Money } from "./Money.tsx";
-import { MerchantLogo } from "./MerchantLogo.tsx";
-import { Icon } from "./Icon.tsx";
-import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
-import { useT } from "../i18n/index.ts";
+import { formatDate } from "../../lib/format.ts";
+import { Money } from "../ui/Money.tsx";
+import { MerchantLogo } from "../ui/MerchantLogo.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { isNeutralTransfer, transferRoute } from "../../lib/transfer.ts";
+import { useT } from "../../i18n/index.ts";
 
 // Спільний рядок транзакції (роадмап §1 «TxRow»): один вигляд для списку операцій і для
 // дрилів Статистики. `compact` — менша висота/шрифт для вкладених дрилів. Приймає широку

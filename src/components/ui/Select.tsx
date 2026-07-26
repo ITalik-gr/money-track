@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CategoryIcon } from "./CategoryIcon.tsx";
-import { useT } from "../i18n/index.ts";
+import { useT } from "../../i18n/index.ts";
 
 export interface SelectOption {
   value: string | number;

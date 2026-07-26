@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { subscribe, dismiss, type ToastItem } from "../lib/toast.ts";
+import { subscribe, dismiss, type ToastItem } from "../../lib/toast.ts";
 import { Icon } from "./Icon.tsx";
-import { useT } from "../i18n/index.ts";
+import { useT } from "../../i18n/index.ts";
 
 // Стек toast-ів справа зверху. Підписується на модульний store (lib/toast).
 export function Toaster() {

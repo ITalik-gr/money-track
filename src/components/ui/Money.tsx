@@ -1,4 +1,4 @@
-import { currencySign, formatMinor } from "../lib/format.ts";
+import { currencySign, formatMinor } from "../../lib/format.ts";
 
 interface Props {
   minor: number;

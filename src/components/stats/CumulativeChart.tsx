@@ -1,7 +1,7 @@
 import { AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { CHART_ANIM } from "../lib/motion.ts";
-import { useT } from "../i18n/index.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { CHART_ANIM } from "../../lib/motion.ts";
+import { useT } from "../../i18n/index.ts";
 
 // §1: кумулятивний потік (running balance) — накопичена чиста різниця (надходження − витрати)
 // по днях періоду. Показує траєкторію: пішов період у плюс чи в мінус і коли.

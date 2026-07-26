@@ -2,15 +2,15 @@
 // контекст (ті самі визначення, що й Статистика/UI), порівнює з тим самим попереднім
 // періодом, тягне аномалії (подорожчання підписок, викиди) і описи операцій (user_note),
 // кличе Sonnet 5, зберігає структурований репорт у ai_reports. Ідемпотентно по періоду.
-import type { Env } from "../env.ts";
-import { getRates } from "./finance.ts";
+import type { Env } from "../../env.ts";
+import { getRates } from "../finance/finance.ts";
 import { fundsBreakdown } from "./advisor.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum,
   lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit,
-} from "./stats.ts";
-import { plannedActuals } from "./subscriptions.ts";
-import { getState } from "./repo.ts";
+} from "../finance/stats.ts";
+import { plannedActuals } from "../finance/subscriptions.ts";
+import { getState } from "../finance/repo.ts";
 import { generateFinancialReport, logUsage, getTaskModel, callCostUsd } from "./ai.ts";
 
 export type ReportType = "week" | "month";

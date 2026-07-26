@@ -1,8 +1,8 @@
-import { useGetUpcomingSubsQuery } from "../store/api.ts";
-import { formatMinor } from "../lib/format.ts";
-import { HoverTip } from "./HoverTip.tsx";
-import { useT } from "../i18n/index.ts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useGetUpcomingSubsQuery } from "../../store/api.ts";
+import { formatMinor } from "../../lib/format.ts";
+import { HoverTip } from "../ui/HoverTip.tsx";
+import { useT } from "../../i18n/index.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
 
 // §Беклог: календар майбутніх списань — сітка на ~5 тижнів наперед, дні з підписками
 // підсвічені сумою. Дає побачити «важкі» дні місяця й вплив на кешфлоу.

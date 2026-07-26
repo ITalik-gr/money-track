@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useCreateEventMutation } from "../store/api.ts";
-import { useT, type TranslationKey } from "../i18n/index.ts";
-import { Select } from "./Select.tsx";
+import { useCreateEventMutation } from "../../store/api.ts";
+import { useT, type TranslationKey } from "../../i18n/index.ts";
+import { Select } from "../ui/Select.tsx";
 
 // Типи груп + типовий колір. Група = будь-що: подорож, проєкт, ремонт, місяць.
 export const GROUP_KINDS: { value: string; labelKey: TranslationKey; color: string }[] = [

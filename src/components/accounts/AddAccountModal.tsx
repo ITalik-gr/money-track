@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { useAddManualAccountMutation } from "../store/api.ts";
-import { Select } from "./Select.tsx";
-import { toast } from "../lib/toast.ts";
-import { errText } from "../lib/errors.ts";
-import { useT, type TranslationKey } from "../i18n/index.ts";
+import { useAddManualAccountMutation } from "../../store/api.ts";
+import { Select } from "../ui/Select.tsx";
+import { toast } from "../../lib/toast.ts";
+import { errText } from "../../lib/errors.ts";
+import { useT, type TranslationKey } from "../../i18n/index.ts";
 
 const CURRENCIES = [
   { value: 980, label: "₴ UAH" },

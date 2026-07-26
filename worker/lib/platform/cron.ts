@@ -12,13 +12,13 @@
 //     minute just to discover there is nothing to do.
 //
 // Rates are fetched once for everybody (see migrations-directory/0002_shared_state.sql).
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 
 const RATES_KEY = "rates";
 
 /** Fetches monobank's public rates and stores them where every user's object can read them. */
 export async function refreshSharedRates(env: Env): Promise<number> {
-  const { getCurrencyRates } = await import("./mono.ts");
+  const { getCurrencyRates } = await import("../bank/mono.ts");
   const rates = await getCurrencyRates();
   const map: Record<string, number> = {};
   for (const r of rates) {

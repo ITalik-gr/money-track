@@ -10,9 +10,9 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { formatMinor, monthShort } from "../lib/format.ts";
 import { renderRich } from "../lib/citations.tsx";
-import { CashflowChart } from "../components/CashflowChart.tsx";
-import { InfoTip } from "../components/InfoTip.tsx";
-import { Icon } from "../components/Icon.tsx";
+import { CashflowChart } from "../components/stats/CashflowChart.tsx";
+import { InfoTip } from "../components/ui/InfoTip.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 
 const rDate = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });

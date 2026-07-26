@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
-import { useGetSummaryQuery } from "../store/api.ts";
-import { Money } from "./Money.tsx";
-import { Icon } from "./Icon.tsx";
-import { formatMinor, currencySign } from "../lib/format.ts";
-import { useCountUp } from "../lib/useCountUp.ts";
-import { useT } from "../i18n/index.ts";
+import { useGetSummaryQuery } from "../../store/api.ts";
+import { Money } from "../ui/Money.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { formatMinor, currencySign } from "../../lib/format.ts";
+import { useCountUp } from "../../lib/useCountUp.ts";
+import { useT } from "../../i18n/index.ts";
 
 // Власні кошти великою sans-цифрою (гібрид, DESIGN.md §2) + швидкі дії (DeliFin R1).
 export function BalanceCard() {

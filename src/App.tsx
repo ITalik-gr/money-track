@@ -1,5 +1,5 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import { Layout } from "./components/Layout.tsx";
+import { Layout } from "./components/layout/Layout.tsx";
 import { Dashboard } from "./pages/Dashboard.tsx";
 import { Transactions } from "./pages/Transactions.tsx";
 import { TxDetail } from "./pages/TxDetail.tsx";

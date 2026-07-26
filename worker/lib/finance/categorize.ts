@@ -2,7 +2,7 @@
 // Returns the resolved category and a human display name when an alias overrides it.
 
 import { matchActiveSubscription } from "./subscriptions.ts";
-import type { AppDb } from "./db-shim.ts";
+import type { AppDb } from "../platform/db-shim.ts";
 
 export interface CategorizeInput {
   mcc: number | null;

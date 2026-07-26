@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useT } from "../i18n/index.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
-import { Icon } from "../components/Icon.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
 import {
   useBackfillStartMutation,
   useBackfillStepMutation,
@@ -14,6 +14,9 @@ import {
   useGetAiModelsQuery,
   useSetAiModelMutation,
   useGetSetupStatusQuery,
+  useGetTranslitFixesQuery,
+  useApplyTranslitFixesMutation,
+  useGetMeQuery,
   useLogoutMutation,
   useRefreshRatesMutation,
   useRegisterWebhookMutation,
@@ -23,8 +26,8 @@ import {
   useSyncAccountsMutation,
 } from "../store/api.ts";
 import type { AiTask, AiModelToken } from "../store/api.ts";
-import { CredentialsCard } from "../components/CredentialsCard.tsx";
-import { CsvImportCard } from "../components/CsvImportCard.tsx";
+import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
+import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
 
 // Крок бекфілу раз на 60с (ліміт моно 1/60с), клієнт веде таймінг і показує прогрес (§5).
 const STEP_INTERVAL_MS = 60_000;
@@ -139,9 +142,13 @@ export function Setup() {
               {t("setup.applySubCats")}
             </button>
           </div>
+          <TranslitFixes />
         </div>
 
-        <div className="card set-card">
+        {/* Full width so the half-width cards stay an even count — an odd one leaves a blank
+            half, the same defect ROADMAP L3 closed elsewhere. Telegram is the natural choice:
+            it is a connectivity section, like the keys card above it. */}
+        <div className="card set-card set-full">
           <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
           <p className="set-card-sub">{t("setup.telegramSub")}</p>
           <div className="stack">
@@ -185,6 +192,56 @@ export function Setup() {
         <button className="btn ghost" onClick={() => logout()}>{t("setup.logout")}</button>
       </div>
     </>
+  );
+}
+
+// ROADMAP L5: merchants the model transliterated before the prompt fix («Сільпо» over a `SILPO`
+// statement line) split one shop's history in two. Preview first, apply on demand — the pass
+// renames every matching transaction, and a bulk rename shown only as a result is a bulk rename
+// nobody can check. Loads lazily: most accounts have nothing to fix, and the scan reads all rows.
+function TranslitFixes() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const { data, isFetching } = useGetTranslitFixesQuery(undefined, { skip: !open });
+  const [apply, applyState] = useApplyTranslitFixesMutation();
+  const fixes = data?.fixes ?? [];
+
+  if (!open) {
+    return (
+      <button className="btn" style={{ marginTop: 8 }} onClick={() => setOpen(true)}>
+        {t("setup.translitCheck")}
+      </button>
+    );
+  }
+  return (
+    <div className="translit-box">
+      {isFetching && <p className="set-card-sub" style={{ margin: 0 }}>{t("common.loading")}</p>}
+      {!isFetching && fixes.length === 0 && <p className="set-card-sub" style={{ margin: 0 }}>{t("setup.translitNone")}</p>}
+      {!isFetching && fixes.length > 0 && (
+        <>
+          <p className="set-card-sub" style={{ margin: "0 0 8px" }}>{t("setup.translitFound", { n: fixes.length })}</p>
+          <ul className="translit-list">
+            {fixes.slice(0, 8).map((f) => (
+              <li key={`${f.from}->${f.to}`}>
+                <span className="tl-from">{f.from}</span>
+                <Icon name="arrowRight" size={13} />
+                <span className="tl-to">{f.to}</span>
+                <span className="tl-n">{t("setup.translitTxCount", { n: f.n })}</span>
+              </li>
+            ))}
+          </ul>
+          <button className="btn primary sm" disabled={applyState.isLoading}
+            onClick={async () => {
+              try {
+                const r = await apply().unwrap();
+                toast.success(t("setup.translitApplied", { n: r.fixed, m: r.merchants }));
+              } catch (e) { toast.error(errText(e)); }
+            }}>
+            {t("setup.translitApply")}
+          </button>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -281,12 +338,19 @@ const AI_MODEL_TASKS: { task: AiTask; labelKey: "setup.task.report" | "setup.tas
 function AiModelToggle() {
   const t = useT();
   const { data } = useGetAiModelsQuery();
+  const { data: me } = useGetMeQuery();
   const [setModel, { isLoading }] = useSetAiModelMutation();
   const models = data?.models;
+  // A demo sandbox runs on OUR key, so the server pins every task to Haiku (`getTaskModel`).
+  // Showing pickable Sonnet/Opus buttons that silently do nothing would be a lie about the
+  // product — say it instead, and show the model that is actually used.
+  const isDemo = me?.demo === true;
   return (
     <div className="ai-model-list">
+      {isDemo && <p className="ai-model-note">{t("setup.aiModelDemoNote")}</p>}
       {AI_MODEL_TASKS.map((row) => {
-        const cur = models?.[row.task] ?? "sonnet";
+        const cur = isDemo ? "haiku" : (models?.[row.task] ?? "sonnet");
+        const options = isDemo ? (["haiku"] as AiModelToken[]) : row.options;
         return (
           <div key={row.task} className="ai-model-row">
             <div className="ai-model-info">
@@ -294,8 +358,8 @@ function AiModelToggle() {
               <span className="ai-model-hint">{t(row.hintKey)} · {MODEL_META[cur].price} {t("setup.perMtok")}</span>
             </div>
             <div className="seg">
-              {row.options.map((m) => (
-                <button key={m} className={`seg-btn ${cur === m ? "active" : ""}`} disabled={isLoading}
+              {options.map((m) => (
+                <button key={m} className={`seg-btn ${cur === m ? "active" : ""}`} disabled={isLoading || isDemo}
                   onClick={() => setModel({ task: row.task, model: m })}>
                   {MODEL_META[m].name}
                 </button>

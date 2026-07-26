@@ -1,9 +1,9 @@
 // D1 persistence helpers: account sync from mono client-info and idempotent
 // transaction upsert (mono order is not guaranteed, so upsert-by-id guards dupes).
-import type { MonoAccount, MonoClientInfo, MonoJar, MonoStatementItem } from "./mono.ts";
+import type { MonoAccount, MonoClientInfo, MonoJar, MonoStatementItem } from "../bank/mono.ts";
 import { categorize } from "./categorize.ts";
 import { descriptionIsTransfer } from "./transfers.ts";
-import type { AppDb, AppPreparedStatement } from "./db-shim.ts";
+import type { AppDb, AppPreparedStatement } from "../platform/db-shim.ts";
 
 export async function getState(db: AppDb, key: string): Promise<string | null> {
   const row = await db

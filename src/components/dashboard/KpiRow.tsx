@@ -1,9 +1,9 @@
-import { useGetOverviewQuery, useGetPeriodModeQuery } from "../store/api.ts";
-import { Icon } from "./Icon.tsx";
-import { formatMinor, currencySign } from "../lib/format.ts";
-import { useCountUp } from "../lib/useCountUp.ts";
-import { InfoTip } from "./InfoTip.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetOverviewQuery, useGetPeriodModeQuery } from "../../store/api.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { formatMinor, currencySign } from "../../lib/format.ts";
+import { useCountUp } from "../../lib/useCountUp.ts";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { useT } from "../../i18n/index.ts";
 
 function pct(cur: number, prev: number): number | null {
   if (!prev) return null;

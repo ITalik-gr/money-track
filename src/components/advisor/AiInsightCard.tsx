@@ -1,9 +1,9 @@
-import { useGetInsightQuery, useGenerateInsightMutation } from "../store/api.ts";
-import { highlightAmounts } from "../lib/highlight.tsx";
+import { useGetInsightQuery, useGenerateInsightMutation } from "../../store/api.ts";
+import { highlightAmounts } from "../../lib/highlight.tsx";
 import { RichFacts } from "./RichFacts.tsx";
-import { UsageCost } from "./UsageCost.tsx";
-import { Icon } from "./Icon.tsx";
-import { useT } from "../i18n/index.ts";
+import { UsageCost } from "../settings/UsageCost.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { useT } from "../../i18n/index.ts";
 
 export function AiInsightCard({ days = 30 }: { days?: number }) {
   const t = useT();

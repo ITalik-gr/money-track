@@ -6,13 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f3f5f8" />
     <title>Money Track</title>
-    <script>
-      // Світла тема — основна; темна лишається опцією через тумблер (DESIGN.md §8 Q1).
-      try {
-        var t = localStorage.getItem("mt-theme") || "light";
-        document.documentElement.setAttribute("data-theme", t);
-      } catch (e) {}
-    </script>
+    <!-- Світла тема — основна; темна лишається опцією через тумблер (DESIGN.md §8 Q1).
+         Окремий файл, а не inline: CSP воркера — `script-src 'self'` (див. public/theme.js). -->
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>

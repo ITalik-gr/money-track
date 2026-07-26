@@ -5,16 +5,16 @@ import {
   useReviewTransferOneMutation,
   useSaveTransferReviewMutation,
   type TransferReviewRow,
-} from "../store/api.ts";
-import { Select } from "./Select.tsx";
-import type { SelectOption } from "./Select.tsx";
-import { MerchantLogo } from "./MerchantLogo.tsx";
-import { Icon } from "./Icon.tsx";
-import { formatMinor, formatDate, currencySign } from "../lib/format.ts";
-import { toast } from "../lib/toast.ts";
-import { errText } from "../lib/errors.ts";
-import { useT } from "../i18n/index.ts";
-import type { Category } from "../../shared/types.ts";
+} from "../../store/api.ts";
+import { Select } from "../ui/Select.tsx";
+import type { SelectOption } from "../ui/Select.tsx";
+import { MerchantLogo } from "../ui/MerchantLogo.tsx";
+import { Icon } from "../ui/Icon.tsx";
+import { formatMinor, formatDate, currencySign } from "../../lib/format.ts";
+import { toast } from "../../lib/toast.ts";
+import { errText } from "../../lib/errors.ts";
+import { useT } from "../../i18n/index.ts";
+import type { Category } from "../../../shared/types.ts";
 
 // §R2-ST4 + §C1/§C2: інтерактивний попап-рев'ю реальної категорії переказів/знять.
 // Велика 2-колонкова модалка (нічого не обрізається), повна інфо про операцію,

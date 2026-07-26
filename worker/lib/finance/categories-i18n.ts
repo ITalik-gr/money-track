@@ -14,8 +14,8 @@
 // category to another seed's EXACT Ukrainian string — negligible, and it only affects a display
 // label, never a number.
 
-import type { NotifLocale } from "../../shared/notif-i18n.ts";
-import type { AppDb } from "./db-shim.ts";
+import type { NotifLocale } from "../../../shared/notif-i18n.ts";
+import type { AppDb } from "../platform/db-shim.ts";
 import { getState } from "./repo.ts";
 
 // Stored Ukrainian seed name -> English. Keys MUST byte-match the seed (note the modifier

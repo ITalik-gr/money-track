@@ -325,6 +325,14 @@ export interface SetupStatus {
   backfill: { progress: number; total: number; done: boolean } | null;
 }
 
+// ROADMAP L5: one planned merchant rename («Сільпо» → `Silpo`), previewed before it is applied.
+export interface TranslitFix {
+  from: string;
+  to: string;
+  n: number;
+  source: "sibling" | "description";
+}
+
 // §A1: факт про світ. adjust_* рухає числа лише коли confirmed_at != null (гейт підтвердження).
 export interface Fact {
   id: number; text: string; effective_from: number; expires_at: number | null;
@@ -428,10 +436,8 @@ export const api = createApi({
       },
       void
     >({ query: () => "/me", providesTags: ["Me"] }),
-    login: b.mutation<{ ok: boolean }, string>({
-      query: (password) => ({ url: "/login", method: "POST", body: { password } }),
-      invalidatesTags: ["Me", "Tx", "Account", "Summary", "Setup"],
-    }),
+    // (`login` removed 2026-07-26 — sign-in is Google-only and `POST /api/login` no longer
+    //  exists on the server, so the mutation could only ever 404.)
     logout: b.mutation<unknown, void>({
       query: () => ({ url: "/logout", method: "POST" }),
       invalidatesTags: ["Me"],
@@ -718,6 +724,13 @@ export const api = createApi({
     }),
     // setup
     getSetupStatus: b.query<SetupStatus, void>({ query: () => "/setup/status", providesTags: ["Setup"] }),
+    // ROADMAP L5: preview then apply — the mutation renames rows, so it must invalidate anything
+    // that shows a merchant name (lists, aggregates, the merchant page).
+    getTranslitFixes: b.query<{ fixes: TranslitFix[] }, void>({ query: () => "/setup/merchants/translit" }),
+    applyTranslitFixes: b.mutation<{ fixed: number; merchants: number; aliases: number }, void>({
+      query: () => ({ url: "/setup/merchants/translit", method: "POST" }),
+      invalidatesTags: ["Tx", "Summary", "Category"],
+    }),
     syncAccounts: b.mutation<unknown, void>({
       query: () => ({ url: "/setup/sync-accounts", method: "POST" }),
       invalidatesTags: ["Setup", "Account", "Summary"],
@@ -946,7 +959,6 @@ export const api = createApi({
 
 export const {
   useGetMeQuery,
-  useLoginMutation,
   useLogoutMutation,
   useGetSummaryQuery,
   useGetAccountsQuery,
@@ -1022,6 +1034,8 @@ export const {
   useDetectPlannedQuery,
   useAiDetectPlannedMutation,
   useGetSetupStatusQuery,
+  useGetTranslitFixesQuery,
+  useApplyTranslitFixesMutation,
   useSyncAccountsMutation,
   useRegisterWebhookMutation,
   useRegisterTelegramMutation,

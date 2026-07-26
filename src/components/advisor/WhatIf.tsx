@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
-import { useGetAdviceQuery, useGetPatternsQuery } from "../store/api.ts";
-import { formatMinor } from "../lib/format.ts";
-import { InfoTip } from "./InfoTip.tsx";
-import { Range } from "./Range.tsx";
-import { useT } from "../i18n/index.ts";
+import { useGetAdviceQuery, useGetPatternsQuery } from "../../store/api.ts";
+import { formatMinor } from "../../lib/format.ts";
+import { InfoTip } from "../ui/InfoTip.tsx";
+import { Range } from "../ui/Range.tsx";
+import { useT } from "../../i18n/index.ts";
 
 // §P4: What-if симулятор — «що якщо зрізати категорію на N%». Клієнтський розрахунок від
 // наявних агрегатів: cushion/burn з Порадника (`/advisor`) + місячні рівні категорій

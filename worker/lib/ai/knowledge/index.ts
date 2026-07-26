@@ -6,7 +6,8 @@ import { investing } from "./investing.ts";
 
 export type { KnowledgeDoc, KnowledgeRow, KnowledgeMetaItem } from "./types.ts";
 export { DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS } from "./types.ts";
-import type { AppDb } from "../db-shim.ts";
+import type { AppDb } from "../../platform/db-shim.ts";
+import type { NotifLocale } from "../../../../shared/notif-i18n.ts";
 
 // Вбудований корпус знань (§A5) — стабільний довідник для AI. Порядок фіксований: він впливає
 // на байт-ідентичність кешованого блока (cache_control), тож НЕ сортувати динамічно.
@@ -70,8 +71,15 @@ export async function buildKnowledgeCorpus(db: AppDb): Promise<string> {
   return parts.join("\n\n---\n\n");
 }
 
+/** Label of a builtin doc in the reader's locale. User-written docs pass through untouched —
+ *  their title is the user's own text, exactly as with user-renamed categories in P3.4. */
+function label(d: KnowledgeDoc, locale: NotifLocale): { title: string; summary: string } {
+  if (locale !== "en") return { title: d.title, summary: d.summary };
+  return { title: d.titleEn ?? d.title, summary: d.summaryEn ?? d.summary };
+}
+
 // Метадані для UI (картка «Корпус знань») — без важкого body.
-export async function knowledgeMeta(db: AppDb): Promise<{ docs: KnowledgeMetaItem[]; user_chars: number; user_limit: number; doc_limit: number }> {
+export async function knowledgeMeta(db: AppDb, locale: NotifLocale = "uk"): Promise<{ docs: KnowledgeMetaItem[]; user_chars: number; user_limit: number; doc_limit: number }> {
   const rows = await loadRows(db);
   const byId = new Map(rows.map((r) => [r.id, r]));
 
@@ -79,10 +87,11 @@ export async function knowledgeMeta(db: AppDb): Promise<{ docs: KnowledgeMetaIte
     const o = byId.get(d.id);
     const locked = !!d.locked;
     const active = o && o.kind === "override" && !locked;
+    const base = label(d, locale);
     return {
       id: d.id,
-      title: active ? o!.title || d.title : d.title,
-      summary: active ? o!.summary || d.summary : d.summary,
+      title: active ? o!.title || base.title : base.title,
+      summary: active ? o!.summary || base.summary : base.summary,
       chars: active ? o!.body.length : d.body.length,
       kind: "builtin" as const,
       locked,
@@ -108,17 +117,18 @@ export async function knowledgeMeta(db: AppDb): Promise<{ docs: KnowledgeMetaIte
 }
 
 // Тіло документа для редактора: override → збережене, інакше — вбудоване.
-export async function knowledgeBody(db: AppDb, id: string): Promise<{ id: string; title: string; summary: string; body: string; kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean } | null> {
+export async function knowledgeBody(db: AppDb, id: string, locale: NotifLocale = "uk"): Promise<{ id: string; title: string; summary: string; body: string; kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean } | null> {
   const rows = await loadRows(db);
   const row = rows.find((r) => r.id === id);
   const base = KNOWLEDGE_DOCS.find((d) => d.id === id);
 
   if (base) {
     const active = row && row.kind === "override" && !base.locked;
+    const lb = label(base, locale);
     return {
       id, kind: "builtin", locked: !!base.locked,
-      title: active ? row!.title || base.title : base.title,
-      summary: active ? row!.summary || base.summary : base.summary,
+      title: active ? row!.title || lb.title : lb.title,
+      summary: active ? row!.summary || lb.summary : lb.summary,
       body: active ? row!.body : base.body,
       enabled: active ? !!row!.enabled : true,
       overridden: !!active && row!.body !== base.body,

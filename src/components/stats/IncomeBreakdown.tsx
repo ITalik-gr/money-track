@@ -1,7 +1,7 @@
-import { useGetIncomeAnalyticsQuery } from "../store/api.ts";
-import { formatMinor, monthShort } from "../lib/format.ts";
-import { HoverTip } from "./HoverTip.tsx";
-import { useT, type TranslationKey } from "../i18n/index.ts";
+import { useGetIncomeAnalyticsQuery } from "../../store/api.ts";
+import { formatMinor, monthShort } from "../../lib/format.ts";
+import { HoverTip } from "../ui/HoverTip.tsx";
+import { useT, type TranslationKey } from "../../i18n/index.ts";
 
 // §1 Аналітика доходу: джерела (по категоріях), стабільність (варіативність 6 міс) і
 // дельта проти минулого періоду. Зведено в ₴. Дзеркалить канон Статистики.

@@ -1,11 +1,12 @@
 import { Link } from "react-router-dom";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useGetUpcomingSubsQuery } from "../store/api.ts";
-import { MerchantLogo } from "./MerchantLogo.tsx";
-import { Money } from "./Money.tsx";
-import { formatMinor } from "../lib/format.ts";
-import { useT } from "../i18n/index.ts";
-import type { TranslationKey } from "../i18n/index.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useGetUpcomingSubsQuery } from "../../store/api.ts";
+import { MerchantLogo } from "../ui/MerchantLogo.tsx";
+import { Money } from "../ui/Money.tsx";
+import { EmptyCard } from "../ui/EmptyCard.tsx";
+import { formatMinor } from "../../lib/format.ts";
+import { useT } from "../../i18n/index.ts";
+import type { TranslationKey } from "../../i18n/index.ts";
 
 // §4 «Скоро спишеться»: планові платежі/підписки у горизонті 30 днів — лого бренду,
 // дата, «через N дн». Перетинає межу місяця (на відміну від прогнозу місяця).
@@ -22,7 +23,21 @@ function whenLabel(days: number): { key: TranslationKey; params?: Record<string,
 export function UpcomingSubs() {
   const t = useT();
   const { data } = useGetUpcomingSubsQuery(30);
-  if (!data || data.items.length === 0) return null;
+  if (!data) return null; // still loading — a placeholder here would flash on every visit
+  // ROADMAP L3: loaded-but-empty gets an empty-state, not null. This card sits in a `.dash-pair`
+  // next to the forecast, so vanishing left half the row blank.
+  if (data.items.length === 0) {
+    return (
+      <section>
+        <div className="section-head">
+          <h2>{t("us.title")}</h2>
+          <Link to="/subs" className="label group-link">{t("link.subs")} →</Link>
+        </div>
+        <EmptyCard icon="repeat" title={t("empty.subs.title")} hint={t("empty.subs.hint")}
+          to="/subs" action={t("empty.subs.action")} />
+      </section>
+    );
+  }
 
   return (
     <section>

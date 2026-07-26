@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { TransactionList } from "../components/TransactionList.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { CategoryIcon } from "../components/CategoryIcon.tsx";
-import { Select } from "../components/Select.tsx";
-import { GroupModal } from "../components/GroupModal.tsx";
-import { SavedFilters } from "../components/SavedFilters.tsx";
+import { TransactionList } from "../components/transactions/TransactionList.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { CategoryIcon } from "../components/ui/CategoryIcon.tsx";
+import { Select } from "../components/ui/Select.tsx";
+import { GroupModal } from "../components/planning/GroupModal.tsx";
+import { SavedFilters } from "../components/transactions/SavedFilters.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 import { toast } from "../lib/toast.ts";
 import { useT } from "../i18n/index.ts";

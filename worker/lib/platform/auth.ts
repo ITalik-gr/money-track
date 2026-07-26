@@ -4,7 +4,7 @@
 // The token carries the `userId`, which is also the name of that user's Durable Object.
 // That is the whole point of the multi-user change: a request no longer asks "is someone
 // logged in?" but "WHOSE database is this?", and the answer must be unforgeable.
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 
 export const SESSION_COOKIE = "mt_session";
 const TTL = 60 * 60 * 24 * 30; // 30 days

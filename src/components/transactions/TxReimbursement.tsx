@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useT } from "../i18n/index.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useT } from "../../i18n/index.ts";
 import { Link } from "react-router-dom";
-import { Icon } from "./Icon.tsx";
-import { formatMinor, currencySign } from "../lib/format.ts";
-import { toast } from "../lib/toast.ts";
-import { errText } from "../lib/errors.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { formatMinor, currencySign } from "../../lib/format.ts";
+import { toast } from "../../lib/toast.ts";
+import { errText } from "../../lib/errors.ts";
 import {
   useGetReimbursementQuery,
   useGetReimbursementUsageQuery,
   useSetReimbursementMutation,
-} from "../store/api.ts";
-import type { ReimbursementTx } from "../store/api.ts";
+} from "../../store/api.ts";
+import type { ReimbursementTx } from "../../store/api.ts";
 
 // §COMPENSATION: «мені скинули за це гроші».
 //

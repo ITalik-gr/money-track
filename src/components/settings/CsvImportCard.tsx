@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
-import { useT, type TranslationKey } from "../i18n/index.ts";
-import { Icon } from "./Icon.tsx";
-import { Select } from "./Select.tsx";
-import { useGetAccountsQuery, useCsvPreviewMutation, useCsvCommitMutation } from "../store/api.ts";
-import { errText } from "../lib/errors.ts";
-import { formatMinor } from "../lib/format.ts";
+import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { useT, type TranslationKey } from "../../i18n/index.ts";
+import { Icon } from "../ui/Icon.tsx";
+import { Select } from "../ui/Select.tsx";
+import { useGetAccountsQuery, useCsvPreviewMutation, useCsvCommitMutation } from "../../store/api.ts";
+import { errText } from "../../lib/errors.ts";
+import { formatMinor } from "../../lib/format.ts";
 
 // Імпорт виписки з файлу (P1.2). Свідомо у ДВА кроки: спершу «ось що я зрозумів», і лише потім
 // запис. Одноетапний імпорт означав би, що неправильно вгадану колонку суми видно вже після

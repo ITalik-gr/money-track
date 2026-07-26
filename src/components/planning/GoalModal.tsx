@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { useCreateGoalMutation, useUpdateGoalMutation, useGetAccountsQuery } from "../store/api.ts";
-import { useT } from "../i18n/index.ts";
-import { Select } from "./Select.tsx";
-import type { SavingsGoal } from "../store/api.ts";
+import { useCreateGoalMutation, useUpdateGoalMutation, useGetAccountsQuery } from "../../store/api.ts";
+import { useT } from "../../i18n/index.ts";
+import { Select } from "../ui/Select.tsx";
+import type { SavingsGoal } from "../../store/api.ts";
 
 const PALETTE = ["#2e6be6", "#127c86", "#1f6e4c", "#7a3e9d", "#c2417a", "#b23a2e", "#c9871a", "#0e7490"];
 

@@ -12,13 +12,13 @@ import {
   useSetAccountActiveMutation,
   useDeleteAccountMutation,
 } from "../store/api.ts";
-import { Money } from "../components/Money.tsx";
-import { Icon } from "../components/Icon.tsx";
-import { Select } from "../components/Select.tsx";
-import { Skeleton } from "../components/Skeleton.tsx";
-import { Sparkline } from "../components/Sparkline.tsx";
-import { NetworthCard } from "../components/NetworthCard.tsx";
-import { AddAccountModal } from "../components/AddAccountModal.tsx";
+import { Money } from "../components/ui/Money.tsx";
+import { Icon } from "../components/ui/Icon.tsx";
+import { Select } from "../components/ui/Select.tsx";
+import { Skeleton } from "../components/ui/Skeleton.tsx";
+import { Sparkline } from "../components/ui/Sparkline.tsx";
+import { NetworthCard } from "../components/stats/NetworthCard.tsx";
+import { AddAccountModal } from "../components/accounts/AddAccountModal.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
 import { errText } from "../lib/errors.ts";
 import { toast } from "../lib/toast.ts";

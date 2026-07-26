@@ -1,10 +1,10 @@
 // §6.6 Weekly insight: aggregate the last 7 days (UAH), compare to the prior week,
 // pass the numbers + user notes to Haiku, and cache the text in app_state.
-import type { Env } from "../env.ts";
+import type { Env } from "../../env.ts";
 import { generateInsight, briefUsage, logUsage, type StructuredInsight, type AiUsageBrief } from "./ai.ts";
-import { getState, setState } from "./repo.ts";
-import { getRates } from "./finance.ts";
-import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "./stats.ts";
+import { getState, setState } from "../finance/repo.ts";
+import { getRates } from "../finance/finance.ts";
+import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "../finance/stats.ts";
 
 const DAY = 86400;
 const PERIOD_KEY = "insight_period_days";
