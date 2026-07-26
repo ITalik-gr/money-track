@@ -24,6 +24,7 @@ import { credentials } from "./routes/credentials.ts";
 import { importRoutes } from "./routes/import.ts";
 import { webhook } from "./routes/webhook.ts";
 import { telegram } from "./routes/telegram.ts";
+import { checkRate, isAiPath } from "./lib/platform/ratelimit.ts";
 
 export const userApp = new Hono<{ Bindings: Env }>();
 
@@ -46,6 +47,37 @@ userApp.use("*", async (c, next) => {
     if (DEMO_BLOCKED_PREFIXES.some((p) => path.startsWith(p))) {
       return c.json({ error: "demo_readonly", detail: "This action is disabled in the demo." }, 403);
     }
+  }
+  await next();
+});
+
+// Per-user request ceilings (C1). Placed here, in front of the routing table, because it must
+// hold for every route including ones added later — a limiter opted into per-handler is a
+// limiter that the next endpoint forgets.
+//
+// Webhook and Telegram callbacks are exempt: they are authenticated by a signed path segment or
+// a bot secret rather than by a session, their rate is set by monobank and Telegram rather than
+// by anyone we are defending against, and dropping a bank event as "too many requests" would
+// silently lose a transaction — the one failure this app must never have.
+userApp.use("*", async (c, next) => {
+  const path = new URL(c.req.url).pathname;
+  if (path.startsWith("/webhook") || path.startsWith("/tg")) return next();
+
+  const bucket = isAiPath(path) ? "ai" : "general";
+  const verdict = checkRate(bucket);
+  if (!verdict.ok) {
+    // Same `{error, detail}` shape as every other failure, so `errText()` shows a real sentence
+    // instead of "[object Object]" (CLAUDE.md §Обробка помилок).
+    return c.json(
+      {
+        error: "rate_limited",
+        detail: bucket === "ai"
+          ? `Too many AI requests. Try again in ${verdict.retryAfter}s.`
+          : `Too many requests. Try again in ${verdict.retryAfter}s.`,
+      },
+      429,
+      { "retry-after": String(verdict.retryAfter) },
+    );
   }
   await next();
 });

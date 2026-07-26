@@ -107,10 +107,17 @@ setup.get("/status", async (c) => {
   const accounts = await c.env.DB.prepare("SELECT COUNT(*) n FROM accounts").first<{ n: number }>();
   const txCount = await c.env.DB.prepare("SELECT COUNT(*) n FROM transactions").first<{ n: number }>();
   const cursor: Cursor | null = raw ? JSON.parse(raw) : null;
+  // How many foreign-currency rates are cached. The first-run checklist needs to know whether the
+  // "refresh rates" step has ever succeeded, and `app_state` stores no timestamps — presence of
+  // the cache is the fact that matters anyway (an empty one means no ₴ conversion is possible).
+  const ratesRaw = await getState(c.env.DB, "rates");
+  let rates = 0;
+  try { rates = ratesRaw ? Object.keys(JSON.parse(ratesRaw) as Record<string, number>).length : 0; } catch { rates = 0; }
   return c.json({
     webhookRegistered: !!webhook,
     accounts: accounts?.n ?? 0,
     transactions: txCount?.n ?? 0,
+    rates,
     backfill: cursor ? { progress: cursor.idx, total: cursor.total, done: cursor.idx >= cursor.total } : null,
   });
 });

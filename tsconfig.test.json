@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.worker.tsbuildinfo",
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
     "target": "ES2022",
     "lib": [
       "ES2022"
@@ -8,6 +8,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "types": [
+      "node",
       "./worker-configuration.d.ts"
     ],
     "skipLibCheck": true,
@@ -18,14 +19,9 @@
     "noEmit": true,
     "strict": true,
     "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noUnusedParameters": true
   },
   "include": [
-    "worker",
-    "shared"
-  ],
-  "exclude": [
     "worker/**/*.test.ts"
   ]
 }

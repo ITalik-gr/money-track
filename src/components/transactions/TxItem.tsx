@@ -29,6 +29,8 @@ export interface TxItemData {
   event_name?: string | null;
   event_color?: string | null;
   hold?: number;
+  /** §COMPENSATION: скільки з цієї витрати вже компенсували (мінор, додатне). */
+  reimbursed?: number | null;
 }
 
 interface Props {
@@ -46,6 +48,9 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
   const isSel = selected ?? false;
   // Переказ між своїми — не витрата й не дохід: без знака, без червоного (`lib/transfer.ts`).
   const neutral = isNeutralTransfer(t);
+  // Only outflows carry a compensation; guard the sign so an incoming row can never render the
+  // struck-through form (its `reimbursed` is always 0, but the arithmetic below assumes a debit).
+  const reimbursed = t.amount < 0 ? (t.reimbursed ?? 0) : 0;
   const route = transferRoute(t);
 
   // Клітинки-осередки (logo · who · cat · date · amt) розкладаються сіткою:
@@ -95,6 +100,17 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
           <span className="amt-neutral">
             <Icon name="swap" size={13} className="amt-swap" />
             <Money minor={Math.abs(t.amount)} currency={t.currency_code} className="neutral" />
+          </span>
+        ) : reimbursed > 0 ? (
+          // §COMPENSATION made visible (user feedback: "я увімкнув компенсацію, а воно всюди
+          // показує повну ціну"). The statistics were already right — `EFF_AMOUNT` subtracts
+          // `reimbursed` — but the list showed only the amount the BANK charged, so a user who
+          // had just recorded a compensation saw the same number as before and concluded it had
+          // not worked. Now the row leads with what is actually YOURS and keeps the charged
+          // amount underneath, struck through: both facts are true and the user needs both.
+          <span className="amt-reimb">
+            <Money minor={t.amount + reimbursed} currency={t.currency_code} signed />
+            <s className="amt-was"><Money minor={t.amount} currency={t.currency_code} signed /></s>
           </span>
         ) : (
           <Money minor={t.amount} currency={t.currency_code} signed />

@@ -10,6 +10,21 @@ deterministic-first pipeline, and layers an AI financial advisor on top that rea
 > **Try it:** [`/demo`](https://money-track.vitaliy-50a.workers.dev/demo) — spins up a private,
 > throwaway sandbox seeded with ~6 months of realistic data. No sign-up, resets in 24 hours.
 
+![Dashboard](docs/screenshots/dashboard-welcome.jpg)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/dashboard-statistic.jpg" alt="Statistics — overview" /></td>
+<td width="50%"><img src="docs/screenshots/dashboard-statistic-2.jpg" alt="Statistics — trends" /></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/advisor.jpg" alt="AI advisor" /></td>
+<td><img src="docs/screenshots/report.jpg" alt="Generated monthly report" /></td>
+</tr>
+</table>
+
+<sup>Screenshots are from the live demo — the same seeded dataset anyone gets at `/demo`.</sup>
+
 ---
 
 ## What it does
@@ -112,8 +127,7 @@ quietly making the numbers wrong.** The rule throughout: *a check beats an instr
   user's screen.
 
 - **Working documents, not artifacts.** `CLAUDE.md` (durable reference + invariants), `DESIGN.md`
-  (design system + decision log), `PLATFORM.md` / `PROGRESS.md` / `ROADMAP.md` (the multi-user
-  platform phase) are how the work was actually planned and kept coherent across sessions.
+  (design system + decision log), `ROADMAP.md` (the live queue) and `HISTORY.md` (closed-phase design notes) are how the work was actually planned and kept coherent across sessions.
 
 ---
 
@@ -158,7 +172,7 @@ npm run build      # production build
 ```
 
 **Deploy:** `npm run deploy` (needs `wrangler login`, secrets set as Worker secrets, and migrations
-applied to remote D1). See `PROGRESS.md` for the exact ops checklist.
+applied to remote D1). See `CLAUDE.md` §Ops for the exact checklist.
 
 ---
 
@@ -181,8 +195,14 @@ scripts/              check-stats-sql, check-i18n, seed-demo, migration-embed ge
 
 ---
 
+## License
+
+MIT — see [`LICENSE`](LICENSE).
+
+---
+
 ## Status
 
 Feature-complete as a single-user app; the current phase turned it into an isolated multi-user
-platform with a public demo and an English UI (see `ROADMAP.md` / `PROGRESS.md`). Built as a
+platform with a public demo and an English UI, live in production. Built as a
 portfolio piece — not a commercial product.

@@ -12,6 +12,7 @@ import { SafeToSpend } from "../components/dashboard/SafeToSpend.tsx";
 import { MonthPulse } from "../components/dashboard/MonthPulse.tsx";
 import { UpcomingSubs } from "../components/dashboard/UpcomingSubs.tsx";
 import { QuickBar } from "../components/dashboard/QuickBar.tsx";
+import { SetupNudge } from "../components/dashboard/SetupNudge.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
@@ -40,6 +41,8 @@ export function Dashboard() {
           <span className="date-pill"><span className="ico"><Icon name="calendar" size={16} /></span>{todayLabel}</span>
         </div>
       </div>
+
+      <SetupNudge />
 
       <QuickBar />
 

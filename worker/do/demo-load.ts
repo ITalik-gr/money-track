@@ -58,6 +58,42 @@ function toBind(v: unknown): string | number | null {
 }
 
 /**
+ * `app_state` rows whose VALUE is JSON carrying unix timestamps. Only these are rewritten — the
+ * others (`rates`, `locale`, `period_mode`, `finance_profile`) hold no time at all, and blindly
+ * walking every blob would risk mangling a number that merely looks like a timestamp.
+ */
+const SHIFTED_STATE_KEYS = new Set(["advisor", "advisor_history"]);
+/** Timestamp-bearing fields inside those blobs. */
+const STATE_TIME_FIELDS = new Set(["generated_at"]);
+
+/**
+ * Shift the unix timestamps inside one stored JSON blob. Walks the parsed structure instead of
+ * doing a regex over the text: a string replace would also hit amounts and ids that happen to sit
+ * in the same numeric range, and the failure would be silent wrong money rather than a parse
+ * error. A blob that does not parse is returned untouched — a demo with slightly stale advice is
+ * better than a demo whose seeding throws.
+ */
+function shiftStateJson(raw: string, shift: number): string {
+  try {
+    const walk = (v: unknown): unknown => {
+      if (Array.isArray(v)) return v.map(walk);
+      if (v && typeof v === "object") {
+        const o = v as Record<string, unknown>;
+        const next: Record<string, unknown> = {};
+        for (const [k, val] of Object.entries(o)) {
+          next[k] = STATE_TIME_FIELDS.has(k) && typeof val === "number" ? val + shift : walk(val);
+        }
+        return next;
+      }
+      return v;
+    };
+    return JSON.stringify(walk(JSON.parse(raw)));
+  } catch {
+    return raw;
+  }
+}
+
+/**
  * Build the ordered INSERTs for a fresh demo object. `nowSec` is load time; every timestamp is
  * shifted so the snapshot reads as "recorded up to now". INSERT OR REPLACE keeps it idempotent
  * if a load is ever retried.
@@ -80,6 +116,14 @@ export function buildDemoStatements(nowSec: number): DemoStatement[] {
       // `health_history.day` is the string form of its `ts`; after shifting ts it must be recomputed.
       if (table === "health_history" && typeof shifted.ts === "number") {
         shifted.day = new Date((shifted.ts as number) * 1000).toISOString().slice(0, 10);
+      }
+      // `app_state` stores JSON blobs, so its timestamps are INSIDE a string and cannot be listed
+      // in `meta.timeFields` (which shifts numeric columns). Left alone they stay absolute while
+      // every transaction around them moves: a sandbox opened a month from now would show fresh
+      // spending next to advice stamped "generated a month ago", and the runway trend chart would
+      // plot points that drift ever further from the data they describe.
+      if (table === "app_state" && typeof shifted.value === "string" && SHIFTED_STATE_KEYS.has(String(shifted.key))) {
+        shifted.value = shiftStateJson(shifted.value as string, shift);
       }
       out.push({ sql, binds: cols.map((c) => toBind(shifted[c])) });
     }

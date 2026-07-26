@@ -125,6 +125,10 @@ export function TxDetail() {
   const looksTransfer = /переказ|зняття/i.test(tx.category_name ?? "") || isTransfer;
   // Подача — від збереженого факту (не від пенд-тогла у формі): див. `lib/transfer.ts`.
   const neutralTx = isNeutralTransfer(tx);
+  // Mirrors the canon's `EFF_AMOUNT` for the non-split case: what is left as yours after the
+  // compensation. Only outflows can carry one.
+  const reimbursedMinor = tx.amount < 0 ? (tx.reimbursed ?? 0) : 0;
+  const heroAmount = tx.amount + reimbursedMinor;
   const route = transferRoute(tx);
 
   async function save() {
@@ -193,13 +197,22 @@ export function TxDetail() {
             </div>
           </div>
           <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+            {/* §COMPENSATION: the hero shows the amount that is actually YOURS — the same figure
+                the statistics use (`EFF_AMOUNT`). Showing the bank's charge here made a recorded
+                compensation look like it had done nothing. The charge stays below, struck. */}
             {/* Переказ між своїми — гроші лишились власними: без знака й без червоного. */}
-            <div className={`num-hero ${neutralTx ? "neutral" : tx.amount < 0 ? "neg" : "pos"}`} style={{ fontSize: 30 }}>
+            <div className={`num-hero ${neutralTx ? "neutral" : heroAmount < 0 ? "neg" : "pos"}`} style={{ fontSize: 30 }}>
               {neutralTx && <Icon name="swap" size={19} className="hero-swap" />}
-              {!neutralTx && tx.amount > 0 ? "+" : ""}
-              {new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(tx.amount) : tx.amount) / 100)}
+              {!neutralTx && heroAmount > 0 ? "+" : ""}
+              {new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(heroAmount) : heroAmount) / 100)}
               <span className="cur">{tx.currency_code === 840 ? "$" : tx.currency_code === 978 ? "€" : "₴"}</span>
             </div>
+            {reimbursedMinor > 0 && (
+              <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+                <s>{new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(tx.amount / 100)}</s>
+                {" · "}{t("tx.reimbursedBy", { amount: new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(reimbursedMinor / 100) })}
+              </div>
+            )}
             {tx.original_amount != null && tx.original_currency != null && tx.original_currency !== tx.currency_code && (
               <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
                 {t("tx.paymentLabel")} {new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(tx.original_amount) / 100)}

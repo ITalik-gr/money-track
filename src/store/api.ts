@@ -36,6 +36,7 @@ export interface TxRow {
   event_name?: string | null;
   event_color?: string | null;
   importance?: string | null;   // §6: override вагомості операції (essential|discretionary|optional)
+  reimbursed?: number | null;   // §COMPENSATION: скільки з цієї витрати компенсували (мінор)
 }
 
 export interface ReceiptItemRow { id: number; name: string | null; qty: number | null; price: number | null }
@@ -318,10 +319,23 @@ export interface PaceItem {
   projected: number; usual: number; pct: number | null;
 }
 
+/** Owner-only directory row (admin UI, D2). Carries identity only — never anything financial. */
+export interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+  status: "invited" | "active" | "disabled";
+  is_owner: boolean;
+  created_at: number;
+  last_login_at: number | null;
+}
+
 export interface SetupStatus {
   webhookRegistered: boolean;
   accounts: number;
   transactions: number;
+  /** Cached foreign-currency rates. 0 = the rates step has never run. */
+  rates: number;
   backfill: { progress: number; total: number; done: boolean } | null;
 }
 
@@ -423,7 +437,7 @@ export type NotifPrefs = Record<NotifKind, boolean>
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -727,6 +741,19 @@ export const api = createApi({
     aiDetectPlanned: b.mutation<{ query?: string; candidates: { title: string; period_amount: number; currency_code: number; n: number; avg_interval_days: number; last_time?: number; category_id?: number | null }[]; error?: string }, string>({
       query: (description) => ({ url: "/planned/ai-detect", method: "POST", body: { description } }),
     }),
+    // owner-only user administration (D2)
+    getAdminUsers: b.query<{ users: AdminUser[] }, void>({
+      query: () => "/admin/users",
+      providesTags: ["AdminUsers"],
+    }),
+    inviteUser: b.mutation<{ ok: boolean }, string>({
+      query: (email) => ({ url: "/admin/users/invite", method: "POST", body: { email } }),
+      invalidatesTags: ["AdminUsers"],
+    }),
+    setUserStatus: b.mutation<{ ok: boolean }, { id: string; status: "active" | "disabled" }>({
+      query: ({ id, status }) => ({ url: `/admin/users/${id}/status`, method: "POST", body: { status } }),
+      invalidatesTags: ["AdminUsers"],
+    }),
     // setup
     getSetupStatus: b.query<SetupStatus, void>({ query: () => "/setup/status", providesTags: ["Setup"] }),
     // ROADMAP L5: preview then apply — the mutation renames rows, so it must invalidate anything
@@ -763,7 +790,9 @@ export const api = createApi({
     }),
     refreshRates: b.mutation<unknown, void>({
       query: () => ({ url: "/rates/refresh", method: "POST" }),
-      invalidatesTags: ["Summary"],
+      // "Setup" too: the first-run checklist reads the cached-rate count from /setup/status, so
+      // without it the step stays marked "not done" right after it succeeded.
+      invalidatesTags: ["Summary", "Setup"],
     }),
     detectTransfers: b.mutation<{ marked: number }, void>({
       query: () => ({ url: "/transfers/detect", method: "POST" }),
@@ -1040,6 +1069,9 @@ export const {
   useDetectPlannedQuery,
   useAiDetectPlannedMutation,
   useGetSetupStatusQuery,
+  useGetAdminUsersQuery,
+  useInviteUserMutation,
+  useSetUserStatusMutation,
   useGetTranslitFixesQuery,
   useApplyTranslitFixesMutation,
   useSyncAccountsMutation,

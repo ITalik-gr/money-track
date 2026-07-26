@@ -6,3 +6,12 @@ worker-configuration.d.ts
 *.tsbuildinfo
 .DS_Store
 graphify-out/cache
+# Full-size screenshot originals (4590px, ~9 MB). The README uses the resized copies in
+# docs/screenshots/ — keeping both in git would put 9 MB of duplicates in the history.
+src/images/
+
+# Local code-intelligence index (graphify). Regenerated from source on every change, so
+# tracking it means a fresh ~12 MB blob in the history each time the code moves.
+graphify-out/
+
+HISTORY.md

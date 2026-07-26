@@ -197,6 +197,27 @@ api.get("/export/transactions.csv", async (c) => {
     amount: number; currency_code: number; is_transfer: number;
     category_name: string | null; account_title: string | null; event_name: string | null;
   }>();
+  // ---- CSV dialect (B2) ----------------------------------------------------
+  // The RFC-4180 file we used to emit (`,` + decimal point) opens as ONE column in Excel on a
+  // Ukrainian/European locale, which reads as "the export is broken" — and even after splitting
+  // it by hand the amount column will not sum, because `-1234.56` is text where the decimal mark
+  // is a comma. Neither failure is loud; the file just looks wrong.
+  //
+  // So the default is the dialect that opens correctly on a double-click here: `sep=;` (Excel
+  // honours it, Sheets accepts it), `;` between fields, `,` as the decimal mark. `?dialect=rfc`
+  // keeps the strict form for a script or a US-locale sheet, because guessing wrong there is the
+  // same silent breakage in the other direction.
+  const rfc = url.searchParams.get("dialect") === "rfc";
+  const sep = rfc ? "," : ";";
+  const num = (n: number) => (rfc ? n.toFixed(2) : n.toFixed(2).replace(".", ","));
+  // Whether a cell is "a plain number" depends on the decimal mark in use — see the exemption
+  // below. Getting this wrong is not cosmetic: every negative amount would be quoted into text
+  // and the amount column would stop summing, which is precisely the bug being fixed.
+  const numeric = rfc ? /^-?\d+(\.\d+)?$/ : /^-?\d+(,\d+)?$/;
+  // Quoting must follow the ACTIVE separator, not a hardcoded comma: with `;` fields, a value
+  // containing `;` is what needs quoting, and a value containing `,` no longer does.
+  const needsQuote = new RegExp(`["${sep === ";" ? ";" : ","}\\n\\r]`);
+
   const esc = (v: unknown) => {
     let s = v == null ? "" : String(v);
     // CSV formula injection (fixed 2026-07-26, security review). Excel/Sheets execute a cell that
@@ -206,8 +227,8 @@ api.get("/export/transactions.csv", async (c) => {
     // cell literal text; it is the standard defence and costs one character in the file.
     // A plain number is exempt — otherwise every negative amount would be quoted into text and
     // the Сума column would stop summing, which is the whole reason to export a CSV.
-    if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
-    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    if (/^[=+\-@\t\r]/.test(s) && !numeric.test(s)) s = `'${s}`;
+    return needsQuote.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   const loc = c.get("locale");
   const header = [
@@ -215,17 +236,19 @@ api.get("/export/transactions.csv", async (c) => {
     st(loc, "csvAmount"), st(loc, "csvCurrency"), st(loc, "csvCategory"), st(loc, "csvAccount"),
     st(loc, "csvGroup"), st(loc, "csvTransfer"),
   ];
-  const lines = [header.join(",")];
+  const lines = [header.map(esc).join(sep)];
   for (const r of rows.results ?? []) {
     lines.push([
       new Date(r.time * 1000).toISOString().slice(0, 10),
       r.merchant ?? "", r.comment ?? "", r.user_note ?? "",
-      (r.amount / 100).toFixed(2), CUR_ALPHA[r.currency_code] ?? String(r.currency_code),
+      num(r.amount / 100), CUR_ALPHA[r.currency_code] ?? String(r.currency_code),
       r.category_name ?? "", r.account_title ?? "", r.event_name ?? "",
       r.is_transfer ? st(loc, "csvYes") : "",
-    ].map(esc).join(","));
+    ].map(esc).join(sep));
   }
-  const csv = "﻿" + lines.join("\r\n");
+  // BOM keeps Cyrillic readable in Excel; the `sep=` hint must come AFTER it and before the
+  // header, which is the only position Excel recognises.
+  const csv = "﻿" + (rfc ? "" : `sep=${sep}\r\n`) + lines.join("\r\n");
   return new Response(csv, {
     headers: {
       "content-type": "text/csv; charset=utf-8",

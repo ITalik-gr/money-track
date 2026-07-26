@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { useT } from "../i18n/index.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { Icon } from "../components/ui/Icon.tsx";
 import {
-  useBackfillStartMutation,
-  useBackfillStepMutation,
   useDetectTransfersMutation,
   useApplySubscriptionCategoriesMutation,
   useGetProfileQuery,
@@ -19,27 +18,37 @@ import {
   useGetMeQuery,
   useEraseMyDataMutation,
   useLogoutMutation,
-  useRefreshRatesMutation,
-  useRegisterWebhookMutation,
   useRegisterTelegramMutation,
   useTgProactiveMutation,
   useScanAlertsMutation,
-  useSyncAccountsMutation,
 } from "../store/api.ts";
 import type { AiTask, AiModelToken } from "../store/api.ts";
 import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
 import { clearLocalUserData } from "../lib/localdata.ts";
 import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
+import { FirstRun } from "../components/settings/FirstRun.tsx";
+import { InviteCard } from "../components/settings/InviteCard.tsx";
 
-// Крок бекфілу раз на 60с (ліміт моно 1/60с), клієнт веде таймінг і показує прогрес (§5).
-const STEP_INTERVAL_MS = 60_000;
+// Settings used to be one flat stack of ten cards — every screen's worth of configuration on one
+// page, so finding anything meant scrolling and recognising it by shape. Tabs group it the way
+// the rest of the app already groups things (`stat-tabs`, as on Stats and Advisor), and the tab
+// lives in the URL so a link to a specific group survives a reload.
+const TABS = {
+  account: "setup.tabAccount",
+  data: "setup.tabData",
+  ai: "setup.tabAi",
+  maintenance: "setup.tabMaintenance",
+} as const;
+type SetupTab = keyof typeof TABS;
 
 export function Setup() {
   const t = useT();
+  const [params, setParams] = useSearchParams();
+  const raw = params.get("tab");
+  const tab: SetupTab = raw && raw in TABS ? (raw as SetupTab) : "account";
+  const setTab = (v: SetupTab) => setParams((p) => { p.set("tab", v); return p; }, { replace: true });
+
   const { data: status } = useGetSetupStatusQuery(undefined, { pollingInterval: 5000 });
-  const [syncAccounts, syncState] = useSyncAccountsMutation();
-  const [registerWebhook, whState] = useRegisterWebhookMutation();
-  const [refreshRates, ratesState] = useRefreshRatesMutation();
   const [detectTransfers, transfersState] = useDetectTransfersMutation();
   const [applySubCats, subCatsState] = useApplySubscriptionCategoriesMutation();
   const [registerTelegram, tgState] = useRegisterTelegramMutation();
@@ -53,28 +62,6 @@ export function Setup() {
   // server-side). Showing buttons that answer 403 — or worse, look like they configure YOUR
   // bot — is a lie about what the product does for you. Per-user bots: ROADMAP §D1.
   const isOwner = me?.user?.is_owner === true;
-  const [backfillStart] = useBackfillStartMutation();
-  const [backfillStep] = useBackfillStepMutation();
-
-  const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<{ progress: number; total: number } | null>(null);
-  const timer = useRef<number | null>(null);
-
-  async function runBackfill() {
-    setRunning(true);
-    const started = await backfillStart().unwrap();
-    setProgress({ progress: 0, total: started.total });
-    const tick = async () => {
-      const r = await backfillStep().unwrap();
-      setProgress({ progress: r.progress, total: r.total });
-      if (r.done) {
-        setRunning(false);
-        if (timer.current) window.clearInterval(timer.current);
-      }
-    };
-    await tick();
-    timer.current = window.setInterval(tick, STEP_INTERVAL_MS);
-  }
 
   return (
     <>
@@ -85,121 +72,121 @@ export function Setup() {
         </div>
       </div>
 
+      <div className="stat-tabs" role="tablist">
+        {(Object.keys(TABS) as SetupTab[]).map((k) => (
+          <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>
+            {t(TABS[k])}
+          </button>
+        ))}
+      </div>
+
       {/* Профіль і AI-блоки — на всю ширину (текстове поле / перемикачі моделей потребують місця);
           решта — картки-групи дій у 2-колонковій сітці (§налаштування-layout). */}
-      <div className="settings-grid">
-        <ProfileCard />
-        <AiUsageCard />
-        <CredentialsCard />
-        <CsvImportCard />
-
-        <div className="card set-card">
-          <div className="set-card-h"><Icon name="stats" size={16} />{t("setup.dbState")}</div>
-          <div className="stack" style={{ marginTop: 12 }}>
-            <Status label={t("setup.accountsInDb")} value={status?.accounts ?? "…"} />
-            <Status label={t("setup.txCount")} value={status?.transactions ?? "…"} />
-            <Status label={t("setup.webhookStatus")} value={status?.webhookRegistered ? t("setup.registered") : t("setup.notRegistered")} />
-          </div>
-        </div>
-
-        <div className="card set-card">
-          <div className="set-card-h"><Icon name="repeat" size={16} />{t("setup.firstRun")}</div>
-          <p className="set-card-sub">{t("setup.firstRunSub")}</p>
-          <div className="stack">
-            <button className="btn" onClick={() => syncAccounts()} disabled={syncState.isLoading}>
-              {t("setup.step1")}
-            </button>
-            <button className="btn" onClick={() => registerWebhook()} disabled={whState.isLoading}>
-              {t("setup.step2")}
-            </button>
-            <button className="btn" onClick={runBackfill} disabled={running}>
-              {t("setup.step3")} {running && progress ? `— ${progress.progress}/${progress.total}` : ""}
-            </button>
-            <button className="btn" onClick={() => refreshRates()} disabled={ratesState.isLoading}>
-              {t("setup.refreshRates")}
-            </button>
-          </div>
-          {running && (
-            <p className="set-card-sub" style={{ marginTop: 10, marginBottom: 0 }}>
-              {t("setup.backfillNote")}
-            </p>
+      {tab === "account" && (
+        <div className="settings-grid">
+          <ProfileCard />
+          {/* Invite-only is enforced server-side; this is the only way to operate it. */}
+          {isOwner && <InviteCard />}
+          {/* Owner-only: one global bot, one global chat id (see `isOwner` above). */}
+          {isOwner && (
+            <div className="card set-card set-full">
+              <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
+              <p className="set-card-sub">{t("setup.telegramSub")}</p>
+              <div className="stack">
+                <button
+                  className="btn"
+                  disabled={tgState.isLoading}
+                  onClick={async () => {
+                    const r = await registerTelegram().unwrap();
+                    if (r.error) toast.error(t("setup.tgError", { error: r.error })); else toast.success(t("setup.tgConnected"));
+                  }}
+                >
+                  {t("setup.connectTg")}
+                </button>
+                <button
+                  className="btn"
+                  disabled={tgPushState.isLoading}
+                  onClick={async () => {
+                    const r = await tgProactive().unwrap();
+                    if (r.sent) toast.success(t("setup.tgPushSent"));
+                    else toast.info(t("setup.tgPushNotSent", { reason: r.reason ?? t("setup.tgNotConfigured") }));
+                  }}
+                >
+                  {t("setup.tgTestSummary")}
+                </button>
+                <button
+                  className="btn"
+                  disabled={scanState.isLoading}
+                  onClick={async () => {
+                    const r = await scanAlerts().unwrap();
+                    if (r.sent > 0) toast.success(t("setup.alertsSent", { n: r.sent }));
+                    else toast.info(t("setup.noSignificantTx"));
+                  }}
+                >
+                  {t("setup.tgTestScan")}
+                </button>
+              </div>
+            </div>
           )}
+          {!isDemo && <DangerZone />}
         </div>
+      )}
 
-        <div className="card set-card">
-          <div className="set-card-h"><Icon name="settings" size={16} />{t("setup.maintenance")}</div>
-          <p className="set-card-sub">{t("setup.maintenanceSub")}</p>
-          <div className="stack">
-            <button
-              className="btn"
-              disabled={transfersState.isLoading}
-              onClick={async () => {
-                const r = await detectTransfers().unwrap();
-                toast.success(t("setup.transfersMarked", { n: r.marked }));
-              }}
-            >
-              {t("setup.findTransfers")}
-            </button>
-            <button
-              className="btn"
-              disabled={subCatsState.isLoading}
-              onClick={async () => {
-                const r = await applySubCats().unwrap();
-                toast.success(t("setup.subCatsApplied", { n: r.fixed }));
-              }}
-            >
-              {t("setup.applySubCats")}
-            </button>
+      {tab === "data" && (
+        <div className="settings-grid">
+          {/* Keys first: every step of the first run needs them, so a page that opened on the
+              checklist would be asking for actions that cannot succeed yet. */}
+          <CredentialsCard />
+          <FirstRun />
+          <div className="card set-card">
+            <div className="set-card-h"><Icon name="stats" size={16} />{t("setup.dbState")}</div>
+            <div className="stack" style={{ marginTop: 12 }}>
+              <Status label={t("setup.accountsInDb")} value={status?.accounts ?? "…"} />
+              <Status label={t("setup.txCount")} value={status?.transactions ?? "…"} />
+              <Status label={t("setup.webhookStatus")} value={status?.webhookRegistered ? t("setup.registered") : t("setup.notRegistered")} />
+            </div>
           </div>
-          <TranslitFixes />
+          <CsvImportCard />
         </div>
+      )}
 
-        {/* Owner-only: one global bot, one global chat id (see `isOwner` above). Full width so
-            the half-width cards keep an even count — an odd one leaves a blank half. */}
-        {isOwner && (
-          <div className="card set-card set-full">
-            <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
-            <p className="set-card-sub">{t("setup.telegramSub")}</p>
+      {tab === "ai" && (
+        <div className="settings-grid">
+          <AiUsageCard />
+        </div>
+      )}
+
+      {tab === "maintenance" && (
+        <div className="settings-grid">
+          <div className="card set-card">
+            <div className="set-card-h"><Icon name="settings" size={16} />{t("setup.maintenance")}</div>
+            <p className="set-card-sub">{t("setup.maintenanceSub")}</p>
             <div className="stack">
               <button
                 className="btn"
-                disabled={tgState.isLoading}
+                disabled={transfersState.isLoading}
                 onClick={async () => {
-                  const r = await registerTelegram().unwrap();
-                  if (r.error) toast.error(t("setup.tgError", { error: r.error })); else toast.success(t("setup.tgConnected"));
+                  const r = await detectTransfers().unwrap();
+                  toast.success(t("setup.transfersMarked", { n: r.marked }));
                 }}
               >
-                {t("setup.connectTg")}
+                {t("setup.findTransfers")}
               </button>
               <button
                 className="btn"
-                disabled={tgPushState.isLoading}
+                disabled={subCatsState.isLoading}
                 onClick={async () => {
-                  const r = await tgProactive().unwrap();
-                  if (r.sent) toast.success(t("setup.tgPushSent"));
-                  else toast.info(t("setup.tgPushNotSent", { reason: r.reason ?? t("setup.tgNotConfigured") }));
+                  const r = await applySubCats().unwrap();
+                  toast.success(t("setup.subCatsApplied", { n: r.fixed }));
                 }}
               >
-                {t("setup.tgTestSummary")}
+                {t("setup.applySubCats")}
               </button>
-              <button
-                className="btn"
-                disabled={scanState.isLoading}
-                onClick={async () => {
-                  const r = await scanAlerts().unwrap();
-                  if (r.sent > 0) toast.success(t("setup.alertsSent", { n: r.sent }));
-                  else toast.info(t("setup.noSignificantTx"));
-                }}
-              >
-                {t("setup.tgTestScan")}
-              </button>
+              <TranslitFixes />
             </div>
           </div>
-        )}
-
-      </div>
-
-      {!isDemo && <DangerZone />}
+        </div>
+      )}
 
       <div className="set-footer">
         <button className="btn ghost" onClick={async () => { clearLocalUserData(); await logout(); }}>
@@ -270,9 +257,12 @@ function TranslitFixes() {
   const [apply, applyState] = useApplyTranslitFixesMutation();
   const fixes = data?.fixes ?? [];
 
+  // No margin override: this button now sits INSIDE the card's `.stack` with its siblings, which
+  // is also what left-aligns its label — `.set-card .stack .btn { justify-content: flex-start }`
+  // never reached it while it was a direct child of the card, so it alone rendered centred.
   if (!open) {
     return (
-      <button className="btn" style={{ marginTop: 8 }} onClick={() => setOpen(true)}>
+      <button className="btn" onClick={() => setOpen(true)}>
         {t("setup.translitCheck")}
       </button>
     );

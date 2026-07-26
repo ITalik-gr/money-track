@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "check": "tsc -b && node scripts/check-stats-sql.mjs && node scripts/check-i18n.mjs && node scripts/gen-migrations.mjs --check",
+    "check": "tsc -b && node scripts/check-stats-sql.mjs && node scripts/check-i18n.mjs && node scripts/gen-migrations.mjs --check && npm test",
     "check:sql": "node scripts/check-stats-sql.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "types": "wrangler types",
@@ -16,7 +16,8 @@
     "db:migrate:remote": "wrangler d1 migrations apply finance --remote",
     "db:seed:local": "wrangler d1 execute finance --local --file ./migrations/0002_seed.sql",
     "db:dir:migrate:local": "wrangler d1 migrations apply directory --local",
-    "db:dir:migrate:remote": "wrangler d1 migrations apply directory --remote"
+    "db:dir:migrate:remote": "wrangler d1 migrations apply directory --remote",
+    "test": "node --test --disable-warning=ExperimentalWarning \"worker/**/*.test.ts\""
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.2.9",
