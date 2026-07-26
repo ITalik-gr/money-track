@@ -17,6 +17,7 @@ import {
   useGetTranslitFixesQuery,
   useApplyTranslitFixesMutation,
   useGetMeQuery,
+  useEraseMyDataMutation,
   useLogoutMutation,
   useRefreshRatesMutation,
   useRegisterWebhookMutation,
@@ -27,6 +28,7 @@ import {
 } from "../store/api.ts";
 import type { AiTask, AiModelToken } from "../store/api.ts";
 import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
+import { clearLocalUserData } from "../lib/localdata.ts";
 import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
 
 // Крок бекфілу раз на 60с (ліміт моно 1/60с), клієнт веде таймінг і показує прогрес (§5).
@@ -44,6 +46,13 @@ export function Setup() {
   const [tgProactive, tgPushState] = useTgProactiveMutation();
   const [scanAlerts, scanState] = useScanAlertsMutation();
   const [logout] = useLogoutMutation();
+  const { data: me } = useGetMeQuery();
+  const isDemo = me?.demo === true; // a sandbox has no account to erase
+  // The Telegram bot is ONE global installation wired to the owner's chat id, so its controls
+  // are the owner's too (security review 2026-07-26: the push paths are gated on `IS_OWNER`
+  // server-side). Showing buttons that answer 403 — or worse, look like they configure YOUR
+  // bot — is a lie about what the product does for you. Per-user bots: ROADMAP §D1.
+  const isOwner = me?.user?.is_owner === true;
   const [backfillStart] = useBackfillStartMutation();
   const [backfillStep] = useBackfillStepMutation();
 
@@ -145,53 +154,108 @@ export function Setup() {
           <TranslitFixes />
         </div>
 
-        {/* Full width so the half-width cards stay an even count — an odd one leaves a blank
-            half, the same defect ROADMAP L3 closed elsewhere. Telegram is the natural choice:
-            it is a connectivity section, like the keys card above it. */}
-        <div className="card set-card set-full">
-          <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
-          <p className="set-card-sub">{t("setup.telegramSub")}</p>
-          <div className="stack">
-            <button
-              className="btn"
-              disabled={tgState.isLoading}
-              onClick={async () => {
-                const r = await registerTelegram().unwrap();
-                if (r.error) toast.error(t("setup.tgError", { error: r.error })); else toast.success(t("setup.tgConnected"));
-              }}
-            >
-              {t("setup.connectTg")}
-            </button>
-            <button
-              className="btn"
-              disabled={tgPushState.isLoading}
-              onClick={async () => {
-                const r = await tgProactive().unwrap();
-                if (r.sent) toast.success(t("setup.tgPushSent"));
-                else toast.info(t("setup.tgPushNotSent", { reason: r.reason ?? t("setup.tgNotConfigured") }));
-              }}
-            >
-              {t("setup.tgTestSummary")}
-            </button>
-            <button
-              className="btn"
-              disabled={scanState.isLoading}
-              onClick={async () => {
-                const r = await scanAlerts().unwrap();
-                if (r.sent > 0) toast.success(t("setup.alertsSent", { n: r.sent }));
-                else toast.info(t("setup.noSignificantTx"));
-              }}
-            >
-              {t("setup.tgTestScan")}
-            </button>
+        {/* Owner-only: one global bot, one global chat id (see `isOwner` above). Full width so
+            the half-width cards keep an even count — an odd one leaves a blank half. */}
+        {isOwner && (
+          <div className="card set-card set-full">
+            <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
+            <p className="set-card-sub">{t("setup.telegramSub")}</p>
+            <div className="stack">
+              <button
+                className="btn"
+                disabled={tgState.isLoading}
+                onClick={async () => {
+                  const r = await registerTelegram().unwrap();
+                  if (r.error) toast.error(t("setup.tgError", { error: r.error })); else toast.success(t("setup.tgConnected"));
+                }}
+              >
+                {t("setup.connectTg")}
+              </button>
+              <button
+                className="btn"
+                disabled={tgPushState.isLoading}
+                onClick={async () => {
+                  const r = await tgProactive().unwrap();
+                  if (r.sent) toast.success(t("setup.tgPushSent"));
+                  else toast.info(t("setup.tgPushNotSent", { reason: r.reason ?? t("setup.tgNotConfigured") }));
+                }}
+              >
+                {t("setup.tgTestSummary")}
+              </button>
+              <button
+                className="btn"
+                disabled={scanState.isLoading}
+                onClick={async () => {
+                  const r = await scanAlerts().unwrap();
+                  if (r.sent > 0) toast.success(t("setup.alertsSent", { n: r.sent }));
+                  else toast.info(t("setup.noSignificantTx"));
+                }}
+              >
+                {t("setup.tgTestScan")}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+
       </div>
 
+      {!isDemo && <DangerZone />}
+
       <div className="set-footer">
-        <button className="btn ghost" onClick={() => logout()}>{t("setup.logout")}</button>
+        <button className="btn ghost" onClick={async () => { clearLocalUserData(); await logout(); }}>
+          {t("setup.logout")}
+        </button>
       </div>
     </>
+  );
+}
+
+/**
+ * Account erasure (security review 2026-07-26).
+ *
+ * Until this existed, the only removal was the owner disabling someone: the door closed and every
+ * transaction, balance and AI note stayed in the deployment forever. "Delete my data" has to be
+ * something the person whose data it is can do.
+ *
+ * Typed confirmation rather than a modal with an OK button: this drops a bank history and cannot
+ * be undone, and the cost of typing six letters is the point.
+ */
+function DangerZone() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
+  const [eraseMyData, delState] = useEraseMyDataMutation();
+
+  async function run() {
+    try {
+      await eraseMyData().unwrap();
+      // The server dropped the cookie; clearing the device-side copy of the chats is ours to do.
+      clearLocalUserData();
+      window.location.href = "/";
+    } catch (e) {
+      toast.error(errText(e));
+    }
+  }
+
+  return (
+    <div className="card set-card set-full danger-zone">
+      <div className="set-card-h"><Icon name="alert" size={16} />{t("setup.dangerTitle")}</div>
+      <p className="set-card-sub">{t("setup.dangerBody")}</p>
+      {!open ? (
+        <button className="btn sm ghost danger-text" onClick={() => setOpen(true)}>{t("setup.deleteAccount")}</button>
+      ) : (
+        <div className="stack">
+          <p className="set-card-sub" style={{ margin: 0 }}>{t("setup.deleteConfirmHint")}</p>
+          <div className="row" style={{ gap: 8 }}>
+            <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="DELETE" style={{ flex: 1 }} />
+            <button className="btn sm danger-text" disabled={typed !== "DELETE" || delState.isLoading} onClick={run}>
+              {delState.isLoading ? "…" : t("setup.deleteConfirmBtn")}
+            </button>
+            <button className="btn sm ghost" onClick={() => { setOpen(false); setTyped(""); }}>{t("common.cancel")}</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

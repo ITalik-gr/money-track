@@ -438,6 +438,11 @@ export const api = createApi({
     >({ query: () => "/me", providesTags: ["Me"] }),
     // (`login` removed 2026-07-26 — sign-in is Google-only and `POST /api/login` no longer
     //  exists on the server, so the mutation could only ever 404.)
+    // Erasure: wipes this user's Durable Object and directory row, then drops the cookie.
+    // Nothing to invalidate afterwards — the client navigates away to the logged-out shell.
+    eraseMyData: b.mutation<{ ok: boolean }, void>({
+      query: () => ({ url: "/account/delete", method: "POST", body: { confirm: "DELETE" } }),
+    }),
     logout: b.mutation<unknown, void>({
       query: () => ({ url: "/logout", method: "POST" }),
       invalidatesTags: ["Me"],
@@ -960,6 +965,7 @@ export const api = createApi({
 export const {
   useGetMeQuery,
   useLogoutMutation,
+  useEraseMyDataMutation,
   useGetSummaryQuery,
   useGetAccountsQuery,
   useGetArchivedAccountsQuery,

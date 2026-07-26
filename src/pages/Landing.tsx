@@ -119,7 +119,18 @@ export function Landing() {
         <p>{t("landing.aiNote")}</p>
       </section>
 
-      <footer className="lp-foot">{t("landing.footer")}</footer>
+      {/* Author link: this page is a portfolio piece, so the person behind it has to be one click
+          away. `rel="me"` states the identity relationship; noreferrer keeps the outbound click
+          from carrying this app's URL along. */}
+      <footer className="lp-foot">
+        <p>{t("landing.footer")}</p>
+        <p className="lp-author">
+          {t("landing.authorPre")}{" "}
+          <a href="https://italik-dev.web.app/" target="_blank" rel="me noreferrer noopener">
+            italik-dev.web.app<Icon name="arrowUpRight" size={12} />
+          </a>
+        </p>
+      </footer>
     </div>
   );
 }

@@ -6,7 +6,7 @@
 // stays in their own DO, and the door simply stops opening.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { findUserById, inviteUser, listUsers, setUserStatus, type UserStatus } from "../lib/platform/directory.ts";
+import { deleteUser, findUserById, inviteUser, listUsers, setUserStatus, type UserStatus } from "../lib/platform/directory.ts";
 
 export const admin = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
@@ -60,6 +60,26 @@ admin.post("/import-legacy", async (c) => {
   const ns = c.env.USER_DO;
   const report = await ns.get(ns.idFromName(me!.id)).importLegacyData();
   return c.json(report, report.ok ? 200 : 409);
+});
+
+/**
+ * Erase a user completely: their finance database, then their identity row.
+ *
+ * `status='disabled'` keeps everything forever, which is right for "revoke access" and wrong for
+ * "this person left, stop holding their bank history". Until 2026-07-26 only the former existed,
+ * so there was no way — for the owner OR the user — to get data out of this deployment.
+ */
+admin.delete("/users/:id", async (c) => {
+  const id = c.req.param("id");
+  const target = await findUserById(c.env.DIRECTORY, id);
+  if (!target) return c.json({ error: "not_found" }, 404);
+  if (target.is_owner === 1) return c.json({ error: "cannot_delete_owner" }, 400);
+  // Data first, identity second: a failure between the two leaves an unreachable account rather
+  // than a live account whose data silently vanished.
+  const ns = c.env.USER_DO;
+  await ns.get(ns.idFromName(id)).reset();
+  await deleteUser(c.env.DIRECTORY, id);
+  return c.json({ ok: true });
 });
 
 admin.post("/users/:id/status", async (c) => {

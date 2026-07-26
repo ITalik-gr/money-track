@@ -5,9 +5,10 @@ import { createMiddleware } from "hono/factory";
 import type { Env } from "./env.ts";
 import { auth } from "./routes/auth.ts";
 import { admin } from "./routes/admin.ts";
+import { account } from "./routes/account.ts";
 import {
   SESSION_COOKIE, verifySession, verifyWebhookToken,
-  DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId,
+  DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId, timingSafeEqual,
 } from "./lib/platform/auth.ts";
 import { withUserHeader } from "./lib/platform/forward.ts";
 import { ensureOwner, findUserById, registerDemoSession } from "./lib/platform/directory.ts";
@@ -236,7 +237,9 @@ app.use("/ingest/*", guard);
 // the transactions in between would simply never arrive.
 async function webhookUserId(env: Env, token: string | undefined): Promise<string | null> {
   if (!token) return null;
-  if (env.WEBHOOK_SECRET && token === env.WEBHOOK_SECRET) {
+  // Constant-time: `===` on a secret leaks its prefix through response timing, and this one is
+  // long-lived (the bank keeps the URL for years, so there is time to measure).
+  if (env.WEBHOOK_SECRET && timingSafeEqual(token, env.WEBHOOK_SECRET)) {
     const owner = await ensureOwner(env.DIRECTORY, env.OWNER_EMAIL || "owner@localhost");
     return owner.id;
   }
@@ -274,6 +277,9 @@ app.all("/tg/*", async (c) => {
 });
 // Owner-only whitelist management; behind the guard above, so `c.var.userId` is set.
 app.route("/api/admin", admin);
+// Self-service account actions (erasure). Worker-side because deleting an account spans BOTH
+// databases — the user's Durable Object and the shared directory.
+app.route("/api/account", account);
 
 // ---- everything that touches finances runs INSIDE the user's Durable Object -------------
 // Registered last among the /api routes, so the Worker-local ones above (health, login,

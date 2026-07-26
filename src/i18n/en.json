@@ -1348,5 +1348,11 @@
   "setup.translitFound": "Found {n} name(s) written in Cyrillic over a Latin bank description. That splits a merchant's history in two.",
   "setup.translitTxCount": "{n} tx",
   "setup.translitApply": "Rename",
-  "setup.translitApplied": "Renamed {n} transactions ({m} merchant(s))."
+  "setup.translitApplied": "Renamed {n} transactions ({m} merchant(s)).",
+  "setup.dangerTitle": "Delete account",
+  "setup.dangerBody": "Erases ALL of your data permanently: transactions, accounts, budgets, goals, reports, stored keys. This cannot be undone and no copy is kept. You can export your statement first with the “CSV” button on Transactions.",
+  "setup.deleteAccount": "Delete account and all data",
+  "setup.deleteConfirmHint": "Type DELETE in capitals to confirm.",
+  "setup.deleteConfirmBtn": "Delete permanently",
+  "landing.authorPre": "Built by"
 }

@@ -140,6 +140,18 @@ export async function setUserStatus(db: D1Database, id: string, status: UserStat
   await db.prepare("UPDATE users SET status = ? WHERE id = ?").bind(status, id).run();
 }
 
+/**
+ * Remove the identity row entirely. Only half of "delete an account" — the finance data lives in
+ * that user's Durable Object and is erased separately (`UserDO.reset()`); callers must do both,
+ * in that order, so a failure leaves an unreachable account rather than a reachable empty one.
+ *
+ * Distinct from `setUserStatus('disabled')` on purpose: disabling closes the door and keeps
+ * everything, deletion is for "erase me". Both existed only as the former until 2026-07-26.
+ */
+export async function deleteUser(db: D1Database, id: string): Promise<void> {
+  await db.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
+}
+
 // ---- demo sandbox registry (P4.2) -------------------------------------------
 // The cron sweep uses this to find and wipe sandboxes whose 24h alarm may not have fired after
 // an eviction (see migrations-directory/0003). The table may not exist yet on a directory db
