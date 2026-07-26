@@ -17,6 +17,7 @@ import {
   categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom,
 } from "./stats.ts";
 import { getState, setState } from "./repo.ts";
+import { renderNotif, type NotifTemplateKey, type NotifParams, type NotifLocale } from "../../shared/notif-i18n.ts";
 
 export type NotifKind =
   | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
@@ -33,6 +34,11 @@ export interface NotifRow {
   kind: NotifKind;
   title: string;
   body: string | null;
+  // Template key + raw params for locale-aware re-rendering at read time (P3.3). NULL for the
+  // free-text `ai` kind and for rows written before migration 0033 — those fall back to
+  // title/body. `notif_params` is a JSON string.
+  notif_key: NotifTemplateKey | null;
+  notif_params: string | null;
   severity: Severity;
   entity_type: string | null;
   entity_id: string | null;
@@ -40,9 +46,14 @@ export interface NotifRow {
   read_at: number | null;
 }
 
+// A generated event. Deterministic kinds carry a template `tkey` + `tparams` (composed into
+// title/body at insert time in the owner's locale, and re-composed client-side on a language
+// switch). The free-text `ai` kind instead carries a ready `title`/`body` from the model.
 interface Draft {
   kind: NotifKind;
-  title: string;
+  tkey?: NotifTemplateKey;
+  tparams?: NotifParams;
+  title?: string;
   body?: string | null;
   severity?: Severity;
   entity_type?: string | null;
@@ -92,7 +103,7 @@ export async function listNotifications(
   const binds: (string | number)[] = [];
   if (opts.kind && NOTIF_KINDS.includes(opts.kind as NotifKind)) { where.push("kind = ?"); binds.push(opts.kind); }
   if (opts.unreadOnly) where.push("read_at IS NULL");
-  const sql = `SELECT id, kind, title, body, severity, entity_type, entity_id, created_at, read_at
+  const sql = `SELECT id, kind, title, body, notif_key, notif_params, severity, entity_type, entity_id, created_at, read_at
                FROM notifications ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
                ORDER BY created_at DESC, id DESC LIMIT ?`;
   const rows = await env.DB.prepare(sql).bind(...binds, limit).all<NotifRow>();
@@ -125,10 +136,20 @@ export async function clearNotifications(env: Env): Promise<void> {
 
 // ---- генерація ---------------------------------------------------------------
 
-const uah = (minor: number) => `${Math.round(minor / 100).toLocaleString("uk-UA")} ₴`;
 const isoDay = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
-const dayMonth = (unix: number) =>
-  new Date(unix * 1000).toLocaleDateString("uk-UA", { day: "numeric", month: "long" });
+
+// Owner locale, read once per run — used to compose the stored fallback title/body and the
+// TG push. The feed itself re-renders client-side, so this only affects the fallback path.
+async function ownerLocale(env: Env): Promise<NotifLocale> {
+  return (await getState(env.DB, "locale")) === "en" ? "en" : "uk";
+}
+
+// notif_params is a JSON string; a malformed one must degrade to {} (the template then shows
+// its defaults) rather than throw and drop the whole TG batch.
+function safeParse(json: string | null): NotifParams {
+  if (!json) return {};
+  try { return JSON.parse(json) as NotifParams; } catch { return {}; }
+}
 
 /**
  * Свіжі AI-репорти, про які ще не сповіщали. Ідемпотентність — по `report:<id>`.
@@ -147,9 +168,12 @@ async function draftReports(env: Env, now: number): Promise<Draft[]> {
   return (rows.results ?? []).map((r) => ({
     kind: "report" as const,
     // Період у заголовку: чотири однакові «Готовий тижневий репорт» у стрічці не розрізнити.
-    title: `${r.period_type === "month" ? "Місячний" : "Тижневий"} репорт · ${dayMonth(r.period_from)} – ${dayMonth(r.period_to)}`,
-    // У стрічці — короткий витяг, не сам репорт: клік веде на /reports/:id.
-    body: (r.summary ?? "").slice(0, 220) || null,
+    // Тіло — короткий витяг (AI-текст, не локалізується), клік веде на /reports/:id.
+    tkey: "report" as const,
+    tparams: {
+      periodType: r.period_type, from: r.period_from, to: r.period_to,
+      summary: (r.summary ?? "").slice(0, 220),
+    },
     severity: "info" as const,
     entity_type: "report", entity_id: String(r.id),
     dedup_key: `report:${r.id}`,
@@ -176,11 +200,10 @@ async function draftDeadlines(env: Env, now: number): Promise<Draft[]> {
     const days = Math.round((at - now) / 86400);
     if (days > 3) continue;
     const amountUAH = plannedUAH(amt, p.currency_code, rates);
-    const when = days <= 0 ? "сьогодні" : days === 1 ? "завтра" : `через ${days} дн`;
     out.push({
       kind: "deadline",
-      title: `${p.title} — списання ${when}`,
-      body: `${uah(amountUAH)} · ${dayMonth(at)}`,
+      tkey: "deadline_plan",
+      tparams: { title: p.title, days, amount: amountUAH, at },
       severity: days <= 2 ? "warn" : "info",
       entity_type: "planned", entity_id: String(p.id),
       // Ключ по ДАТІ списання: наступного разу подія має зʼявитись знову.
@@ -206,12 +229,11 @@ async function draftDeadlines(env: Env, now: number): Promise<Draft[]> {
     if (days > 3) continue;
     const amt = a.min_payment && a.min_payment > 0 ? a.min_payment : used;
     const amtUAH = plannedUAH(amt, a.currency_code, rates);
-    const label = a.min_payment && a.min_payment > 0 ? "мін. платіж" : "борг";
-    const when = days <= 0 ? "сьогодні" : days === 1 ? "завтра" : `через ${days} дн`;
+    const isMin = !!(a.min_payment && a.min_payment > 0);
     out.push({
       kind: "deadline",
-      title: `${a.title ?? "Кредитка"} — платіж ${when}`,
-      body: `${label} ${uah(amtUAH)} · до ${dayMonth(at)}`,
+      tkey: "deadline_credit",
+      tparams: { title: a.title, days, isMin, amount: amtUAH, at },
       severity: "warn",  // пропущений платіж по кредитці дорогий → завжди у TG-пуш
       entity_type: "account", entity_id: a.id,
       dedup_key: `deadline:credit:${a.id}:${isoDay(at).slice(0, 7)}`,
@@ -282,12 +304,11 @@ function draftAnomalies(pace: MonthPace): Draft[] {
     // projected === spent означає, що спрацював кеп: перевитрата вже СТАЛАСЬ, а не
     // «прогнозується». Казати про неї в майбутньому часі — брехати про стан справ.
     const already = projected <= r.spent;
+    const pct = Math.round(((already ? r.spent : projected) / r.usual) * 100);
     out.push({
       kind: "anomaly",
-      title: `${r.name} — ${already ? "вже вище звичного" : "темп вище звичного"}`,
-      body: already
-        ? `Уже ${uah(r.spent)} проти звичних ${uah(r.usual)} за місяць (${Math.round((r.spent / r.usual) * 100)}%).`
-        : `Уже ${uah(r.spent)}, за темпом місяць вийде ≈ ${uah(projected)} проти звичних ${uah(r.usual)} (${Math.round((projected / r.usual) * 100)}%).`,
+      tkey: "anomaly",
+      tparams: { name: r.name, already, spent: r.spent, usual: r.usual, projected, pct },
       severity: "warn",
       entity_type: "category", entity_id: String(r.id),
       dedup_key: `anomaly:${r.id}:${pace.monthKey}`,
@@ -312,8 +333,8 @@ function draftWins(pace: MonthPace): Draft[] {
     if (saved < 30000) continue;              // <300 ₴ — не новина
     out.push({
       kind: "win",
-      title: `${r.name} — нижче звичного на ${Math.round((saved / r.usual) * 100)}%`,
-      body: `За темпом вийде ≈ ${uah(projected)} проти звичних ${uah(r.usual)}. Різниця ${uah(saved)}.`,
+      tkey: "win",
+      tparams: { name: r.name, pct: Math.round((saved / r.usual) * 100), projected, usual: r.usual, saved },
       severity: "info",
       entity_type: "category", entity_id: String(r.id),
       dedup_key: `win:${r.id}:${pace.monthKey}`,
@@ -355,8 +376,8 @@ async function draftBudgets(env: Env, now: number): Promise<Draft[]> {
     const over = ratio >= 1;
     out.push({
       kind: "budget",
-      title: over ? `Бюджет «${b.name}» вичерпано` : `Бюджет «${b.name}» майже вичерпано`,
-      body: `${uah(spent)} з ${uah(b.amount)} (${Math.round(ratio * 100)}%).`,
+      tkey: "budget",
+      tparams: { name: b.name, over, spent, amount: b.amount, pct: Math.round(ratio * 100) },
       severity: over ? "urgent" : "warn",
       entity_type: "category", entity_id: String(b.id),
       // Різні ключі для 90% і 100% — щоб «майже» не глушило подальше «вичерпано».
@@ -384,9 +405,12 @@ async function draftPriceUps(env: Env): Promise<Draft[]> {
     if (delta <= 0) continue;
     out.push({
       kind: "price_up",
-      title: `${p.title} подорожчав на ${a.price_change_pct}%`,
       // Абсолютна дельта + вплив на рік читається краще за голий відсоток (як у Підписках).
-      body: `Було ${uah(p.period_amount)}, стало ${uah(a.last_amount)} (+${uah(delta)} · ${uah(delta * 12)}/рік).`,
+      tkey: "price_up",
+      tparams: {
+        title: p.title, pct: a.price_change_pct,
+        old: p.period_amount, new: a.last_amount, delta, year: delta * 12,
+      },
       severity: "warn",
       entity_type: "planned", entity_id: String(a.id),
       dedup_key: `price_up:${a.id}:${isoDay(a.last_time)}`,
@@ -432,8 +456,8 @@ async function draftLiquidity(env: Env, now: number): Promise<Draft[]> {
     if (balance >= 0) continue;
     return [{
       kind: "liquidity",
-      title: "Прогнозований провал ліквідності",
-      body: `На ${dayMonth(ch.at)} планових списань більше, ніж подушки: не вистачить ≈ ${uah(-balance)}. Подушка зараз ${uah(funds.cushion)}.`,
+      tkey: "liquidity",
+      tparams: { at: ch.at, short: -balance, cushion: funds.cushion },
       severity: "urgent",
       entity_type: null, entity_id: null,
       dedup_key: `liquidity:${isoDay(ch.at)}`,
@@ -480,8 +504,11 @@ async function draftBigTx(env: Env, now: number): Promise<Draft[]> {
 
   return (rows.results ?? []).map((r) => ({
     kind: "big_tx" as const,
-    title: `Велика витрата: ${r.merchant ?? "без назви"}`,
-    body: `${uah(r.amount)} — це ×${(r.amount / r.avg_amt).toFixed(1)} до звичного чека в категорії «${r.category ?? "без категорії"}» (${uah(Math.round(r.avg_amt))}).`,
+    tkey: "big_tx" as const,
+    tparams: {
+      merchant: r.merchant, amount: r.amount, mult: (r.amount / r.avg_amt).toFixed(1),
+      category: r.category, avg: Math.round(r.avg_amt),
+    },
     severity: "info" as const,
     entity_type: "tx", entity_id: r.id,
     dedup_key: `big_tx:${r.id}`,
@@ -510,8 +537,8 @@ async function draftDuplicates(env: Env, now: number): Promise<Draft[]> {
     seen.add(pair);
     out.push({
       kind: "duplicate",
-      title: `Схоже на подвійне списання: ${r.merchant}`,
-      body: `Дві операції по ${uah(r.amount)} протягом доби. Перевір, чи це не помилка терміналу.`,
+      tkey: "duplicate",
+      tparams: { merchant: r.merchant, amount: r.amount },
       severity: "warn",
       entity_type: "tx", entity_id: r.id,
       dedup_key: `duplicate:${pair}`,
@@ -539,8 +566,8 @@ async function draftHealthDrop(env: Env, now: number): Promise<Draft[]> {
 
   return [{
     kind: "health_drop",
-    title: `Індекс фінздоровʼя впав на ${drop} п.`,
-    body: `Було ${past.score} (${past.day}), стало ${latest.score}. Відкрий «Стан фінансів» — там видно, яка складова просіла.`,
+    tkey: "health_drop",
+    tparams: { drop, pastScore: past.score, pastDay: past.day, latestScore: latest.score },
     severity: "warn",
     entity_type: null, entity_id: null,
     dedup_key: `health_drop:${latest.day}`,
@@ -576,10 +603,12 @@ async function draftGoalRisk(env: Env, now: number): Promise<Draft[]> {
     const perMonth = daysLeft > 0 ? Math.round(need / Math.max(1, daysLeft / 30)) : need;
     out.push({
       kind: "goal_risk",
-      title: daysLeft <= 0 ? `Дедлайн цілі «${g.name}» минув` : `Ціль «${g.name}» не встигає`,
-      body: daysLeft <= 0
-        ? `Зібрано ${uah(current)} з ${uah(g.target_amount)} (${Math.round(progressFrac * 100)}%).`
-        : `Зібрано ${Math.round(progressFrac * 100)}%, а часу минуло ${Math.round(elapsedFrac * 100)}%. Щоб устигнути — ${uah(perMonth)}/міс (лишилось ${daysLeft} дн).`,
+      tkey: "goal_risk",
+      tparams: {
+        name: g.name, passed: daysLeft <= 0,
+        current, target: g.target_amount, progressPct: Math.round(progressFrac * 100),
+        elapsedPct: Math.round(elapsedFrac * 100), perMonth, daysLeft,
+      },
       severity: daysLeft <= 7 ? "warn" : "info",
       entity_type: "goal", entity_id: String(g.id),
       // Раз на тиждень: щоденне нагадування про ту саму ціль — це вже докучання.
@@ -607,10 +636,8 @@ async function draftDeadSubs(env: Env, now: number): Promise<Draft[]> {
     const perMonth = plannedUAH(p.period_amount, p.currency_code, rates);
     out.push({
       kind: "dead_sub",
-      title: `${p.title} — списань не видно`,
-      body: perMonth > 0
-        ? `План на ${uah(perMonth)}/міс активний понад 60 днів, але жодної операції до нього не привʼязано. Або підписки вже нема, або списання не розпізналось.`
-        : "План активний понад 60 днів без жодного фактичного списання.",
+      tkey: "dead_sub",
+      tparams: { title: p.title, perMonth },
       severity: "info",
       entity_type: "planned", entity_id: String(p.id),
       dedup_key: `dead_sub:${p.id}:${isoDay(now).slice(0, 7)}`,   // раз на місяць
@@ -632,8 +659,8 @@ async function draftTodo(env: Env, now: number): Promise<Draft[]> {
   const week = Math.floor(now / (7 * 86400));
   return [{
     kind: "todo",
-    title: `${n} операцій без категорії`,
-    body: "За останні 30 днів. Поки вони без категорії — статистика, бюджети й поради рахують не все.",
+    tkey: "todo",
+    tparams: { n },
     severity: "info",
     entity_type: null, entity_id: null,
     dedup_key: `todo:uncategorized:${week}`,
@@ -744,15 +771,25 @@ export async function pushPendingToTelegram(env: Env): Promise<{ sent: number; r
   if (!token || !chatId) return { sent: 0, reason: "TG not configured" };
 
   const rows = await env.DB.prepare(
-    `SELECT id, kind, title, body, severity FROM notifications
+    `SELECT id, kind, title, body, notif_key, notif_params, severity FROM notifications
      WHERE pushed_tg_at IS NULL AND severity IN ('warn','urgent')
      ORDER BY created_at ASC LIMIT 10`,
-  ).all<{ id: number; kind: string; title: string; body: string | null; severity: Severity }>();
+  ).all<{ id: number; kind: string; title: string; body: string | null; notif_key: NotifTemplateKey | null; notif_params: string | null; severity: Severity }>();
   const items = rows.results ?? [];
   if (!items.length) return { sent: 0 };
 
+  // Render in the owner's CURRENT locale at send time (§12.3), not the locale stored at
+  // creation — the stored title/body is only a fallback for rows without a template.
+  const locale = await ownerLocale(env);
   const { sendMessage } = await import("./telegram.ts");
-  const lines = items.map((n) => `${TG_ICON[n.severity]} <b>${tgEsc(n.title)}</b>${n.body ? `\n${tgEsc(n.body)}` : ""}`);
+  const lines = items.map((n) => {
+    let title = n.title, body = n.body;
+    if (n.notif_key) {
+      const r = renderNotif(locale, n.notif_key, safeParse(n.notif_params));
+      title = r.title; body = r.body;
+    }
+    return `${TG_ICON[n.severity]} <b>${tgEsc(title)}</b>${body ? `\n${tgEsc(body)}` : ""}`;
+  });
   await sendMessage(token, chatId, `🔔 Money Track\n\n${lines.join("\n\n")}`);
 
   const now = Math.floor(Date.now() / 1000);
@@ -823,20 +860,30 @@ export async function generateNotifications(
   const rank: Record<Severity, number> = { urgent: 0, warn: 1, info: 2 };
   deduped.sort((a, b) => rank[a.severity ?? "info"] - rank[b.severity ?? "info"]);
 
+  // Fallback title/body are composed in the owner's locale at insert (P3.3): they serve
+  // legacy/`ai` rows and TG. The client re-renders templated rows live from key/params.
+  const locale = await ownerLocale(env);
   let created = 0;
   for (const d of deduped) {
     // Ліміт рахуємо по СТВОРЕНИХ, а не по переглянутих: інакше десяток уже наявних
     // (і мовчки проігнорованих) чернеток зʼїдав би квоту й глушив справді нові події.
     if (created >= MAX_PER_RUN) break;
+    let title = d.title ?? "";
+    let body: string | null = d.body ?? null;
+    if (d.tkey) {
+      const r = renderNotif(locale, d.tkey, d.tparams ?? {});
+      title = r.title;
+      body = r.body;
+    }
     // INSERT OR IGNORE + UNIQUE(dedup_key): крон щодня бачить ті самі події — вставиться
     // лише те, чого ще не було. `changes` каже, чи справді додався рядок.
     const res = await env.DB.prepare(
       `INSERT OR IGNORE INTO notifications
-         (kind, title, body, severity, entity_type, entity_id, dedup_key, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (kind, title, body, notif_key, notif_params, severity, entity_type, entity_id, dedup_key, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      d.kind, d.title, d.body ?? null, d.severity ?? "info",
-      d.entity_type ?? null, d.entity_id ?? null, d.dedup_key, now,
+      d.kind, title, body, d.tkey ?? null, d.tparams ? JSON.stringify(d.tparams) : null,
+      d.severity ?? "info", d.entity_type ?? null, d.entity_id ?? null, d.dedup_key, now,
     ).run();
     if (res.meta.changes > 0) created++;
   }

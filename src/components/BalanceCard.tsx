@@ -4,9 +4,11 @@ import { Money } from "./Money.tsx";
 import { Icon } from "./Icon.tsx";
 import { formatMinor, currencySign } from "../lib/format.ts";
 import { useCountUp } from "../lib/useCountUp.ts";
+import { useT } from "../i18n/index.ts";
 
 // Власні кошти великою sans-цифрою (гібрид, DESIGN.md §2) + швидкі дії (DeliFin R1).
 export function BalanceCard() {
+  const t = useT();
   const { data, isLoading } = useGetSummaryQuery();
   const uah = data?.byCurrency.find((x) => x.currency_code === 980)?.own ?? 0;
   const others = data?.byCurrency.filter((x) => x.currency_code !== 980 && x.own !== 0) ?? [];
@@ -16,8 +18,8 @@ export function BalanceCard() {
   return (
     <div className="card balance hero">
       <div className="bal-top">
-        <span className="label">власні кошти</span>
-        <Link to="/accounts" className="label">рахунки →</Link>
+        <span className="label">{t("bal.ownFunds")}</span>
+        <Link to="/accounts" className="label">{t("link.accounts")} →</Link>
       </div>
 
       <div className={`bal-num num-hero ${uah < 0 ? "neg" : ""}`}>
@@ -33,13 +35,13 @@ export function BalanceCard() {
         <div className="bal-chips">
           {others.map((x) => (
             <div key={x.currency_code} className="bal-chip">
-              <span className="label">≈ у валюті</span>
+              <span className="label">{t("bal.inCurrency")}</span>
               <Money minor={x.own} currency={x.currency_code} decimals={false} />
             </div>
           ))}
           {data && data.totalUAH !== uah && (
             <div className="bal-chip">
-              <span className="label">всього ≈ ₴</span>
+              <span className="label">{t("bal.totalUah")}</span>
               <Money minor={data.totalUAH} decimals={false} />
             </div>
           )}
@@ -48,10 +50,10 @@ export function BalanceCard() {
 
       <div className="quick-actions">
         <Link to="/add" className="btn primary">
-          <Icon name="add" size={17} /> Додати
+          <Icon name="add" size={17} /> {t("nav.add")}
         </Link>
         <Link to="/tx" className="btn">
-          <Icon name="tx" size={17} /> Усі операції
+          <Icon name="tx" size={17} /> {t("bal.allTx")}
         </Link>
       </div>
     </div>

@@ -3,44 +3,48 @@
 // подушка, скільки інвестиції, скільки з'їдає борг. Саме розклад відповідає на «чому нетворт
 // не росте» — часто активи ростуть, а борг росте швидше.
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT } from "../i18n/index.ts";
 import { useGetNetworthQuery } from "../store/api.ts";
 import { InfoTip } from "./InfoTip.tsx";
 import { ErrorNote } from "./ErrorNote.tsx";
 import { CHART_ANIM } from "../lib/motion.ts";
+import { monthShort } from "../lib/format.ts";
 
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
+const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
 const minor = (v: number) => fmt0.format(Math.round(v / 100));
 
-const MONTHS_SHORT = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
 // Підпис місяця рахуємо з `ym` (`YYYY-MM`), а не з `t`. Форматування `t` через Intl у київському
 // поясі зсувало кінець місяця на наступний → дубль категорії на осі X із точкою «зараз».
 function monthLabel(ym: string): string {
   const [y, m] = ym.split("-");
   const i = Number(m) - 1;
-  return `${MONTHS_SHORT[i] ?? m} ${y.slice(2)}`;
+  return `${monthShort(i) ?? m} ${y.slice(2)}`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function NwTooltip(props: any) {
+  const t = useT();
   const { active, payload } = props;
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
     <div className="chart-tip">
-      <div className="tip-lbl">{p.label}{p.partial ? " · поточний, неповний" : ""}</div>
-      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />Подушка: {minor(p.cushion)} ₴</div>
-      {p.investment > 0 && <div className="r"><span className="d" style={{ background: "var(--pos)" }} />Інвестиції: {minor(p.investment)} ₴</div>}
-      {p.debt > 0 && <div className="r"><span className="d" style={{ background: "var(--neg)" }} />Борг: −{minor(p.debt)} ₴</div>}
-      <div className="r" style={{ fontWeight: 600 }}>Нетворт: {minor(p.net)} ₴</div>
+      <div className="tip-lbl">{p.label}{p.partial ? t("nw.partialSuffix") : ""}</div>
+      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{t("nw.cushionLabel")}: {minor(p.cushion)} ₴</div>
+      {p.investment > 0 && <div className="r"><span className="d" style={{ background: "var(--pos)" }} />{t("nw.investmentLabel")}: {minor(p.investment)} ₴</div>}
+      {p.debt > 0 && <div className="r"><span className="d" style={{ background: "var(--neg)" }} />{t("nw.debtLabel")}: −{minor(p.debt)} ₴</div>}
+      <div className="r" style={{ fontWeight: 600 }}>{t("nw.networthLabel")}: {minor(p.net)} ₴</div>
     </div>
   );
 }
 
 export function NetworthCard({ months = 12 }: { months?: number }) {
+  const t = useT();
   const { data, error, refetch } = useGetNetworthQuery(months);
   const points = data?.points ?? [];
 
-  if (error) return <div className="card"><ErrorNote error={error} what="нетворт" onRetry={refetch} /></div>;
+  if (error) return <div className="card"><ErrorNote error={error} what={t("nw.errorWhat")} onRetry={refetch} /></div>;
   if (points.length < 2) return null;
 
   // Остання точка — «зараз» (місяць ще не завершений), позначаємо це і в підписі, і в тултіпі:
@@ -60,18 +64,14 @@ export function NetworthCard({ months = 12 }: { months?: number }) {
       <div className="cashflow-head">
         <div>
           <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            нетворт · {months} міс
-            <InfoTip>
-              Активи (ліквідна подушка + інвестиції) мінус борги, на кінець кожного місяця.
-              Реконструйовано назад від поточних балансів за історією операцій.
-              Розклад рахується тим самим правилом, що й «Розбивка коштів» у Пораднику.
-            </InfoTip>
+            {t("nw.monthsLabel", { months })}
+            <InfoTip>{t("nw.tip")}</InfoTip>
           </span>
           <div className="cf-total num-hero">{minor(last)}<span className="cur">₴</span></div>
         </div>
         <div className={`cap-delta ${delta >= 0 ? "pos" : "neg"}`}>
           {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : "−"}{minor(Math.abs(delta))} ₴
-          <span className="cap-delta-sub">за період</span>
+          <span className="cap-delta-sub">{t("nw.periodSub")}</span>
         </div>
       </div>
 
@@ -91,15 +91,15 @@ export function NetworthCard({ months = 12 }: { months?: number }) {
             <Legend iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
             {/* Борг — від'ємним стеком: він має ТЯГНУТИ ВНИЗ, а не стояти окремою колонкою.
                 Так видно, що нетворт-лінія проходить крізь різницю активів і боргу. */}
-            <Area type="monotone" dataKey="cushion" name="Подушка" stackId="nw"
+            <Area type="monotone" dataKey="cushion" name={t("nw.cushionLabel")} stackId="nw"
               stroke="var(--accent)" fill="var(--accent)" fillOpacity={0.16} isAnimationActive={CHART_ANIM.isAnimationActive} animationDuration={CHART_ANIM.animationDuration} />
-            <Area type="monotone" dataKey="investment" name="Інвестиції" stackId="nw"
+            <Area type="monotone" dataKey="investment" name={t("nw.investmentLabel")} stackId="nw"
               stroke="var(--pos)" fill="var(--pos)" fillOpacity={0.16} isAnimationActive={CHART_ANIM.isAnimationActive} animationDuration={CHART_ANIM.animationDuration} />
-            <Area type="monotone" dataKey="debtNeg" name="Борг" stackId="nw"
+            <Area type="monotone" dataKey="debtNeg" name={t("nw.debtLabel")} stackId="nw"
               stroke="var(--neg)" fill="var(--neg)" fillOpacity={0.16} isAnimationActive={CHART_ANIM.isAnimationActive} animationDuration={CHART_ANIM.animationDuration} />
             {/* Крапка лише на останній точці — «зараз». Ряд закінчується неповним місяцем,
                 без маркера це читається як завершений місяць. */}
-            <Line type="monotone" dataKey="net" name="Нетворт" stroke="var(--ink)" strokeWidth={2}
+            <Line type="monotone" dataKey="net" name={t("nw.networthLabel")} stroke="var(--ink)" strokeWidth={2}
               dot={(p: { cx?: number; cy?: number; index?: number; key?: React.Key | null }) =>
                 p.index === rows.length - 1 && p.cx != null && p.cy != null
                   ? <circle key={p.key ?? "nw-now"} cx={p.cx} cy={p.cy} r={3.5} fill="var(--ink)" stroke="var(--surface)" strokeWidth={2} />

@@ -1,10 +1,13 @@
 import { useGetUpcomingSubsQuery } from "../store/api.ts";
 import { formatMinor } from "../lib/format.ts";
 import { HoverTip } from "./HoverTip.tsx";
+import { useT } from "../i18n/index.ts";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 
 // §Беклог: календар майбутніх списань — сітка на ~5 тижнів наперед, дні з підписками
 // підсвічені сумою. Дає побачити «важкі» дні місяця й вплив на кешфлоу.
-const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
+// Пн-перший тиждень (2021-01-04 — понеділок), рахуємо в рендері для живого перемикача мови.
+const weekdayShort = (idx: number) => new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short" }).format(new Date(2021, 0, 4 + idx));
 const DAY = 86400;
 
 function dayKey(unix: number): string {
@@ -13,6 +16,8 @@ function dayKey(unix: number): string {
 }
 
 export function SubsCalendar() {
+  const t = useT();
+  const WD = Array.from({ length: 7 }, (_, i) => weekdayShort(i));
   const { data } = useGetUpcomingSubsQuery(34);
   if (!data || data.items.length === 0) return null;
 
@@ -43,8 +48,8 @@ export function SubsCalendar() {
   return (
     <section>
       <div className="section-head">
-        <h2>Календар списань</h2>
-        <span className="label">за 34 дні · {formatMinor(data.total, { decimals: false })} ₴</span>
+        <h2>{t("sc.title")}</h2>
+        <span className="label">{t("sc.subtitle", { amount: `${formatMinor(data.total, { decimals: false })} ₴` })}</span>
       </div>
       <div className="card subs-cal">
         <div className="sc-grid sc-head">

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useT } from "../i18n/index.ts";
 import {
   useGetAccountsQuery,
   useGetArchivedAccountsQuery,
@@ -35,6 +36,7 @@ function uahValue(a: Account, rates: Record<string, number>): number {
 }
 
 export function Accounts() {
+  const t = useT();
   const { data: accounts, isLoading } = useGetAccountsQuery();
   const { data: ratesData } = useGetRatesQuery();
   const { data: histData } = useGetAccountsHistoryQuery();
@@ -50,30 +52,27 @@ export function Accounts() {
   const src = (accounts ?? []).filter((a) => !hideZero || nonZero(a));
   const zeroCount = (accounts ?? []).length - (accounts ?? []).filter(nonZero).length;
 
-  const isCard = (t: string | null) => t === "black" || t === "white" || t === "platinum";
-  const uahCards = src.filter((a) => isCard(a.type) && a.currency_code === 980);
-  const fxCards = src.filter((a) => isCard(a.type) && a.currency_code !== 980);
-  const fop = src.filter((a) => a.type === "fop");
-  const manual = src.filter((a) => a.type === "cash" || a.type === "manual_card" || a.type === "crypto");
-  const jars = src.filter((a) => a.type === "jar");
-
+  // §P2.2 — групуємо по ІНСТИТУЦІЇ (`provider`), а не по типу: усі рахунки одного банку (картки
+  // + банки + ФОП) під спільним заголовком. Рахунки з реального банку йдуть у групу цього банку;
+  // ручні/CSV (`provider` не банк) лишаються в типових бакетах, бо це не одна установа.
+  const groups = buildGroups(src, rates, t);
   const curRows = currencyRows(accounts ?? [], rates);
 
   return (
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Рахунки</div>
-          <div className="sub">Усі картки, готівка й накопичення в одному місці.</div>
+          <div className="greet">{t("nav.accounts")}</div>
+          <div className="sub">{t("acct.sub")}</div>
         </div>
         <div className="page-head-actions">
           {zeroCount > 0 && (
             <button className="pill-toggle" onClick={() => setHideZero((z) => !z)}>
               <Icon name={hideZero ? "check" : "folder"} size={14} />
-              {hideZero ? "Показати нульові" : `Сховати нульові (${zeroCount})`}
+              {hideZero ? t("acct.showZero") : t("acct.hideZero", { count: zeroCount })}
             </button>
           )}
-          <button className="btn primary" onClick={() => setAdding(true)}><Icon name="plus" size={15} /> Додати рахунок</button>
+          <button className="btn primary" onClick={() => setAdding(true)}><Icon name="plus" size={15} /> {t("acct.add")}</button>
         </div>
       </div>
 
@@ -81,7 +80,7 @@ export function Accounts() {
 
       {!accounts?.length && (
         <div className="card empty" style={{ marginBottom: 16 }}>
-          Рахунків із Monobank ще немає. Підтягни їх у «Налаштуваннях» — або додай крипто/готівку вручну кнопкою вгорі.
+          {t("acct.empty")}
         </div>
       )}
 
@@ -90,23 +89,21 @@ export function Accounts() {
           Рахунки — головне на сторінці, тож на ВСЮ ширину; підсумки-довідники (валюти,
           історія, архів) ідуть під ними, а не сайдбаром, який відрізав би від рахунків 320px. */}
       <div className="acct-sections">
-        <Section title="Гривневі картки" accounts={uahCards} rates={rates} history={history} />
-        <Section title="Валютні картки" accounts={fxCards} rates={rates} history={history} />
-        <Section title="ФОП" accounts={fop} rates={rates} history={history} />
-        <Section title="Готівка та ручні" accounts={manual} rates={rates} history={history} manual />
-        <Section title="Банки (накопичення)" accounts={jars} rates={rates} history={history} muted renameable />
+        {groups.map((g) => (
+          <Section key={g.key} title={g.label} accounts={g.accounts} rates={rates} history={history} />
+        ))}
       </div>
 
       {curRows.length >= 2 && (
         <section className="acct-tail">
-          <div className="section-head"><h2>Розподіл по валютах</h2><span className="label">у ₴-еквіваленті</span></div>
+          <div className="section-head"><h2>{t("acct.currencyBreakdown")}</h2><span className="label">{t("acct.uahEquiv")}</span></div>
           <CurrencyBreakdown rows={curRows} />
         </section>
       )}
 
       {(accounts?.length ?? 0) > 1 && (
         <section className="acct-tail">
-          <div className="section-head"><h2>Історія капіталу</h2><span className="label">склад нетворту 12 міс</span></div>
+          <div className="section-head"><h2>{t("acct.capitalHistory")}</h2><span className="label">{t("acct.networthComposition")}</span></div>
           <NetworthCard months={12} />
         </section>
       )}
@@ -128,6 +125,40 @@ function currencyRows(accounts: Account[], rates: Record<string, number>): [numb
     if (v > 0) byCur.set(code, (byCur.get(code) ?? 0) + v);
   }
   return [...byCur.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+// Human names for real bank providers (proper nouns — not translated). Anything not here
+// (manual/csv/null) is not a single institution and falls back to type buckets below.
+const BANK_LABEL: Record<string, string> = { mono: "Monobank", privat: "PrivatBank" };
+
+function accountSubtotal(accts: Account[], rates: Record<string, number>): number {
+  return accts.reduce((s, a) => s + uahValue(a, rates), 0);
+}
+
+interface AcctGroup { key: string; label: string; accounts: Account[] }
+
+// §P2.2 — group by institution: one group per real bank (all its account types together),
+// then the non-bank type buckets. Ordered by ₴ subtotal so the primary bank sits on top.
+function buildGroups(src: Account[], rates: Record<string, number>, t: ReturnType<typeof useT>): AcctGroup[] {
+  const banks = new Map<string, Account[]>();
+  const rest: Account[] = [];
+  for (const a of src) {
+    if (a.provider && BANK_LABEL[a.provider]) {
+      const arr = banks.get(a.provider) ?? [];
+      arr.push(a);
+      banks.set(a.provider, arr);
+    } else rest.push(a);
+  }
+  const jars = rest.filter((a) => a.type === "jar");
+  const fop = rest.filter((a) => a.type === "fop");
+  const manual = rest.filter((a) => a.type !== "jar" && a.type !== "fop");
+  const groups: AcctGroup[] = [
+    ...[...banks.entries()].map(([key, accounts]) => ({ key, label: BANK_LABEL[key], accounts })),
+    { key: "manual", label: t("acct.sec.manual"), accounts: manual },
+    { key: "fop", label: t("acct.sec.fop"), accounts: fop },
+    { key: "jars", label: t("acct.sec.jars"), accounts: jars },
+  ].filter((g) => g.accounts.length);
+  return groups.sort((a, b) => accountSubtotal(b.accounts, rates) - accountSubtotal(a.accounts, rates));
 }
 
 function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
@@ -159,6 +190,7 @@ function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
 // §R3: композиція коштів = канон fundsBreakdown (той самий, що в Пораднику). Не рахуємо на
 // клієнті, щоб «подушка/борг/інвестиції» тут не розійшлись із Порадником.
 function FundsOverview() {
+  const t = useT();
   const { data: f } = useGetFundsQuery();
   if (!f) return null;
   // Повний нетворт (= пігулка «власних» = summary.totalUAH): подушка + інвестиції − борг.
@@ -166,9 +198,9 @@ function FundsOverview() {
   // щоб дві різні цифри «власних» не збивали з пантелику (раніше −31 966 vs 30 755).
   const fullNet = f.cushion + f.investment - f.debt;
   const parts = [
-    { key: "cushion", label: "Ліквідна подушка", val: f.cushion, color: "var(--pos)" },
-    { key: "investment", label: "Інвестиції", val: f.investment, color: "var(--c-plum)" },
-    { key: "debt", label: "Борг", val: f.debt, color: "var(--neg)" },
+    { key: "cushion", label: t("acct.cushion"), val: f.cushion, color: "var(--pos)" },
+    { key: "investment", label: t("acct.investments"), val: f.investment, color: "var(--c-plum)" },
+    { key: "debt", label: t("acct.debt"), val: f.debt, color: "var(--neg)" },
   ] as const;
   const barTotal = f.cushion + f.investment + f.debt || 1;
   const hasBar = f.cushion + f.investment + f.debt > 0;
@@ -176,10 +208,10 @@ function FundsOverview() {
     <div className="card funds-overview">
       <div className="funds-stats">
         <div className="funds-stat net">
-          <span className="fs-lbl">Чистий капітал</span>
+          <span className="fs-lbl">{t("acct.netCapital")}</span>
           <span className={`fs-val num-hero ${fullNet < 0 ? "neg" : ""}`}><Money minor={fullNet} decimals={false} /></span>
           {f.investment > 0 && (
-            <span className="fs-sub">без інвестицій: <Money minor={f.net} decimals={false} /></span>
+            <span className="fs-sub">{t("acct.withoutInvestments")}: <Money minor={f.net} decimals={false} /></span>
           )}
         </div>
         {parts.map((p) => (p.val > 0 || p.key === "cushion") && (
@@ -200,11 +232,11 @@ function FundsOverview() {
   );
 }
 
-function Section({ title, accounts, rates, history, muted, manual, renameable }: {
-  title: string; accounts: Account[]; rates: Record<string, number>; history: Record<string, number[]>; muted?: boolean; manual?: boolean; renameable?: boolean;
+function Section({ title, accounts, rates, history }: {
+  title: string; accounts: Account[]; rates: Record<string, number>; history: Record<string, number[]>;
 }) {
   if (!accounts.length) return null;
-  // Сортуємо за ₴-величиною спадно — найбільші рахунки вгорі (раніше — довільний порядок за типом).
+  // Сортуємо за ₴-величиною спадно — найбільші рахунки вгорі.
   const sorted = [...accounts].sort((a, b) => uahValue(b, rates) - uahValue(a, rates));
   const subtotal = sorted.reduce((s, a) => s + uahValue(a, rates), 0);
   return (
@@ -214,10 +246,7 @@ function Section({ title, accounts, rates, history, muted, manual, renameable }:
         <span className="acct-sec-sum">≈ {formatMinor(subtotal, { decimals: false })} ₴</span>
       </div>
       <div className="acct-grid">
-        {sorted.map((a) => (
-          <AccountCard key={a.id} a={a} rates={rates} spark={history[a.id]} muted={muted}
-            editable={manual && !!a.is_manual} renameable={renameable} />
-        ))}
+        {sorted.map((a) => <AccountCard key={a.id} a={a} rates={rates} spark={history[a.id]} />)}
       </div>
     </section>
   );
@@ -234,11 +263,17 @@ const TYPE_COLOR: Record<string, string> = {
   jar: "var(--c-teal)", cash: "var(--c-ochre)", manual_card: "var(--accent)", crypto: "var(--c-plum)",
 };
 
-function AccountCard({ a, rates, spark, muted, editable, renameable }: {
-  a: Account; rates: Record<string, number>; spark?: number[]; muted?: boolean; editable?: boolean; renameable?: boolean;
+function AccountCard({ a, rates, spark }: {
+  a: Account; rates: Record<string, number>; spark?: number[];
 }) {
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const kind = a.type ?? "manual";
+  // Per-account flags (were section-level before institution grouping): manual accounts allow
+  // balance/title edit; jars are visually muted and renameable even when synced from a bank.
+  const muted = a.type === "jar";
+  const editable = a.is_manual === 1;
+  const renameable = a.type === "jar";
   const cls = ["acct2", muted ? "muted-acct" : ""].join(" ");
   const pan = last4(a.title);
   const credit = (a.credit_limit ?? 0) > 0;
@@ -254,12 +289,12 @@ function AccountCard({ a, rates, spark, muted, editable, renameable }: {
 
   const showManualTitle = a.type === "cash" || a.type === "manual_card" || a.type === "crypto";
   const title = a.type === "jar" || showManualTitle ? (a.title || accountTypeLabel(kind)) : (accountTypeLabel(kind) ?? kind);
-  const subLabel = credit ? "власних коштів"
-    : a.type === "jar" ? "накопичено"
-    : a.type === "crypto" ? "оцінка (вручну)"
-    : a.type === "cash" ? "готівкою"
-    : a.is_manual ? "баланс (вручну)"
-    : "на рахунку";
+  const subLabel = credit ? t("acct.ownFunds")
+    : a.type === "jar" ? t("acct.saved")
+    : a.type === "crypto" ? t("acct.manualEstimate")
+    : a.type === "cash" ? t("acct.cash")
+    : a.is_manual ? t("acct.manualBalance")
+    : t("acct.onAccount");
 
   const isInvestment = a.role === "investment";
 
@@ -270,9 +305,9 @@ function AccountCard({ a, rates, spark, muted, editable, renameable }: {
       <div className="acct2-head">
         <span className="acct2-badge" style={{ background: color }} />
         <span className="acct2-title">{title}</span>
-        {isInvestment && <span className="acct2-role" title="Інвестиційний рахунок — не входить у ліквідну подушку">інвест</span>}
+        {isInvestment && <span className="acct2-role" title={t("acct.investmentBadgeTitle")}>{t("acct.investmentBadge")}</span>}
         {pan && a.type !== "jar" && <span className="acct2-pan">·· {pan}</span>}
-        <button className="acct2-edit" onClick={() => setEditing(true)} aria-label="Налаштування рахунку">
+        <button className="acct2-edit" onClick={() => setEditing(true)} aria-label={t("acct.settings")}>
           <Icon name="edit" size={14} />
         </button>
       </div>
@@ -280,20 +315,20 @@ function AccountCard({ a, rates, spark, muted, editable, renameable }: {
       <div className="acct2-bal"><Money minor={shown} currency={code} /></div>
       {uah != null && <div className="acct2-fx">≈ {formatMinor(uah, { decimals: false })} ₴</div>}
       {spark && spark.length >= 2 && !spark.every((v) => v === spark[0]) && (
-        <div className="acct2-spark" title="Тренд балансу за 6 міс"><Sparkline values={spark} width={220} height={26} goodUp /></div>
+        <div className="acct2-spark" title={t("acct.trend6mo")}><Sparkline values={spark} width={220} height={26} goodUp /></div>
       )}
       {a.ai_note && <div className="acct2-note" title={a.ai_note}>{a.ai_note}</div>}
       {credit && (
         <div className="acct2-credit">
           <div className="acct2-credit-row">
-            <span>використано <b><Money minor={usedCredit} decimals={false} /></b></span>
-            <span className="muted">ліміт <Money minor={limit} decimals={false} /></span>
+            <span>{t("acct.used")} <b><Money minor={usedCredit} decimals={false} /></b></span>
+            <span className="muted">{t("acct.limit")} <Money minor={limit} decimals={false} /></span>
           </div>
           <div className="credit-meter"><span style={{ width: `${limit ? Math.min(100, (usedCredit / limit) * 100) : 0}%` }} /></div>
           {a.payment_day != null && (
             <div className="acct2-credit-terms">
-              <Icon name="calendar" size={12} /> платіж до {a.payment_day} числа
-              {a.min_payment ? <> · мін. {formatMinor(a.min_payment, { decimals: false })} ₴</> : null}
+              <Icon name="calendar" size={12} /> {t("acct.paymentDue", { day: a.payment_day })}
+              {a.min_payment ? <> {t("acct.minPaymentPrefix")} {formatMinor(a.min_payment, { decimals: false })} ₴</> : null}
             </div>
           )}
         </div>
@@ -304,13 +339,14 @@ function AccountCard({ a, rates, spark, muted, editable, renameable }: {
 
 // §R3: єдиний редактор рахунку — роль (ліквідний/інвестиційний) + опис для AI для БУДЬ-ЯКОГО
 // рахунку; додатково назва (банки/ручні) й баланс (ручні); архів/видалення внизу.
-const ROLE_OPTIONS = [
-  { value: "liquid", label: "Ліквідний (подушка)" },
-  { value: "investment", label: "Інвестиційний (не подушка)" },
-];
 function AccountEditor({ a, onClose, cls, manual, renameable }: {
   a: Account; onClose: () => void; cls: string; manual: boolean; renameable: boolean;
 }) {
+  const t = useT();
+  const ROLE_OPTIONS = [
+    { value: "liquid", label: t("acct.roleLiquid") },
+    { value: "investment", label: t("acct.roleInvestment") },
+  ];
   const [editAccount] = useEditManualAccountMutation();
   const [setTitle] = useSetAccountTitleMutation();
   const [setMeta, { isLoading }] = useSetAccountMetaMutation();
@@ -346,43 +382,43 @@ function AccountEditor({ a, onClose, cls, manual, renameable }: {
   }
 
   async function archive() {
-    try { await setActive({ id: a.id, active: false }).unwrap(); toast.success("Рахунок у архіві"); onClose(); }
+    try { await setActive({ id: a.id, active: false }).unwrap(); toast.success(t("acct.archivedToast")); onClose(); }
     catch (e) { toast.error(errText(e)); }
   }
   async function remove() {
-    try { await deleteAccount(a.id).unwrap(); toast.success("Рахунок видалено"); onClose(); }
+    try { await deleteAccount(a.id).unwrap(); toast.success(t("acct.deletedToast")); onClose(); }
     catch (e) { toast.error(errText(e)); }
   }
 
   return (
     <div className={cls} style={{ padding: 14 }}>
       <div className="acct-edit-form">
-        {canTitle && <input value={title} onChange={(e) => setTitleVal(e.target.value)} placeholder="Назва" />}
-        {manual && <input type="number" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder="Баланс" />}
+        {canTitle && <input value={title} onChange={(e) => setTitleVal(e.target.value)} placeholder={t("acct.namePlaceholder")} />}
+        {manual && <input type="number" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder={t("acct.balancePlaceholder")} />}
         <Select value={role} options={ROLE_OPTIONS} onChange={(v) => setRole(v as "liquid" | "investment")} />
         <textarea className="acct-note-input" value={note} rows={2} maxLength={280}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Опис для AI (напр. «USDT — інвестиції, чіпати лише в крайньому разі»)" />
+          placeholder={t("acct.notePlaceholder")} />
         {isCredit && (
           <div className="credit-terms">
-            <div className="ct-title">Умови кредитки <span className="muted">— нагадаємо про платіж за 3 дні</span></div>
+            <div className="ct-title">{t("acct.creditTermsTitle")} <span className="muted">{t("acct.creditTermsHint")}</span></div>
             <div className="ct-grid">
-              <label>Виписка<input type="number" inputMode="numeric" min={1} max={31} value={stmtDay} onChange={(e) => setStmtDay(e.target.value)} placeholder="день" /></label>
-              <label>Платіж до<input type="number" inputMode="numeric" min={1} max={31} value={payDay} onChange={(e) => setPayDay(e.target.value)} placeholder="день" /></label>
-              <label>Мін. платіж<input type="number" inputMode="decimal" value={minPay} onChange={(e) => setMinPay(e.target.value)} placeholder="₴" /></label>
+              <label>{t("acct.statement")}<input type="number" inputMode="numeric" min={1} max={31} value={stmtDay} onChange={(e) => setStmtDay(e.target.value)} placeholder={t("acct.dayPlaceholder")} /></label>
+              <label>{t("acct.paymentBy")}<input type="number" inputMode="numeric" min={1} max={31} value={payDay} onChange={(e) => setPayDay(e.target.value)} placeholder={t("acct.dayPlaceholder")} /></label>
+              <label>{t("acct.minPaymentLabel")}<input type="number" inputMode="decimal" value={minPay} onChange={(e) => setMinPay(e.target.value)} placeholder="₴" /></label>
             </div>
           </div>
         )}
         <div className="row" style={{ gap: 6 }}>
-          <button className="btn primary" onClick={save} disabled={isLoading}>Зберегти</button>
-          <button className="btn ghost" onClick={onClose}>Скасувати</button>
+          <button className="btn primary" onClick={save} disabled={isLoading}>{t("common.save")}</button>
+          <button className="btn ghost" onClick={onClose}>{t("common.cancel")}</button>
         </div>
         <div className="acct-danger">
-          <button className="btn ghost sm" onClick={archive}><Icon name="folder" size={13} /> Архівувати</button>
+          <button className="btn ghost sm" onClick={archive}><Icon name="folder" size={13} /> {t("acct.archiveBtn")}</button>
           {a.is_manual === 1 && (
             confirmDel
-              ? <button className="btn danger sm" onClick={remove}>Точно видалити?</button>
-              : <button className="btn ghost sm danger-text" onClick={() => setConfirmDel(true)}>Видалити</button>
+              ? <button className="btn danger sm" onClick={remove}>{t("acct.deleteConfirm")}</button>
+              : <button className="btn ghost sm danger-text" onClick={() => setConfirmDel(true)}>{t("common.delete")}</button>
           )}
         </div>
       </div>
@@ -392,6 +428,7 @@ function AccountEditor({ a, onClose, cls, manual, renameable }: {
 
 // Архів (is_active=0): згорнута секція з відновленням. Схований рахунок не в підсумках/подушці.
 function ArchivedSection({ rates }: { rates: Record<string, number> }) {
+  const t = useT();
   const { data } = useGetArchivedAccountsQuery();
   const [setActive] = useSetAccountActiveMutation();
   const [open, setOpen] = useState(false);
@@ -399,8 +436,8 @@ function ArchivedSection({ rates }: { rates: Record<string, number> }) {
   return (
     <section style={{ marginTop: 8 }}>
       <div className="section-head">
-        <h2>Архів</h2>
-        <button className="btn ghost label" onClick={() => setOpen((o) => !o)}>{open ? "згорнути" : `${data.length} схованих`}</button>
+        <h2>{t("acct.archiveTitle")}</h2>
+        <button className="btn ghost label" onClick={() => setOpen((o) => !o)}>{open ? t("acct.collapse") : t("acct.hiddenCount", { n: data.length })}</button>
       </div>
       {open && (
         <div className="acct-grid">
@@ -412,7 +449,7 @@ function ArchivedSection({ rates }: { rates: Record<string, number> }) {
                 <div className="acct2-head"><span className="acct2-title">{a.title || accountTypeLabel(a.type ?? "manual")}</span></div>
                 <div className="acct2-bal"><Money minor={a.balance ?? 0} currency={code} /></div>
                 {uah != null && <div className="acct2-fx">≈ {formatMinor(uah, { decimals: false })} ₴</div>}
-                <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={() => setActive({ id: a.id, active: true })}>Відновити</button>
+                <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={() => setActive({ id: a.id, active: true })}>{t("acct.restore")}</button>
               </div>
             );
           })}
@@ -424,10 +461,11 @@ function ArchivedSection({ rates }: { rates: Record<string, number> }) {
 
 // Скелет сторінки Рахунків: смуга огляду + дві секції карток.
 function AccountsSkeleton() {
+  const t = useT();
   return (
     <div aria-hidden="true">
       <div className="page-head">
-        <div><div className="greet">Рахунки</div><div className="sub">Усі картки, готівка й накопичення в одному місці.</div></div>
+        <div><div className="greet">{t("nav.accounts")}</div><div className="sub">{t("acct.sub")}</div></div>
       </div>
       <div className="card funds-overview" style={{ marginBottom: 16 }}>
         <div className="funds-stats">

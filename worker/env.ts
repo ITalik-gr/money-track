@@ -26,6 +26,10 @@ export interface Env extends Omit<Cloudflare.Env, "DB"> {
   // Email of the pre-existing single user, seeded into the directory as the owner. Only used
   // by the transitional password login and by the P0.7 data migration.
   OWNER_EMAIL: string;
+  // Dedicated Anthropic key for the public demo (PLATFORM.md §11.3), given its own billing limit
+  // on Anthropic's side as the last backstop behind the per-session/global caps. Optional: if
+  // unset, demo AI falls back to the regular key (still capped + forced to Haiku).
+  DEMO_ANTHROPIC_KEY?: string;
   /**
    * Id of the user this request belongs to. NOT a Cloudflare binding: set by `UserDO.fetch`
    * from the header the Worker attaches after authenticating. Needed because a Durable Object

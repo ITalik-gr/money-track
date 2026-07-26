@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { highlightAmounts } from "./highlight.tsx";
+import { translate } from "../i18n/index.ts";
+import { getLocale } from "../i18n/locale.ts";
 
 // §5/§2: AI цитує конкретні операції токеном [tx:ID]. Рендеримо їх клікабельними чипами
 // (→ /tx/:id), а решту тексту — через highlightAmounts (суми/відсотки). Спільно для
@@ -17,7 +19,7 @@ export function renderRich(text: string | null | undefined): ReactNode[] {
   while ((m = TX_RE.exec(text)) !== null) {
     if (m.index > last) out.push(...highlightAmounts(text.slice(last, m.index)));
     out.push(
-      <Link key={`tx-${i++}`} to={`/tx/${m[1]}`} className="tx-cite" title="Відкрити операцію">↗</Link>,
+      <Link key={`tx-${i++}`} to={`/tx/${m[1]}`} className="tx-cite" title={translate(getLocale(), "citations.openTxTitle")}>↗</Link>,
     );
     last = m.index + m[0].length;
   }

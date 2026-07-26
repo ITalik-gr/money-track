@@ -1244,6 +1244,78 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 @media (min-width: 900px) { .topbar-brand { display: none; } }
 .topbar-right { display: flex; align-items: center; gap: 8px; }
 
+/* Demo banner (P4.4): slim warn strip, sticky ABOVE the topbar (which is pushed down by
+   .has-demo-banner). Non-dismissable — there is no close control by design. */
+.demo-banner {
+  position: sticky; top: 0; z-index: 25;
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 16px; min-height: 34px;
+  font-size: 12.5px; line-height: 1.3;
+  color: var(--warn); background: var(--warn-soft);
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 35%, transparent);
+}
+@media (min-width: 900px) { .demo-banner { padding: 7px 40px; } }
+.demo-banner .db-badge {
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  font-size: 10.5px; padding: 2px 7px; border-radius: 999px;
+  background: color-mix(in srgb, var(--warn) 20%, transparent);
+}
+.demo-banner .db-text { color: color-mix(in srgb, var(--warn) 88%, var(--text)); }
+.demo-banner .db-exit {
+  margin-left: auto; font: inherit; font-weight: 600; color: var(--warn);
+  background: none; border: 1px solid color-mix(in srgb, var(--warn) 45%, transparent);
+  border-radius: 7px; padding: 3px 10px; cursor: pointer;
+}
+.demo-banner .db-exit:hover { background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.has-demo-banner .topbar { top: 34px; }
+
+/* Public landing (P5.2). Logged-out marketing page — recruiter sees this, not the login form. */
+.landing { min-height: 100dvh; max-width: 960px; margin: 0 auto; padding: 20px 20px 48px; display: flex; flex-direction: column; }
+.lp-top { display: flex; align-items: center; justify-content: space-between; }
+.lp-brand { display: flex; align-items: center; gap: 9px; }
+.lp-brand .mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 700; }
+.lp-brand .name { font-family: var(--font-mono); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.lp-brand .dot { color: var(--accent); }
+.lp-hero { text-align: center; padding: clamp(40px, 9vw, 96px) 0 8px; }
+.lp-hero h1 { margin: 0 auto; max-width: 16ch; font-size: clamp(30px, 6vw, 52px); line-height: 1.05; letter-spacing: -0.02em; }
+.lp-sub { margin: 18px auto 0; max-width: 56ch; color: var(--muted); font-size: clamp(15px, 2vw, 18px); line-height: 1.5; }
+.lp-cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 28px; }
+.btn.lg { padding: 12px 22px; font-size: 15px; border-radius: 12px; }
+.lp-note { margin-top: 14px; color: var(--muted); font-size: 12.5px; }
+.lp-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: clamp(40px, 8vw, 72px); }
+@media (max-width: 760px) { .lp-features { grid-template-columns: 1fr; } }
+.lp-feature { padding: 22px; }
+.lp-feature h3 { margin: 0 0 8px; font-size: 16px; letter-spacing: -0.01em; }
+.lp-feature p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+/* "What your own account needs" — the API-key expectations, stated before sign-up rather than
+   discovered in Settings. Narrower than the feature grid so it reads as a note, not a feature. */
+.lp-keys { margin-top: clamp(28px, 5vw, 44px); padding: 20px; max-width: 720px; }
+.lp-keys h3 { margin: 0 0 8px; font-size: 15px; }
+.lp-keys p { margin: 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.55; }
+.lp-foot { margin-top: auto; padding-top: 40px; text-align: center; color: var(--muted); font-size: 12.5px; }
+
+/* Event plan vs actual (P2.3) */
+.evt-plan-tag { font-size: 12.5px; font-weight: 600; }
+.evt-plan-tag.pos { color: var(--pos); }
+.evt-plan-tag.neg { color: var(--neg); }
+.evt-plan-bar-wrap { margin-bottom: 12px; }
+.evt-plan-bar { height: 9px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.evt-plan-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
+.evt-plan-bar > span.over { background: var(--neg); }
+.evt-plan-nums { display: flex; justify-content: space-between; gap: 12px; margin-top: 6px; font-size: 12.5px; color: var(--muted); }
+.evt-plan-nums b { color: var(--text); font-variant-numeric: tabular-nums; }
+.evt-plan-items { list-style: none; margin: 0 0 12px; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.evt-plan-items li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.evt-plan-items .pl-label { flex: 1; font-size: 14px; }
+.evt-plan-items .pl-amt { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; }
+.evt-plan-items .pl-del { display: grid; place-items: center; width: 22px; height: 22px; border: none; background: none; color: var(--muted); cursor: pointer; border-radius: 6px; }
+.evt-plan-items .pl-del:hover { background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); }
+.evt-plan-empty { text-align: center; padding: 8px 0 14px; }
+.evt-plan-empty p { margin: 0 0 10px; font-size: 13.5px; }
+.evt-plan-add { display: flex; gap: 6px; }
+.evt-plan-add input:first-child { flex: 1; }
+.evt-plan-add input:nth-child(2) { width: 96px; }
+
 /* топбар-пошук — веде на /tx?q= */
 /* Кнопка-пошук у топбарі: виглядає як поле, але відкриває командну панель (⌘K).
    Форму поля лишаємо свідомо — вона читається як «сюди можна писати», і саме тому
@@ -1702,6 +1774,28 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
 }
 .switch.on::after { transform: translateX(16px); }
+
+/* Language switch (UA/EN) in the sidebar foot — segmented, so the active language reads at a
+   glance instead of a toggle that would have to label the OTHER language. */
+.lang-seg {
+  display: flex; gap: 2px; padding: 3px; margin: 2px 0;
+  background: var(--surface-2); border-radius: var(--radius-sm);
+  /* Border is load-bearing, not decoration: --surface-2 sits ~5/channel away from --bg, so on the
+     landing (which has no neighbouring surfaces to give context) the track vanished and the active
+     chip read as a stray white blob. The line is what makes this read as a segmented control. */
+  border: 1px solid var(--line-strong);
+}
+.lang-seg button {
+  /* Inner radius = outer − padding, or the corners visibly disagree. */
+  flex: 1; padding: 4px 8px; border: 0; border-radius: calc(var(--radius-sm) - 3px);
+  background: transparent; color: var(--ink-2); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.04em; cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.lang-seg button:hover { color: var(--ink); }
+.lang-seg button.on { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+/* Global :focus-visible uses outline-offset 2px, which would draw the ring outside the track;
+   pull it inward so the focused segment stays inside the control. */
+.lang-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
 /* (Прибрано застарілий «R6 fix»-блок tx-рядка — конфліктував з новою колонковою
    таблицею §11.3: повертав radius/тінь на .tx, стилював неіснуючі .meta/.m-card/.pill-hold.) */

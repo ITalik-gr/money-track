@@ -1,12 +1,15 @@
 import { useGetOverviewQuery } from "../store/api.ts";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 import { CashflowChart } from "./CashflowChart.tsx";
 import { InfoTip } from "./InfoTip.tsx";
+import { monthShort } from "../lib/format.ts";
+import { useT } from "../i18n/index.ts";
 
 // Огляд: грошовий потік за 6 місяців (DESIGN.md §7 F1, DeliFin R1).
-const MONTHS = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
 
 export function CashflowCard() {
+  const t = useT();
+  const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
   const now = new Date();
   const to = Math.floor(Date.now() / 1000);
   const from = Math.floor(new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime() / 1000);
@@ -15,7 +18,7 @@ export function CashflowCard() {
   const series = data?.series ?? [];
   const rows = series.map((s) => {
     const m = Number(s.bucket.split("-")[1]);
-    return { label: MONTHS[m - 1] ?? s.bucket, spend: s.spend / 100, income: s.income / 100 };
+    return { label: monthShort(m - 1) ?? s.bucket, spend: s.spend / 100, income: s.income / 100 };
   });
   const net = series.reduce((a, s) => a + s.income - s.spend, 0);
 
@@ -24,16 +27,16 @@ export function CashflowCard() {
       <div className="cashflow-head">
         <div>
           <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            грошовий потік · 6 міс
-            <InfoTip>Надходження мінус витрати щомісяця за останні 6 місяців (зведено в ₴). Сума над стовпцями — чистий підсумок за весь період.</InfoTip>
+            {t("cf.title")}
+            <InfoTip>{t("cf.info")}</InfoTip>
           </span>
           <div className={`cf-total num-hero ${net < 0 ? "neg" : "pos"}`}>
             {net >= 0 ? "+" : "−"}{fmt0.format(Math.abs(net) / 100)}<span className="cur">₴</span>
           </div>
         </div>
         <div className="legend">
-          <span><span className="d" style={{ background: "var(--chart-income)" }} />Надходження</span>
-          <span><span className="d" style={{ background: "var(--chart-expense)" }} />Витрати</span>
+          <span><span className="d" style={{ background: "var(--chart-income)" }} />{t("mp.income")}</span>
+          <span><span className="d" style={{ background: "var(--chart-expense)" }} />{t("common.expenses")}</span>
         </div>
       </div>
       <CashflowChart rows={rows} />

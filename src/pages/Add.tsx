@@ -1,8 +1,10 @@
 import { useRef, useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useDispatch } from "react-redux";
 import { api, useAddTransactionMutation, useGetAccountsQuery, useGetCategoriesQuery } from "../store/api.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
+import { useT } from "../i18n/index.ts";
 
 interface ParsedText {
   merchant: string;
@@ -31,10 +33,11 @@ interface ReceiptResponse {
 
 const currencyCode = (c: string): number => (c === "USD" ? 840 : c === "EUR" ? 978 : 980);
 const fmtMoney = (major: number, cur: string): string =>
-  `${major.toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`;
+  `${major.toLocaleString(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`;
 
 // Швидкий ввід: текст -> Haiku розбирає -> підтверджую -> зберігаю (§6.2).
 export function Add() {
+  const t = useT();
   const { data: accounts } = useGetAccountsQuery();
   const { data: cats } = useGetCategoriesQuery();
   const [addTx, { isLoading: saving }] = useAddTransactionMutation();
@@ -104,7 +107,7 @@ export function Add() {
       category_id: parsed.category_guess,
       user_note: parsed.note,
     }).unwrap();
-    toast.success(`Збережено: ${parsed.merchant}`);
+    toast.success(t("add.toastSaved", { name: parsed.merchant }));
     setParsed(null);
     setText("");
   }
@@ -113,52 +116,52 @@ export function Add() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Додати операцію</div>
-          <div className="sub">Напиши текстом або сфотографуй чек — AI розбере.</div>
+          <div className="greet">{t("add.title")}</div>
+          <div className="sub">{t("add.subtitle")}</div>
         </div>
       </div>
       <div className="stack">
         <input
-          placeholder="напр. «кава 45 аромакава»"
+          placeholder={t("add.textPlaceholder")}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && text && parse()}
         />
         <button className="btn primary" onClick={parse} disabled={!text || parsing}>
-          {parsing ? "Розбираю…" : "Розібрати через AI"}
+          {parsing ? t("add.parsingBtn") : t("add.parseBtn")}
         </button>
 
         {parsed && (
           <div className="card" style={{ padding: 16 }}>
             <div className="stack">
               <div className="row" style={{ justifyContent: "space-between" }}>
-                <span className="label">мерчант</span>
+                <span className="label">{t("add.merchantLabel")}</span>
                 <input value={parsed.merchant} onChange={(e) => setParsed({ ...parsed, merchant: e.target.value })} style={{ maxWidth: 220 }} />
               </div>
               <div className="row" style={{ justifyContent: "space-between" }}>
-                <span className="label">сума</span>
+                <span className="label">{t("add.amountLabel")}</span>
                 <input type="number" value={parsed.amount} onChange={(e) => setParsed({ ...parsed, amount: Number(e.target.value) })} style={{ maxWidth: 120 }} />
               </div>
               <div className="row" style={{ justifyContent: "space-between" }}>
-                <span className="label">категорія</span>
+                <span className="label">{t("tx.label.category")}</span>
                 <select value={parsed.category_guess ?? ""} onChange={(e) => setParsed({ ...parsed, category_guess: e.target.value ? Number(e.target.value) : null })} style={{ maxWidth: 220 }}>
                   <option value="">—</option>
                   {cats?.filter((c) => !c.is_income).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
               <div className="row" style={{ justifyContent: "space-between" }}>
-                <span className="label">рахунок</span>
+                <span className="label">{t("add.accountLabel")}</span>
                 <select value={account} onChange={(e) => setAccount(e.target.value)} style={{ maxWidth: 220 }}>
-                  <option value="">авто (готівка)</option>
+                  <option value="">{t("add.autoAccountOption")}</option>
                   {accounts?.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
                 </select>
               </div>
-              <button className="btn primary" onClick={save} disabled={saving}>Зберегти витрату</button>
+              <button className="btn primary" onClick={save} disabled={saving}>{t("add.saveExpenseBtn")}</button>
             </div>
           </div>
         )}
 
-        <div className="section-head" style={{ marginTop: 8 }}><h2>Фото чека</h2></div>
+        <div className="section-head" style={{ marginTop: 8 }}><h2>{t("add.receiptPhotoTitle")}</h2></div>
         <input
           ref={fileRef}
           type="file"
@@ -171,22 +174,22 @@ export function Add() {
           }}
         />
         <button className="btn" onClick={() => fileRef.current?.click()} disabled={uploading}>
-          {uploading ? "Розпізнаю чек…" : "📷 Сфотографувати / вибрати чек"}
+          {uploading ? t("add.recognizingReceipt") : t("add.photoReceiptBtn")}
         </button>
 
         {receipt?.result && (
           <div className="card" style={{ padding: 16 }}>
             <div className="stack" style={{ gap: 8 }}>
               <div className="row" style={{ justifyContent: "space-between" }}>
-                <strong>{receipt.result.store || "Чек"}</strong>
+                <strong>{receipt.result.store || t("add.receiptFallback")}</strong>
                 <span className="mono">{fmtMoney(receipt.result.total, receipt.result.currency)}</span>
               </div>
               <div className={receipt.matched ? "pos" : "muted"} style={{ fontSize: 12 }}>
                 {receipt.matched
-                  ? "✓ Причеплено до наявної транзакції Monobank"
+                  ? t("add.matchedToMono")
                   : receipt.transactionId
-                    ? "Створено готівкову витрату"
-                    : "Збережено чек (немає готівкового рахунку для витрати)"}
+                    ? t("add.createdCashTx")
+                    : t("add.savedReceiptOnly")}
               </div>
               {receipt.result.items.length > 0 && (
                 <div className="ledger" style={{ borderTop: "1px solid var(--line)", paddingTop: 6 }}>

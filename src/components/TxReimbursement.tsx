@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT } from "../i18n/index.ts";
 import { Link } from "react-router-dom";
 import { Icon } from "./Icon.tsx";
 import { formatMinor, currencySign } from "../lib/format.ts";
@@ -20,11 +22,12 @@ import type { ReimbursementTx } from "../store/api.ts";
 // прив'язати надходження рівно до однієї витрати й обрізала суму стелею витрати — на реальних
 // даних «+2400 за витрату −1870» це означало, що 530 ₴ зависали: ні на іншу витрату, ні в дохід.
 // Тепер береться рівно стільки, скільки треба, а залишок лишається вільним для інших витрат.
-const dfmt = new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short" });
+const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
 const toMinor = (major: string) => Math.round(Number(major.replace(",", ".")) * 100) || 0;
 const toMajor = (minor: number) => (Math.max(0, minor) / 100).toFixed(2);
 
 export function TxReimbursement({ txId, amount, currency }: { txId: string; amount: number; currency: number }) {
+  const t = useT();
   const { data } = useGetReimbursementQuery(txId);
   const [save, { isLoading }] = useSetReimbursementMutation();
   const [editing, setEditing] = useState(false);
@@ -83,7 +86,7 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
         manual_amount: clear ? 0 : manualMode ? toMinor(manual) : 0,
         allocations: clear || manualMode ? [] : Object.entries(alloc).map(([source_id, v]) => ({ source_id, amount: toMinor(v) })),
       }).unwrap();
-      toast.success(clear ? "Компенсацію прибрано" : "Збережено — у статистику піде лише твоя частина");
+      toast.success(clear ? t("rb.toastCleared") : t("rb.toastSaved"));
       setEditing(false);
     } catch (e) { toast.error(errText(e)); }
   }
@@ -94,16 +97,16 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
     return (
       <div className="card split-card">
         <div className="section-head">
-          <h3>Тобі компенсували</h3>
-          <button className="btn sm ghost" onClick={() => setEditing(true)}>Редагувати</button>
+          <h3>{t("rb.title")}</h3>
+          <button className="btn sm ghost" onClick={() => setEditing(true)}>{t("common.edit")}</button>
         </div>
         <div className="rb-summary">
           <div className="rb-fig">
-            <span className="label">твоя частина</span>
+            <span className="label">{t("rb.yourShare")}</span>
             <span className="rb-mine">{formatMinor(total - current, { decimals: false })} {sign}</span>
           </div>
           <div className="rb-fig">
-            <span className="label">компенсовано</span>
+            <span className="label">{t("rb.reimbursedLabel")}</span>
             <span className="rb-back">{formatMinor(current, { decimals: false })} {sign}</span>
           </div>
         </div>
@@ -121,7 +124,7 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
                   {formatMinor(l.allocated_here, { decimals: false })} {sign}
                   {/* Видно, що взято ЧАСТИНУ надходження, а решта лишилась вільною для інших витрат. */}
                   {l.allocated_here < l.amount && (
-                    <span className="muted"> з {formatMinor(l.amount, { decimals: false })}</span>
+                    <span className="muted"> {t("rb.ofAmount", { amount: `${formatMinor(l.amount, { decimals: false })} ${sign}` })}</span>
                   )}
                 </span>
               </div>
@@ -129,10 +132,10 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
           </div>
         )}
         <p className="split-empty-s" style={{ marginTop: 10 }}>
-          У витратах рахується {formatMinor(total - current, { decimals: false })} {sign}.
-          {linked.length > 0 ? " Використана частина надходжень не рахується доходом." : ""}
+          {t("rb.countedInExpenses", { amount: `${formatMinor(total - current, { decimals: false })} ${sign}` })}
+          {linked.length > 0 ? t("rb.usedNotIncome") : ""}
         </p>
-        <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => commit(true)} disabled={isLoading}>Прибрати компенсацію</button>
+        <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => commit(true)} disabled={isLoading}>{t("rb.removeBtn")}</button>
       </div>
     );
   }
@@ -142,10 +145,10 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
       <div className="card split-card">
         <div className="split-empty">
           <div>
-            <div className="split-empty-t">Мені скинули за це гроші</div>
-            <div className="split-empty-s">Платив за спільне й частину повернули? Вкажи скільки — у витратах лишиться тільки твоя частина.</div>
+            <div className="split-empty-t">{t("rb.emptyTitle")}</div>
+            <div className="split-empty-s">{t("rb.emptyDesc")}</div>
           </div>
-          <button className="btn sm" onClick={() => setEditing(true)}><Icon name="repeat" /> Вказати</button>
+          <button className="btn sm" onClick={() => setEditing(true)}><Icon name="repeat" /> {t("rb.specifyBtn")}</button>
         </div>
       </div>
     );
@@ -153,25 +156,25 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
 
   return (
     <div className="card split-card">
-      <div className="section-head"><h3>Тобі компенсували</h3></div>
+      <div className="section-head"><h3>{t("rb.title")}</h3></div>
 
       <div className="rb-modes" role="tablist">
         <button role="tab" aria-selected={!manualMode} className={`rb-mode${manualMode ? "" : " on"}`} onClick={() => setManualMode(false)}>
-          Надходження в банку
+          {t("rb.modeBank")}
         </button>
         <button role="tab" aria-selected={manualMode} className={`rb-mode${manualMode ? " on" : ""}`} onClick={() => setManualMode(true)}>
-          Готівкою — вписати суму
+          {t("rb.modeCash")}
         </button>
       </div>
 
       {manualMode ? (
         <label className="stack" style={{ gap: 5 }}>
-          <span className="label">скільки тобі повернули ({sign})</span>
+          <span className="label">{t("rb.howMuchReturned", { sign })}</span>
           <input inputMode="decimal" value={manual} placeholder="0.00" autoFocus onChange={(e) => setManual(e.target.value)} />
         </label>
       ) : options.length > 0 ? (
         <>
-          <span className="label">надходження поруч у часі — познач ті, що за цю витрату</span>
+          <span className="label">{t("rb.candidatesHint")}</span>
           <div className="rb-cands">
             {options.map((o) => {
               const on = o.id in alloc;
@@ -185,7 +188,7 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
                       <span className="rb-cand-name">{o.label}</span>
                       <span className="rb-cand-sub">
                         {dfmt.format(o.time * 1000)}{o.account_title ? ` · ${o.account_title}` : ""}
-                        {partial && ` · вільно ${formatMinor(free, { decimals: false })} з ${formatMinor(o.amount, { decimals: false })}`}
+                        {partial && ` · ${t("rb.freeOf", { free: formatMinor(free, { decimals: false }), amount: formatMinor(o.amount, { decimals: false }) })}`}
                       </span>
                     </span>
                     <span className="rb-cand-amt">+{formatMinor(o.amount, { decimals: false })} {sign}</span>
@@ -194,14 +197,14 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
                       редагується: одне надходження може покривати кілька витрат. */}
                   {on && (
                     <div className="rb-take">
-                      <span className="label">взяти звідси</span>
+                      <span className="label">{t("rb.takeFromHere")}</span>
                       <div className="split-amt-in">
                         <input inputMode="decimal" value={alloc[o.id]} placeholder="0.00"
                           onChange={(e) => setAlloc((p) => ({ ...p, [o.id]: e.target.value }))} />
                         <span className="split-sign">{sign}</span>
                       </div>
                       {toMinor(alloc[o.id]) > free && (
-                        <span className="rb-take-err">більше, ніж вільно ({formatMinor(free, { decimals: false })})</span>
+                        <span className="rb-take-err">{t("rb.tooMuchFree", { free: formatMinor(free, { decimals: false }) })}</span>
                       )}
                     </div>
                   )}
@@ -211,10 +214,7 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
           </div>
         </>
       ) : (
-        <p className="split-empty-s">
-          Поруч у часі вільних надходжень нема (шукаємо ±21 день, ту саму валюту).
-          Скористайся вкладкою «Готівкою».
-        </p>
+        <p className="split-empty-s">{t("rb.noCandidates")}</p>
       )}
 
       <div className="rb-preview">
@@ -225,16 +225,16 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
         )}
         <div className={`split-remainder ${over ? "" : effective <= 0 ? "idle" : "ok"}`}>
           {over
-            ? `Забагато: ${formatMinor(effective, { decimals: false })} ${sign} проти суми витрати ${formatMinor(total, { decimals: false })} ${sign}`
+            ? t("rb.tooMuch", { effective: `${formatMinor(effective, { decimals: false })} ${sign}`, total: `${formatMinor(total, { decimals: false })} ${sign}` })
             : effective <= 0
-              ? `Поки нічого не вказано — у витратах лишиться вся сума ${formatMinor(total, { decimals: false })} ${sign}`
-              : `Твоя частина: ${formatMinor(mine, { decimals: false })} ${sign} з ${formatMinor(total, { decimals: false })} ${sign} · компенсовано ${formatMinor(effective, { decimals: false })} ${sign}`}
+              ? t("rb.nothingYet", { total: `${formatMinor(total, { decimals: false })} ${sign}` })
+              : t("rb.previewShare", { mine: `${formatMinor(mine, { decimals: false })} ${sign}`, total: `${formatMinor(total, { decimals: false })} ${sign}`, effective: `${formatMinor(effective, { decimals: false })} ${sign}` })}
         </div>
       </div>
 
       <div className="split-actions">
-        <button className="btn sm ghost" onClick={() => setEditing(false)}>Скасувати</button>
-        <button className="btn sm primary" disabled={isLoading || over || effective <= 0} onClick={() => commit()}>Зберегти</button>
+        <button className="btn sm ghost" onClick={() => setEditing(false)}>{t("common.cancel")}</button>
+        <button className="btn sm primary" disabled={isLoading || over || effective <= 0} onClick={() => commit()}>{t("common.save")}</button>
       </div>
     </div>
   );
@@ -246,13 +246,14 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
  * і незрозуміло, чому в доході стоїть не вся сума.
  */
 export function TxReimbursementUsage({ txId, amount, currency }: { txId: string; amount: number; currency: number }) {
+  const t = useT();
   const { data } = useGetReimbursementUsageQuery(txId, { skip: amount <= 0 });
   if (amount <= 0 || !data || data.allocated <= 0) return null;
   const sign = currencySign(currency);
 
   return (
     <div className="card split-card">
-      <div className="section-head"><h3>Чим це покрито</h3></div>
+      <div className="section-head"><h3>{t("rb.coveredByTitle")}</h3></div>
       <div className="split-view">
         {data.used.map((u) => (
           <div className="split-vrow" key={u.id}>
@@ -265,8 +266,8 @@ export function TxReimbursementUsage({ txId, amount, currency }: { txId: string;
       </div>
       <p className="split-empty-s" style={{ marginTop: 10 }}>
         {data.available > 0
-          ? `Вільно ще ${formatMinor(data.available, { decimals: false })} ${sign} — можна віднести на іншу витрату з її сторінки.`
-          : "Розподілено повністю — у дохід ця операція не потрапляє."}
+          ? t("rb.stillFree", { avail: `${formatMinor(data.available, { decimals: false })} ${sign}` })
+          : t("rb.fullyAllocated")}
       </p>
     </div>
   );

@@ -130,13 +130,4 @@ export class DoDatabase implements AppDb {
       statements.map((s) => (s as DoStatement).execSync<T>()),
     );
   }
-
-  /**
-   * Executes raw SQL that may contain several statements. Not part of `AppDb` on purpose —
-   * only the migration runner needs it, and application code must never take this door
-   * (no bind parameters means no protection against injection).
-   */
-  execScript(sql: string): void {
-    this.ctx.storage.sql.exec(sql);
-  }
 }

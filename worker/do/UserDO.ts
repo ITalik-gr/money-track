@@ -5,8 +5,8 @@
 // canonical SQL in `lib/stats.ts` — dozens of queries built on STATS_JOINS/SPEND_WHERE —
 // stays byte-identical, reached through the D1-shaped facade in `lib/db-shim.ts`.
 import { DurableObject } from "cloudflare:workers";
-import { DoDatabase, type AppDb, type AppResult } from "../lib/db-shim.ts";
-import { runMigrations, type MigrationReport } from "./migrate.ts";
+import { DoDatabase, type AppDb } from "../lib/db-shim.ts";
+import { runMigrations } from "./migrate.ts";
 import { userApp } from "../user-app.ts";
 import { getSecret } from "../lib/secrets.ts";
 import { USER_HEADER } from "../lib/forward.ts";
@@ -17,7 +17,6 @@ export class UserDO extends DurableObject<Env> {
   /** `env.DB` replacement for everything running inside this object. */
   readonly db: AppDb;
   private readonly raw: DoDatabase;
-  private migration: MigrationReport = { applied: [], skipped: 0 };
   private credentials: { MONO_TOKEN: string; ANTHROPIC_API_KEY: string } | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -28,7 +27,7 @@ export class UserDO extends DurableObject<Env> {
     // only thing that guarantees it: the DO can be created by a concurrent burst of
     // requests, and without the gate the second one would hit half-built tables.
     ctx.blockConcurrencyWhile(async () => {
-      this.migration = runMigrations(ctx.storage.sql);
+      runMigrations(ctx.storage.sql);
     });
   }
 
@@ -62,10 +61,19 @@ export class UserDO extends DurableObject<Env> {
    * and not one SQL string had to be edited.
    */
   private async appEnv(userId?: string): Promise<Env> {
+    const creds = await this.userCredentials();
+    // Demo sandbox: run AI on the dedicated demo key (P4.3), and null out the mono token so a
+    // sandbox can never reach the real bank even if a guard were ever missed (it also never has a
+    // user of its own). The spend caps + forced-Haiku still apply on top (see lib/demo.ts).
+    const isDemo = (userId ?? "").startsWith("demo:");
+    const demoOverride = isDemo
+      ? { ANTHROPIC_API_KEY: this.env.DEMO_ANTHROPIC_KEY || creds.ANTHROPIC_API_KEY, MONO_TOKEN: "" }
+      : {};
     return {
       ...this.env,
       DB: this.db,
-      ...(await this.userCredentials()),
+      ...creds,
+      ...demoOverride,
       USER_ID: userId,
       onSecretsChanged: () => this.invalidateCredentials(),
       scheduleBackfillStep: (delayMs: number) => this.ctx.storage.setAlarm(Date.now() + delayMs),
@@ -150,7 +158,39 @@ export class UserDO extends DurableObject<Env> {
    * The cursor lives in `app_state`, so a restart or an eviction mid-run resumes rather than
    * starting over.
    */
+  /**
+   * P4.2 — seed this object as an ephemeral DEMO sandbox and arm its 24h self-destruct alarm.
+   *
+   * Idempotent: a non-empty object is left untouched, so a returning demo cookie reuses its own
+   * sandbox rather than doubling the data. The Worker addresses demo objects by the `demo:`-
+   * prefixed name, which keeps them physically disjoint from real users' objects.
+   */
+  async seedDemo(nowSec: number): Promise<{ seeded: boolean; statements: number }> {
+    const existing = await this.db.prepare("SELECT COUNT(*) AS n FROM transactions").first<{ n: number }>();
+    if ((existing?.n ?? 0) > 0) return { seeded: false, statements: 0 };
+
+    const { buildDemoStatements } = await import("./demo-load.ts");
+    const stmts = buildDemoStatements(nowSec);
+    await this.db.batch(stmts.map((s) => this.db.prepare(s.sql).bind(...s.binds)));
+
+    const { setState } = await import("../lib/repo.ts");
+    const expiresAt = nowSec + 24 * 3600;
+    // The marker doubles as "this is a demo object" for `alarm()` — a real user never has it.
+    await setState(this.db, "demo_expires_at", String(expiresAt));
+    this.ctx.storage.setAlarm(expiresAt * 1000);
+    return { seeded: true, statements: stmts.length };
+  }
+
   override async alarm(): Promise<void> {
+    // A demo sandbox's alarm is its 24h self-destruct, not a backfill tick (a demo has no mono
+    // token to backfill). Distinguished by the marker `seedDemo` wrote; real users never have it.
+    const { getState } = await import("../lib/repo.ts");
+    const demoExpires = await getState(this.db, "demo_expires_at");
+    if (demoExpires != null) {
+      if (Date.now() / 1000 >= Number(demoExpires)) await this.reset(); // wipe back to empty schema
+      return;
+    }
+
     const env = await this.appEnv();
     try {
       const { stepBackfill } = await import("../lib/backfill.ts");
@@ -216,39 +256,11 @@ export class UserDO extends DurableObject<Env> {
     );
   }
 
-  /** Migration outcome from the last cold start — used by the P0.0 spike report. */
-  async migrationReport(): Promise<MigrationReport> {
-    return this.migration;
-  }
 
   /**
-   * Runs one statement through the shim and returns its D1-shaped result.
-   *
-   * Exists for the P0.0 spike (comparing this backend against D1 on identical SQL). Normal
-   * application code does NOT go through here — it keeps calling `env.DB.prepare(...)`,
-   * with `env.DB` swapped for `this.db` by the request middleware.
-   */
-  async query<T = Record<string, unknown>>(sql: string, binds: unknown[] = []): Promise<AppResult<T>> {
-    return this.db.prepare(sql).bind(...binds).all<T>();
-  }
-
-  /** Multi-statement script (fixtures, ad-hoc setup). No bind parameters — see `execScript`. */
-  async script(sql: string): Promise<void> {
-    this.raw.execScript(sql);
-  }
-
-  /**
-   * Runs the P0.0 comparison probe against this object's own database and returns plain
-   * JSON. It has to execute in here because a database handle cannot cross RPC. Spike-only.
-   */
-  async spikeProbe(): Promise<Record<string, unknown>> {
-    const { probe } = await import("./spike-probe.ts");
-    return probe(this.db);
-  }
-
-  /**
-   * Wipes the object back to an empty schema so the spike can re-seed a known state.
-   * Spike-only.
+   * Wipes the object back to an empty schema (freshly migrated). Used by the demo lifecycle
+   * (P4.2) to expire a sandbox — from the self-destruct `alarm()` and from the daily cron sweep
+   * of evicted sandboxes.
    *
    * Two findings from the spike are baked in here:
    *   • the DO enforces foreign keys — `DROP TABLE categories` raised while `transactions`
@@ -271,6 +283,6 @@ export class UserDO extends DurableObject<Env> {
       sql.exec("PRAGMA defer_foreign_keys = ON");
       for (const t of tables) sql.exec(`DROP TABLE IF EXISTS "${t.name}"`);
     });
-    this.migration = runMigrations(sql);
+    runMigrations(sql);
   }
 }

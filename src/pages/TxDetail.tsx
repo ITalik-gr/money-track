@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { translate, useT } from "../i18n/index.ts";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   useChatTxMutation,
@@ -30,7 +32,7 @@ function categoryOptions(cats: Category[] | undefined): SelectOption[] {
   const tops = list.filter((c) => c.parent_id == null);
   const out: SelectOption[] = [];
   for (const p of tops) {
-    out.push({ value: p.id, label: p.name + (p.is_income ? " (дохід)" : ""), color: p.color, icon: p.icon });
+    out.push({ value: p.id, label: p.name + (p.is_income ? " " + translate(getLocale(), "tx.categoryIncomeSuffix") : ""), color: p.color, icon: p.icon });
     for (const ch of list.filter((c) => c.parent_id === p.id)) {
       out.push({ value: ch.id, label: ch.name, color: ch.color ?? p.color, icon: ch.icon, indent: true });
     }
@@ -38,31 +40,33 @@ function categoryOptions(cats: Category[] | undefined): SelectOption[] {
   return out;
 }
 
-const MCC_HINT = "код типу торговця (MCC)";
+const MCC_HINT_KEY = "tx.mccHint";
 
 // Текстовий дамп транзакції для буфера обміну — щоб скинути AI (в інший чат) або собі.
 function buildTxDump(tx: TxDetail): string {
   const money = (minor: number, cur: number) =>
-    `${new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)} ${currencySign(cur)}`;
-  const when = new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
+    `${new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)} ${currencySign(cur)}`;
+  const when = new Intl.DateTimeFormat(localeTag(getLocale()), { dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
+  const lk = (k: string, p?: Record<string, string | number>) => translate(getLocale(), k as never, p);
   const lines = [
-    `${tx.merchant ?? tx.comment ?? "Операція"} — ${tx.amount > 0 ? "+" : ""}${money(tx.amount, tx.currency_code)}`,
-    `Дата: ${when}`,
-    tx.account_title ? `Рахунок: ${tx.account_title}` : null,
-    tx.category_name ? `Категорія: ${tx.category_name}` : null,
-    tx.real_category_name ? `Реальна категорія: ${tx.real_category_name}` : null,
-    tx.event_name ? `Група: ${tx.event_name}` : null,
-    tx.tags.length ? `Теги: ${tx.tags.map((t) => t.name).join(", ")}` : null,
-    tx.mcc ? `MCC: ${tx.mcc}` : null,
-    tx.planned_title ? `Підписка: ${tx.planned_title}` : null,
-    tx.comment ? `Коментар банку: ${tx.comment}` : null,
-    tx.ai_note ? `AI розуміє як: ${tx.ai_note}` : null,
-    tx.user_note ? `Нотатка: ${tx.user_note}` : null,
+    `${tx.merchant ?? tx.comment ?? lk("tx.dumpFallback")} — ${tx.amount > 0 ? "+" : ""}${money(tx.amount, tx.currency_code)}`,
+    lk("tx.dumpDate", { when }),
+    tx.account_title ? lk("tx.dumpAccount", { title: tx.account_title }) : null,
+    tx.category_name ? lk("tx.dumpCategory", { name: tx.category_name }) : null,
+    tx.real_category_name ? lk("tx.dumpRealCategory", { name: tx.real_category_name }) : null,
+    tx.event_name ? lk("tx.dumpEvent", { name: tx.event_name }) : null,
+    tx.tags.length ? lk("tx.dumpTags", { names: tx.tags.map((t) => t.name).join(", ") }) : null,
+    tx.mcc ? lk("tx.dumpMcc", { mcc: String(tx.mcc) }) : null,
+    tx.planned_title ? lk("tx.dumpPlanned", { title: tx.planned_title }) : null,
+    tx.comment ? lk("tx.dumpBankComment", { text: tx.comment }) : null,
+    tx.ai_note ? lk("tx.dumpAiNote", { note: tx.ai_note }) : null,
+    tx.user_note ? lk("tx.dumpUserNote", { note: tx.user_note }) : null,
   ].filter(Boolean);
   return lines.join("\n");
 }
 
 export function TxDetail() {
+  const t = useT();
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { data: tx, isLoading } = useGetTransactionQuery(id, { skip: !id });
@@ -112,11 +116,11 @@ export function TxDetail() {
     setTags((prev) => prev.includes(id) ? prev.filter((t) => t !== id) : prev.length >= 3 ? prev : [...prev, id]);
   }
 
-  if (isLoading) return <div className="empty">Завантаження…</div>;
-  if (!tx) return <div className="card empty">Транзакцію не знайдено.</div>;
+  if (isLoading) return <div className="empty">{t("common.loading")}</div>;
+  if (!tx) return <div className="card empty">{t("tx.notFound")}</div>;
 
   const isMono = tx.source === "mono";
-  const when = new Intl.DateTimeFormat("uk-UA", { dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
+  const when = new Intl.DateTimeFormat(localeTag(getLocale()), { dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
   // Операція у бакеті «Перекази і зняття» — показуємо поле «реальна категорія» (§F2 крок 2).
   const looksTransfer = /переказ|зняття/i.test(tx.category_name ?? "") || isTransfer;
   // Подача — від збереженого факту (не від пенд-тогла у формі): див. `lib/transfer.ts`.
@@ -144,11 +148,11 @@ export function TxDetail() {
       // §R6: якщо я написав/змінив нотатку для AI — одразу переосмислюємо категорію з нею
       // (enrich має пріоритет №1 на user_note). Так «це було за освіту» реально спрацьовує.
       if (noteChanged && note.trim()) {
-        toast.success("Збережено · переосмислюю з AI…");
-        try { await enrich(id).unwrap(); toast.success("AI врахував нотатку"); }
-        catch { toast.error("Нотатку збережено, але AI не відповів"); }
+        toast.success(t("tx.savedEnriching"));
+        try { await enrich(id).unwrap(); toast.success(t("tx.aiNoted")); }
+        catch { toast.error(t("tx.aiNoteFailed")); }
       } else {
-        toast.success("Збережено");
+        toast.success(t("tx.saved"));
       }
     } catch (e) {
       toast.error(errText(e));
@@ -159,19 +163,19 @@ export function TxDetail() {
   async function unlockName() {
     try {
       await editTx({ id, body: { lock_name: false } }).unwrap();
-      toast.success("AI зможе оновлювати назву");
+      toast.success(t("tx.unlockNameDone"));
     } catch (e) { toast.error(errText(e)); }
   }
 
   return (
     <>
       <div className="section-head" style={{ justifyContent: "space-between" }}>
-        <button className="btn ghost xs" style={{ marginLeft: -8 }} onClick={() => navigate(-1)}>← назад</button>
+        <button className="btn ghost xs" style={{ marginLeft: -8 }} onClick={() => navigate(-1)}>← {t("tx.back")}</button>
         <button className="btn ghost xs"
           onClick={async () => {
-            try { await navigator.clipboard.writeText(buildTxDump(tx)); toast.success("Скопійовано"); }
-            catch { toast.error("Не вдалося скопіювати"); }
-          }}>⧉ Копіювати</button>
+            try { await navigator.clipboard.writeText(buildTxDump(tx)); toast.success(t("tx.copied")); }
+            catch { toast.error(t("tx.copyFailed")); }
+          }}>⧉ {t("tx.copy")}</button>
       </div>
 
       {/* Шапка: лого + сума героєм */}
@@ -193,12 +197,12 @@ export function TxDetail() {
             <div className={`num-hero ${neutralTx ? "neutral" : tx.amount < 0 ? "neg" : "pos"}`} style={{ fontSize: 30 }}>
               {neutralTx && <Icon name="swap" size={19} className="hero-swap" />}
               {!neutralTx && tx.amount > 0 ? "+" : ""}
-              {new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(tx.amount) : tx.amount) / 100)}
+              {new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(tx.amount) : tx.amount) / 100)}
               <span className="cur">{tx.currency_code === 840 ? "$" : tx.currency_code === 978 ? "€" : "₴"}</span>
             </div>
             {tx.original_amount != null && tx.original_currency != null && tx.original_currency !== tx.currency_code && (
               <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-                оплата: {new Intl.NumberFormat("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(tx.original_amount) / 100)}
+                {t("tx.paymentLabel")} {new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(tx.original_amount) / 100)}
                 {" "}{currencySign(tx.original_currency)}
               </div>
             )}
@@ -219,15 +223,15 @@ export function TxDetail() {
       <div className="txd-grid">
         <div className="stack" style={{ gap: 14 }}>
           <div className="card facts">
-            <FactLine k="Джерело" v={isMono ? "Monobank" : tx.source === "cash" ? "Готівка" : "Вручну"} />
-            <FactLine k="Рахунок" v={tx.account_title ?? "—"} />
-            <FactLine k="Категорія" v={tx.category_name ?? "без категорії"} dot={tx.category_color} />
-            {looksTransfer && tx.real_category_name ? <FactLine k="Реальна категорія" v={tx.real_category_name} dot={tx.real_category_color} /> : null}
-            {tx.event_name ? <FactLine k="Група" v={tx.event_name} dot={tx.event_color} /> : null}
-            {tx.mcc ? <FactLine k={MCC_HINT} v={String(tx.mcc)} mono /> : null}
-            {tx.cashback ? <FactLine k="Кешбек" v={<Money minor={tx.cashback} currency={tx.currency_code} />} /> : null}
-            {tx.balance_after != null ? <FactLine k="Баланс після" v={<Money minor={tx.balance_after} currency={tx.currency_code} />} /> : null}
-            {tx.comment ? <FactLine k="Коментар банку" v={tx.comment} /> : null}
+            <FactLine k={t("tx.field.source")} v={isMono ? t("tx.source.mono") : tx.source === "cash" ? t("tx.source.cash") : t("tx.source.manual")} />
+            <FactLine k={t("tx.field.account")} v={tx.account_title ?? "—"} />
+            <FactLine k={t("tx.field.category")} v={tx.category_name ?? t("tx.noCategory")} dot={tx.category_color} />
+            {looksTransfer && tx.real_category_name ? <FactLine k={t("tx.field.realCategory")} v={tx.real_category_name} dot={tx.real_category_color} /> : null}
+            {tx.event_name ? <FactLine k={t("tx.field.event")} v={tx.event_name} dot={tx.event_color} /> : null}
+            {tx.mcc ? <FactLine k={t(MCC_HINT_KEY)} v={String(tx.mcc)} mono /> : null}
+            {tx.cashback ? <FactLine k={t("tx.field.cashback")} v={<Money minor={tx.cashback} currency={tx.currency_code} />} /> : null}
+            {tx.balance_after != null ? <FactLine k={t("tx.field.balanceAfter")} v={<Money minor={tx.balance_after} currency={tx.currency_code} />} /> : null}
+            {tx.comment ? <FactLine k={t("tx.field.bankComment")} v={tx.comment} /> : null}
           </div>
 
           {/* §SPLIT: поділ витрати на кілька категорій (не для переказів/надходжень) */}
@@ -248,52 +252,52 @@ export function TxDetail() {
           {/* Окремий AI-блок: що AI знає + розпізнавання + нотатка + інлайн-чат */}
           <div className="card ai-block">
             <div className="ai-block-head">
-              <span className="ai-block-title"><Icon name="spark" size={16} />AI про цю операцію</span>
+              <span className="ai-block-title"><Icon name="spark" size={16} />{t("tx.aiBlockTitle")}</span>
               <button className="btn ai-recognize" disabled={enriching}
                 onClick={async () => {
-                  try { await enrich(id).unwrap(); toast.success("AI оновив назву й категорію"); }
+                  try { await enrich(id).unwrap(); toast.success(t("tx.aiEnrichedDone")); }
                   catch (e) { toast.error(errText(e)); }
-                }}>{enriching ? "Аналізую…" : "Розпізнати"}</button>
+                }}>{enriching ? t("tx.analyzing") : t("tx.recognize")}</button>
             </div>
 
             {/* Панель фактів: що AI розпізнав про цю операцію */}
             <div className="ai-facts">
               <div className="ai-fact">
-                <span className="ai-fact-k">Статус</span>
-                <span className="ai-fact-v">{tx.ai_enriched ? "AI опрацював цю операцію" : "AI ще не опрацьовував"}</span>
+                <span className="ai-fact-k">{t("tx.aiFact.status")}</span>
+                <span className="ai-fact-v">{tx.ai_enriched ? t("tx.aiStatusEnriched") : t("tx.aiStatusNotEnriched")}</span>
               </div>
               <div className="ai-fact">
-                <span className="ai-fact-k">Розпізнав як</span>
+                <span className="ai-fact-k">{t("tx.aiFact.recognizedAs")}</span>
                 <span className="ai-fact-v">{tx.merchant ?? tx.comment ?? "—"}</span>
               </div>
               {tx.user_note && (
                 <div className="ai-fact">
-                  <span className="ai-fact-k">Моя нотатка</span>
+                  <span className="ai-fact-k">{t("tx.aiFact.myNote")}</span>
                   <span className="ai-fact-v">📝 {tx.user_note}</span>
                 </div>
               )}
               {tx.ai_note && (
                 <div className="ai-fact">
-                  <span className="ai-fact-k">AI розуміє це як</span>
+                  <span className="ai-fact-k">{t("tx.aiFact.aiUnderstands")}</span>
                   <span className="ai-fact-v">{tx.ai_note}</span>
                 </div>
               )}
               {tx.planned_title && (
                 <div className="ai-fact">
-                  <span className="ai-fact-k">Підписка</span>
+                  <span className="ai-fact-k">{t("tx.aiFact.planned")}</span>
                   <span className="ai-fact-v">🔁 {tx.planned_title}</span>
                 </div>
               )}
               <div className="ai-fact">
-                <span className="ai-fact-k">Категорія</span>
+                <span className="ai-fact-k">{t("tx.aiFact.category")}</span>
                 <span className="ai-fact-v">
                   {tx.category_color && <span className="ai-fact-dot" style={{ background: tx.category_color }} />}
-                  {tx.category_name ?? "без категорії"}
+                  {tx.category_name ?? t("tx.noCategory")}
                 </span>
               </div>
               {looksTransfer && tx.real_category_name && (
                 <div className="ai-fact">
-                  <span className="ai-fact-k">Реальна категорія</span>
+                  <span className="ai-fact-k">{t("tx.aiFact.realCategory")}</span>
                   <span className="ai-fact-v">
                     {tx.real_category_color && <span className="ai-fact-dot" style={{ background: tx.real_category_color }} />}
                     {tx.real_category_name}
@@ -302,7 +306,7 @@ export function TxDetail() {
               )}
               {tx.tags.length > 0 && (
                 <div className="ai-fact">
-                  <span className="ai-fact-k">Теги</span>
+                  <span className="ai-fact-k">{t("tx.aiFact.tags")}</span>
                   <span className="ai-fact-v ai-fact-tags">
                     {tx.tags.map((t) => (
                       <span key={t.id} className="ai-tag"><span className="ai-fact-dot" style={{ background: t.color ?? "var(--muted)" }} />{t.name}</span>
@@ -312,28 +316,28 @@ export function TxDetail() {
               )}
               {tx.mcc && (
                 <div className="ai-fact">
-                  <span className="ai-fact-k">{MCC_HINT}</span>
+                  <span className="ai-fact-k">{t(MCC_HINT_KEY)}</span>
                   <span className="ai-fact-v mono">{tx.mcc}</span>
                 </div>
               )}
             </div>
 
             <label className="stack" style={{ gap: 4, marginTop: 12 }}>
-              <span className="label">нотатка для AI</span>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder="напр. «це було за освіту», «це подарунок, не рахуй як регулярне»" />
-              <span className="ai-block-sub">Після «Зберегти» AI одразу переосмислить категорію з урахуванням нотатки. Також враховується в інсайтах і порадах.</span>
+              <span className="label">{t("tx.label.noteForAi")}</span>
+              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={t("tx.placeholder.noteForAi")} />
+              <span className="ai-block-sub">{t("tx.noteHint")}</span>
             </label>
 
             {/* Інлайн-чат: обговорити операцію, уточнити («це відпочинок») — AI оновить категорію */}
-            <TxAiChat txId={id} txName={tx.merchant ?? tx.comment ?? "операцію"} />
+            <TxAiChat txId={id} txName={tx.merchant ?? tx.comment ?? t("tx.chatFallback")} />
           </div>
 
           {tx.receipt && (
             <div>
-              <div className="section-head"><h2>Чек</h2></div>
+              <div className="section-head"><h2>{t("tx.section.receipt")}</h2></div>
               <div className="card facts">
-                <FactLine k="Магазин" v={tx.receipt.store ?? "—"} />
-                {tx.receipt.total != null && <FactLine k="Разом" v={<Money minor={tx.receipt.total} currency={tx.receipt.currency_code ?? 980} />} />}
+                <FactLine k={t("tx.receipt.store")} v={tx.receipt.store ?? "—"} />
+                {tx.receipt.total != null && <FactLine k={t("tx.receipt.total")} v={<Money minor={tx.receipt.total} currency={tx.receipt.currency_code ?? 980} />} />}
                 {(tx.receipt.items ?? []).map((it) => (
                   <div key={it.id} className="fact-line">
                     <span className="fact-k" style={{ textTransform: "none" }}>{it.name}{it.qty && it.qty !== 1 ? ` ×${it.qty}` : ""}</span>
@@ -347,57 +351,57 @@ export function TxDetail() {
 
         {/* Редагування */}
         <div>
-          <div className="section-head"><h2>Редагувати</h2></div>
+          <div className="section-head"><h2>{t("tx.section.edit")}</h2></div>
           <div className="card" style={{ padding: 16 }}>
             <div className="stack">
               <label className="stack" style={{ gap: 4 }}>
-                <span className="label">мерчант / назва</span>
-                <input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder="напр. кавʼярня біля дому" />
+                <span className="label">{t("tx.label.merchant")}</span>
+                <input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder={t("tx.placeholder.merchant")} />
                 {tx.name_locked ? (
                   <span className="ai-block-sub" style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    🔒 Ти задав цю назву — AI її не змінюватиме.
-                    <button type="button" className="link-btn" onClick={unlockName}>дозволити AI оновлювати</button>
+                    {"🔒 "}{t("tx.nameLocked")}{" "}
+                    <button type="button" className="link-btn" onClick={unlockName}>{t("tx.unlockNameLink")}</button>
                   </span>
                 ) : (
-                  <span className="ai-block-sub">Зміниш назву — AI більше не перезаписуватиме її автоматично.</span>
+                  <span className="ai-block-sub">{t("tx.nameEditHint")}</span>
                 )}
               </label>
               <label className="stack" style={{ gap: 4 }}>
-                <span className="label">категорія</span>
-                <Select value={categoryId} options={catOptions} searchable clearable clearLabel="— без категорії"
-                  placeholder="— без категорії" onChange={(v) => setCategoryId(v == null ? null : Number(v))} />
+                <span className="label">{t("tx.label.category")}</span>
+                <Select value={categoryId} options={catOptions} searchable clearable clearLabel={t("tx.clearLabel.noCategory")}
+                  placeholder={t("tx.clearLabel.noCategory")} onChange={(v) => setCategoryId(v == null ? null : Number(v))} />
               </label>
 
               {looksTransfer && (
                 <label className="stack" style={{ gap: 4 }}>
-                  <span className="label">реальна категорія переказу/зняття</span>
-                  <Select value={realCategoryId} options={catOptions} searchable clearable clearLabel="— не визначено"
-                    placeholder="— на що пішли кошти?" onChange={(v) => setRealCategoryId(v == null ? null : Number(v))} />
-                  <span className="ai-block-sub">Операція лишається у «Переказах і зняттях», але тут — на що кошти пішли насправді (зняв готівку → «Продукти»). «Розпізнати» вгорі підкаже через AI.</span>
+                  <span className="label">{t("tx.label.realCategory")}</span>
+                  <Select value={realCategoryId} options={catOptions} searchable clearable clearLabel={t("tx.clearLabel.notDefined")}
+                    placeholder={t("tx.placeholder.realCategory")} onChange={(v) => setRealCategoryId(v == null ? null : Number(v))} />
+                  <span className="ai-block-sub">{t("tx.realCategoryHint")}</span>
                 </label>
               )}
 
               <label className="stack" style={{ gap: 4 }}>
-                <span className="label">група / проєкт</span>
-                <Select value={eventId} clearable clearLabel="— без групи" placeholder="— без групи"
+                <span className="label">{t("tx.label.event")}</span>
+                <Select value={eventId} clearable clearLabel={t("tx.clearLabel.noEvent")} placeholder={t("tx.clearLabel.noEvent")}
                   onChange={(v) => setEventId(v == null ? null : Number(v))}
                   options={events.map((ev) => ({ value: ev.id, label: ev.name, color: ev.color }))} />
               </label>
 
               {!looksTransfer && (
                 <div className="stack" style={{ gap: 6 }}>
-                  <span className="label">вагомість (перевизначити категорію)</span>
+                  <span className="label">{t("tx.label.importance")}</span>
                   <div className="imp-picker">
-                    <button type="button" className={`imp-opt ${importance == null ? "on" : ""}`} onClick={() => setImportance(null)}>як категорія</button>
+                    <button type="button" className={`imp-opt ${importance == null ? "on" : ""}`} onClick={() => setImportance(null)}>{t("tx.importanceAsCategory")}</button>
                     {IMPORTANCE_LEVELS.map((lv) => {
                       const m = IMPORTANCE_META[lv];
                       const on = importance === lv;
                       return (
-                        <button key={lv} type="button" title={m.hint}
+                        <button key={lv} type="button" title={t(m.hintKey)}
                           className={`imp-opt ${on ? "on" : ""}`}
                           style={on ? { borderColor: m.color, background: `color-mix(in srgb, ${m.color} 14%, transparent)`, color: m.color } : undefined}
                           onClick={() => setImportance(lv)}>
-                          <span className="d" style={{ background: m.color }} />{m.label}
+                          <span className="d" style={{ background: m.color }} />{t(m.labelKey)}
                         </button>
                       );
                     })}
@@ -407,7 +411,7 @@ export function TxDetail() {
 
               <div className="stack" style={{ gap: 8 }}>
                 <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span className="label">теги для контексту</span>
+                  <span className="label">{t("tx.label.tags")}</span>
                   <span className="tags-count">{tags.length}/3</span>
                 </div>
 
@@ -428,14 +432,14 @@ export function TxDetail() {
                   </div>
                 )}
 
-                <input className="tag-search" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} placeholder="пошук тегу…" />
+                <input className="tag-search" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} placeholder={t("tx.placeholder.tagSearch")} />
 
                 {(() => {
                   const qq = tagQuery.trim().toLowerCase();
                   const matches = (c: Category) => c.id !== categoryId && !tags.includes(c.id) && (!qq || c.name.toLowerCase().includes(qq));
                   const groups: [string, Category[]][] = [
-                    ["Витрати", orderedCats.filter((c) => !c.is_income && matches(c))],
-                    ["Доходи", orderedCats.filter((c) => c.is_income && matches(c))],
+                    [t("tx.tagGroup.expenses"), orderedCats.filter((c) => !c.is_income && matches(c))],
+                    [t("tx.tagGroup.income"), orderedCats.filter((c) => c.is_income && matches(c))],
                   ];
                   const atMax = tags.length >= 3;
                   return (
@@ -454,7 +458,7 @@ export function TxDetail() {
                           </div>
                         </div>
                       ))}
-                      {atMax && <div className="ai-block-sub">Максимум 3 теги — зніми якийсь, щоб додати інший.</div>}
+                      {atMax && <div className="ai-block-sub">{t("tx.tagsMax3")}</div>}
                     </div>
                   );
                 })()}
@@ -464,17 +468,17 @@ export function TxDetail() {
                 <label className="row" style={{ gap: 8, alignItems: "flex-start" }}>
                   <input type="checkbox" checked={learn} onChange={(e) => setLearn(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
                   <span style={{ fontSize: 13 }}>
-                    Застосувати до всіх таких і <strong>запамʼятати</strong> — наступні транзакції з тим самим описом отримають цю назву й категорію автоматично.
+                    {t("tx.learnHint.before")} <strong>{t("tx.learnHint.strong")}</strong> {t("tx.learnHint.after")}
                   </span>
                 </label>
               )}
               <label className="row" style={{ gap: 8, alignItems: "flex-start" }}>
                 <input type="checkbox" checked={isTransfer} onChange={(e) => setIsTransfer(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
                 <span style={{ fontSize: 13 }}>
-                  Це <strong>переказ</strong> між своїми рахунками — не рахувати як витрату/дохід у статистиці.
+                  {t("tx.transferHint.before")} <strong>{t("tx.transferHint.strong")}</strong> {t("tx.transferHint.after")}
                 </span>
               </label>
-              <button className="btn primary" onClick={save} disabled={saving}>{saving ? "Зберігаю…" : "Зберегти"}</button>
+              <button className="btn primary" onClick={save} disabled={saving}>{saving ? t("tx.saving") : t("common.save")}</button>
             </div>
           </div>
         </div>
@@ -488,6 +492,7 @@ type ChatMsg = { role: "user" | "assistant"; content: string };
 // Інлайн-чат по конкретній операції: користувач уточнює («це відпочинок»), AI відповідає
 // й може оновити категорію/прапорець переказу (застосовується на бекенді, тег Tx інвалідиться).
 function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
+  const t = useT();
   const [chatTx, { isLoading: chatting }] = useChatTxMutation();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
@@ -503,22 +508,22 @@ function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
     try {
       const r = await chatTx({ id: txId, messages: next }).unwrap();
       setMessages((m) => [...m, { role: "assistant", content: r.reply }]);
-      if (r.applied?.category_name) toast.success(`AI оновив категорію → ${r.applied.category_name}`);
-      if (r.applied?.is_transfer) toast.success("AI позначив як переказ між своїми");
-      if (r.applied?.understanding) toast.success("AI оновив розуміння операції");
+      if (r.applied?.category_name) toast.success(t("tx.aiUpdatedCategory", { name: r.applied.category_name }));
+      if (r.applied?.is_transfer) toast.success(t("tx.aiMarkedTransfer"));
+      if (r.applied?.understanding) toast.success(t("tx.aiUpdatedUnderstanding"));
     } catch (e) {
       // Показуємо РЕАЛЬНУ причину (ліміт, ключ, збій моделі), а не глухе «спробуй ще раз» —
       // інакше діагностувати AI-помилку неможливо (див. `lib/errors.ts`).
-      setMessages((m) => [...m, { role: "assistant", content: `⚠️ Не вдалося відповісти: ${errText(e)}` }]);
+      setMessages((m) => [...m, { role: "assistant", content: t("tx.chatReplyFailed", { error: errText(e) }) }]);
     } finally { sending.current = false; }
   }
 
   return (
     <div className="tx-chat">
-      <div className="tx-chat-head">💬 Обговорити з AI</div>
+      <div className="tx-chat-head">💬 {t("tx.chatHead")}</div>
       {messages.length === 0 && !chatting && (
         <div className="tx-chat-hint">
-          Уточни, що це насправді — напр. «це відпочинок», «поверни в кафе», «це переказ мамі». AI відповість і, за потреби, оновить категорію.
+          {t("tx.chatHint")}
         </div>
       )}
       {messages.length > 0 && (
@@ -532,10 +537,10 @@ function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
         </div>
       )}
       <div className="tx-chat-input">
-        <input placeholder={`Спитати про «${txName}»…`} value={input}
+        <input placeholder={t("tx.chatInputPlaceholder", { name: txName })} value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") send(); }} />
-        <button className="btn primary" onClick={() => send()} disabled={chatting || !input.trim()} aria-label="Надіслати">➤</button>
+        <button className="btn primary" onClick={() => send()} disabled={chatting || !input.trim()} aria-label={t("tx.chatSend")}>➤</button>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { highlightAmounts } from "./highlight.tsx";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 
 // Легкий рендер markdown-відповідей AI (без зовнішніх бібліотек, CSP-safe):
 // **жирний**, списки (-, •, —, «1.»), заголовки (###), абзаци, чипи-транзакції
@@ -38,7 +39,9 @@ const BULLET = /^\s*(?:[-•—*]|\d+[.)])\s+(.*)$/;
 
 // §CH4: AI кидає графік у чат директивою [chart]…[/chart], кожен рядок «Підпис|значення».
 // Рендеримо горизонтальні бари (self-contained, CSP-safe, без сторонніх ліб).
-const fmtNum = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
+// Lazy so it reflects the CURRENT locale — a module-level Intl.NumberFormat would lock the
+// grouping to whatever locale was active at first import and never follow a language switch.
+const fmtNum = { format: (n: number) => new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 }).format(n) };
 function ChartBlock({ title, rows, keyBase }: { title: string | null; rows: { label: string; value: number }[]; keyBase: string }) {
   const max = Math.max(...rows.map((r) => r.value), 1);
   return (

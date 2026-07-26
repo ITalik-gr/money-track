@@ -1,19 +1,24 @@
 import { useGetReceiptItemsQuery } from "../store/api.ts";
 import { formatMinor } from "../lib/format.ts";
 import { HoverTip } from "./HoverTip.tsx";
+import { useT } from "../i18n/index.ts";
 
 // Аналітика позицій чека: топ товарів за сумою (з OCR-чеків) за період. Ховається, якщо чеків нема.
 export function ReceiptItems({ from, to, sign }: { from: number; to: number; sign: string }) {
+  const t = useT();
   const { data } = useGetReceiptItemsQuery({ from, to, limit: 12 });
   if (!data || data.receipts === 0 || data.items.length === 0) return null;
 
   const max = Math.max(...data.items.map((i) => i.total), 1);
+  // Українська форма "чек/чеки/чеків" спрощена до два-словної пари (однина/множина);
+  // англійська — звичайне s.
+  const receiptWord = data.receipts % 10 === 1 && data.receipts % 100 !== 11 ? t("ri.receiptWord") : t("ri.receiptWordPlural");
   return (
     <section>
       <div className="section-head">
-        <h2>Товари з чеків</h2>
-        <HoverTip content={<>Позиції з розпізнаних чеків (OCR). Топ товарів за сумою за період. Сума — за рядок чека; кількість — сумарна.</>}>
-          <span className="label">{data.receipts} чек{data.receipts % 10 === 1 && data.receipts % 100 !== 11 ? "" : "и/ів"} · що це?</span>
+        <h2>{t("ri.title")}</h2>
+        <HoverTip content={<>{t("ri.tip")}</>}>
+          <span className="label">{data.receipts} {receiptWord} · {t("common.whatIsThis")}</span>
         </HoverTip>
       </div>
       <div className="card flush"><div className="catbars">

@@ -1,4 +1,6 @@
 import { Link, useParams } from "react-router-dom";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT } from "../i18n/index.ts";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useGetMerchantQuery } from "../store/api.ts";
 import { MerchantLogo } from "../components/MerchantLogo.tsx";
@@ -9,9 +11,9 @@ import { CHART_ANIM } from "../lib/motion.ts";
 
 // §P3: сторінка одного мерчанта — уся історія витрат, тренд 6 міс, середній чек, частка в
 // категорії, перша/остання покупка. Дані канонічні (stats.ts), зведені в ₴.
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
-const monthShort = new Intl.DateTimeFormat("uk-UA", { month: "short" });
-const dateFull = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short", year: "numeric" });
+const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
+const monthShort = new Intl.DateTimeFormat(localeTag(getLocale()), { month: "short" });
+const dateFull = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short", year: "numeric" });
 const monthLabel = (m: string) => { const [y, mm] = m.split("-"); return monthShort.format(new Date(Number(y), Number(mm) - 1, 1)); };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -41,6 +43,7 @@ function Stat({ label, v, sub, color }: { label: string; v: React.ReactNode; sub
 }
 
 export function Merchant() {
+  const t = useT();
   const { name = "" } = useParams();
   const decoded = decodeURIComponent(name);
   const { data, isLoading } = useGetMerchantQuery(decoded, { skip: !decoded });
@@ -54,27 +57,27 @@ export function Merchant() {
           <MerchantLogo merchant={decoded} color="var(--accent)" fallbackLabel={decoded} />
           <div style={{ minWidth: 0 }}>
             <div className="greet" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{decoded}</div>
-            <div className="sub">Історія витрат у цього мерчанта.</div>
+            <div className="sub">{t("mrc.sub")}</div>
           </div>
         </div>
         <div className="page-head-actions">
-          <Link to="/stats" className="btn ghost sm">← Статистика</Link>
+          <Link to="/stats" className="btn ghost sm">← {t("nav.stats")}</Link>
         </div>
       </div>
 
       {isLoading ? (
-        <div className="card empty">Завантаження…</div>
+        <div className="card empty">{t("common.loading")}</div>
       ) : !data || (data.n === 0 && data.transactions.length === 0) ? (
-        <div className="card empty">Немає витрат у цього мерчанта.</div>
+        <div className="card empty">{t("mrc.emptyText")}</div>
       ) : (
         <div className="stack" style={{ gap: 18 }}>
           <div className="merchant-kpis">
-            <Stat label="Усього витрачено" v={<>{formatMinor(data.total, { decimals: false })} <span className="cur">₴</span></>} />
-            <Stat label="Операцій" v={data.n} sub={data.first_at ? `з ${dateFull.format(data.first_at * 1000)}` : undefined} />
-            <Stat label="Середній чек" v={<>{formatMinor(data.avg, { decimals: false })} <span className="cur">₴</span></>} />
+            <Stat label={t("mrc.totalSpentLabel")} v={<>{formatMinor(data.total, { decimals: false })} <span className="cur">₴</span></>} />
+            <Stat label={t("stats.fact.txCount")} v={data.n} sub={data.first_at ? t("mrc.sinceDate", { date: dateFull.format(data.first_at * 1000) }) : undefined} />
+            <Stat label={t("stats.fact.avgCheck")} v={<>{formatMinor(data.avg, { decimals: false })} <span className="cur">₴</span></>} />
             {data.top_category && (
-              <Stat label="Категорія" v={data.top_category.name} color={data.top_category.color}
-                sub={data.category_share != null ? `${data.category_share}% усіх витрат категорії` : undefined} />
+              <Stat label={t("mrc.categoryLabel")} v={data.top_category.name} color={data.top_category.color}
+                sub={data.category_share != null ? t("mrc.categoryShareSub", { pct: data.category_share }) : undefined} />
             )}
           </div>
 
@@ -82,8 +85,8 @@ export function Merchant() {
             <div className="card cashflow">
               <div className="cashflow-head">
                 <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                  витрати · 6 міс
-                  <InfoTip>Сума витрат у цього мерчанта по місяцях (зведено в ₴). Показує, чи росте чи спадає активність.</InfoTip>
+                  {t("mrc.trendTitle")}
+                  <InfoTip>{t("mrc.trendTip")}</InfoTip>
                 </span>
               </div>
               <div className="chart-wrap" style={{ height: 190 }}>
@@ -109,7 +112,7 @@ export function Merchant() {
 
           <section>
             <div className="section-head">
-              <h2>Операції</h2>
+              <h2>{t("mrc.transactionsTitle")}</h2>
               <span className="label">{data.transactions.length}{data.transactions.length >= 40 ? "+" : ""}</span>
             </div>
             <div className="ledger rows">

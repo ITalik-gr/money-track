@@ -37,8 +37,22 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // API is never cached; only the app shell + static assets.
-        navigateFallbackDenylist: [/^\/api/, /^\/webhook/, /^\/ingest/],
+        // ⚠️ NO navigation fallback. The service worker precaches static assets and nothing else;
+        // every navigation goes to the network, where the Worker decides (and falls back to the
+        // SPA shell itself via `assets.not_found_handling`).
+        //
+        // Why not the denylist: with `navigateFallback: "index.html"` the SW answers navigations
+        // from cache IN THE BROWSER, before the request reaches Cloudflare, and correctness then
+        // depends on a hand-maintained list of every Worker route. `/auth` and `/demo` were
+        // missing from it, which silently broke "Sign in with Google" and "Try the demo" — the
+        // demo only worked right after a hard reload (which bypasses the SW) and broke again the
+        // moment the SW took control. A list that must be updated in lockstep with the router,
+        // in a layer curl cannot observe, is a trap; deleting the fallback deletes the class.
+        //
+        // Cost, stated plainly: no offline deep-linking. Acceptable — this app is useless
+        // offline anyway (every screen reads live bank data through the Worker).
+        navigateFallback: null,
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

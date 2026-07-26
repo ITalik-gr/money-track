@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT, type TranslationKey } from "../i18n/index.ts";
 import { Icon } from "./Icon.tsx";
 import { useGetCredentialsQuery, usePutCredentialMutation, useDeleteCredentialMutation } from "../store/api.ts";
 import { errText } from "../lib/errors.ts";
@@ -8,25 +10,26 @@ import { ErrorNote } from "./ErrorNote.tsx";
 // Значення НІКОЛИ не приходить назад із сервера — навіть замасковане. Тому картка живе
 // зі статусу: «збережено» + «востаннє звірено». Без другої дати протермінований токен
 // виглядав би точно як робочий, і причину шукали б у зовсім іншому місці застосунку.
-const LABELS: Record<string, { title: string; hint: string; placeholder: string }> = {
+const LABELS: Record<string, { titleKey: TranslationKey; hintKey: TranslationKey; placeholder: string }> = {
   mono_token: {
-    title: "Токен Monobank",
-    hint: "Особистий токен із api.monobank.ua — з нього тягнуться рахунки й виписка.",
+    titleKey: "cred.monoTitle",
+    hintKey: "cred.monoHint",
     placeholder: "u1AbC…",
   },
   anthropic_api_key: {
-    title: "Ключ Anthropic",
-    hint: "Свій ключ — AI рахується на нього, чужі витрати тебе не стосуються.",
+    titleKey: "cred.anthropicTitle",
+    hintKey: "cred.anthropicHint",
     placeholder: "sk-ant-…",
   },
 };
 
 function when(ts: number | null): string {
   if (!ts) return "—";
-  return new Date(ts * 1000).toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(ts * 1000).toLocaleDateString(localeTag(getLocale()), { day: "numeric", month: "short", year: "numeric" });
 }
 
 export function CredentialsCard() {
+  const t = useT();
   const { data, isLoading, error, refetch } = useGetCredentialsQuery();
   const [put, putState] = usePutCredentialMutation();
   const [del] = useDeleteCredentialMutation();
@@ -44,7 +47,7 @@ export function CredentialsCard() {
       setDrafts((d) => ({ ...d, [name]: "" }));
       // `detail` приходить, коли зберегли БЕЗ звірки (напр. mono обмежив 1 запит/60с) —
       // це не помилка, але й не «перевірено», тож кажемо прямо.
-      setNote(res.detail ?? (res.verified ? "Збережено й перевірено." : "Збережено."));
+      setNote(res.detail ?? (res.verified ? t("cred.savedVerified") : t("cred.saved")));
     } catch (e) {
       setFailed(errText(e));
     }
@@ -52,31 +55,32 @@ export function CredentialsCard() {
 
   return (
     <div className="card set-card">
-      <div className="set-card-h"><Icon name="settings" size={16} />Ключі та підключення</div>
-      <p className="set-card-sub">
-        Свої ключі, у твоїй базі, зашифровані. Назад не показуються — лише статус.
-      </p>
+      <div className="set-card-h"><Icon name="settings" size={16} />{t("cred.title")}</div>
+      <p className="set-card-sub">{t("cred.subtitle")}</p>
 
-      {error && <ErrorNote error={error} what="ключі" onRetry={refetch} />}
-      {isLoading && <div className="muted" style={{ fontSize: 13 }}>Завантаження…</div>}
+      {error && <ErrorNote error={error} what={t("cred.errorWhat")} onRetry={refetch} />}
+      {isLoading && <div className="muted" style={{ fontSize: 13 }}>{t("common.loading")}</div>}
 
       <div className="stack">
         {(data?.secrets ?? []).map((s) => {
-          const meta = LABELS[s.name] ?? { title: s.name, hint: "", placeholder: "" };
+          const meta = LABELS[s.name];
+          const title = meta ? t(meta.titleKey) : s.name;
+          const hint = meta ? t(meta.hintKey) : "";
+          const placeholder = meta?.placeholder ?? "";
           return (
             <div key={s.name}>
               <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
-                <strong style={{ fontSize: 14 }}>{meta.title}</strong>
+                <strong style={{ fontSize: 14 }}>{title}</strong>
                 <span className="muted" style={{ fontSize: 12 }}>
-                  {s.set ? (s.last_ok_at ? `звірено ${when(s.last_ok_at)}` : "збережено, не звірено") : "не задано"}
+                  {s.set ? (s.last_ok_at ? t("cred.verifiedOn", { date: when(s.last_ok_at) }) : t("cred.savedNotVerified")) : t("cred.notSet")}
                 </span>
               </div>
-              <p className="set-card-sub" style={{ margin: "4px 0 8px" }}>{meta.hint}</p>
+              <p className="set-card-sub" style={{ margin: "4px 0 8px" }}>{hint}</p>
               <div className="row" style={{ gap: 8 }}>
                 <input
                   type="password"
                   autoComplete="off"
-                  placeholder={s.set ? "замінити на новий…" : meta.placeholder}
+                  placeholder={s.set ? t("cred.replacePlaceholder") : placeholder}
                   value={drafts[s.name] ?? ""}
                   onChange={(e) => setDrafts((d) => ({ ...d, [s.name]: e.target.value }))}
                   style={{ flex: 1 }}
@@ -86,11 +90,11 @@ export function CredentialsCard() {
                   onClick={() => save(s.name)}
                   disabled={!(drafts[s.name] ?? "").trim() || putState.isLoading}
                 >
-                  {putState.isLoading ? "…" : "Зберегти"}
+                  {putState.isLoading ? "…" : t("common.save")}
                 </button>
                 {s.set && (
                   <button className="btn sm ghost danger-text" onClick={() => del(s.name)}>
-                    Прибрати
+                    {t("cred.removeBtn")}
                   </button>
                 )}
               </div>

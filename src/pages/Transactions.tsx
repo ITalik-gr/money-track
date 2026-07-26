@@ -8,6 +8,7 @@ import { GroupModal } from "../components/GroupModal.tsx";
 import { SavedFilters } from "../components/SavedFilters.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 import { toast } from "../lib/toast.ts";
+import { useT } from "../i18n/index.ts";
 import {
   useBulkEditTransactionsMutation,
   useGetAccountsQuery,
@@ -23,12 +24,13 @@ function FilterSection({ id, title, open, active, onToggle, children }: {
   id: string; title: string; open: boolean; active?: boolean;
   onToggle: (id: string) => void; children: React.ReactNode;
 }) {
+  const t = useT();
   return (
     <div className={`filt-sec ${open ? "open" : ""}`}>
       <button type="button" className="filt-sec-head" onClick={() => onToggle(id)} aria-expanded={open}>
         <span className="filt-sec-title">{title}</span>
         <span className="filt-sec-right">
-          {active && !open && <span className="filt-sec-dot" title="Активний фільтр" />}
+          {active && !open && <span className="filt-sec-dot" title={t("tx.list.activeFilter")} />}
           <Icon name="chevron" size={15} className="filt-sec-chev" />
         </span>
       </button>
@@ -45,6 +47,7 @@ function dateToUnix(s: string, endOfDay = false): number | undefined {
 }
 
 export function Transactions() {
+  const t = useT();
   // Фільтри живуть в URL, щоб переживати перехід у транзакцію й Back.
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -136,7 +139,7 @@ export function Transactions() {
   async function addTag(tagId: number) {
     if (!ids.length) return;
     await bulkEdit({ ids, tag_ids: [tagId] }).unwrap();
-    toast.success(`Тег додано до ${ids.length} операцій`);
+    toast.success(t("tx.list.tagAddedToCount", { n: ids.length }));
   }
   async function assignImportance(importance: string | null) {
     if (!ids.length) return;
@@ -147,7 +150,7 @@ export function Transactions() {
   const tops = (cats ?? []).filter((c) => c.parent_id == null && !c.is_income);
   const childrenOf = (id: number) => (cats ?? []).filter((c) => c.parent_id === id);
   const catOptions = (cats ?? []).map((c) => ({ value: c.id, label: c.name, color: c.color, icon: c.icon, indent: !!c.parent_id }));
-  const groupOptions = groups.map((g) => ({ value: g.id, label: g.name, color: g.color, hint: `${g.tx_count} оп.` }));
+  const groupOptions = groups.map((g) => ({ value: g.id, label: g.name, color: g.color, hint: `${g.tx_count} ${t("stats.txCountShort")}` }));
   const accOptions = accounts.map((a) => ({ value: a.id, label: a.title ?? a.id }));
   const anyFilter = !!(q || cat || catp || type || acc || dfrom || dto || amin || amax);
   function clearAll() { patch({ q: null, cat: null, catp: null, type: null, acc: null, dfrom: null, dto: null, amin: null, amax: null }); }
@@ -166,16 +169,16 @@ export function Transactions() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Транзакції</div>
-          <div className="sub">Усі операції з пошуком, фільтром і групуванням.</div>
+          <div className="greet">{t("tx.list.title")}</div>
+          <div className="sub">{t("tx.list.sub")}</div>
         </div>
         <div className="page-head-actions">
-          <a className="btn ghost" href="/api/export/transactions.csv" title="Вивантажити всі операції у CSV (для бухгалтера/податкової)">
+          <a className="btn ghost" href="/api/export/transactions.csv" title={t("tx.list.exportCsvTitle")}>
             <Icon name="export" size={16} /> CSV
           </a>
           <button className={`btn select-btn ${selectMode ? "primary" : ""}`} onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}>
             <Icon name={selectMode ? "overview" : "tag"} size={16} />
-            {selectMode ? "Готово" : "Вибрати"}
+            {selectMode ? t("common.done") : t("common.select")}
           </button>
         </div>
       </div>
@@ -189,35 +192,35 @@ export function Transactions() {
             onClick={() => (selectMode ? exitSelect() : setSelectMode(true))}
           >
             <Icon name={selectMode ? "overview" : "tag"} size={16} />
-            {selectMode ? "Готово" : "Вибрати"}
+            {selectMode ? t("common.done") : t("common.select")}
           </button>
           <div className="searchbar" style={{ marginBottom: 12 }}>
             <span className="ico"><Icon name="search" size={17} /></span>
-            <input placeholder="Пошук…" value={q} onChange={(e) => patch({ q: e.target.value })} />
+            <input placeholder={t("tx.list.searchPlaceholder")} value={q} onChange={(e) => patch({ q: e.target.value })} />
           </div>
 
           <div className="seg" style={{ marginBottom: 14 }}>
-            {[["", "Усі"], ["expense", "Витрати"], ["income", "Доходи"]].map(([v, l]) => (
+            {[["", t("tx.list.allTypes")], ["expense", t("common.expenses")], ["income", t("tx.list.typeIncome")]].map(([v, l]) => (
               <button key={v} className={`seg-btn ${type === v ? "active" : ""}`} onClick={() => patch({ type: v || null })}>{l}</button>
             ))}
           </div>
 
           {accOptions.length > 1 && (
-            <FilterSection id="acc" title="Рахунок" open={openSecs.has("acc")} active={!!acc} onToggle={toggleSec}>
-              <Select value={acc || null} clearable clearLabel="усі рахунки" placeholder="Усі рахунки"
+            <FilterSection id="acc" title={t("tx.list.filterAccount")} open={openSecs.has("acc")} active={!!acc} onToggle={toggleSec}>
+              <Select value={acc || null} clearable clearLabel={t("tx.list.allAccountsClear")} placeholder={t("tx.list.allAccountsPlaceholder")}
                 options={accOptions} onChange={(v) => patch({ acc: v == null ? null : String(v) })} />
             </FilterSection>
           )}
 
-          <FilterSection id="amount" title="Сума, ₴" open={openSecs.has("amount")} active={!!(amin || amax)} onToggle={toggleSec}>
+          <FilterSection id="amount" title={t("tx.list.filterAmount")} open={openSecs.has("amount")} active={!!(amin || amax)} onToggle={toggleSec}>
             <div className="filt-range">
-              <input type="number" inputMode="decimal" min="0" placeholder="від" value={amin} onChange={(e) => patch({ amin: e.target.value || null })} />
+              <input type="number" inputMode="decimal" min="0" placeholder={t("tx.list.amountFrom")} value={amin} onChange={(e) => patch({ amin: e.target.value || null })} />
               <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
-              <input type="number" inputMode="decimal" min="0" placeholder="до" value={amax} onChange={(e) => patch({ amax: e.target.value || null })} />
+              <input type="number" inputMode="decimal" min="0" placeholder={t("tx.list.amountTo")} value={amax} onChange={(e) => patch({ amax: e.target.value || null })} />
             </div>
           </FilterSection>
 
-          <FilterSection id="period" title="Період" open={openSecs.has("period")} active={!!(dfrom || dto)} onToggle={toggleSec}>
+          <FilterSection id="period" title={t("tx.list.filterPeriod")} open={openSecs.has("period")} active={!!(dfrom || dto)} onToggle={toggleSec}>
             <div className="filt-range">
               <input type="date" value={dfrom} max={dto || undefined} onChange={(e) => patch({ dfrom: e.target.value || null })} />
               <span style={{width: "16px", maxWidth: "16px", overflow: "hidden"}} className="dash">–</span>
@@ -225,10 +228,10 @@ export function Transactions() {
             </div>
           </FilterSection>
 
-          <FilterSection id="cat" title="Категорії" open={openSecs.has("cat")} active={!!(cat || catp)} onToggle={toggleSec}>
+          <FilterSection id="cat" title={t("tx.list.filterCategories")} open={openSecs.has("cat")} active={!!(cat || catp)} onToggle={toggleSec}>
             <div className="cat-tree">
               <button className={`cat-tree-row ${!cat && !catp ? "on" : ""}`} onClick={() => patch({ cat: null, catp: null })}>
-                <span className="ctr-name">Усі категорії</span>
+                <span className="ctr-name">{t("tx.list.allCategories")}</span>
               </button>
               {tops.map((c) => {
                 const kids = childrenOf(c.id);
@@ -242,7 +245,7 @@ export function Transactions() {
                         <span className="ctr-name">{c.name}</span>
                       </button>
                       {kids.length > 0 && (
-                        <button className="ctr-caret" onClick={() => toggleExpand(c.id)} aria-label="Розгорнути">
+                        <button className="ctr-caret" onClick={() => toggleExpand(c.id)} aria-label={t("tx.list.expand")}>
                           <Icon name="chevron" size={15} />
                         </button>
                       )}
@@ -259,15 +262,15 @@ export function Transactions() {
             </div>
           </FilterSection>
 
-          {anyFilter && <button className="btn ghost filt-clear" onClick={clearAll}>Скинути фільтри</button>}
+          {anyFilter && <button className="btn ghost filt-clear" onClick={clearAll}>{t("tx.list.resetFilters")}</button>}
 
           <SavedFilters current={params.toString()} onApply={(query) => setParams(new URLSearchParams(query), { replace: true })} />
         </aside>
 
         <div className="tx-main">
-          {isFetching && <div className="label" style={{ margin: "0 2px 8px" }}>завантаження…</div>}
+          {isFetching && <div className="label" style={{ margin: "0 2px 8px" }}>{t("tx.list.loadingShort")}</div>}
           <TransactionList rows={rows} selectable={selectMode} selected={selected} onToggle={toggle}
-            empty={anyFilter ? "Немає операцій за цим фільтром. Спробуй скинути фільтри." : "Ще немає операцій."} />
+            empty={anyFilter ? t("tx.list.emptyFiltered") : t("tx.list.emptyAll")} />
           {hasMore && (
             <div className="tx-more">
               <button className="tx-more-btn" disabled={isFetching} onClick={() => setLimit((l) => l + 100)}>
@@ -276,7 +279,7 @@ export function Transactions() {
                 ) : (
                   <Icon name="chevron" size={16} className="tx-more-chev" />
                 )}
-                {isFetching ? "Завантаження…" : `Показати більше · ${rows.length}`}
+                {isFetching ? t("tx.list.loadingMore") : t("tx.list.showMore", { n: rows.length })}
               </button>
             </div>
           )}
@@ -286,34 +289,34 @@ export function Transactions() {
       {selectMode && (
         <div className="bulkbar">
           <div className="bulkbar-inner">
-            <span className="bulk-count">{selected.size} вибрано</span>
+            <span className="bulk-count">{t("tx.list.selectedCount", { n: selected.size })}</span>
             <div className="bulk-actions">
               <div className="bulk-field">
-                <Select value={null} clearable clearLabel="прибрати з групи" placeholder="У групу…" searchable
+                <Select value={null} clearable clearLabel={t("tx.list.removeFromGroupClear")} placeholder={t("tx.list.groupPlaceholder")} searchable
                   options={groupOptions} onChange={(v) => assignGroup(v == null ? null : Number(v))} disabled={!selected.size || bulkSaving} />
               </div>
-              <button className="btn ghost" onClick={() => setShowGroupModal(true)} disabled={bulkSaving}>+ нова група</button>
+              <button className="btn ghost" onClick={() => setShowGroupModal(true)} disabled={bulkSaving}>{t("tx.list.newGroupBtn")}</button>
               <div className="bulk-field">
-                <Select value={null} placeholder="Категорія…" searchable
+                <Select value={null} placeholder={t("tx.list.categoryPlaceholder")} searchable
                   options={catOptions} onChange={(v) => assignCategory(v == null ? null : Number(v))} disabled={!selected.size || bulkSaving} />
               </div>
               <div className="bulk-field">
-                <Select value={null} placeholder="Тег…" searchable
+                <Select value={null} placeholder={t("tx.list.tagPlaceholder")} searchable
                   options={catOptions} onChange={(v) => v != null && addTag(Number(v))} disabled={!selected.size || bulkSaving} />
               </div>
               <div className="bulk-field">
                 {/* §6 вагомість гуртом. «за категорією» = зняти override операції — це не
                     те саме, що «бажана», тож окремий пункт, а не дефолтне значення. */}
-                <Select value={null} placeholder="Вагомість…"
+                <Select value={null} placeholder={t("tx.list.importancePlaceholder")}
                   options={[
-                    ...IMPORTANCE_LEVELS.map((lv) => ({ value: lv, label: IMPORTANCE_META[lv].label })),
-                    { value: "__inherit", label: "за категорією" },
+                    ...IMPORTANCE_LEVELS.map((lv) => ({ value: lv, label: t(IMPORTANCE_META[lv].labelKey) })),
+                    { value: "__inherit", label: t("tx.list.importanceInherit") },
                   ]}
                   onChange={(v) => v != null && assignImportance(v === "__inherit" ? null : String(v))}
                   disabled={!selected.size || bulkSaving} />
               </div>
-              <button className="btn ghost" onClick={markTransfer} disabled={!selected.size || bulkSaving}>Переказ</button>
-              <button className="btn ghost" onClick={() => setSelected(new Set())} disabled={!selected.size}>Зняти</button>
+              <button className="btn ghost" onClick={markTransfer} disabled={!selected.size || bulkSaving}>{t("tx.list.markTransfer")}</button>
+              <button className="btn ghost" onClick={() => setSelected(new Set())} disabled={!selected.size}>{t("tx.list.deselect")}</button>
             </div>
           </div>
         </div>

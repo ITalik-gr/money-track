@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT, translate } from "../i18n/index.ts";
 import { Icon } from "./Icon.tsx";
 import { InfoTip } from "./InfoTip.tsx";
 import { Select } from "./Select.tsx";
@@ -13,18 +15,19 @@ import {
 // система його пам'ятає, пояснює й — ЯКЩО підтверджено — рахує з ним (burn/runway).
 // ⚠️ Гейт підтвердження: факт із коригуванням суми НЕ рухає числа, поки не «Застосувати».
 const iso = (u: number) => new Date(u * 1000).toISOString().slice(0, 10);
-const dayStr = (u: number) => new Date(u * 1000).toLocaleDateString("uk-UA", { day: "numeric", month: "short", year: "numeric" });
+const dayStr = (u: number) => new Date(u * 1000).toLocaleDateString(localeTag(getLocale()), { day: "numeric", month: "short", year: "numeric" });
 
 function effectLabel(f: Fact): string | null {
   if (f.adjust_kind === "multiplier" && f.adjust_value != null) return `×${f.adjust_value}`;
   if (f.adjust_kind === "delta_minor" && f.adjust_value != null) {
     const sign = f.adjust_value >= 0 ? "+" : "−";
-    return `${sign}${formatMinor(Math.abs(f.adjust_value))} ₴/міс`;
+    return translate(getLocale(), "facts.perMonth", { value: `${sign}${formatMinor(Math.abs(f.adjust_value))}` });
   }
   return null;
 }
 
 export function FactsCard() {
+  const t = useT();
   const { data: facts } = useGetFactsQuery();
   const [adding, setAdding] = useState(false);
   const list = facts ?? [];
@@ -35,20 +38,20 @@ export function FactsCard() {
         <span className="ai-badge soft"><Icon name="info" size={18} /></span>
         <div style={{ minWidth: 0 }}>
           <div className="ai-title">
-            Факти
-            <InfoTip>Факти про світ, які ти повідомляєш системі («метро подорожчало 8→30 ₴», «я звільнився»). AI враховує їх у поясненнях. Факт із коригуванням суми починає рухати burn/runway лише після «Застосувати».</InfoTip>
+            {t("facts.title")}
+            <InfoTip>{t("facts.tip")}</InfoTip>
           </div>
-          <div className="label">що ти повідомив системі</div>
+          <div className="label">{t("facts.subtitle")}</div>
         </div>
         <button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => setAdding((v) => !v)}>
-          <Icon name={adding ? "check" : "plus"} /> {adding ? "Згорнути" : "Додати"}
+          <Icon name={adding ? "check" : "plus"} /> {adding ? t("facts.collapse") : t("facts.addBtn")}
         </button>
       </div>
 
       {adding && <FactForm onDone={() => setAdding(false)} />}
 
       {list.length === 0 && !adding && (
-        <p className="muted" style={{ margin: 0 }}>Ще нема фактів. Додай сам або попроси в чаті («запам'ятай, що…»).</p>
+        <p className="muted" style={{ margin: 0 }}>{t("facts.emptyHint")}</p>
       )}
 
       {list.length > 0 && (
@@ -61,6 +64,7 @@ export function FactsCard() {
 }
 
 function FactRow({ f }: { f: Fact }) {
+  const t = useT();
   const [confirmFact, { isLoading: confirming }] = useConfirmFactMutation();
   const [deleteFact] = useDeleteFactMutation();
   const eff = effectLabel(f);
@@ -72,12 +76,12 @@ function FactRow({ f }: { f: Fact }) {
       <div className="fact-item-main">
         <div className="fact-item-text">{f.text}</div>
         <div className="fact-item-meta">
-          <span className="muted">з {dayStr(f.effective_from)}{f.expires_at ? ` до ${dayStr(f.expires_at)}` : ""}</span>
+          <span className="muted">{t("facts.since", { date: dayStr(f.effective_from) })}{f.expires_at ? t("facts.until", { date: dayStr(f.expires_at) }) : ""}</span>
           {f.category_name && <span className="fact-chip">{f.category_name}</span>}
           {eff && <span className={`fact-chip ${applied ? "on" : ""}`}>{eff}</span>}
           {proposable && (
             <span className={`fact-status ${applied ? "on" : ""}`}>
-              {applied ? "враховано в числах" : "не застосовано"}
+              {applied ? t("facts.appliedStatus") : t("facts.notAppliedStatus")}
             </span>
           )}
         </div>
@@ -88,12 +92,12 @@ function FactRow({ f }: { f: Fact }) {
             className={`btn sm ${applied ? "ghost" : "primary"}`}
             disabled={confirming}
             onClick={() => confirmFact({ id: f.id, on: !applied })}
-            title={applied ? "Прибрати з розрахунків (лишиться пояснювальним)" : "Застосувати до burn/runway"}
+            title={applied ? t("facts.removeFromCalcTitle") : t("facts.applyToBurnTitle")}
           >
-            {applied ? "Скасувати" : "Застосувати"}
+            {applied ? t("facts.undoBtn") : t("facts.applyBtn")}
           </button>
         )}
-        <button className="btn sm icon ghost" title="Видалити" onClick={() => deleteFact(f.id)}>
+        <button className="btn sm icon ghost" title={t("common.delete")} onClick={() => deleteFact(f.id)}>
           <Icon name="trash" />
         </button>
       </div>
@@ -102,6 +106,7 @@ function FactRow({ f }: { f: Fact }) {
 }
 
 function FactForm({ onDone }: { onDone: () => void }) {
+  const t = useT();
   const { data: cats } = useGetCategoriesQuery();
   const [addFact, { isLoading }] = useAddFactMutation();
   const [text, setText] = useState("");
@@ -116,12 +121,12 @@ function FactForm({ onDone }: { onDone: () => void }) {
   );
 
   const submit = async () => {
-    if (!text.trim()) { toast.info("Впиши текст факту"); return; }
+    if (!text.trim()) { toast.info(t("facts.toastNeedText")); return; }
     let adjust_kind: "multiplier" | "delta_minor" | null = null;
     let adjust_value: number | null = null;
     if (categoryId != null && kind !== "none") {
       const n = Number(amount.replace(",", "."));
-      if (!Number.isFinite(n) || n === 0) { toast.info("Впиши число ефекту"); return; }
+      if (!Number.isFinite(n) || n === 0) { toast.info(t("facts.toastNeedNumber")); return; }
       if (kind === "multiplier") { adjust_kind = "multiplier"; adjust_value = n; }
       else { adjust_kind = "delta_minor"; adjust_value = Math.round(n * 100); } // ₴ → копійки
     }
@@ -129,41 +134,41 @@ function FactForm({ onDone }: { onDone: () => void }) {
     try {
       // Ручний факт: користувач сам ввів число → confirm=true (сам себе підтвердив).
       await addFact({ text: text.trim(), category_id: categoryId, effective_from: fromUnix, adjust_kind, adjust_value, confirm: true }).unwrap();
-      toast.success("Факт додано");
+      toast.success(t("facts.toastAdded"));
       onDone();
     } catch {
-      toast.error("Не вдалося зберегти факт");
+      toast.error(t("facts.toastSaveFailed"));
     }
   };
 
   return (
     <div className="fact-form">
-      <input className="fact-input" placeholder="Напр. Метро подорожчало 8 → 30 ₴" value={text} onChange={(e) => setText(e.target.value)} />
+      <input className="fact-input" placeholder={t("facts.textPlaceholder")} value={text} onChange={(e) => setText(e.target.value)} />
       <label className="fact-field">
-        <span className="fact-field-lbl">Категорія (для впливу на суму)</span>
+        <span className="fact-field-lbl">{t("facts.categoryLabel")}</span>
         <Select
           value={categoryId}
           options={catOptions}
           onChange={(v) => setCategoryId(v == null ? null : Number(v))}
-          placeholder="— глобальний факт"
+          placeholder={t("facts.globalPlaceholder")}
           searchable
           clearable
-          clearLabel="— глобальний факт"
+          clearLabel={t("facts.globalPlaceholder")}
         />
       </label>
       <label className="fact-field">
-        <span className="fact-field-lbl">Діє з</span>
+        <span className="fact-field-lbl">{t("facts.effectiveFromLabel")}</span>
         <input type="date" className="fact-input fact-date" value={from} onChange={(e) => setFrom(e.target.value)} />
       </label>
       {categoryId != null && (
         <label className="fact-field">
-          <span className="fact-field-lbl">Вплив на місячну суму</span>
+          <span className="fact-field-lbl">{t("facts.impactLabel")}</span>
           <Select
             value={kind}
             options={[
-              { value: "none", label: "Без впливу на суму" },
-              { value: "multiplier", label: "×N разів (напр. ×3.75)" },
-              { value: "delta_minor", label: "±N ₴/міс" },
+              { value: "none", label: t("facts.impactNone") },
+              { value: "multiplier", label: t("facts.impactMultiplier") },
+              { value: "delta_minor", label: t("facts.impactDelta") },
             ]}
             onChange={(v) => setKind(v as "none" | "multiplier" | "delta_minor")}
           />
@@ -171,7 +176,7 @@ function FactForm({ onDone }: { onDone: () => void }) {
             <input
               className="fact-input"
               inputMode="decimal"
-              placeholder={kind === "multiplier" ? "напр. 3.75" : "напр. +200 або −150"}
+              placeholder={kind === "multiplier" ? t("facts.amountPlaceholderMultiplier") : t("facts.amountPlaceholderDelta")}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
@@ -179,8 +184,8 @@ function FactForm({ onDone }: { onDone: () => void }) {
         </label>
       )}
       <div className="fact-form-actions">
-        <button className="btn sm ghost" onClick={onDone}>Скасувати</button>
-        <button className="btn sm primary" disabled={isLoading} onClick={submit}>Зберегти</button>
+        <button className="btn sm ghost" onClick={onDone}>{t("common.cancel")}</button>
+        <button className="btn sm primary" disabled={isLoading} onClick={submit}>{t("common.save")}</button>
       </div>
     </div>
   );

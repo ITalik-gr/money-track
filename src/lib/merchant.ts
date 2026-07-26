@@ -1,5 +1,7 @@
 // Бренд-стилі мерчантів переїхали в lib/brands.tsx (локально, без зовнішніх запитів).
 // Тут лишається лише визначення типу фізичної картки за назвою рахунку.
+import { translate, type TranslationKey } from "../i18n/index.ts";
+import { getLocale } from "../i18n/locale.ts";
 
 export type CardKind = "black" | "white" | "fop" | "jar" | "other";
 
@@ -12,23 +14,26 @@ export function cardKind(title: string | null): CardKind {
   return "other";
 }
 
-const CARD_KIND_LABEL: Record<CardKind, string> = {
-  black: "Чорна картка", white: "Біла картка", fop: "ФОП-картка", jar: "Банка", other: "Рахунок",
+const CARD_KIND_LABEL: Record<CardKind, TranslationKey> = {
+  black: "merchant.cardBlack", white: "merchant.cardWhite", fop: "merchant.cardFop", jar: "goal.jarFallback", other: "merchant.cardOther",
 };
 export function cardKindLabel(kind: CardKind): string {
-  return CARD_KIND_LABEL[kind];
+  return translate(getLocale(), CARD_KIND_LABEL[kind]);
 }
 
 // Людська назва за ТИПОМ рахунку (`account.type`) — коротка форма для списку Рахунків.
 // Домен ширший за CardKind (є crypto/cash/manual_card/platinum) і навмисно коротший
 // («Чорна», не «Чорна картка»): у списку тип уже в контексті картки. Єдине джерело
 // вокабуляру типів рахунків — тут (був дубльований інлайном у Accounts.tsx).
-const ACCOUNT_TYPE_LABEL: Record<string, string> = {
-  black: "Чорна", white: "Біла", platinum: "Platinum", fop: "ФОП",
-  jar: "Банка", cash: "Готівка", manual_card: "Картка", crypto: "Крипта",
+const ACCOUNT_TYPE_LABEL: Record<string, TranslationKey> = {
+  black: "merchant.typeBlack", white: "merchant.typeWhite", fop: "merchant.typeFop",
+  jar: "goal.jarFallback", cash: "merchant.typeCash", manual_card: "merchant.typeCard", crypto: "acctAdd.kindCrypto",
 };
+// "Platinum" — картковий тір, однакове слово в обох мовах (не проганяємо через словник).
 export function accountTypeLabel(type: string): string | undefined {
-  return ACCOUNT_TYPE_LABEL[type];
+  if (type === "platinum") return "Platinum";
+  const key = ACCOUNT_TYPE_LABEL[type];
+  return key ? translate(getLocale(), key) : undefined;
 }
 
 // account_title з бекенду — конкатенація "<type> <··маскований PAN>" (repo.ts titleFor).

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useT } from "../i18n/index.ts";
 import { Select } from "./Select.tsx";
 import { Icon } from "./Icon.tsx";
 import { formatMinor, currencySign } from "../lib/format.ts";
@@ -14,6 +15,7 @@ const toMinor = (major: string) => Math.round(Number(major.replace(",", ".")) * 
 export function TxSplitEditor({ txId, amount, currency, cats }: {
   txId: string; amount: number; currency: number; cats: Category[] | undefined;
 }) {
+  const t = useT();
   const { data: splits } = useGetTxSplitsQuery(txId);
   const [save, { isLoading }] = useSetTxSplitsMutation();
   const [editing, setEditing] = useState(false);
@@ -78,10 +80,10 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
     try {
       const payload = next === null ? [] : next.map((r) => ({ category_id: r.category_id as number, amount: -toMinor(r.major) }));
       await save({ id: txId, splits: payload }).unwrap();
-      toast.success(next === null ? "Поділ прибрано" : "Операцію розділено");
+      toast.success(next === null ? t("split.toastRemoved") : t("split.toastSplit"));
       setEditing(false);
     } catch (e) {
-      toast.error((e as { data?: { error?: string } })?.data?.error ?? "Не вдалося зберегти поділ");
+      toast.error((e as { data?: { error?: string } })?.data?.error ?? t("split.toastFailed"));
     }
   }
 
@@ -89,16 +91,16 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
   if (has && !editing) {
     return (
       <div className="card split-card">
-        <div className="section-head"><h3>Розділено на категорії</h3><button className="btn sm ghost" onClick={begin}>Редагувати</button></div>
+        <div className="section-head"><h3>{t("split.splitByCategoryTitle")}</h3><button className="btn sm ghost" onClick={begin}>{t("common.edit")}</button></div>
         <div className="split-view">
           {splits!.map((s) => (
             <div className="split-vrow" key={s.id}>
-              <span className="split-cat"><span className="d" style={{ background: s.category_color ?? "var(--muted)" }} />{s.category_name ?? "категорія"}</span>
+              <span className="split-cat"><span className="d" style={{ background: s.category_color ?? "var(--muted)" }} />{s.category_name ?? t("split.categoryFallback")}</span>
               <span className="split-amt">{formatMinor(Math.abs(s.amount), { decimals: false })} {sign}</span>
             </div>
           ))}
         </div>
-        <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => commit(null)} disabled={isLoading}>Прибрати поділ</button>
+        <button className="btn sm ghost" style={{ marginTop: 10 }} onClick={() => commit(null)} disabled={isLoading}>{t("split.removeBtn")}</button>
       </div>
     );
   }
@@ -108,10 +110,10 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
       <div className="card split-card">
         <div className="split-empty">
           <div>
-            <div className="split-empty-t">Розділити на категорії</div>
-            <div className="split-empty-s">Одна покупка → кілька категорій (напр. продукти + побутхімія). Впливає на аналітику.</div>
+            <div className="split-empty-t">{t("split.emptyTitle")}</div>
+            <div className="split-empty-s">{t("split.emptyDesc")}</div>
           </div>
-          <button className="btn sm" onClick={begin}><Icon name="swap" /> Розділити</button>
+          <button className="btn sm" onClick={begin}><Icon name="swap" /> {t("split.splitBtn")}</button>
         </div>
       </div>
     );
@@ -119,7 +121,7 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
 
   return (
     <div className="card split-card">
-      <div className="section-head"><h3>Поділ на категорії</h3></div>
+      <div className="section-head"><h3>{t("split.editTitle")}</h3></div>
       <div className="split-rows">
         {rows.map((r, i) => (
           <div className="split-row" key={i}>
@@ -127,7 +129,7 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
               value={r.category_id}
               options={catOptions}
               onChange={(v) => setRows((rs) => rs.map((x, j) => (j === i ? { ...x, category_id: v == null ? null : Number(v) } : x)))}
-              placeholder="категорія"
+              placeholder={t("split.categoryFallback")}
               searchable
             />
             <div className="split-amt-in">
@@ -136,10 +138,10 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
               <span className="split-sign">{sign}</span>
               {remainder !== 0 && rows.length > 2 && (
                 <button type="button" className="split-rest" onClick={() => fillRest(i)}
-                  title={`Досипати сюди залишок ${formatMinor(remainder, { decimals: false })} ${sign}`}>решта</button>
+                  title={t("split.fillRestTitle", { amount: `${formatMinor(remainder, { decimals: false })} ${sign}` })}>{t("split.fillRestBtn")}</button>
               )}
             </div>
-            <button className="btn sm icon ghost" aria-label="Прибрати" disabled={rows.length <= 2}
+            <button className="btn sm icon ghost" aria-label={t("split.removeRowAria")} disabled={rows.length <= 2}
               onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}><Icon name="trash" /></button>
           </div>
         ))}
@@ -149,7 +151,7 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
       {rows.length === 2 && (
         <div className="split-slider">
           <input type="range" min={0} max={totalMinor} step={10} value={Math.min(totalMinor, Math.max(0, toMinor(rows[0].major)))}
-            onChange={(e) => slide(Number(e.target.value))} aria-label="Пропорція поділу" />
+            onChange={(e) => slide(Number(e.target.value))} aria-label={t("split.sliderAria")} />
           <div className="split-slider-marks">
             <button type="button" onClick={() => slide(Math.round(totalMinor / 2))}>50 / 50</button>
             <button type="button" onClick={() => slide(Math.round(totalMinor * 0.7))}>70 / 30</button>
@@ -158,21 +160,21 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
         </div>
       )}
 
-      <button className="btn sm ghost" onClick={() => setRows((rs) => [...rs, { category_id: null, major: "" }])}><Icon name="plus" /> Додати частину</button>
+      <button className="btn sm ghost" onClick={() => setRows((rs) => [...rs, { category_id: null, major: "" }])}><Icon name="plus" /> {t("split.addPartBtn")}</button>
 
       {/* Статус мусить відповідати РЕАЛЬНІЙ готовності, а не лише залишку: раніше «✓ сходиться»
           світилось зеленим при частині на 0.00 без категорії — тобто зберегти було не можна,
           а індикатор казав «усе добре». */}
       <div className={`split-remainder ${valid ? "ok" : ""}`}>
         {remainder !== 0
-          ? `Лишилось розподілити ${formatMinor(remainder, { decimals: false })} ${sign} із ${formatMinor(totalMinor, { decimals: false })} ${sign}`
-          : zeroRow ? "Є частина з нульовою сумою — прибери її або впиши суму"
-          : noCat ? "Обери категорію в кожній частині"
-          : "✓ сходиться"}
+          ? t("split.remainderText", { remainder: `${formatMinor(remainder, { decimals: false })} ${sign}`, total: `${formatMinor(totalMinor, { decimals: false })} ${sign}` })
+          : zeroRow ? t("split.zeroRowText")
+          : noCat ? t("split.noCatText")
+          : t("split.matchesText")}
       </div>
       <div className="split-actions">
-        <button className="btn sm ghost" onClick={() => setEditing(false)}>Скасувати</button>
-        <button className="btn sm primary" disabled={!valid || isLoading} onClick={() => commit(rows)}>Зберегти поділ</button>
+        <button className="btn sm ghost" onClick={() => setEditing(false)}>{t("common.cancel")}</button>
+        <button className="btn sm primary" disabled={!valid || isLoading} onClick={() => commit(rows)}>{t("split.saveBtn")}</button>
       </div>
     </div>
   );

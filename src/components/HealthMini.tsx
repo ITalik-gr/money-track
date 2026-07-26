@@ -6,10 +6,13 @@ import { Link } from "react-router-dom";
 import { useGetHealthQuery } from "../store/api.ts";
 import { Gauge } from "./Gauge.tsx";
 import { Sparkline } from "./Sparkline.tsx";
+import { useT } from "../i18n/index.ts";
+import type { TranslationKey } from "../i18n/index.ts";
 
-const BAND_LABEL: Record<string, string> = { good: "стабільно", ok: "прийнятно", risk: "під ризиком" };
+const BAND_KEY: Record<string, TranslationKey> = { good: "band.good", ok: "band.ok", risk: "band.risk" };
 
 export function HealthMini() {
+  const t = useT();
   const { data } = useGetHealthQuery();
   // Мовчимо, поки не порахувалось: скелет заради скелета на рейлі — це шум.
   if (!data) return null;
@@ -20,11 +23,11 @@ export function HealthMini() {
   const delta = trend.length >= 2 ? trend[trend.length - 1].score - trend[0].score : null;
 
   return (
-    <Link to="/advisor?tab=state" className="card hm" title="Відкрити «Стан фінансів»">
-      <Gauge ratio={score / 100} center={String(score)} sub="зі 100" tone={tone} size={82} />
+    <Link to="/advisor?tab=state" className="card hm" title={t("hm.open")}>
+      <Gauge ratio={score / 100} center={String(score)} sub={t("hm.of100")} tone={tone} size={82} />
       <div className="hm-body">
-        <div className="hm-label">Фінздоровʼя</div>
-        <div className={`hm-band ${tone}`}>{BAND_LABEL[band] ?? band}</div>
+        <div className="hm-label">{t("hm.title")}</div>
+        <div className={`hm-band ${tone}`}>{BAND_KEY[band] ? t(BAND_KEY[band]) : band}</div>
         {trend.length >= 2 && (
           <div className="hm-trend">
             <Sparkline values={trend.map((t) => t.score)} width={78} height={20} color="var(--muted)" goodUp />

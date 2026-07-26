@@ -1,11 +1,14 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useGetCapitalTrendQuery } from "../store/api.ts";
 import { InfoTip } from "./InfoTip.tsx";
 import { CHART_ANIM } from "../lib/motion.ts";
+import { useT, translate } from "../i18n/index.ts";
+import { getLocale as loc } from "../i18n/locale.ts";
 
 // §4 Тренд капіталу: динаміка власних коштів (₴) за 6 місяців (реконструкція від поточного тоталу).
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
-const dLabel = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short" });
+const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
+const dLabel = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CapTooltip(props: any) {
@@ -15,12 +18,13 @@ function CapTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{dLabel.format(p.t * 1000)}</div>
-      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />Капітал: {fmt0.format(p.capital_uah)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{translate(loc(), "ct.capital")}: {fmt0.format(p.capital_uah)} ₴</div>
     </div>
   );
 }
 
 export function CapitalTrendCard() {
+  const t = useT();
   const { data } = useGetCapitalTrendQuery(6);
   const points = data?.points ?? [];
   if (points.length < 2) return null;
@@ -35,14 +39,14 @@ export function CapitalTrendCard() {
       <div className="cashflow-head">
         <div>
           <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            капітал · 6 міс
-            <InfoTip>Власні кошти (без кредитного ліміту) на кожен момент — реконструйовано назад від поточного балансу за історією операцій. Показує, чи росте чи тане «подушка».</InfoTip>
+            {t("ct.title")}
+            <InfoTip>{t("ct.info")}</InfoTip>
           </span>
           <div className="cf-total num-hero">{fmt0.format(last)}<span className="cur">₴</span></div>
         </div>
         <div className={`cap-delta ${delta >= 0 ? "pos" : "neg"}`}>
           {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : "−"}{fmt0.format(Math.abs(delta))} ₴
-          <span className="cap-delta-sub">за період</span>
+          <span className="cap-delta-sub">{t("common.overPeriod")}</span>
         </div>
       </div>
       <div className="chart-wrap" style={{ height: 200 }}>

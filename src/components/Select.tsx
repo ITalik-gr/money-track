@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CategoryIcon } from "./CategoryIcon.tsx";
+import { useT } from "../i18n/index.ts";
 
 export interface SelectOption {
   value: string | number;
@@ -25,9 +26,12 @@ interface Props {
 // Проєктний красивий селект (заміна нативному <select>): кольорова крапка/іконка,
 // пошук, клавіатура, click-outside. Юзаємо всюди — категорії, події, підписки, валюта.
 export function Select({
-  value, options, onChange, placeholder = "Обрати…",
-  searchable, clearable, clearLabel = "— без вибору", disabled, className,
+  value, options, onChange, placeholder,
+  searchable, clearable, clearLabel, disabled, className,
 }: Props) {
+  const t = useT();
+  const resolvedPlaceholder = placeholder ?? t("select.defaultPlaceholder");
+  const resolvedClearLabel = clearLabel ?? t("select.defaultClearLabel");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
@@ -91,7 +95,7 @@ export function Select({
       <button type="button" className="sel-trigger" disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)} onKeyDown={onKey} aria-haspopup="listbox" aria-expanded={open}>
         <span className="sel-value">
-          {selected ? <OptionInner o={selected} /> : <span className="sel-placeholder">{placeholder}</span>}
+          {selected ? <OptionInner o={selected} /> : <span className="sel-placeholder">{resolvedPlaceholder}</span>}
         </span>
         <svg className="sel-caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
       </button>
@@ -100,7 +104,7 @@ export function Select({
         <div className={`sel-pop ${drop}`} role="listbox">
           {searchable && (
             <div className="sel-search">
-              <input ref={searchRef} value={query} placeholder="Пошук…"
+              <input ref={searchRef} value={query} placeholder={t("select.searchPlaceholder")}
                 onChange={(e) => { setQuery(e.target.value); setActive(0); }} onKeyDown={onKey} />
             </div>
           )}
@@ -108,7 +112,7 @@ export function Select({
             {clearable && !query && (
               <div className={`sel-opt ${value == null ? "sel-selected" : ""}`} data-idx={-1}
                 onMouseDown={(e) => { e.preventDefault(); choose(null); }}>
-                <span className="sel-clear">{clearLabel}</span>
+                <span className="sel-clear">{resolvedClearLabel}</span>
               </div>
             )}
             {filtered.map((o, i) => (
@@ -120,7 +124,7 @@ export function Select({
                 {o.hint && <span className="sel-hint">{o.hint}</span>}
               </div>
             ))}
-            {!filtered.length && <div className="sel-empty">Нічого не знайдено</div>}
+            {!filtered.length && <div className="sel-empty">{t("select.noResults")}</div>}
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 import { TxItem } from "./TxItem.tsx";
 import type { TxRow } from "../store/api.ts";
+import { useT } from "../i18n/index.ts";
 
 interface Props {
   rows: TxRow[];
@@ -11,7 +12,8 @@ interface Props {
 }
 
 export function TransactionList({ rows, selectable, selected, onToggle, empty }: Props) {
-  if (!rows.length) return <div className="card empty">{empty ?? "Порожньо"}</div>;
+  const t = useT();
+  if (!rows.length) return <div className="card empty">{empty ?? t("common.empty")}</div>;
   return (
     <div className="ledger rows">
       {rows.map((t) => (

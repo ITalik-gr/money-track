@@ -139,3 +139,28 @@ export async function listUsers(db: D1Database): Promise<DirectoryUser[]> {
 export async function setUserStatus(db: D1Database, id: string, status: UserStatus): Promise<void> {
   await db.prepare("UPDATE users SET status = ? WHERE id = ?").bind(status, id).run();
 }
+
+// ---- demo sandbox registry (P4.2) -------------------------------------------
+// The cron sweep uses this to find and wipe sandboxes whose 24h alarm may not have fired after
+// an eviction (see migrations-directory/0003). The table may not exist yet on a directory db
+// that hasn't been migrated — callers wrap in try/catch so the demo path degrades to
+// "alarm-only cleanup" rather than 500-ing.
+
+export async function registerDemoSession(db: D1Database, demoId: string, expiresAt: number): Promise<void> {
+  await db
+    .prepare("INSERT OR REPLACE INTO demo_sessions (demo_id, created_at, expires_at) VALUES (?, ?, ?)")
+    .bind(demoId, Math.floor(Date.now() / 1000), expiresAt)
+    .run();
+}
+
+export async function listExpiredDemoSessions(db: D1Database, now = Math.floor(Date.now() / 1000)): Promise<string[]> {
+  const rows = await db
+    .prepare("SELECT demo_id FROM demo_sessions WHERE expires_at <= ? LIMIT 500")
+    .bind(now)
+    .all<{ demo_id: string }>();
+  return (rows.results ?? []).map((r) => r.demo_id);
+}
+
+export async function deleteDemoSession(db: D1Database, demoId: string): Promise<void> {
+  await db.prepare("DELETE FROM demo_sessions WHERE demo_id = ?").bind(demoId).run();
+}

@@ -8,6 +8,7 @@ import {
 import { Icon } from "./Icon.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
+import { useT } from "../i18n/index.ts";
 
 interface Props {
   /** Поточний query-рядок сторінки (`params.toString()`). */
@@ -26,6 +27,7 @@ const cleanQuery = (q: string) => {
 };
 
 export function SavedFilters({ current, onApply }: Props) {
+  const t = useT();
   const { data: filters = [] } = useGetSavedFiltersQuery();
   const [save, { isLoading: saving }] = useSaveFilterMutation();
   const [remove] = useDeleteSavedFilterMutation();
@@ -39,13 +41,13 @@ export function SavedFilters({ current, onApply }: Props) {
     e.preventDefault();
     try {
       await save({ name: name.trim(), query: cur }).unwrap();
-      toast.success("Фільтр збережено");
+      toast.success(t("sf.toastSaved"));
       setNaming(false); setName("");
     } catch (err) { toast.error(errText(err)); }
   }
 
   async function del(id: string, label: string) {
-    if (!confirm(`Видалити фільтр «${label}»?`)) return;
+    if (!confirm(t("sf.deleteConfirm", { name: label }))) return;
     try { await remove(id).unwrap(); }
     catch (err) { toast.error(errText(err)); }
   }
@@ -56,7 +58,7 @@ export function SavedFilters({ current, onApply }: Props) {
 
   return (
     <div className="sf">
-      <div className="sf-head">Збережені</div>
+      <div className="sf-head">{t("sf.savedHead")}</div>
 
       {filters.length > 0 && (
         <div className="sf-list">
@@ -66,7 +68,7 @@ export function SavedFilters({ current, onApply }: Props) {
                 {f.id === activeId && <Icon name="check" size={13} />}
                 <span>{f.name}</span>
               </button>
-              <button type="button" className="sf-del" onClick={() => del(f.id, f.name)} aria-label={`Видалити ${f.name}`}>
+              <button type="button" className="sf-del" onClick={() => del(f.id, f.name)} aria-label={t("sf.deleteAria", { name: f.name })}>
                 <Icon name="trash" size={13} />
               </button>
             </div>
@@ -81,14 +83,14 @@ export function SavedFilters({ current, onApply }: Props) {
           <form className="sf-form" onSubmit={submit}>
             <input
               autoFocus value={name} onChange={(e) => setName(e.target.value)}
-              placeholder="Назва фільтра" maxLength={60} aria-label="Назва фільтра"
+              placeholder={t("sf.namePlaceholder")} maxLength={60} aria-label={t("sf.namePlaceholder")}
               onKeyDown={(e) => { if (e.key === "Escape") { setNaming(false); setName(""); } }}
             />
-            <button className="btn sm primary" disabled={saving || !name.trim()}>Ок</button>
+            <button className="btn sm primary" disabled={saving || !name.trim()}>{t("sf.okBtn")}</button>
           </form>
         ) : (
           <button type="button" className="btn ghost sm sf-add" onClick={() => setNaming(true)}>
-            <Icon name="plus" size={14} />Зберегти цей набір
+            <Icon name="plus" size={14} />{t("sf.saveThisSet")}
           </button>
         )
       )}

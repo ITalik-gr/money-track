@@ -6,6 +6,8 @@
 // про те, що зламалось. Ніколи не роби `toast.error(String(e))`; завжди `errText(e)`.
 //
 // Правило: усі catch-гілки в UI показують `errText(e)`.
+import { translate } from "../i18n/index.ts";
+import { getLocale } from "../i18n/locale.ts";
 
 /** Форма помилки, яку віддає наш Worker: `{ error, detail? }` (див. `app.onError`). */
 interface ApiErrorBody { error?: unknown; detail?: unknown; message?: unknown }
@@ -36,20 +38,20 @@ function bodyText(data: unknown): string | null {
 
 /** Людські назви для транспортних статусів RTK Query. */
 function statusText(status: unknown): string {
-  if (status === "FETCH_ERROR") return "Немає зв'язку з сервером";
-  if (status === "TIMEOUT_ERROR") return "Сервер не відповів вчасно";
-  if (status === "PARSING_ERROR") return "Сервер повернув неочікувану відповідь";
-  if (status === 401) return "Сесія завершилась — увійди знову";
-  if (status === 503) return "Сервіс тимчасово недоступний";
-  if (typeof status === "number") return `Помилка сервера (${status})`;
-  return "Невідома помилка";
+  if (status === "FETCH_ERROR") return translate(getLocale(), "errors.noConnection");
+  if (status === "TIMEOUT_ERROR") return translate(getLocale(), "errors.timeout");
+  if (status === "PARSING_ERROR") return translate(getLocale(), "errors.unexpectedResponse");
+  if (status === 401) return translate(getLocale(), "errors.sessionExpired");
+  if (status === 503) return translate(getLocale(), "errors.serviceUnavailable");
+  if (typeof status === "number") return translate(getLocale(), "errors.serverError", { status });
+  return translate(getLocale(), "errors.unknown");
 }
 
 /**
  * Перетворити будь-що з catch на текст для toast/інлайн-повідомлення.
  * Порядок: тіло відповіді API → статус → Error.message → JSON → fallback.
  */
-export function errText(e: unknown, fallback = "Щось пішло не так"): string {
+export function errText(e: unknown, fallback = translate(getLocale(), "errors.somethingWrong")): string {
   if (e == null) return fallback;
   if (typeof e === "string") return e.trim() || fallback;
   if (e instanceof Error) return e.message || fallback;

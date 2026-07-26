@@ -13,6 +13,7 @@ import { Icon } from "./Icon.tsx";
 import { formatMinor, formatDate, currencySign } from "../lib/format.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
+import { useT } from "../i18n/index.ts";
 import type { Category } from "../../shared/types.ts";
 
 // §R2-ST4 + §C1/§C2: інтерактивний попап-рев'ю реальної категорії переказів/знять.
@@ -34,6 +35,7 @@ function categoryOptions(cats: Category[] | undefined): SelectOption[] {
 interface EditRow extends TransferReviewRow { chosen: number | null; learn: boolean; hint: string; rerunning?: boolean }
 
 export function TransferReviewModal({ onClose }: { onClose: () => void }) {
+  const t = useT();
   const { data: cats } = useGetCategoriesQuery();
   const [review, { isLoading: loading }] = useReviewTransfersMutation();
   const [reviewOne] = useReviewTransferOneMutation();
@@ -80,7 +82,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
         chosen: res.real_category_id, note: res.note,
         needs_attention: res.needs_attention, rerunning: false,
       });
-      toast.success("AI переглянув з урахуванням опису");
+      toast.success(t("trev.aiReviewedToast"));
     } catch (e) {
       patchRow(row.id, { rerunning: false });
       toast.error(errText(e));
@@ -90,7 +92,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
   async function saveAll() {
     try {
       await save({ items: rows.map((r) => ({ id: r.id, real_category_id: r.chosen, learn: r.learn })) }).unwrap();
-      toast.success(`Збережено ${rows.length} операцій`);
+      toast.success(t("trev.savedToast", { n: rows.length }));
       onClose();
     } catch (e) {
       toast.error(errText(e));
@@ -103,17 +105,17 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
     <div className="modal-overlay" onMouseDown={onClose}>
       <div className="modal modal-review" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3 className="h-ico"><Icon name="spark" size={17} />Рев'ю реальних категорій переказів</h3>
-          <button className="modal-x" onClick={onClose} aria-label="Закрити">✕</button>
+          <h3 className="h-ico"><Icon name="spark" size={17} />{t("trev.title")}</h3>
+          <button className="modal-x" onClick={onClose} aria-label={t("common.close")}>✕</button>
         </div>
 
         <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-          AI визначив, на що пішли перекази й зняття. Перевір і за потреби виправ кожен рядок — або опиши операцію словами, і AI перегляне.
-          {attention > 0 && <> <b style={{ color: "var(--warn, #c9871a)" }}>{attention}</b> потребують уваги.</>}
+          {t("trev.intro")}
+          {attention > 0 && <> <b style={{ color: "var(--warn, #c9871a)" }}>{attention}</b>{t("trev.needAttentionSuffix")}</>}
         </p>
 
-        {loading && rows.length === 0 && <div className="empty">AI аналізує операції…</div>}
-        {ran && rows.length === 0 && !loading && <div className="empty">Немає переказів без реальної категорії 🎉</div>}
+        {loading && rows.length === 0 && <div className="empty">{t("trev.analyzing")}</div>}
+        {ran && rows.length === 0 && !loading && <div className="empty">{t("trev.noneFound")}</div>}
 
         {rows.length > 0 && (
           <div className="rev-grid">
@@ -123,8 +125,8 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
                   <MerchantLogo merchant={r.merchant} color="var(--c-plum, var(--accent))" fallbackLabel={r.merchant ?? r.comment} transfer />
                   <div className="rev-card-title">
                     <div className="rev-name">
-                      <span className="rev-name-txt">{r.merchant ?? r.comment ?? "операція"}</span>
-                      {r.needs_attention && <span className="rev-badge">потребує уваги</span>}
+                      <span className="rev-name-txt">{r.merchant ?? r.comment ?? t("chat.txFallback")}</span>
+                      {r.needs_attention && <span className="rev-badge">{t("trev.needsAttentionBadge")}</span>}
                     </div>
                     <div className="rev-meta">
                       {formatMinor(Math.abs(r.amount), { decimals: false })} {currencySign(r.currency_code)} · {formatDate(r.time)}
@@ -138,14 +140,14 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
                 {r.note && <div className="rev-note">💡 {r.note}</div>}
 
                 <div className="rev-pick">
-                  <span className="label">на що пішли кошти?</span>
-                  <Select value={r.chosen} options={catOptions} searchable clearable clearLabel="— справжній переказ"
-                    placeholder="— на що пішло?" onChange={(v) => patchRow(r.id, { chosen: v == null ? null : Number(v) })} />
+                  <span className="label">{t("trev.whatFor")}</span>
+                  <Select value={r.chosen} options={catOptions} searchable clearable clearLabel={t("trev.realTransferClear")}
+                    placeholder={t("trev.whatForPlaceholder")} onChange={(v) => patchRow(r.id, { chosen: v == null ? null : Number(v) })} />
                 </div>
 
                 <div className="rev-hint">
                   <input
-                    placeholder="описати для AI: напр. «зняв на продукти»"
+                    placeholder={t("trev.describeForAiPlaceholder")}
                     value={r.hint}
                     onChange={(e) => patchRow(r.id, { hint: e.target.value })}
                     onKeyDown={(e) => e.key === "Enter" && reRun(r)}
@@ -155,9 +157,9 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
                   </button>
                 </div>
 
-                <label className="rev-learn" title="Запам'ятати для схожих переказів цього мерчанта">
+                <label className="rev-learn" title={t("trev.rememberSimilarTitle")}>
                   <input type="checkbox" checked={r.learn} onChange={() => patchRow(r.id, { learn: !r.learn })} />
-                  <span>запам'ятати для схожих</span>
+                  <span>{t("trev.rememberSimilar")}</span>
                 </label>
               </div>
             ))}
@@ -166,17 +168,17 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
 
         <div className="rev-foot">
           <span className="muted" style={{ fontSize: 12.5 }}>
-            {rows.length ? `${rows.length} у списку` : ""}{remaining > 0 ? ` · ще ${remaining} нерозмічених` : ""}
+            {rows.length ? t("trev.inListCount", { n: rows.length }) : ""}{remaining > 0 ? t("trev.moreUnmarked", { n: remaining }) : ""}
           </span>
           <div className="row" style={{ gap: 8 }}>
             {remaining > 0 && (
               <button className="btn ghost" onClick={runBatch} disabled={loading}>
-                {loading ? "Аналізую…" : `Ще ${Math.min(remaining, 12)}`}
+                {loading ? t("trev.analyzingBtn") : t("trev.moreBtn", { n: Math.min(remaining, 12) })}
               </button>
             )}
-            <button className="btn ghost" onClick={onClose}>Закрити</button>
+            <button className="btn ghost" onClick={onClose}>{t("common.close")}</button>
             <button className="btn primary" onClick={saveAll} disabled={saving || rows.length === 0}>
-              {saving ? "Зберігаю…" : "Зберегти все"}
+              {saving ? t("trev.savingBtn") : t("trev.saveAllBtn")}
             </button>
           </div>
         </div>

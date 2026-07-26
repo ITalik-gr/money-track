@@ -7,6 +7,7 @@ import { Money } from "./Money.tsx";
 import { Icon } from "./Icon.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
+import { useT } from "../i18n/index.ts";
 
 function state(ratio: number): "ok" | "warn" | "over" {
   if (ratio >= 1) return "over";
@@ -26,6 +27,7 @@ export function EventBudgetBar({ spent, budget }: { spent: number; budget: numbe
 
 /** Блок на сторінці події: стан + редагування ліміту. */
 export function EventBudget({ id, spent, budget }: { id: number; spent: number; budget: number | null }) {
+  const t = useT();
   const [save, { isLoading }] = useSetEventBudgetMutation();
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(budget ? String(Math.round(budget / 100)) : "");
@@ -33,7 +35,7 @@ export function EventBudget({ id, spent, budget }: { id: number; spent: number; 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const major = Number(val.replace(",", "."));
-    if (val.trim() && (!Number.isFinite(major) || major < 0)) { toast.error("Сума має бути числом"); return; }
+    if (val.trim() && (!Number.isFinite(major) || major < 0)) { toast.error(t("eb.amountMustBeNumber")); return; }
     try {
       await save({ id, budget: val.trim() ? Math.round(major * 100) : null }).unwrap();
       setEditing(false);
@@ -43,24 +45,22 @@ export function EventBudget({ id, spent, budget }: { id: number; spent: number; 
   if (editing || budget == null) {
     return (
       <form className="card eb-edit" onSubmit={submit}>
-        <div className="label">Бюджет на цю подію</div>
+        <div className="label">{t("eb.setBudgetLabel")}</div>
         <div className="eb-edit-row">
           <input
             autoFocus={editing} inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value)}
-            placeholder="напр. 25000" aria-label="Бюджет у гривнях"
+            placeholder={t("eb.amountPlaceholder")} aria-label={t("eb.amountAriaLabel")}
             onKeyDown={(e) => { if (e.key === "Escape" && budget != null) { setEditing(false); setVal(String(Math.round(budget / 100))); } }}
           />
           <span className="eb-cur">₴</span>
-          <button className="btn primary sm" disabled={isLoading}>Зберегти</button>
+          <button className="btn primary sm" disabled={isLoading}>{t("common.save")}</button>
           {budget != null && (
             <button type="button" className="btn ghost sm" onClick={() => { setEditing(false); setVal(String(Math.round(budget / 100))); }}>
-              Скасувати
+              {t("common.cancel")}
             </button>
           )}
         </div>
-        <p className="eb-hint">
-          Порожнє поле прибирає ліміт. Витрати групи зведено в ₴ за поточним курсом.
-        </p>
+        <p className="eb-hint">{t("eb.hint")}</p>
       </form>
     );
   }
@@ -73,14 +73,14 @@ export function EventBudget({ id, spent, budget }: { id: number; spent: number; 
     <div className={`card eb ${st}`}>
       <div className="eb-head">
         <div>
-          <div className="label">Бюджет події</div>
+          <div className="label">{t("eb.eventBudgetLabel")}</div>
           <div className="eb-nums">
             <b><Money minor={spent} decimals={false} /></b>
-            <span className="muted"> з <Money minor={budget} decimals={false} /></span>
+            <span className="muted"> {t("goal.ofTarget")} <Money minor={budget} decimals={false} /></span>
           </div>
         </div>
         <button className="btn ghost sm" onClick={() => setEditing(true)}>
-          <Icon name="edit" size={14} />Змінити
+          <Icon name="edit" size={14} />{t("eb.editBtn")}
         </button>
       </div>
 
@@ -89,11 +89,11 @@ export function EventBudget({ id, spent, budget }: { id: number; spent: number; 
       </div>
 
       <div className="eb-foot">
-        <span>{Math.round(ratio * 100)}% використано</span>
+        <span>{t("eb.usedPct", { pct: Math.round(ratio * 100) })}</span>
         {/* Перевитрату називаємо прямо, а не «залишок −500 ₴»: мінусовий залишок читається
             гірше, ніж явне «перевищено на». */}
         <span className={st === "over" ? "neg" : ""}>
-          {left >= 0 ? <>лишилось <Money minor={left} decimals={false} /></> : <>перевищено на <Money minor={-left} decimals={false} /></>}
+          {left >= 0 ? <>{t("goal.leftPrefix")} <Money minor={left} decimals={false} /></> : <>{t("eb.overBy")} <Money minor={-left} decimals={false} /></>}
         </span>
       </div>
     </div>

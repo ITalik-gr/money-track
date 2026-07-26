@@ -3,6 +3,7 @@ import { Icon } from "./Icon.tsx";
 import { formatMinor, currencySign } from "../lib/format.ts";
 import { useCountUp } from "../lib/useCountUp.ts";
 import { InfoTip } from "./InfoTip.tsx";
+import { useT } from "../i18n/index.ts";
 
 function pct(cur: number, prev: number): number | null {
   if (!prev) return null;
@@ -54,6 +55,7 @@ function KpiTile({
 }
 
 export function KpiRow() {
+  const t = useT();
   // Preset «month» + режим period_mode → ті самі межі, що й Статистика (числа збігаються).
   // Валюта не передається → зведено в ₴ (USD-витрати/доходи враховані).
   const { data: pm } = useGetPeriodModeQuery();
@@ -64,14 +66,14 @@ export function KpiRow() {
   const income = data?.summary.income ?? 0;
   const prevSpend = data?.prev.spend ?? 0;
   const prevIncome = data?.prev.income ?? 0;
-  const prevLabel = rolling ? "попередні 30 дн" : "минулого міс.";
+  const prevLabel = rolling ? t("kpi.prev30") : t("kpi.prevMonth");
 
   return (
     <div className="kpi-row">
-      <KpiTile title={rolling ? "Витрачено (30 дн)" : "Витрачено за місяць"} kind="spend" valueMinor={spend} prevMinor={prevSpend} deltaPct={pct(spend, prevSpend)} prevLabel={prevLabel}
-        info="Сума всіх витрат за період: без переказів між своїми рахунками і без зняття готівки (готівка рахується за реальною категорією)." />
-      <KpiTile title={rolling ? "Надходження (30 дн)" : "Надходження за місяць"} kind="income" valueMinor={income} prevMinor={prevIncome} deltaPct={pct(income, prevIncome)} prevLabel={prevLabel}
-        info="Сума всіх надходжень за період, без переказів між своїми рахунками." />
+      <KpiTile title={rolling ? t("kpi.spent30") : t("kpi.spentMonth")} kind="spend" valueMinor={spend} prevMinor={prevSpend} deltaPct={pct(spend, prevSpend)} prevLabel={prevLabel}
+        info={t("kpi.spendInfo")} />
+      <KpiTile title={rolling ? t("kpi.income30") : t("kpi.incomeMonth")} kind="income" valueMinor={income} prevMinor={prevIncome} deltaPct={pct(income, prevIncome)} prevLabel={prevLabel}
+        info={t("kpi.incomeInfo")} />
     </div>
   );
 }

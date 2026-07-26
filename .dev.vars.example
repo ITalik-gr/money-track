@@ -25,3 +25,7 @@ OWNER_EMAIL=
 # Шифрує per-user ключі (mono/Anthropic) у базі юзера. `openssl rand -hex 32`.
 # ⚠️ Втрата/ротація = збережені ключі юзерів треба вводити заново.
 SECRETS_MASTER_KEY=
+# Окремий Anthropic-ключ для публічного демо (P4.3). Дай йому власний білінг-ліміт на боці
+# Anthropic — останній рубіж за per-session/global капами. Не заданий → демо-AI бере звичайний
+# ключ (усе одно капнутий + примусово Haiku).
+DEMO_ANTHROPIC_KEY=

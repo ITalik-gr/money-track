@@ -9,7 +9,22 @@
 	// SPA served from the Vite build output, worker handles API/webhook/ingest.
 	"assets": {
 		"binding": "ASSETS",
-		"not_found_handling": "single-page-application"
+		"not_found_handling": "single-page-application",
+		// ⚠️ Load-bearing. With SPA fallback the asset router answers *navigation* requests
+		// (browser GET, Accept: text/html) itself and never wakes the Worker — so `<a href>`
+		// links to Worker routes silently rendered index.html and React Router showed its own
+		// "404 Not Found". It looked like the routes were unregistered; they were not.
+		// The bug was invisible on `fetch` calls (POST /api/login worked fine), which is what
+		// made it read as "Google login is broken" rather than "assets shadow the Worker".
+		// Listed per-prefix rather than `true`, so plain static hits don't pay a Worker invocation.
+		"run_worker_first": [
+			"/api/*",
+			"/auth/*",
+			"/demo",
+			"/webhook/*",
+			"/tg/*",
+			"/ingest/*"
+		]
 	},
 	"observability": {
 		"enabled": true
@@ -26,21 +41,11 @@
 		// Identity and invites live here; every financial row lives in the user's own
 		// Durable Object. Kept as a D1 (not a directory-DO) so the registry stays
 		// inspectable with `wrangler d1 execute` while debugging invites/logins.
-		// ⚠️ database_id below is a placeholder — run `wrangler d1 create directory` and
-		// paste the real id before the first remote deploy (see CLAUDE.md §Ops).
 		{
 			"binding": "DIRECTORY",
 			"database_name": "directory",
-			"database_id": "00000000-0000-4000-8000-00000000d1e0",
+			"database_id": "c72e2571-1fbb-44b2-8308-5a961aef9670",
 			"migrations_dir": "./migrations-directory"
-		},
-		// P0.0 spike only: scratch database used as the D1 reference when comparing D1
-		// against the DO's SQLite on identical fixtures. Local-only — this binding and
-		// worker/routes/spike.ts come out together once the shim is proven (PROGRESS.md).
-		{
-			"binding": "SPIKE_DB",
-			"database_name": "spike",
-			"database_id": "00000000-0000-4000-8000-000000000001"
 		}
 	],
 	// Durable Object: one per user, holds that user's whole finance database (PLATFORM.md §2).

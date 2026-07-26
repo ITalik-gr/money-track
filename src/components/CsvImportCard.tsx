@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT, type TranslationKey } from "../i18n/index.ts";
 import { Icon } from "./Icon.tsx";
 import { Select } from "./Select.tsx";
 import { useGetAccountsQuery, useCsvPreviewMutation, useCsvCommitMutation } from "../store/api.ts";
@@ -24,16 +26,17 @@ interface Preview {
   preview?: { time: number; amount: number; description: string | null }[];
 }
 
-const FIELDS: { key: keyof Mapping; label: string; required: boolean }[] = [
-  { key: "date", label: "Дата", required: true },
-  { key: "amount", label: "Сума", required: true },
-  { key: "description", label: "Опис", required: true },
+const FIELDS: { key: keyof Mapping; labelKey: TranslationKey; required: boolean }[] = [
+  { key: "date", labelKey: "csv.fieldDate", required: true },
+  { key: "amount", labelKey: "csv.fieldAmount", required: true },
+  { key: "description", labelKey: "csv.fieldDescription", required: true },
   // MCC не обовʼязковий, але саме він вмикає детерміновану категоризацію (правила по MCC).
-  { key: "mcc", label: "MCC", required: false },
-  { key: "comment", label: "Коментар", required: false },
+  { key: "mcc", labelKey: "csv.fieldMcc", required: false },
+  { key: "comment", labelKey: "csv.fieldComment", required: false },
 ];
 
 export function CsvImportCard() {
+  const t = useT();
   const { data: accounts } = useGetAccountsQuery();
   const [preview, { isLoading: previewing }] = useCsvPreviewMutation();
   const [commit, { isLoading: committing }] = useCsvCommitMutation();
@@ -82,9 +85,9 @@ export function CsvImportCard() {
     try {
       const res = await commit({ text, account_id: accountId, mapping }).unwrap();
       setDone(
-        `Додано ${res.inserted}` +
-          (res.duplicates ? `, вже було ${res.duplicates}` : "") +
-          (res.skipped ? `, пропущено ${res.skipped}` : ""),
+        t("csv.addedCount", { n: res.inserted }) +
+          (res.duplicates ? t("csv.alreadyHadCount", { n: res.duplicates }) : "") +
+          (res.skipped ? t("csv.skippedCount", { n: res.skipped }) : ""),
       );
       setPreviewResult(null);
       setText("");
@@ -108,15 +111,12 @@ export function CsvImportCard() {
 
   return (
     <div className="card set-card">
-      <div className="set-card-h"><Icon name="repeat" size={16} />Імпорт виписки (CSV)</div>
-      <p className="set-card-sub">
-        Будь-який банк, який уміє експортувати виписку. Повторний імпорт того самого періоду
-        не дублює операції.
-      </p>
+      <div className="set-card-h"><Icon name="repeat" size={16} />{t("csv.title")}</div>
+      <p className="set-card-sub">{t("csv.subtitle")}</p>
 
       <div className="stack">
         <label className="btn" style={{ justifyContent: "center", cursor: "pointer" }}>
-          {fileName ? `Файл: ${fileName}` : "Обрати файл…"}
+          {fileName ? t("csv.fileLabel", { name: fileName }) : t("csv.chooseFile")}
           <input type="file" accept=".csv,text/csv,text/plain" onChange={onFile} style={{ display: "none" }} />
         </label>
 
@@ -128,10 +128,10 @@ export function CsvImportCard() {
                 setAccountId(String(v ?? ""));
                 void runPreview();
               }}
-              options={[{ value: "", label: "На який рахунок…" }, ...accountOptions]}
+              options={[{ value: "", label: t("csv.pickAccount") }, ...accountOptions]}
             />
             <button className="btn" onClick={() => runPreview()} disabled={previewing || !accountId}>
-              {previewing ? "…" : "Розібрати файл"}
+              {previewing ? "…" : t("csv.parseFile")}
             </button>
           </>
         )}
@@ -144,14 +144,14 @@ export function CsvImportCard() {
               {FIELDS.map((f) => (
                 <div key={f.key} className="row" style={{ gap: 8, alignItems: "center" }}>
                   <span className="muted" style={{ fontSize: 13, minWidth: 84 }}>
-                    {f.label}{f.required ? " *" : ""}
+                    {t(f.labelKey)}{f.required ? " *" : ""}
                   </span>
                   <Select
                     value={mapping[f.key] == null ? "" : String(mapping[f.key])}
                     onChange={(v) => setField(f.key, v == null ? "" : String(v))}
                     options={[
                       { value: "", label: "—" },
-                      ...result.headers.map((h, i) => ({ value: String(i), label: h || `колонка ${i + 1}` })),
+                      ...result.headers.map((h, i) => ({ value: String(i), label: h || t("csv.columnFallback", { n: i + 1 }) })),
                     ]}
                   />
                 </div>
@@ -159,10 +159,10 @@ export function CsvImportCard() {
             </div>
 
             <div className="muted" style={{ fontSize: 13 }}>
-              Рядків у файлі: {result.total_rows}
-              {result.complete && ` · розібрано ${result.parsed}`}
-              {!!result.duplicates && ` · вже є ${result.duplicates}`}
-              {!!result.skipped_total && ` · пропущено ${result.skipped_total}`}
+              {t("csv.rowsInFile", { n: result.total_rows })}
+              {result.complete && t("csv.parsedSuffix", { n: result.parsed ?? 0 })}
+              {!!result.duplicates && t("csv.alreadyExistsSuffix", { n: result.duplicates })}
+              {!!result.skipped_total && t("csv.skippedSuffix", { n: result.skipped_total })}
             </div>
 
             {result.complete && !!result.preview?.length && (
@@ -170,7 +170,7 @@ export function CsvImportCard() {
                 {result.preview.map((r, i) => (
                   <div key={i} className="row" style={{ gap: 8, fontSize: 13, alignItems: "baseline" }}>
                     <span className="muted" style={{ minWidth: 76 }}>
-                      {new Date(r.time * 1000).toLocaleDateString("uk-UA")}
+                      {new Date(r.time * 1000).toLocaleDateString(localeTag(getLocale()))}
                     </span>
                     <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.description ?? "—"}
@@ -187,18 +187,18 @@ export function CsvImportCard() {
             {!!result.skipped?.length && (
               <details>
                 <summary className="muted" style={{ fontSize: 13, cursor: "pointer" }}>
-                  Пропущені рядки ({result.skipped_total})
+                  {t("csv.skippedRowsSummary", { n: result.skipped_total ?? 0 })}
                 </summary>
                 <ul className="muted" style={{ fontSize: 12, margin: "6px 0 0", paddingLeft: 18 }}>
                   {result.skipped.map((s) => (
-                    <li key={s.line}>рядок {s.line}: {s.reason}</li>
+                    <li key={s.line}>{t("csv.rowLine", { line: s.line, reason: s.reason })}</li>
                   ))}
                 </ul>
               </details>
             )}
 
             <button className="btn primary" onClick={runCommit} disabled={!canCommit || committing}>
-              {committing ? "…" : `Імпортувати ${result.parsed ?? 0} операцій`}
+              {committing ? "…" : t("csv.importBtn", { n: result.parsed ?? 0 })}
             </button>
           </>
         )}

@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT } from "../i18n/index.ts";
 import { useGetCashflowCalendarQuery } from "../store/api.ts";
 import { formatMinor, currencySign } from "../lib/format.ts";
 import { InfoTip } from "./InfoTip.tsx";
@@ -6,15 +8,19 @@ import { Icon } from "./Icon.tsx";
 
 // Cashflow-календар: місячна сітка очікуваних списань (підписки/розстрочки) по днях +
 // проєкція ліквідної подушки «наперед» → видно провали ліквідності. Дані — /analytics/cashflow-calendar.
-const WD = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Нд"];
-const monthFmt = new Intl.DateTimeFormat("uk-UA", { month: "long", year: "numeric" });
-const dayFmt = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short" });
+// Пн-перший тиждень (2021-01-04 — понеділок). Рахуємо в рендері (не на модульному рівні),
+// щоб живий перемикач мови одразу оновив підписи днів тижня.
+const weekdayShort = (idx: number) => new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short" }).format(new Date(2021, 0, 4 + idx));
+const monthFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { month: "long", year: "numeric" });
+const dayFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
 const pad = (n: number) => String(n).padStart(2, "0");
 
 interface DayItem { title: string; amount: number; amountOrig: number; currency: number; kind: string }
 interface DayCell { total: number; items: DayItem[] }
 
 export function CashflowCalendar() {
+  const t = useT();
+  const WD = Array.from({ length: 7 }, (_, i) => weekdayShort(i));
   const { data } = useGetCashflowCalendarQuery();
   const [offset, setOffset] = useState(0); // 0 = поточний місяць, 1 = наступний (вікно = 2 міс)
   const [open, setOpen] = useState<string | null>(null); // дата розкритого поповера
@@ -46,7 +52,7 @@ export function CashflowCalendar() {
     return { balances: bal, low: { min, minDate } };
   }, [data]);
 
-  if (!data) return <div className="card empty">Рахуємо…</div>;
+  if (!data) return <div className="card empty">{t("cfcal.calculating")}</div>;
 
   const base = new Date(data.now * 1000);
   const shown = new Date(base.getFullYear(), base.getMonth() + offset, 1);
@@ -65,20 +71,20 @@ export function CashflowCalendar() {
         <span className="ai-badge soft"><Icon name="calendar" size={18} /></span>
         <div style={{ minWidth: 0 }}>
           <div className="ai-title">
-            Cashflow-календар
-            <InfoTip>Очікувані списання (підписки/розстрочки) по днях + проєкція ліквідної подушки наперед. Видно, коли платежі згущуються й баланс просідає. Наведи на день — повний список списань. Планового доходу тут ще нема.</InfoTip>
+            {t("cfcal.title")}
+            <InfoTip>{t("cfcal.tip")}</InfoTip>
           </div>
-          <div className="label">списання й провали ліквідності наперед</div>
+          <div className="label">{t("cfcal.subtitle")}</div>
         </div>
         <div className="cf-nav">
-          <button className="btn sm icon ghost" disabled={offset <= 0} onClick={() => setOffset((o) => o - 1)} aria-label="Попередній місяць"><Icon name="chevron" /></button>
+          <button className="btn sm icon ghost" disabled={offset <= 0} onClick={() => setOffset((o) => o - 1)} aria-label={t("cfcal.prevMonthAria")}><Icon name="chevron" /></button>
           <span className="cf-month">{monthFmt.format(shown)}</span>
-          <button className="btn sm icon ghost" disabled={offset >= 1} onClick={() => setOffset((o) => o + 1)} aria-label="Наступний місяць"><Icon name="chevron" /></button>
+          <button className="btn sm icon ghost" disabled={offset >= 1} onClick={() => setOffset((o) => o + 1)} aria-label={t("cfcal.nextMonthAria")}><Icon name="chevron" /></button>
         </div>
       </div>
 
       {low && low.min < 0 && (
-        <div className="cf-warn">⚠️ Прогноз балансу йде в мінус до {dayFmt.format(new Date(`${low.minDate}T00:00:00`))}: {formatMinor(low.min, { decimals: false })} ₴. Прибери/перенеси необов'язкові списання.</div>
+        <div className="cf-warn">{t("cfcal.warnNegative", { date: dayFmt.format(new Date(`${low.minDate}T00:00:00`)), amount: `${formatMinor(low.min, { decimals: false })} ₴` })}</div>
       )}
 
       <div className="cf-wd">{WD.map((d) => <span key={d}>{d}</span>)}</div>
@@ -112,7 +118,7 @@ export function CashflowCalendar() {
               type="button"
               className={`cf-day has ${isToday ? "today" : ""} ${bal != null && bal < 0 ? "danger" : ""} ${open === dateStr ? "open" : ""}`}
               style={{ background: `color-mix(in srgb, var(--neg) ${Math.round(intensity * 100)}%, var(--surface))` }}
-              aria-label={`${dayFmt.format(new Date(`${dateStr}T00:00:00`))}: ${cell.items.length} списань на ${formatMinor(cell.total, { decimals: false })} ₴`}
+              aria-label={t("cfcal.dayAria", { date: dayFmt.format(new Date(`${dateStr}T00:00:00`)), count: cell.items.length, amount: `${formatMinor(cell.total, { decimals: false })} ₴` })}
               onMouseEnter={() => setOpen(dateStr)}
               onMouseLeave={() => setOpen((o) => (o === dateStr ? null : o))}
               onFocus={() => setOpen(dateStr)}
@@ -132,7 +138,7 @@ export function CashflowCalendar() {
                     <span className="cf-item-amt">{formatMinor(it.amount, { decimals: false })}</span>
                   </span>
                 ))}
-                {rest > 0 && <span className="cf-item more">+{rest} ще</span>}
+                {rest > 0 && <span className="cf-item more">{t("cfcal.moreItems", { n: rest })}</span>}
               </span>
 
               {open === dateStr && (
@@ -149,12 +155,12 @@ export function CashflowCalendar() {
                     </span>
                   ))}
                   <span className="cf-pop-foot">
-                    <span>Разом за день</span>
+                    <span>{t("cfcal.dayTotal")}</span>
                     <b>−{formatMinor(cell.total, { decimals: false })} ₴</b>
                   </span>
                   {bal != null && (
                     <span className={`cf-pop-bal ${bal < 0 ? "neg" : ""}`}>
-                      Подушка після: {formatMinor(bal, { decimals: false })} ₴
+                      {t("cfcal.cushionAfter", { amount: `${formatMinor(bal, { decimals: false })} ₴` })}
                     </span>
                   )}
                 </span>
@@ -165,8 +171,8 @@ export function CashflowCalendar() {
       </div>
 
       <div className="cf-foot">
-        <span>Списань цього місяця: <b>{formatMinor(monthTotal, { decimals: false })} ₴</b></span>
-        <span className="muted">старт подушки {formatMinor(data.cushion, { decimals: false })} ₴</span>
+        <span>{t("cfcal.monthTotal")} <b>{formatMinor(monthTotal, { decimals: false })} ₴</b></span>
+        <span className="muted">{t("cfcal.cushionStart", { amount: `${formatMinor(data.cushion, { decimals: false })} ₴` })}</span>
       </div>
     </div>
   );

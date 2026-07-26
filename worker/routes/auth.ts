@@ -6,7 +6,7 @@ import { Hono } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
 import { createSession, SESSION_COOKIE, signShortLived, verifyShortLived } from "../lib/auth.ts";
-import { loginWithGoogle } from "../lib/directory.ts";
+import { ensureOwner, loginWithGoogle } from "../lib/directory.ts";
 
 export const auth = new Hono<{ Bindings: Env }>();
 
@@ -115,12 +115,23 @@ auth.get("/google/callback", async (c) => {
 
   // Invite-only lives entirely in `loginWithGoogle`: an unknown or disabled email gets no
   // session, no Durable Object, no row. One place to audit.
-  const user = await loginWithGoogle(c.env.DIRECTORY, {
+  const profile = {
     sub,
     email,
     name: claims["name"] ? String(claims["name"]) : undefined,
     picture: claims["picture"] ? String(claims["picture"]) : undefined,
-  });
+  };
+  let user = await loginWithGoogle(c.env.DIRECTORY, profile);
+
+  // Bootstrap. `loginWithGoogle` only ever MATCHES existing rows, so on a fresh install nobody
+  // can log in — the owner row used to be created as a side effect of the password gate, which
+  // no longer exists. Seeding it here keeps that from being a lockout, and keeps invite-only
+  // intact: this branch fires for exactly one address, the configured OWNER_EMAIL.
+  const ownerEmail = (c.env.OWNER_EMAIL || "").trim().toLowerCase();
+  if (!user && ownerEmail && email.toLowerCase() === ownerEmail) {
+    await ensureOwner(c.env.DIRECTORY, ownerEmail);
+    user = await loginWithGoogle(c.env.DIRECTORY, profile);
+  }
   if (!user) return fail("not_invited");
 
   setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id), {

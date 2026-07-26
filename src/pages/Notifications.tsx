@@ -2,6 +2,8 @@
 // готові репорти, дедлайни списань, аномалії темпу, бюджети, подорожчання, провал ліквідності.
 // Усі цифри рахує бекенд по канону `stats.ts` — тут лише подача.
 import { useMemo, useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT, translate, useLocale } from "../i18n/index.ts";
 import { Link } from "react-router-dom";
 import {
   useGetNotificationsQuery, useGetNotifPrefsQuery, useSetNotifPrefsMutation,
@@ -13,28 +15,46 @@ import { Icon } from "../components/Icon.tsx";
 import { ErrorNote } from "../components/ErrorNote.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
+import { renderNotif, type NotifLocale, type NotifParams } from "../../shared/notif-i18n.ts";
 
-// Тип події → підпис, іконка й куди веде клік. Один вокабуляр на всю сторінку.
-const KIND_META: Record<NotifKind, { label: string; icon: string }> = {
-  ai: { label: "AI-спостереження", icon: "spark" },
-  report: { label: "Репорти", icon: "report" },
-  deadline: { label: "Дедлайни", icon: "calendar" },
-  anomaly: { label: "Аномалії", icon: "stats" },
-  budget: { label: "Бюджети", icon: "plan" },
-  price_up: { label: "Подорожчання", icon: "swap" },
-  liquidity: { label: "Ліквідність", icon: "alert" },
-  big_tx: { label: "Великі витрати", icon: "tx" },
-  duplicate: { label: "Дублі списань", icon: "copy" },
-  health_drop: { label: "Індекс здоровʼя", icon: "advisor" },
-  goal_risk: { label: "Цілі", icon: "target" },
-  dead_sub: { label: "Мертві підписки", icon: "repeat" },
-  win: { label: "Перемоги", icon: "check" },
-  todo: { label: "Треба зробити", icon: "tag" },
+// Compose a feed row's text: templated rows (P3.3) re-render in the CURRENT locale from
+// key+params, so switching language retranslates the whole feed live; `ai`/legacy rows have
+// no template and fall back to the stored title/body.
+function notifText(n: Notification): { title: string; body: string | null } {
+  if (n.notif_key) {
+    const loc: NotifLocale = getLocale() === "en" ? "en" : "uk";
+    let params: NotifParams = {};
+    try { params = n.notif_params ? JSON.parse(n.notif_params) as NotifParams : {}; } catch { /* fall back to defaults */ }
+    return renderNotif(loc, n.notif_key, params);
+  }
+  return { title: n.title, body: n.body };
+}
+
+// Тип події → ключ підпису, іконка й куди веде клік. Один вокабуляр на всю сторінку.
+const KIND_META: Record<NotifKind, { labelKey:
+  "notif.kind.ai" | "notif.kind.report" | "notif.kind.deadline" | "notif.kind.anomaly" |
+  "notif.kind.budget" | "notif.kind.price_up" | "notif.kind.liquidity" | "notif.kind.big_tx" |
+  "notif.kind.duplicate" | "notif.kind.health_drop" | "notif.kind.goal_risk" | "notif.kind.dead_sub" |
+  "notif.kind.win" | "notif.kind.todo"; icon: string }> = {
+  ai: { labelKey: "notif.kind.ai", icon: "spark" },
+  report: { labelKey: "notif.kind.report", icon: "report" },
+  deadline: { labelKey: "notif.kind.deadline", icon: "calendar" },
+  anomaly: { labelKey: "notif.kind.anomaly", icon: "stats" },
+  budget: { labelKey: "notif.kind.budget", icon: "plan" },
+  price_up: { labelKey: "notif.kind.price_up", icon: "swap" },
+  liquidity: { labelKey: "notif.kind.liquidity", icon: "alert" },
+  big_tx: { labelKey: "notif.kind.big_tx", icon: "tx" },
+  duplicate: { labelKey: "notif.kind.duplicate", icon: "copy" },
+  health_drop: { labelKey: "notif.kind.health_drop", icon: "advisor" },
+  goal_risk: { labelKey: "notif.kind.goal_risk", icon: "target" },
+  dead_sub: { labelKey: "notif.kind.dead_sub", icon: "repeat" },
+  win: { labelKey: "notif.kind.win", icon: "check" },
+  todo: { labelKey: "notif.kind.todo", icon: "tag" },
 };
 const KINDS = Object.keys(KIND_META) as NotifKind[];
 
-const dayFmt = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "long" });
-const timeFmt = new Intl.DateTimeFormat("uk-UA", { hour: "2-digit", minute: "2-digit" });
+const dayFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "long" });
+const timeFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { hour: "2-digit", minute: "2-digit" });
 
 // Заголовок групи: «Сьогодні» / «Вчора» / дата. Стрічку читають зверху вниз за днями.
 function dayLabel(unix: number): string {
@@ -42,8 +62,8 @@ function dayLabel(unix: number): string {
   const today = new Date();
   const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((startOf(today) - startOf(d)) / 86400000);
-  if (diff === 0) return "Сьогодні";
-  if (diff === 1) return "Вчора";
+  if (diff === 0) return translate(getLocale(), "notif.today");
+  if (diff === 1) return translate(getLocale(), "notif.yesterday");
   return dayFmt.format(d);
 }
 
@@ -58,14 +78,16 @@ function linkFor(n: Notification): string | null {
 }
 
 function Row({ n, onRead }: { n: Notification; onRead: (id: number) => void }) {
+  useLocale();               // re-render this row when the language switches (P3.3)
   const meta = KIND_META[n.kind];
   const to = linkFor(n);
+  const text = notifText(n);
   const body = (
     <>
       <span className={`nt-ico ${n.severity}`}><Icon name={meta?.icon ?? "info"} size={16} /></span>
       <span className="nt-body">
-        <span className="nt-title">{n.title}</span>
-        {n.body && <span className="nt-text">{n.body}</span>}
+        <span className="nt-title">{text.title}</span>
+        {text.body && <span className="nt-text">{text.body}</span>}
       </span>
       <span className="nt-time">{timeFmt.format(n.created_at * 1000)}</span>
     </>
@@ -78,6 +100,7 @@ function Row({ n, onRead }: { n: Notification; onRead: (id: number) => void }) {
 }
 
 export function Notifications() {
+  const t = useT();
   const [kind, setKind] = useState<NotifKind | null>(null);
   const [showPrefs, setShowPrefs] = useState(false);
   const { data, error, isLoading, refetch } = useGetNotificationsQuery({ kind });
@@ -105,18 +128,18 @@ export function Notifications() {
   const run = async () => {
     try {
       const r = await generate().unwrap();
-      const bits = [r.created ? `нових подій: ${r.created}` : "нових подій немає"];
-      if (r.pushed) bits.push(`у Telegram: ${r.pushed}`);
-      if (r.pruned) bits.push(`прибрано старих: ${r.pruned}`);
+      const bits = [r.created ? t("notif.newEventsCount", { n: r.created }) : t("notif.noNewEvents")];
+      if (r.pushed) bits.push(t("notif.pushedToTg", { n: r.pushed }));
+      if (r.pruned) bits.push(t("notif.prunedOld", { n: r.pruned }));
       toast.success(bits.join(" · "));
       // Гілка впала (напр. таблиця відсутня на remote) — кажемо це вголос, не мовчимо.
-      if (r.skipped.length) toast.error(`Не порахувалось: ${r.skipped.join("; ")}`);
+      if (r.skipped.length) toast.error(t("notif.failedItems", { list: r.skipped.join("; ") }));
     } catch (e) { toast.error(errText(e)); }
   };
 
   const wipe = async () => {
-    if (!confirm("Очистити всю стрічку сповіщень?")) return;
-    try { await clearAll().unwrap(); toast.success("Стрічку очищено"); }
+    if (!confirm(t("notif.clearAllConfirm"))) return;
+    try { await clearAll().unwrap(); toast.success(t("notif.cleared")); }
     catch (e) { toast.error(errText(e)); }
   };
 
@@ -124,28 +147,23 @@ export function Notifications() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Сповіщення</div>
-          <div className="sub">
-            Що система помітила у твоїх грошах: готові репорти, дедлайни списань, аномалії темпу,
-            бюджети й провали ліквідності.
-          </div>
+          <div className="greet">{t("notif.title")}</div>
+          <div className="sub">{t("notif.sub")}</div>
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn sm" disabled={generating} onClick={run}>
-            <Icon name="spark" size={15} />{generating ? "Перевіряю…" : "Перевірити зараз"}
+            <Icon name="spark" size={15} />{generating ? t("notif.checking") : t("notif.checkNow")}
           </button>
           <button className="btn sm" onClick={() => setShowPrefs((v) => !v)} aria-expanded={showPrefs}>
-            <Icon name="settings" size={15} />Типи
+            <Icon name="settings" size={15} />{t("notif.types")}
           </button>
         </div>
       </div>
 
       {showPrefs && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <div className="section-head"><span>Які події збирати</span></div>
-          <p className="ai-block-hint">
-            Вимкнений тип більше не генерується добовим прогоном. Уже наявні події лишаються в стрічці.
-          </p>
+          <div className="section-head"><span>{t("notif.whichToCollect")}</span></div>
+          <p className="ai-block-hint">{t("notif.prefsHint")}</p>
           <div className="nt-prefs">
             {KINDS.map((k) => (
               <label key={k} className="nt-pref">
@@ -155,31 +173,31 @@ export function Notifications() {
                   onChange={(e) => { void setPrefs({ [k]: e.target.checked }); }}
                 />
                 <Icon name={KIND_META[k].icon} size={14} />
-                {KIND_META[k].label}
+                {t(KIND_META[k].labelKey)}
               </label>
             ))}
           </div>
         </div>
       )}
 
-      <div className="chips" role="tablist" aria-label="Фільтр за типом">
+      <div className="chips" role="tablist" aria-label={t("notif.filterByType")}>
         <button type="button" className={`chip ${kind === null ? "on" : ""}`} onClick={() => setKind(null)}>
-          Усі{data ? ` · ${data.unread}` : ""}
+          {t("notif.all")}{data ? ` · ${data.unread}` : ""}
         </button>
         {KINDS.map((k) => (
           <button key={k} type="button" className={`chip ${kind === k ? "on" : ""}`} onClick={() => setKind(k)}>
-            <Icon name={KIND_META[k].icon} size={13} />{KIND_META[k].label}
+            <Icon name={KIND_META[k].icon} size={13} />{t(KIND_META[k].labelKey)}
           </button>
         ))}
       </div>
 
       {/* §Обробка помилок: сторінка зі стрічкою МУСИТЬ мати гілку помилки — інакше
           збій і «подій немає» виглядають однаково. */}
-      <ErrorNote error={error} what="сповіщення" onRetry={refetch} />
+      <ErrorNote error={error} what={t("notif.errorWhat")} onRetry={refetch} />
 
       {!error && !isLoading && items.length === 0 && (
         <div className="card empty">
-          {kind ? "Подій цього типу ще немає." : "Поки тихо. Стрічка оновлюється щоранку — або тисни «Перевірити зараз»."}
+          {kind ? t("notif.emptyOfType") : t("notif.emptyAll")}
         </div>
       )}
 
@@ -187,10 +205,10 @@ export function Notifications() {
         <div className="row" style={{ justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
           {(data?.unread ?? 0) > 0 && (
             <button className="btn sm" onClick={() => { void markAll(); }}>
-              <Icon name="check" size={14} />Позначити все прочитаним
+              <Icon name="check" size={14} />{t("notif.markAllRead")}
             </button>
           )}
-          <button className="btn sm" onClick={wipe}><Icon name="trash" size={14} />Очистити</button>
+          <button className="btn sm" onClick={wipe}><Icon name="trash" size={14} />{t("notif.clear")}</button>
         </div>
       )}
 

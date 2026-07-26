@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { Account, Budget, Category, EventGroup, PlannedPayment, AiUsageStats, PlannedActual } from "../../shared/types.ts";
+import type { NotifTemplateKey } from "../../shared/notif-i18n.ts";
 
 export interface EventWithAgg extends EventGroup {
   tx_count: number;
@@ -401,6 +402,9 @@ export type NotifKind =
   | "big_tx" | "duplicate" | "health_drop" | "goal_risk" | "dead_sub" | "win" | "todo" | "ai";
 export interface Notification {
   id: number; kind: NotifKind; title: string; body: string | null;
+  // Template key + JSON params for locale-aware re-rendering of the feed (P3.3). NULL for the
+  // free-text `ai` kind and legacy rows — those render the stored title/body verbatim.
+  notif_key: NotifTemplateKey | null; notif_params: string | null;
   severity: "info" | "warn" | "urgent";
   entity_type: string | null; entity_id: string | null;
   created_at: number; read_at: number | null;
@@ -418,7 +422,9 @@ export const api = createApi({
     getMe: b.query<
       {
         authenticated: boolean;
-        user?: { id: string; email: string; name: string | null; picture: string | null; is_owner: boolean };
+        demo?: boolean; // ephemeral demo sandbox (P4.2) — drives the demo banner (P4.4)
+        demo_expires_at?: number | null; // unix; banner countdown
+        user?: { id: string; email: string | null; name: string | null; picture: string | null; is_owner: boolean };
       },
       void
     >({ query: () => "/me", providesTags: ["Me"] }),
@@ -484,9 +490,22 @@ export const api = createApi({
       query: ({ id, budget }) => ({ url: `/events/${id}`, method: "PATCH", body: { budget } }),
       invalidatesTags: ["Event"],
     }),
-    getEvent: b.query<{ event: EventGroup; transactions: TxRow[]; spent: number; income: number }, number>({
+    getEvent: b.query<{
+      event: EventGroup; transactions: TxRow[]; spent: number; income: number;
+      // Plan line items (P2.3) — amounts in ₴ minor units.
+      planned: { id: number; label: string; amount: number; category_id: number | null; category_name: string | null }[];
+      planned_total: number;
+    }, number>({
       query: (id) => `/events/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Event", id }],
+    }),
+    addEventPlanned: b.mutation<{ ok: boolean; id: number }, { id: number; label: string; amount: number; category_id?: number | null }>({
+      query: ({ id, ...body }) => ({ url: `/events/${id}/planned`, method: "POST", body }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Event", id: arg.id }],
+    }),
+    deleteEventPlanned: b.mutation<{ ok: boolean }, { id: number; pid: number }>({
+      query: ({ id, pid }) => ({ url: `/events/${id}/planned/${pid}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, arg) => [{ type: "Event", id: arg.id }],
     }),
     createEvent: b.mutation<{ ok: boolean; id: number }, { name: string; kind?: string; color?: string; icon?: string; note?: string }>({
       query: (body) => ({ url: "/events", method: "POST", body }),
@@ -950,6 +969,8 @@ export const {
   useGetEventQuery,
   useCreateEventMutation,
   useSetEventBudgetMutation,
+  useAddEventPlannedMutation,
+  useDeleteEventPlannedMutation,
   useDeleteEventMutation,
   useGetBudgetsQuery,
   useGetPlannedQuery,

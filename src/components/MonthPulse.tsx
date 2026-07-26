@@ -2,12 +2,14 @@ import { Link } from "react-router-dom";
 import { useGetOverviewQuery } from "../store/api.ts";
 import { formatMinor } from "../lib/format.ts";
 import { InfoTip } from "./InfoTip.tsx";
+import { useT } from "../i18n/index.ts";
 
 // §4 Пульс місяця для Головної: норма заощаджень + топ-категорії міні (календарний місяць,
 // зведено в ₴). Одна вибірка overview → обидва блоки. Клік по категорії → дриль у Статистиці.
 const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e"];
 
 export function MonthPulse() {
+  const t = useT();
   const { data } = useGetOverviewQuery({ preset: "month", currency: 980 });
   if (!data) return null;
 
@@ -25,33 +27,33 @@ export function MonthPulse() {
   return (
     <div className="card pulse">
       <div className="section-head" style={{ marginBottom: 12 }}>
-        <h2>Пульс місяця</h2>
-        <Link to="/stats" className="label group-link">статистика →</Link>
+        <h2>{t("mp.title")}</h2>
+        <Link to="/stats" className="label group-link">{t("link.stats")} →</Link>
       </div>
 
       <div className="pulse-save">
         <div className="pulse-save-main">
           <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            Норма заощаджень
-            <InfoTip>Скільки з надходжень цього місяця лишається після витрат: (надходження − витрати) ÷ надходження. Від'ємне — витратив більше, ніж отримав.</InfoTip>
+            {t("mp.savingsRate")}
+            <InfoTip>{t("mp.info")}</InfoTip>
           </span>
           <div className={`pulse-rate num-hero ${rateTone}`}>
             {rate == null ? "—" : <>{rate > 0 ? "+" : ""}{rate}<span className="cur">%</span></>}
           </div>
         </div>
         <div className="pulse-save-detail">
-          <span>Надходження <b className="pos">{formatMinor(income, { decimals: false })} ₴</b></span>
-          <span>Витрати <b className="neg">{formatMinor(spend, { decimals: false })} ₴</b></span>
-          <span>Відкладено <b className={net >= 0 ? "pos" : "neg"}>{net >= 0 ? "+" : "−"}{formatMinor(Math.abs(net), { decimals: false })} ₴</b></span>
+          <span>{t("mp.income")} <b className="pos">{formatMinor(income, { decimals: false })} ₴</b></span>
+          <span>{t("common.expenses")} <b className="neg">{formatMinor(spend, { decimals: false })} ₴</b></span>
+          <span>{t("mp.saved")} <b className={net >= 0 ? "pos" : "neg"}>{net >= 0 ? "+" : "−"}{formatMinor(Math.abs(net), { decimals: false })} ₴</b></span>
         </div>
       </div>
 
       {top.length > 0 && (
         <div className="pulse-cats">
-          <span className="label" style={{ display: "block", marginBottom: 8 }}>Топ-категорії</span>
+          <span className="label" style={{ display: "block", marginBottom: 8 }}>{t("common.topCategories")}</span>
           {top.map((c, i) => (
             <Link key={c.category_id ?? i} to={`/stats?tab=categories`} className="pulse-cat">
-              <span className="pc-name"><span className="d" style={{ background: c.color ?? FALLBACK[i % FALLBACK.length] }} />{c.category_name ?? "Без категорії"}</span>
+              <span className="pc-name"><span className="d" style={{ background: c.color ?? FALLBACK[i % FALLBACK.length] }} />{c.category_name ?? t("common.uncategorized")}</span>
               <span className="pc-track"><span style={{ width: `${(c.spent / topMax) * 100}%`, background: c.color ?? FALLBACK[i % FALLBACK.length] }} /></span>
               <span className="pc-val">{formatMinor(c.spent, { decimals: false })} ₴</span>
             </Link>

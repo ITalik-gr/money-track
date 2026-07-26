@@ -1,4 +1,5 @@
 import type { AiUsageBrief } from "../store/api.ts";
+import { useT } from "../i18n/index.ts";
 
 // Приблизна вартість виклику (Haiku 4.5: $1/$5 за млн вх/вих, кеш-читання $0.10/млн).
 function cost(u: AiUsageBrief): number {
@@ -9,12 +10,13 @@ function toks(n: number): string {
 }
 
 export function UsageCost({ usage }: { usage?: AiUsageBrief }) {
+  const t = useT();
   if (!usage) return null;
   const c = cost(usage);
   const total = usage.in + usage.out + usage.cache_read;
   return (
-    <span className="usage-cost" title={`вх ${usage.in} · вих ${usage.out} · кеш ${usage.cache_read}`}>
-      ≈ ${c < 0.001 ? c.toFixed(5) : c.toFixed(4)} · {toks(total)} ток{usage.cache_read > 0 ? " · кеш ✓" : ""}
+    <span className="usage-cost" title={t("uc.titleTip", { in: usage.in, out: usage.out, cache: usage.cache_read })}>
+      ≈ ${c < 0.001 ? c.toFixed(5) : c.toFixed(4)} · {toks(total)} {t("uc.tokAbbr")}{usage.cache_read > 0 ? t("uc.cacheCheckSuffix") : ""}
     </span>
   );
 }

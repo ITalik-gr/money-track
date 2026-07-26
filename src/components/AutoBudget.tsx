@@ -9,10 +9,12 @@ import { Icon } from "./Icon.tsx";
 import { ErrorNote } from "./ErrorNote.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
+import { useT } from "../i18n/index.ts";
 
 const TRIMS = [0, 5, 10, 15, 20];
 
 export function AutoBudget() {
+  const tr = useT();
   const [load, { data, isFetching, error }] = useLazyGetAutoBudgetQuery();
   const [apply, { isLoading: applying }] = useApplyAutoBudgetMutation();
   const [trim, setTrim] = useState(10);
@@ -36,46 +38,39 @@ export function AutoBudget() {
     if (!picked.length) return;
     try {
       const r = await apply({ items: picked.map((i) => ({ category_id: i.category_id, amount: i.suggested })) }).unwrap();
-      toast.success(`Оновлено конвертів: ${r.applied}`);
+      toast.success(tr("ab.updatedEnvelopesToast", { n: r.applied }));
     } catch (e) { toast.error(errText(e)); }
   }
 
   return (
     <section>
       <div className="section-head">
-        <h2>Автобюджет із історії</h2>
+        <h2>{tr("ab.title")}</h2>
         <button className="btn sm" onClick={() => run(trim)} disabled={isFetching}>
-          <Icon name="repeat" size={15} />{isFetching ? "Рахую…" : data ? "Перерахувати" : "Порахувати"}
+          <Icon name="repeat" size={15} />{isFetching ? tr("ab.calculating") : data ? tr("ab.recalculate") : tr("ab.calculate")}
         </button>
       </div>
 
-      <ErrorNote error={error} what="автобюджет" onRetry={() => run(trim)} />
+      <ErrorNote error={error} what={tr("ab.errorWhat")} onRetry={() => run(trim)} />
 
       {!data && !isFetching && !error && (
-        <div className="card empty">
-          Візьме твій звичний місячний рівень по кожній категорії й запропонує ліміт трохи нижчий.
-          Без AI — миттєво й безкоштовно.
-        </div>
+        <div className="card empty">{tr("ab.introText")}</div>
       )}
 
       {data && (
         <div className="card" style={{ padding: 16 }}>
           <div className="ab-trim">
-            <span className="label">Зрізати від звичного</span>
+            <span className="label">{tr("ab.trimLabel")}</span>
             <div className="seg">
-              {TRIMS.map((t) => (
-                <button key={t} className={`seg-btn ${trim === t ? "active" : ""}`} onClick={() => run(t)} disabled={isFetching}>
-                  {t === 0 ? "як є" : `−${t}%`}
+              {TRIMS.map((v) => (
+                <button key={v} className={`seg-btn ${trim === v ? "active" : ""}`} onClick={() => run(v)} disabled={isFetching}>
+                  {v === 0 ? tr("ab.trimAsIs") : `−${v}%`}
                 </button>
               ))}
             </div>
           </div>
 
-          <p className="ab-hint">
-            Обовʼязкові категорії (оренда, продукти, ліки) не ріжемо — ліміт по них дорівнює
-            звичному рівню. Урізати те, що не можна урізати, означає завести бюджет,
-            який червонітиме з першого дня.
-          </p>
+          <p className="ab-hint">{tr("ab.essentialHint")}</p>
 
           <div className="bp-list">
             {items.map((i: AutoBudgetItem) => {
@@ -88,10 +83,10 @@ export function AutoBudget() {
                     <span className="bp-name">
                       <span className="d" style={{ background: i.color ?? "var(--muted)" }} />
                       {i.name}
-                      {i.essential && <span className="ab-tag">обовʼязкова</span>}
+                      {i.essential && <span className="ab-tag">{tr("ab.essentialTag")}</span>}
                     </span>
                     <span className="bp-figs">
-                      <span className="bp-avg">звично <Money minor={i.level} decimals={false} /></span>
+                      <span className="bp-avg">{tr("ab.usualPrefix")} <Money minor={i.level} decimals={false} /></span>
                       <span className="bp-arrow">→</span>
                       <span className="bp-sug"><Money minor={i.suggested} decimals={false} /></span>
                       {delta !== 0 && <span className={`cmp-delta ${delta < 0 ? "down" : "up"}`}>{delta > 0 ? "+" : ""}{delta}%</span>}
@@ -100,23 +95,23 @@ export function AutoBudget() {
                   {/* Наявний ліміт показуємо явно: застосування його ПЕРЕЗАПИШЕ, і про це
                       треба знати до кліку, а не після. */}
                   {i.current != null && i.current !== i.suggested && (
-                    <div className="bp-reason">зараз стоїть <Money minor={i.current} decimals={false} /> — буде замінено</div>
+                    <div className="bp-reason">{tr("ab.currentPrefix")} <Money minor={i.current} decimals={false} />{tr("ab.willBeReplaced")}</div>
                   )}
                 </label>
               );
             })}
           </div>
 
-          {items.length === 0 && <div className="empty">Замало історії, щоб порахувати рівні по категоріях.</div>}
+          {items.length === 0 && <div className="empty">{tr("ab.notEnoughHistory")}</div>}
 
           {picked.length > 0 && (
             <div className="ab-foot">
               <span className="ab-total">
-                Разом на місяць: <b><Money minor={total} decimals={false} /></b>
-                <span className="muted"> · {picked.length} з {items.length} категорій</span>
+                {tr("ab.totalPerMonth")} <b><Money minor={total} decimals={false} /></b>
+                <span className="muted">{tr("ab.countOfTotal", { picked: picked.length, total: items.length })}</span>
               </span>
               <button className="btn primary" onClick={save} disabled={applying}>
-                {applying ? "Застосовую…" : "Застосувати"}
+                {applying ? tr("ab.applying") : tr("common.apply")}
               </button>
             </div>
           )}

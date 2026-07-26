@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT, translate } from "../i18n/index.ts";
 import {
   useAddPlannedMutation,
   useDeletePlannedMutation,
@@ -21,7 +23,7 @@ import { Select } from "../components/Select.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
 
-const fmtDate = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "short" });
+const fmtDate = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
 const CUR_OPTS = [
   { value: 980, label: "₴ UAH" },
   { value: 840, label: "$ USD" },
@@ -61,8 +63,9 @@ function nextCharge(p: PlannedPayment): number {
 // Мітка каденції: «/міс», «/тиж», або «кожні N міс/тиж».
 function cadenceLabel(p: PlannedPayment): string {
   const n = pcount(p);
-  const unit = p.period === "week" ? "тиж" : "міс";
-  return n === 1 ? `/${unit}` : `кожні ${n} ${unit}`;
+  const loc = getLocale();
+  const unit = translate(loc, p.period === "week" ? "sub.unitWeek" : "sub.unitMonth");
+  return n === 1 ? `/${unit}` : translate(loc, "sub.everyN", { n, unit });
 }
 
 // Місячний еквівалент (тижневі × 4.33; ділимо на period_count). Завершені не тягнуть.
@@ -99,6 +102,7 @@ function plannedFromCandidate(
 }
 
 export function Subscriptions() {
+  const t = useT();
   const { data: planned } = useGetPlannedQuery();
   const { data: actuals } = useGetPlannedActualsQuery();
   const { data: cats } = useGetCategoriesQuery();
@@ -115,11 +119,11 @@ export function Subscriptions() {
     const listc = cats ?? [];
     const out: { value: number; label: string; color?: string | null; icon?: string | null; indent?: boolean }[] = [];
     for (const p of listc.filter((c) => c.parent_id == null)) {
-      out.push({ value: p.id, label: p.name + (p.is_income ? " (дохід)" : ""), color: p.color, icon: p.icon });
+      out.push({ value: p.id, label: p.name + (p.is_income ? t("tx.categoryIncomeSuffix") : ""), color: p.color, icon: p.icon });
       for (const ch of listc.filter((c) => c.parent_id === p.id)) out.push({ value: ch.id, label: ch.name, color: ch.color ?? p.color, icon: ch.icon, indent: true });
     }
     return out;
-  }, [cats]);
+  }, [cats, t]);
   const list = (planned ?? []).slice().sort((a, b) => nextCharge(a) - nextCharge(b));
   // Місячний тягар — зводимо кожну підписку в ₴ за її валютою (§F4).
   const burden = Math.round(list.reduce((s, p) => s + (toUAHMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)), 0));
@@ -135,20 +139,20 @@ export function Subscriptions() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Підписки</div>
-          <div className="sub">Регулярні платежі, розстрочки й що скоро спишеться.</div>
+          <div className="greet">{t("sub.title")}</div>
+          <div className="sub">{t("sub.sub")}</div>
         </div>
       </div>
 
       <div className="stack" style={{ gap: 18 }}>
         <div className="card sub-hero">
           <div>
-            <div className="label">на місяць виходить</div>
+            <div className="label">{t("sub.perMonth")}</div>
             <div className="num-hero"><Money minor={burden} decimals={false} /></div>
-            <div className="sub-hero-year">≈ {formatMinor(burden * 12, { decimals: false })} ₴ на рік</div>
+            <div className="sub-hero-year">{t("sub.perYear", { amount: formatMinor(burden * 12, { decimals: false }) })}</div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div className="label">активних</div>
+            <div className="label">{t("sub.active")}</div>
             <div className="num-hero" style={{ fontSize: 30 }}>{list.length}</div>
           </div>
         </div>
@@ -160,13 +164,13 @@ export function Subscriptions() {
               const rem = remainingOccurrences(p);
               return (
                 <div key={p.id} className={`sub-card ${finished ? "is-finished" : ""}`}>
-                  <button className="sub-card-x" onClick={() => deletePlanned(p.id)} aria-label="Видалити">✕</button>
+                  <button className="sub-card-x" onClick={() => deletePlanned(p.id)} aria-label={t("common.delete")}>✕</button>
                   <div className="sub-card-top">
                     <MerchantLogo merchant={p.title} color="var(--c-plum)" fallbackLabel={p.title} />
                     <div style={{ minWidth: 0 }}>
                       <div className="sub-card-name">{p.title}</div>
                       <div className="sub-card-kind">
-                        {p.kind === "installment" ? "розстрочка" : "підписка"}
+                        {p.kind === "installment" ? t("sub.kindInstallment") : t("sub.kindSubscription")}
                         {p.category_id ? ` · ${catName.get(p.category_id) ?? ""}` : ""}
                       </div>
                     </div>
@@ -192,19 +196,19 @@ export function Subscriptions() {
                     const perYear = delta != null ? Math.round(delta * (p.period === "week" ? 52 : 12) / pcount(p)) : null;
                     return (
                       <div className="sub-card-fx sub-fact">
-                        <span>факт: {a.count}× списань</span>
+                        <span>{t("sub.factCount", { count: a.count })}</span>
                         {a.last_amount != null && (
-                          <span>· останнє <Money minor={a.last_amount} currency={cur} decimals={false} /></span>
+                          <span>{t("sub.lastAmount")} <Money minor={a.last_amount} currency={cur} decimals={false} /></span>
                         )}
                         {up && delta != null && (
-                          <span className="sub-badge up" title={`План ${Math.round((p.period_amount ?? 0) / 100)} → факт ${Math.round(a.last_amount! / 100)}`}>
+                          <span className="sub-badge up" title={t("sub.priceUpTitle", { plan: Math.round((p.period_amount ?? 0) / 100), fact: Math.round(a.last_amount! / 100) })}>
                             ↑ +<Money minor={delta} currency={cur} decimals={false} />
-                            {perYear != null && <span className="sub-badge-sub"> · +<Money minor={perYear} currency={cur} decimals={false} />/рік</span>}
+                            {perYear != null && <span className="sub-badge-sub"> · +<Money minor={perYear} currency={cur} decimals={false} />{t("sub.perYearShort")}</span>}
                           </span>
                         )}
                         {down && delta != null && (
                           <span className="sub-badge down">
-                            ↓ <Money minor={Math.abs(delta)} currency={cur} decimals={false} /> дешевше
+                            ↓ <Money minor={Math.abs(delta)} currency={cur} decimals={false} /> {t("sub.cheaper")}
                           </span>
                         )}
                       </div>
@@ -212,25 +216,25 @@ export function Subscriptions() {
                   })()}
                   <div className="sub-card-foot">
                     {finished ? (
-                      <span className="sub-badge done">завершено</span>
+                      <span className="sub-badge done">{t("sub.finished")}</span>
                     ) : (
                       <>
-                        <span className="sub-badge">наступне {fmtDate.format(nextCharge(p) * 1000)}</span>
-                        {rem != null && <span className="sub-rem">лишилось ~{rem}</span>}
+                        <span className="sub-badge">{t("sub.next")} {fmtDate.format(nextCharge(p) * 1000)}</span>
+                        {rem != null && <span className="sub-rem">{t("sub.remaining", { n: rem })}</span>}
                         {(() => {
                           // Детект «мертвої»: активна >60 днів, але поряд НЕ видно фактичних списань → лише підказка.
                           const a = actualBy.get(p.id);
                           const ageDays = (Date.now() / 1000 - p.start_date) / 86400;
                           const stale = (!a || a.count === 0) && ageDays > 60;
-                          return stale ? <span className="sub-badge dead" title="Активна підписка, але поряд не видно фактичних списань. Досі користуєшся?">не видно списань — актуальна?</span> : null;
+                          return stale ? <span className="sub-badge dead" title={t("sub.deadTitle")}>{t("sub.deadBadge")}</span> : null;
                         })()}
                       </>
                     )}
                   </div>
                   <div className="sub-card-cat">
-                    <span className="label" style={{ fontSize: 10.5 }}>категорія</span>
-                    <Select value={p.category_id} options={catOptions} searchable clearable clearLabel="— без категорії"
-                      placeholder="— обрати категорію"
+                    <span className="label" style={{ fontSize: 10.5 }}>{t("sub.category")}</span>
+                    <Select value={p.category_id} options={catOptions} searchable clearable clearLabel={t("sub.noCategory")}
+                      placeholder={t("sub.pickCategory")}
                       onChange={(v) => updatePlanned({ id: p.id, category_id: v == null ? null : Number(v) })} />
                   </div>
                   <SubNote id={p.id} note={p.note ?? ""} onSave={(note) => updatePlanned({ id: p.id, note })} />
@@ -242,19 +246,19 @@ export function Subscriptions() {
 
         {list.length === 0 && (
           <div className="card empty" style={{ padding: 28 }}>
-            Активних підписок і планових платежів ще нема. Додай нижче — або дай AI знайти їх у твоїй історії.
+            {t("sub.empty")}
           </div>
         )}
 
         {topExpensive.length >= 3 && (
           <div className="card top-subs-card">
-            <div className="section-head"><h2>Найдорожчі</h2><span className="label">на місяць</span></div>
+            <div className="section-head"><h2>{t("sub.expensive")}</h2><span className="label">{t("sub.perMonthShort")}</span></div>
             <div className="top-subs">
               {topExpensive.map(({ p, uah }) => (
                 <div className="top-sub-row" key={p.id}>
                   <MerchantLogo merchant={p.title} color="var(--c-plum)" fallbackLabel={p.title} />
                   <span className="top-sub-name">{p.title}</span>
-                  <span className="top-sub-amt">{formatMinor(uah, { decimals: false })} ₴/міс</span>
+                  <span className="top-sub-amt">{t("sub.uahPerMonth", { amount: formatMinor(uah, { decimals: false }) })}</span>
                 </div>
               ))}
             </div>
@@ -273,6 +277,7 @@ export function Subscriptions() {
 
 // AI-детект за описом (§F4): опиши підписку словами → AI знайде схожі транзакції.
 function AiDetect() {
+  const t = useT();
   const [detect, { isLoading }] = useAiDetectPlannedMutation();
   const [addPlanned] = useAddPlannedMutation();
   const { data: cats } = useGetCategoriesQuery();
@@ -285,29 +290,28 @@ function AiDetect() {
     setMsg(null); setCands(null);
     try {
       const r = await detect(desc.trim()).unwrap();
-      if (r.error) { setMsg(r.error.includes("not set") ? "AI-ключ не налаштовано (перевір на проді)." : r.error); return; }
+      if (r.error) { setMsg(r.error.includes("not set") ? t("sub.aiKeyMissing") : r.error); return; }
       setCands(r.candidates);
-      if (!r.candidates.length) setMsg("Схожих транзакцій не знайшов. Спробуй інший опис.");
-    } catch { setMsg("Не вдалося. Спробуй ще раз."); }
+      if (!r.candidates.length) setMsg(t("sub.aiNoMatch"));
+    } catch { setMsg(t("sub.aiFailed")); }
   }
 
   return (
     <section>
       <div className="section-head">
-        <h2 className="h-ico"><Icon name="spark" size={16} />Знайти підписку через AI</h2>
-        <span className="label">опиши словами — знайду в історії</span>
+        <h2 className="h-ico"><Icon name="spark" size={16} />{t("sub.aiFindTitle")}</h2>
+        <span className="label">{t("sub.aiFindSub")}</span>
       </div>
       <div className="card sub-ai-block">
         <p className="sub-ai-hint">
-          AI прочитає твій опис, знайде схожі регулярні списання в транзакціях і порахує суму та каденцію —
-          лишиться натиснути «додати».
+          {t("sub.aiHint")}
         </p>
         <div className="row" style={{ gap: 8 }}>
-          <input placeholder="напр. «моя підписка на Anthropic» чи «інтернет Київстар»"
+          <input placeholder={t("sub.aiPlaceholder")}
             value={desc} onChange={(e) => setDesc(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && desc.trim() && run()} />
           <button className="btn primary" style={{ whiteSpace: "nowrap" }} onClick={run} disabled={isLoading || !desc.trim()}>
-            {isLoading ? "Шукаю…" : "Знайти"}
+            {isLoading ? t("sub.aiSearching") : t("sub.aiSearch")}
           </button>
         </div>
         {msg && <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>{msg}</div>}
@@ -319,13 +323,13 @@ function AiDetect() {
                 <div className="s-body">
                   <div className="s-name">{c.title}</div>
                   <div className="s-meta">
-                    {c.n}× · кожні ~{c.avg_interval_days} дн
+                    {t("sub.candMeta", { n: c.n, days: c.avg_interval_days })}
                     {c.category_id != null && catName.get(c.category_id) ? ` · ${catName.get(c.category_id)}` : ""}
                   </div>
                 </div>
                 <div className="s-amt"><Money minor={c.period_amount} currency={c.currency_code} decimals={false} /></div>
                 <button className="btn primary sm"
-                  onClick={() => addPlanned(plannedFromCandidate(c))}>+ додати</button>
+                  onClick={() => addPlanned(plannedFromCandidate(c))}>{t("sub.add")}</button>
               </div>
             ))}
           </div>
@@ -337,6 +341,7 @@ function AiDetect() {
 
 // Редаговане поле «опис для AI» на картці підписки. Зберігає на blur, якщо змінилось.
 function SubNote({ id, note, onSave }: { id: number; note: string; onSave: (note: string) => void }) {
+  const t = useT();
   const [val, setVal] = useState(note);
   // Синхронізуємо, якщо note оновився ззовні (напр. після рефетчу).
   useEffect(() => setVal(note), [note, id]);
@@ -345,7 +350,7 @@ function SubNote({ id, note, onSave }: { id: number; note: string; onSave: (note
       className="sub-note"
       rows={2}
       value={val}
-      placeholder="опис для AI: що це за платіж (напр. «сімейний Apple, це не розваги»)"
+      placeholder={t("sub.notePlaceholder")}
       onChange={(e) => setVal(e.target.value)}
       onBlur={() => { if (val.trim() !== note.trim()) onSave(val.trim()); }}
     />
@@ -353,6 +358,7 @@ function SubNote({ id, note, onSave }: { id: number; note: string; onSave: (note
 }
 
 function Detected() {
+  const t = useT();
   const { data: candidates } = useDetectPlannedQuery();
   const { data: cats } = useGetCategoriesQuery();
   const [addPlanned, { isLoading }] = useAddPlannedMutation();
@@ -361,7 +367,7 @@ function Detected() {
   if (!candidates?.length) return null;
   return (
     <section>
-      <div className="section-head"><h2>Схоже на підписки</h2><span className="label">знайдено автоматично</span></div>
+      <div className="section-head"><h2>{t("sub.detectedTitle")}</h2><span className="label">{t("sub.detectedSub")}</span></div>
       <div className="sub-detected">
         {candidates.map((c) => {
           const cad = cadenceFromDays(c.avg_interval_days);
@@ -371,7 +377,9 @@ function Detected() {
               <div className="s-body">
                 <div className="s-name">{c.merchant}</div>
                 <div className="s-meta">
-                  {c.n}× · {cad.period_count === 1 ? (cad.period === "week" ? "щотижня" : "щомісяця") : `кожні ${cad.period_count} ${cad.period === "week" ? "тиж" : "міс"}`}
+                  {c.n}× · {cad.period_count === 1
+                    ? t(cad.period === "week" ? "sub.weekly" : "sub.monthly")
+                    : t("sub.everyN", { n: cad.period_count, unit: t(cad.period === "week" ? "sub.unitWeek" : "sub.unitMonth") })}
                   {c.category_id != null && catName.get(c.category_id) ? ` · ${catName.get(c.category_id)}` : ""}
                 </div>
               </div>
@@ -380,9 +388,9 @@ function Detected() {
                 onClick={() => addPlanned(plannedFromCandidate({
                   title: c.merchant, period_amount: c.amount, currency_code: c.currency_code,
                   avg_interval_days: c.avg_interval_days, last_time: c.last_time, category_id: c.category_id,
-                }))}>+ додати</button>
-              <button className="btn ghost s-dismiss" title="Це не підписка — сховати"
-                onClick={() => dismiss(c.merchant)} aria-label="Це не підписка">✕</button>
+                }))}>{t("sub.add")}</button>
+              <button className="btn ghost s-dismiss" title={t("sub.dismissTitle")}
+                onClick={() => dismiss(c.merchant)} aria-label={t("sub.dismissAria")}>✕</button>
             </div>
           );
         })}
@@ -392,6 +400,7 @@ function Detected() {
 }
 
 function AddForm() {
+  const t = useT();
   const [addPlanned, { isLoading: adding }] = useAddPlannedMutation();
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<"subscription" | "installment">("subscription");
@@ -404,9 +413,9 @@ function AddForm() {
   async function submit() {
     const perMinor = Math.round(Number(periodAmount || 0) * 100);
     const totMinor = Math.round(Number(totalAmount || 0) * 100);
-    if (!title.trim()) { toast.error("Вкажи назву"); return; }
-    if (kind === "subscription" && !perMinor) { toast.error("Вкажи суму за період"); return; }
-    if (kind === "installment" && (!totMinor || !perMinor)) { toast.error("Для розстрочки потрібні повна сума і платіж"); return; }
+    if (!title.trim()) { toast.error(t("sub.nameRequired")); return; }
+    if (kind === "subscription" && !perMinor) { toast.error(t("sub.amountRequired")); return; }
+    if (kind === "installment" && (!totMinor || !perMinor)) { toast.error(t("sub.installmentRequired")); return; }
     try {
       await addPlanned({
         title: title.trim(), kind, period, period_count: Math.max(1, Math.round(Number(periodCount) || 1)),
@@ -416,42 +425,42 @@ function AddForm() {
         total_amount: kind === "installment" ? totMinor : null,
       }).unwrap();
       setTitle(""); setPeriodAmount(""); setTotalAmount(""); setPeriodCount("1");
-      toast.success("Додано");
+      toast.success(t("sub.added"));
     } catch (e) { toast.error(errText(e)); }
   }
 
   return (
     <section>
-      <div className="section-head"><h2>Додати вручну</h2></div>
+      <div className="section-head"><h2>{t("sub.addManual")}</h2></div>
       <div className="card" style={{ padding: 18 }}>
         <div className="stack">
           <div className="row" style={{ gap: 8 }}>
             <Select value={kind} onChange={(v) => setKind(v as typeof kind)}
-              options={[{ value: "subscription", label: "Підписка" }, { value: "installment", label: "Розстрочка" }]} />
+              options={[{ value: "subscription", label: t("sub.typeSubscription") }, { value: "installment", label: t("sub.typeInstallment") }]} />
             <Select value={period} onChange={(v) => setPeriod(v as typeof period)}
-              options={[{ value: "month", label: "на місяць" }, { value: "week", label: "на тиждень" }]} />
+              options={[{ value: "month", label: t("sub.optMonth") }, { value: "week", label: t("sub.optWeek") }]} />
             <Select value={currency} onChange={(v) => setCurrency(Number(v))} options={CUR_OPTS} />
           </div>
           <label className="row sub-every">
-            <span className="label" style={{ whiteSpace: "nowrap" }}>кожні</span>
+            <span className="label" style={{ whiteSpace: "nowrap" }}>{t("sub.every")}</span>
             <input type="number" min={1} inputMode="numeric" value={periodCount}
               onChange={(e) => setPeriodCount(e.target.value)} style={{ width: 72 }} />
-            <span className="muted" style={{ fontSize: 13 }}>{period === "week" ? "тиж." : "міс."} (1 = щоразу; 3 = раз на квартал)</span>
+            <span className="muted" style={{ fontSize: 13 }}>{t("sub.everyHint", { unit: t(period === "week" ? "sub.unitWeek" : "sub.unitMonth") + "." })}</span>
           </label>
-          <input placeholder="Назва (напр. Netflix)" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input placeholder={t("sub.namePlaceholder")} value={title} onChange={(e) => setTitle(e.target.value)} />
           <input type="number" inputMode="decimal"
-            placeholder={kind === "installment" ? "Сума платежу за період" : "Сума за період"}
+            placeholder={kind === "installment" ? t("sub.amountPerPeriod") : t("sub.amountPerPeriodPlain")}
             value={periodAmount} onChange={(e) => setPeriodAmount(e.target.value)} />
           {kind === "installment" && (
-            <input type="number" inputMode="decimal" placeholder="Повна сума розстрочки"
+            <input type="number" inputMode="decimal" placeholder={t("sub.totalAmount")}
               value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
           )}
           {kind === "installment" && Number(totalAmount) > 0 && Number(periodAmount) > 0 && (
             <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-              ≈ {Math.ceil(Number(totalAmount) / Number(periodAmount))} платежів
+              {t("sub.paymentsCount", { n: Math.ceil(Number(totalAmount) / Number(periodAmount)) })}
             </p>
           )}
-          <button className="btn primary" onClick={submit} disabled={adding}>Додати</button>
+          <button className="btn primary" onClick={submit} disabled={adding}>{t("sub.addBtn")}</button>
         </div>
       </div>
     </section>

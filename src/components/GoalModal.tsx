@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useCreateGoalMutation, useUpdateGoalMutation, useGetAccountsQuery } from "../store/api.ts";
+import { useT } from "../i18n/index.ts";
 import { Select } from "./Select.tsx";
 import type { SavingsGoal } from "../store/api.ts";
 
@@ -13,6 +14,7 @@ const toDateInput = (unix: number | null | undefined) =>
 export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
   goal?: SavingsGoal | null; defaultAccountId?: string | null; defaultName?: string; onClose: () => void;
 }) {
+  const t = useT();
   const editing = !!goal;
   const { data: accounts = [] } = useGetAccountsQuery();
   const [createGoal, { isLoading: creating }] = useCreateGoalMutation();
@@ -35,7 +37,7 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
   // Джерело прогресу — банки (накопичення).
   const jarOptions = accounts
     .filter((a) => a.type === "jar")
-    .map((a) => ({ value: a.id, label: a.title ?? "Банка", color: "#127c86", hint: `${Math.round((a.balance ?? 0) / 100)} ₴` }));
+    .map((a) => ({ value: a.id, label: a.title ?? t("goal.jarFallback"), color: "#127c86", hint: `${Math.round((a.balance ?? 0) / 100)} ₴` }));
 
   const busy = creating || updating;
 
@@ -58,42 +60,42 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
     <div className="modal-overlay" onMouseDown={onClose}>
       <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{editing ? "Редагувати ціль" : "Нова ціль"}</h3>
-          <button className="modal-x" onClick={onClose} aria-label="Закрити">✕</button>
+          <h3>{editing ? t("goalModal.editTitle") : t("goalModal.newTitle")}</h3>
+          <button className="modal-x" onClick={onClose} aria-label={t("common.close")}>✕</button>
         </div>
         <div className="stack" style={{ gap: 14 }}>
           <label className="stack" style={{ gap: 5 }}>
-            <span className="label">назва</span>
-            <input autoFocus placeholder="напр. «Подушка безпеки» чи «MacBook»" value={name}
+            <span className="label">{t("goalModal.nameLabel")}</span>
+            <input autoFocus placeholder={t("goalModal.namePlaceholder")} value={name}
               onChange={(e) => setName(e.target.value)} />
           </label>
 
           <div className="row" style={{ gap: 10 }}>
             <label className="stack" style={{ gap: 5, flex: 1 }}>
-              <span className="label">ціль, ₴</span>
+              <span className="label">{t("goalModal.targetLabel")}</span>
               <input type="number" inputMode="decimal" placeholder="0" value={target} onChange={(e) => setTarget(e.target.value)} />
             </label>
             <label className="stack" style={{ gap: 5, flex: 1 }}>
-              <span className="label">дедлайн (опц.)</span>
+              <span className="label">{t("goalModal.deadlineLabel")}</span>
               <input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
             </label>
           </div>
 
           <label className="stack" style={{ gap: 5 }}>
-            <span className="label">джерело прогресу — банка (опц.)</span>
-            <Select value={accountId} clearable clearLabel="— рахувати вручну" placeholder="— рахувати вручну"
+            <span className="label">{t("goalModal.sourceLabel")}</span>
+            <Select value={accountId} clearable clearLabel={t("goalModal.manualClear")} placeholder={t("goalModal.manualClear")}
               onChange={(v) => setAccountId(v == null ? null : String(v))} options={jarOptions} />
           </label>
 
           {!accountId && (
             <label className="stack" style={{ gap: 5 }}>
-              <span className="label">вже зібрано, ₴ (вручну)</span>
+              <span className="label">{t("goalModal.alreadySavedLabel")}</span>
               <input type="number" inputMode="decimal" placeholder="0" value={current} onChange={(e) => setCurrent(e.target.value)} />
             </label>
           )}
 
           <div className="stack" style={{ gap: 6 }}>
-            <span className="label">колір</span>
+            <span className="label">{t("goalModal.colorLabel")}</span>
             <div className="color-row">
               {PALETTE.map((cc) => (
                 <button key={cc} type="button" className={`swatch ${color === cc ? "on" : ""}`}
@@ -103,14 +105,14 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
           </div>
 
           <label className="stack" style={{ gap: 5 }}>
-            <span className="label">нотатка (опц.)</span>
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="навіщо / як збираєш" />
+            <span className="label">{t("goalModal.noteLabel")}</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("goalModal.notePlaceholder")} />
           </label>
 
           <div className="row" style={{ justifyContent: "flex-end", gap: 8 }}>
-            <button className="btn ghost" onClick={onClose}>Скасувати</button>
+            <button className="btn ghost" onClick={onClose}>{t("common.cancel")}</button>
             <button className="btn primary" onClick={save} disabled={busy || !name.trim() || !(Number(target) > 0)}>
-              {editing ? "Зберегти" : "Створити"}
+              {editing ? t("common.save") : t("goalModal.createBtn")}
             </button>
           </div>
         </div>

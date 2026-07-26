@@ -1,27 +1,30 @@
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT } from "../i18n/index.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { useGetMonthlyHistoryQuery } from "../store/api.ts";
 import { HoverTip } from "./HoverTip.tsx";
 import { InfoTip } from "./InfoTip.tsx";
+import { monthShort } from "../lib/format.ts";
 
-const MONTHS = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
-const monLbl = (m: string) => MONTHS[Number(m.split("-")[1]) - 1] ?? m;
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
+const monLbl = (m: string) => monthShort(Number(m.split("-")[1]) - 1) ?? m;
+const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
 
 type Row = { label: string; spend: number; income: number; net: number; rate: number | null; current: boolean };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function MhTooltip(props: any) {
+  const t = useT();
   const { active, payload } = props;
   if (!active || !payload?.length) return null;
   const r: Row = payload[0].payload;
   return (
     <div className="chart-tip">
-      <div className="tip-lbl">{r.label}{r.current ? " (поточний)" : ""}</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />Надходження: {fmt0.format(r.income)} ₴</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />Витрати: {fmt0.format(r.spend)} ₴</div>
+      <div className="tip-lbl">{r.label}{r.current ? t("mh.currentSuffix") : ""}</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{t("mh.incomeLabel")}: {fmt0.format(r.income)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{t("common.expenses")}: {fmt0.format(r.spend)} ₴</div>
       <div className="r tip-net" style={{ color: r.net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
-        <span className="d" style={{ background: "transparent" }} />Чистий: {r.net >= 0 ? "+" : ""}{fmt0.format(r.net)} ₴
+        <span className="d" style={{ background: "transparent" }} />{t("mh.netLabel")}: {r.net >= 0 ? "+" : ""}{fmt0.format(r.net)} ₴
       </div>
     </div>
   );
@@ -30,6 +33,7 @@ function MhTooltip(props: any) {
 // 6-місячний тренд spend/income/net (канонічний /analytics/monthly-history) + норма
 // заощаджень по місяцях. Довгий горизонт, якого не давали періодні вкладки.
 export function MonthlyHistory() {
+  const t = useT();
   const { data } = useGetMonthlyHistoryQuery({ months: 6 });
   if (!data || data.months.length === 0) return null;
   const rows: Row[] = data.months.map((m, i) => {
@@ -47,16 +51,16 @@ export function MonthlyHistory() {
   return (
     <section>
       <div className="section-head">
-        <h2>Історія по місяцях</h2>
-        <HoverTip content={<>Витрати, надходження й <b>чистий потік</b> (надходження − витрати) за 6 місяців. Канонічні цифри, зведені в ₴. Останній місяць — поточний, ще не завершився.</>}>
-          <span className="label">6 міс · що це?</span>
+        <h2>{t("mh.historyTitle")}</h2>
+        <HoverTip content={<>{t("mh.tipPre")}<b>{t("mh.tipBold")}</b>{t("mh.tipPost")}</>}>
+          <span className="label">{t("mh.sixMoWhatIsThis")}</span>
         </HoverTip>
       </div>
       <div className="card mh-card">
         <div className="legend" style={{ justifyContent: "flex-end", padding: "0 2px 8px" }}>
-          <span><span className="d" style={{ background: "var(--chart-income)" }} />Надходження</span>
-          <span><span className="d" style={{ background: "var(--chart-expense)" }} />Витрати</span>
-          <span><span className="d" style={{ background: "var(--accent)" }} />Чистий</span>
+          <span><span className="d" style={{ background: "var(--chart-income)" }} />{t("mh.incomeLabel")}</span>
+          <span><span className="d" style={{ background: "var(--chart-expense)" }} />{t("common.expenses")}</span>
+          <span><span className="d" style={{ background: "var(--accent)" }} />{t("mh.netLabel")}</span>
         </div>
         <div className="chart-wrap" style={{ height: 240 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -76,12 +80,12 @@ export function MonthlyHistory() {
 
         <div className="mh-rates">
           <div className="mh-rates-head">
-            <span className="label">Норма заощаджень по місяцях</span>
-            <InfoTip>Скільки з надходжень місяця лишилось після витрат: (надходження − витрати) ÷ надходження. Від'ємне — витратив більше, ніж отримав.</InfoTip>
+            <span className="label">{t("mh.savingsRateLabel")}</span>
+            <InfoTip>{t("mh.savingsRateTip")}</InfoTip>
           </div>
           <div className="mh-rate-bars">
             {rows.map((r, i) => (
-              <HoverTip key={i} content={<><div className="tip-lbl">{r.label}{r.current ? " (поточний)" : ""}</div><div className="r">Норма: {r.rate != null ? `${r.rate}%` : "—"}</div></>}>
+              <HoverTip key={i} content={<><div className="tip-lbl">{r.label}{r.current ? t("mh.currentSuffix") : ""}</div><div className="r">{t("mh.rateValue", { value: r.rate != null ? `${r.rate}%` : "—" })}</div></>}>
                 <div className="mh-rate-col">
                   <div className="mh-rate-track">
                     {r.rate != null && r.rate >= 0 && <span className="mh-rate-fill pos" style={{ height: `${Math.min(100, (r.rate / rateMax) * 50)}%` }} />}

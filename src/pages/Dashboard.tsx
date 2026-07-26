@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 import { BalanceCard } from "../components/BalanceCard.tsx";
 import { KpiRow } from "../components/KpiRow.tsx";
 import { CashflowCard } from "../components/CashflowCard.tsx";
@@ -14,18 +15,21 @@ import { QuickBar } from "../components/QuickBar.tsx";
 import { TransactionList } from "../components/TransactionList.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { useGetTransactionsQuery } from "../store/api.ts";
-
-const todayLabel = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "long", year: "numeric" }).format(new Date());
+import { useT } from "../i18n/index.ts";
 
 export function Dashboard() {
+  const t = useT();
   const { data: rows = [] } = useGetTransactionsQuery({ limit: 8 });
+  // Computed per render so it follows a live language switch (a module-level const would lock
+  // the locale at import time).
+  const todayLabel = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
   return (
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Вітаю, Віталій</div>
-          <div className="sub">Твої гроші, рахунки й бюджети — в одному місці.</div>
+          <div className="greet">{t("dash.greet")}</div>
+          <div className="sub">{t("dash.sub")}</div>
         </div>
         <div className="page-head-actions">
           <span className="date-pill"><span className="ico"><Icon name="calendar" size={16} /></span>{todayLabel}</span>
@@ -55,8 +59,8 @@ export function Dashboard() {
           <CapitalTrendCard />
           <section>
             <div className="section-head">
-              <h2>Бюджети-конверти</h2>
-              <Link to="/plan" className="label group-link">керувати →</Link>
+              <h2>{t("dash.envelopeBudgets")}</h2>
+              <Link to="/plan" className="label group-link">{t("common.manage")} →</Link>
             </div>
             <EnvelopeGrid />
           </section>
@@ -67,8 +71,8 @@ export function Dashboard() {
           <CreditBanner />
           <section>
             <div className="section-head">
-              <h2>Останні</h2>
-              <Link to="/tx" className="label">усі →</Link>
+              <h2>{t("dash.recent")}</h2>
+              <Link to="/tx" className="label">{t("common.all")} →</Link>
             </div>
             <TransactionList rows={rows} />
           </section>

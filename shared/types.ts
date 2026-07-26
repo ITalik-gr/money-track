@@ -34,6 +34,8 @@ export interface Account {
   statement_day: number | null;
   payment_day: number | null;
   min_payment: number | null;
+  // Банк-провайдер (0032): 'mono' | 'manual' | 'csv' | … — інституція рахунку (для групування, §P2.2).
+  provider: string | null;
 }
 
 export interface Category {

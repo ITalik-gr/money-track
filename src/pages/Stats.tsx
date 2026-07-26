@@ -1,10 +1,12 @@
 import { useMemo, useState, type ReactNode } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT, translate } from "../i18n/index.ts";
 import { useSearchParams, Link } from "react-router-dom";
 import { useGetCurrenciesQuery, useGetOverviewQuery, useGetCategoryDrillQuery, useGetSliceDrillQuery, useGetTransfersStatusQuery, useGetCompareQuery, useGetPatternsQuery, useGetPeriodModeQuery, useSetPeriodModeMutation, useGetSparkQuery } from "../store/api.ts";
 import { Sparkline } from "../components/Sparkline.tsx";
 import type { Overview, DrillTx } from "../store/api.ts";
 import { TransferReviewModal } from "../components/TransferReviewModal.tsx";
-import { currencySign, formatMinor, formatDate } from "../lib/format.ts";
+import { currencySign, formatMinor, formatDate, monthShort } from "../lib/format.ts";
 import { CashflowChart } from "../components/CashflowChart.tsx";
 import { CumulativeChart } from "../components/CumulativeChart.tsx";
 import { IncomeBreakdown } from "../components/IncomeBreakdown.tsx";
@@ -25,23 +27,31 @@ import { cardKind, cardKindLabel, cardLast4 } from "../lib/merchant.ts";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../lib/importance.ts";
 
 const RANGES = {
-  week: { label: "Тиждень", days: 7 },
-  month: { label: "Місяць", days: 30 },
-  quarter: { label: "3 місяці", days: 90 },
-  year: { label: "Рік", days: 365 },
+  week: { labelKey: "stats.range.week", days: 7 },
+  month: { labelKey: "stats.range.month", days: 30 },
+  quarter: { labelKey: "stats.range.quarter", days: 90 },
+  year: { labelKey: "stats.range.year", days: 365 },
 } as const;
 type RangeKey = keyof typeof RANGES;
 
 const TABS = {
-  overview: "Огляд",
-  categories: "Категорії",
-  trends: "Тренди",
-  merchants: "Мерчанти",
-  compare: "Порівняння",
+  overview: "stats.tab.overview",
+  categories: "stats.tab.categories",
+  trends: "stats.tab.trends",
+  merchants: "stats.tab.merchants",
+  compare: "stats.tab.compare",
 } as const;
 type TabKey = keyof typeof TABS;
 
-const MONTHS = ["січ", "лют", "бер", "кві", "тра", "чер", "лип", "сер", "вер", "жов", "лис", "гру"];
+// Localized short weekday names (0=Sun..6=Sat). Used both as tooltips and inline labels
+// in deeper-analytics charts; keeps the live locale in sync.
+function weekdayShort(idx: number): string {
+  return new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short" }).format(new Date(2021, 0, 3 + idx));
+}
+function weekdayLong(idx: number): string {
+  return new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "long" }).format(new Date(2021, 0, 3 + idx));
+}
+
 const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e", "#127c86", "#6b7a74"];
 // currency=null → зведено в ₴. Знак завжди по обраній валюті (₴ для зведення).
 type Cur = number | null;
@@ -63,9 +73,14 @@ function periodLength(range: RangeKey, mode: "calendar" | "rolling", from: numbe
 
 function labelFor(bucket: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(bucket)) { const [, m, d] = bucket.split("-"); return `${d}.${m}`; }
-  if (/^\d{4}-W\d+$/.test(bucket)) return "Т" + bucket.split("-W")[1];
-  if (/^\d{4}-\d{2}$/.test(bucket)) return MONTHS[Number(bucket.split("-")[1]) - 1] ?? bucket;
+  if (/^\d{4}-W\d+$/.test(bucket)) return translate(getLocale(), "stats.weekAbbr") + bucket.split("-W")[1];
+  if (/^\d{4}-\d{2}$/.test(bucket)) return monthShort(Number(bucket.split("-")[1]) - 1) ?? bucket;
   return bucket;
+}
+
+// Localized full month name (0=Jan..11=Dec) for month-comparison labels.
+function monthLong(monthIndex0: number): string {
+  return new Intl.DateTimeFormat(localeTag(getLocale()), { month: "long" }).format(new Date(2021, monthIndex0, 1));
 }
 
 // §1: накопичена чиста різниця (надходження − витрати) по бакетах — для running-balance лінії.
@@ -89,7 +104,7 @@ function toCumulative(series: Overview["series"], opts?: { mode: string; to: num
   const slope = nets.length % 2 ? nets[mid] : (nets[mid - 1] + nets[mid]) / 2;
   rows[rows.length - 1].proj = lastCum; // місток від фактичної точки до пунктиру
   const d = new Date(opts.to * 1000);
-  const dm = new Intl.DateTimeFormat("uk-UA", { day: "numeric", month: "numeric" });
+  const dm = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "numeric" });
   for (let i = 1; i <= remaining; i++) {
     d.setDate(d.getDate() + 1);
     rows.push({ label: dm.format(d).replace(/\s/g, ""), cum: null, proj: Math.round(lastCum + slope * i) });
@@ -98,6 +113,7 @@ function toCumulative(series: Overview["series"], opts?: { mode: string; to: num
 }
 
 export function Stats() {
+  const t = useT();
   const [params, setParams] = useSearchParams();
   const rangeParam = params.get("range");
   const range: RangeKey = rangeParam && rangeParam in RANGES ? (rangeParam as RangeKey) : "month";
@@ -135,34 +151,34 @@ export function Stats() {
   const projected = data && mode === "calendar" && days < periodLen && days >= periodLen * 0.4
     ? Math.round(avgDay * periodLen) : null;
   const periodNote = mode === "calendar"
-    ? { week: "цей тиждень", month: "цей місяць", quarter: "цей квартал", year: "цей рік" }[range]
-    : `останні ${RANGES[range].days} дн`;
+    ? t(({ week: "stats.period.week", month: "stats.period.month", quarter: "stats.period.quarter", year: "stats.period.year" } as const)[range])
+    : t("stats.period.rolling", { days: RANGES[range].days });
 
   return (
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Статистика</div>
-          <div className="sub">Куди йдуть і звідки надходять гроші · {periodNote}</div>
+          <div className="greet">{t("stats.title")}</div>
+          <div className="sub">{t("stats.sub")} · {periodNote}</div>
         </div>
         <div className="page-head-actions">
           <div className="seg">
             {(Object.keys(RANGES) as RangeKey[]).map((k) => (
               <button key={k} className={`seg-btn ${range === k ? "active" : ""}`} onClick={() => setParam("range", k)}>
-                {RANGES[k].label}
+                {t(RANGES[k].labelKey)}
               </button>
             ))}
           </div>
-          <button className="pill-toggle" title="Календарний = природний цикл (цей тиждень/місяць). Ковзний = останні N днів."
+          <button className="pill-toggle" title={t("stats.modeTip")}
             onClick={() => setPeriodMode(mode === "calendar" ? "rolling" : "calendar")}>
             <Icon name={mode === "calendar" ? "calendar" : "repeat"} size={14} />
-            {mode === "calendar" ? "Календарний" : "Ковзний"}
+            {mode === "calendar" ? t("stats.mode.calendar") : t("stats.mode.rolling")}
           </button>
           {currencies && currencies.length > 1 && (
             <Select
               className="ph-cur-sel"
               value={currency ?? "all"}
-              options={[{ value: "all", label: "₴ звед." }, ...currencies.map((c) => ({ value: c, label: currencySign(c) }))]}
+              options={[{ value: "all", label: t("stats.curUah") }, ...currencies.map((c) => ({ value: c, label: currencySign(c) }))]}
               onChange={(v) => setCurrency(v === "all" ? null : Number(v))}
             />
           )}
@@ -172,7 +188,7 @@ export function Stats() {
       <div className="stat-tabs" role="tablist">
         {(Object.keys(TABS) as TabKey[]).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setParam("tab", k)}>
-            {TABS[k]}
+            {t(TABS[k])}
           </button>
         ))}
       </div>
@@ -180,8 +196,8 @@ export function Stats() {
       <div className="stack" style={{ gap: 18 }}>
         {!data && isFetching && <StatsSkeleton />}
         {/* Без цієї гілки впалий запит давав просто порожню сторінку без пояснення. */}
-        <ErrorNote error={error} what="Статистику" onRetry={refetch} />
-        {!data && !isFetching && !error && <div className="empty">Немає даних за цей період.</div>}
+        <ErrorNote error={error} what={t("stats.error")} onRetry={refetch} />
+        {!data && !isFetching && !error && <div className="empty">{t("stats.emptyPeriod")}</div>}
 
         {data && (
           <>
@@ -191,28 +207,28 @@ export function Stats() {
                 <ClickableKpis data={data} sign={sign} net={net} avgDay={avgDay} from={from} to={to} currency={currency} />
                 <div className="stat-facts">
                   <div className="fact">
-                    <FactLabel>Операцій</FactLabel>
+                    <FactLabel>{t("stats.fact.txCount")}</FactLabel>
                     <span className="fact-val">{data.summary.n}</span>
                   </div>
                   <div className="fact">
-                    <FactLabel info={<>Скільки з надходжень лишається після витрат: (надходження − витрати) ÷ надходження. Від'ємне значення — витратив більше, ніж отримав.</>}>Норма заощаджень</FactLabel>
+                    <FactLabel info={<>{t("stats.fact.savingsRateInfo")}</>}>{t("stats.fact.savingsRate")}</FactLabel>
                     <span className={`fact-val ${savingsRate != null ? (savingsRate >= 0 ? "pos" : "neg") : ""}`}>
                       {savingsRate != null ? `${savingsRate}%` : "—"}
                     </span>
                   </div>
                   <div className="fact">
-                    <FactLabel info={<>Категорія з найбільшою сумою витрат за період (з урахуванням підкатегорій).</>}>Найбільша категорія</FactLabel>
+                    <FactLabel info={<>{t("stats.fact.topCatInfo")}</>}>{t("stats.fact.topCat")}</FactLabel>
                     <span className="fact-val fact-cat">
                       {topCat ? (<><span className="d" style={{ background: topCat.color ?? "var(--accent)" }} />{topCat.category_name ?? "—"} · {formatMinor(topCat.spent, { decimals: false })} {sign}</>) : "—"}
                     </span>
                   </div>
                   <div className="fact">
-                    <FactLabel info={<>Середня сума однієї витратної операції: витрати ÷ кількість операцій.</>}>Середній чек</FactLabel>
+                    <FactLabel info={<>{t("stats.fact.avgCheckInfo")}</>}>{t("stats.fact.avgCheck")}</FactLabel>
                     <span className="fact-val">{avgCheck ? `${formatMinor(avgCheck, { decimals: false })} ${sign}` : "—"}</span>
                   </div>
                   {projected != null && (
                     <div className="fact">
-                      <FactLabel info={<>Оцінка витрат на кінець періоду за поточним темпом: середні витрати/день × кількість днів у періоді. Показується, поки період ще не завершився.</>}>Прогноз на кінець періоду</FactLabel>
+                      <FactLabel info={<>{t("stats.fact.projectedInfo")}</>}>{t("stats.fact.projected")}</FactLabel>
                       <span className="fact-val">≈{formatMinor(projected, { decimals: false })} {sign}</span>
                     </div>
                   )}
@@ -220,11 +236,11 @@ export function Stats() {
                 <ImportanceBreakdown data={data} sign={sign} from={from} to={to} currency={currency} />
                 <SpendingPatterns />
                 <section>
-                  <div className="section-head"><h2>Грошовий потік</h2><span className="label">витрати й надходження</span></div>
+                  <div className="section-head"><h2>{t("stats.cashflow.title")}</h2><span className="label">{t("stats.cashflow.sub")}</span></div>
                   <div className="card cashflow">
                     <div className="legend" style={{ justifyContent: "flex-end", padding: "2px 4px 8px" }}>
-                      <span><span className="d" style={{ background: "var(--chart-income)" }} />Надходження</span>
-                      <span><span className="d" style={{ background: "var(--chart-expense)" }} />Витрати</span>
+                      <span><span className="d" style={{ background: "var(--chart-income)" }} />{t("common.income")}</span>
+                      <span><span className="d" style={{ background: "var(--chart-expense)" }} />{t("common.expenses")}</span>
                     </div>
                     <CashflowChart rows={rows} height={240} />
                   </div>
@@ -235,13 +251,13 @@ export function Stats() {
             {tab === "categories" && (
               <>
                 <section>
-                  <div className="section-head"><h2>Витрати по категоріях</h2><InfoTip>Підкатегорії згорнуто в батьківську. Готівка й зняття зараховані за реальною категорією; перекази між своїми виключені. Клік — деталі категорії.</InfoTip><span className="label">клік — деталі</span></div>
+                  <div className="section-head"><h2>{t("stats.byCategory.title")}</h2><InfoTip>{t("stats.byCategory.tip")}</InfoTip><span className="label">{t("stats.byCategory.click")}</span></div>
                   {data.byCategory.length ? (
                     <div className="cat-with-donut">
                       <SpendDonut rows={data.byCategory} sign={sign} />
                       <CategoryBreakdown rows={data.byCategory} from={from} to={to} currency={currency} sign={sign} />
                     </div>
-                  ) : <div className="card empty">Немає витрат за період.</div>}
+                  ) : <div className="card empty">{t("stats.byCategory.empty")}</div>}
                 </section>
                 <AvgCheckByCategory rows={data.byCategory} sign={sign} />
                 <ReceiptItems from={from} to={to} sign={sign} />
@@ -254,15 +270,15 @@ export function Stats() {
               <>
                 <MonthlyHistory />
                 <section>
-                  <div className="section-head"><h2>Динаміка</h2><span className="label">по днях/тижнях періоду</span></div>
+                  <div className="section-head"><h2>{t("stats.trends.title")}</h2><span className="label">{t("stats.trends.sub")}</span></div>
                   <div className="card cashflow"><CashflowChart rows={rows} height={240} /></div>
                 </section>
                 <TopSpendDays series={data.series} sign={sign} from={from} to={to} currency={currency} />
                 <section>
                   <div className="section-head">
-                    <h2>Кумулятивний потік</h2>
-                    <HoverTip content={<>Накопичена різниця <b>надходження − витрати</b> від початку періоду. Лінія вгору — відкладаєш; вниз — проїдаєш. Нуль = вийшов у баланс. <b>Пунктир</b> — прогноз до кінця періоду за поточним темпом.</>}>
-                      <span className="label">що це?</span>
+                    <h2>{t("stats.cumulative.title")}</h2>
+                    <HoverTip content={<>{t("stats.cumulative.tip")}</>}>
+                      <span className="label">{t("common.whatIsThis")}</span>
                     </HoverTip>
                   </div>
                   <div className="card cashflow"><CumulativeChart rows={toCumulative(data.series, { mode, to, days, periodLen })} sign={sign} height={220} /></div>
@@ -294,31 +310,32 @@ export function Stats() {
 function ClickableKpis({ data, sign, net, avgDay, from, to, currency }: {
   data: Overview; sign: string; net: number; avgDay: number; from: number; to: number; currency: Cur;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<"expense" | "income" | null>(null);
   return (
     <>
       <div className="stat-kpis">
         <button type="button" className={`card kpi-tile kpi-click ${open === "expense" ? "open" : ""}`} onClick={() => setOpen(open === "expense" ? null : "expense")}>
-          <StatKpiInner title="Витрати ›" minor={data.summary.spend} prev={data.prev.spend} sign={sign} goodWhenUp={false}
-            info={<>Сума всіх витрат за період: без переказів між своїми рахунками і без зняття готівки (готівка рахується за реальною категорією). Операції в обробці — теж тут.</>} />
+          <StatKpiInner title={t("stats.kpi.spend")} minor={data.summary.spend} prev={data.prev.spend} sign={sign} goodWhenUp={false}
+            info={<>{t("stats.kpi.spendInfo")}</>} />
         </button>
         <button type="button" className={`card kpi-tile kpi-click ${open === "income" ? "open" : ""}`} onClick={() => setOpen(open === "income" ? null : "income")}>
-          <StatKpiInner title="Надходження ›" minor={data.summary.income} prev={data.prev.income} sign={sign} goodWhenUp
-            info={<>Сума всіх надходжень за період, без переказів між своїми рахунками.</>} />
+          <StatKpiInner title={t("stats.kpi.income")} minor={data.summary.income} prev={data.prev.income} sign={sign} goodWhenUp
+            info={<>{t("stats.kpi.incomeInfo")}</>} />
         </button>
         <div className="card kpi-tile">
-          <StatKpiInner title="Чистий потік" minor={net} sign={sign} tone={net >= 0 ? "pos" : "neg"}
-            info={<>Надходження мінус витрати за період. Від'ємне значення — витратив більше, ніж отримав.</>} />
+          <StatKpiInner title={t("stats.kpi.net")} minor={net} sign={sign} tone={net >= 0 ? "pos" : "neg"}
+            info={<>{t("stats.kpi.netInfo")}</>} />
         </div>
         <div className="card kpi-tile">
-          <StatKpiInner title="Середньо/день" minor={avgDay} sign={sign}
-            info={<>Середні витрати за один день періоду: витрати, поділені на кількість днів у періоді.</>} />
+          <StatKpiInner title={t("stats.kpi.avgDay")} minor={avgDay} sign={sign}
+            info={<>{t("stats.kpi.avgDayInfo")}</>} />
         </div>
       </div>
       {open && (
         <div className="card drill-open-card">
           <div className="label" style={{ marginBottom: 6 }}>
-            {open === "expense" ? "Усі витрати, що рахуються" : "Усі надходження"} за період
+            {(open === "expense" ? t("stats.drill.allSpend") : t("stats.drill.allIncome")) + " " + t("stats.drill.period")}
           </div>
           <SliceDrillPanel dim="all" type={open} from={from} to={to} currency={currency} sign={sign} embedded />
         </div>
@@ -334,11 +351,13 @@ const isSecondaryCat = (name: string | null) => /переказ|зняття/i.t
 function CategoryBreakdown({ rows, from, to, currency, sign }: {
   rows: Overview["byCategory"]; from: number; to: number; currency: Cur; sign: string;
 }) {
+  const t = useT();
   const [openId, setOpenId] = useState<number | null>(null);
   const { data: spark } = useGetSparkQuery();
   const primary = rows.filter((r) => !isSecondaryCat(r.category_name));
   const secondary = rows.filter((r) => isSecondaryCat(r.category_name));
   const total = primary.reduce((a, c) => a + c.spent, 0) || 1;
+  const noCat = t("common.uncategorized");
 
   const bar = (e: Overview["byCategory"][number], i: number, secondaryStyle: boolean) => {
     const p = (e.spent / total) * 100;
@@ -348,13 +367,13 @@ function CategoryBreakdown({ rows, from, to, currency, sign }: {
     return (
       <div key={`${id}-${i}`}>
         <HoverTip content={
-          <><div className="tip-lbl">{e.category_name ?? "без категорії"}</div>
+          <><div className="tip-lbl">{e.category_name ?? noCat}</div>
           <div className="r"><span className="d" style={{ background: color }} />{formatMinor(e.spent, { decimals: false })} {sign}</div>
-          <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{p.toFixed(0)}% · {e.n} оп. · сер. {formatMinor(Math.round(e.spent / Math.max(1, e.n)), { decimals: false })} {sign}</div></>
+          <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{p.toFixed(0)}% · {e.n} {t("stats.txCountShort")} · {t("stats.avgShort")} {formatMinor(Math.round(e.spent / Math.max(1, e.n)), { decimals: false })} {sign}</div></>
         }>
           <button type="button" className={`catbar catbar-btn ${open ? "open" : ""}`}
             onClick={() => id != null && setOpenId(open ? null : id)}>
-            <span className="cb-name"><span className="d" style={{ background: color }} />{e.category_name ?? "без категорії"}</span>
+            <span className="cb-name"><span className="d" style={{ background: color }} />{e.category_name ?? noCat}</span>
             <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.min(p, 100)}%`, background: color }} /></span>
             {id != null && spark?.categories[String(id)] && <Sparkline values={spark.categories[String(id)]} color={color} />}
             <span className="cb-val">{formatMinor(e.spent, { decimals: false })} {sign}</span>
@@ -381,6 +400,7 @@ function CategoryBreakdown({ rows, from, to, currency, sign }: {
 
 // Заголовок вторинного блоку: кнопка AI-розмітки реальної категорії переказів/знять (§F2 крок 2).
 function SecondaryHeader() {
+  const t = useT();
   const { data: status } = useGetTransfersStatusQuery();
   const [showReview, setShowReview] = useState(false);
   const pending = status?.pending ?? 0;
@@ -389,16 +409,16 @@ function SecondaryHeader() {
     <>
       <div className="cat-ai-callout">
         <div className="cat-ai-body">
-          <div className="cat-ai-title"><Icon name="spark" size={15} /> AI визначає реальну категорію переказів</div>
+          <div className="cat-ai-title"><Icon name="spark" size={15} /> {t("stats.secondary.title")}</div>
           <div className="cat-ai-sub">
             {pending > 0
-              ? `${pending} переказів/знять без реальної категорії. Відкрий рев'ю — AI підкаже, на що кошти пішли (зняв готівку → «Продукти»), а ти перевіриш і виправиш кожен рядок.`
-              : "Усі перекази й зняття розмічено. Можна перевірити/перерозмітити ще раз у рев'ю."}
+              ? t("stats.secondary.pending", { count: pending })
+              : t("stats.secondary.done")}
           </div>
         </div>
         <button type="button" className="btn primary cat-ai-btn" onClick={() => setShowReview(true)}>
           {pending > 0 && <Icon name="spark" size={15} />}
-          {pending > 0 ? "Рев'ю переказів" : "Перевірити"}
+          {pending > 0 ? t("stats.secondary.reviewBtn") : t("stats.secondary.reviewBtnDone")}
         </button>
       </div>
       {showReview && <TransferReviewModal onClose={() => setShowReview(false)} />}
@@ -407,6 +427,7 @@ function SecondaryHeader() {
 }
 
 function CatDrill({ category, from, to, currency, sign }: { category: number; from: number; to: number; currency: Cur; sign: string }) {
+  const t = useT();
   const { data, isFetching } = useGetCategoryDrillQuery({ category, from, to, currency });
   if (isFetching) return <div className="cat-drill"><SkeletonRows n={4} /></div>;
   if (!data) return null;
@@ -425,7 +446,7 @@ function CatDrill({ category, from, to, currency, sign }: { category: number; fr
         <div className={`cat-drill-grid ${hasSubs && hasMerch ? "" : "single"}`}>
           {hasSubs && (
             <div className="cat-drill-panel">
-              <div className="cat-drill-panel-h">Підкатегорії</div>
+              <div className="cat-drill-panel-h">{t("stats.catdrill.subs")}</div>
               {subs.map((s, i) => (
                 <div key={i} className="drill-row">
                   <span className="drill-name"><span className="d" style={{ background: s.color ?? "var(--muted)" }} />{s.name}</span>
@@ -437,7 +458,7 @@ function CatDrill({ category, from, to, currency, sign }: { category: number; fr
           )}
           {hasMerch && (
             <div className="cat-drill-panel">
-              <div className="cat-drill-panel-h">Топ мерчантів</div>
+              <div className="cat-drill-panel-h">{t("stats.catdrill.topMerch")}</div>
               {data.merchants.slice(0, 6).map((m, i) => (
                 <div key={i} className="drill-row">
                   <span className="drill-name">{m.merchant}</span>
@@ -453,11 +474,11 @@ function CatDrill({ category, from, to, currency, sign }: { category: number; fr
       {/* §R2-ST5(в): самі операції зрізу з переходом на транзакцію. */}
       {txs.length > 0 && (
         <div className="cat-drill-block cat-drill-txs">
-          <div className="label">операції · {txs.length}{txs.length >= 60 ? "+" : ""} · {formatMinor(txTotal, { decimals: false })} {sign}</div>
+          <div className="label">{t("stats.catdrill.txs", { count: txs.length, plus: txs.length >= 60 ? "+" : "", total: formatMinor(txTotal, { decimals: false }), sign })}</div>
           <DrillTxList txs={txs} />
         </div>
       )}
-      {!hasSubs && !hasMerch && !txs.length && <span className="muted" style={{ fontSize: 12.5 }}>Немає деталізації.</span>}
+      {!hasSubs && !hasMerch && !txs.length && <span className="muted" style={{ fontSize: 12.5 }}>{t("stats.drill.noMerch")}</span>}
     </div>
   );
 }
@@ -465,14 +486,15 @@ function CatDrill({ category, from, to, currency, sign }: { category: number; fr
 // §R2-ST5(в): спільний список операцій зрізу з переходом на /tx/:id.
 // §1: дрил-операції = стандартний рядок транзакції (спільний TxItem), лише компактніший.
 // §1: підзаголовок «що саме рахується» — щоб цифра зрізу була прозорою (канон stats.ts).
-const DRILL_NOTE: Record<"expense" | "income", string> = {
-  expense: "Витрати: без переказів між своїми та зняття готівки; готівка — за реальною категорією; операції в обробці рахуються.",
-  income: "Надходження: без переказів між своїми рахунками.",
+const DRILL_NOTE: Record<"expense" | "income", "stats.drill.drillNoteExpense" | "stats.drill.drillNoteIncome"> = {
+  expense: "stats.drill.drillNoteExpense",
+  income: "stats.drill.drillNoteIncome",
 };
 function DrillTxList({ txs, kind = "expense" }: { txs: DrillTx[]; kind?: "expense" | "income" }) {
+  const t = useT();
   return (
     <>
-      <div className="drill-note muted">{DRILL_NOTE[kind]}</div>
+      <div className="drill-note muted">{t(DRILL_NOTE[kind])}</div>
       <div className="ledger rows drill-txs">
         {txs.map((t) => (
           <TxItem key={t.id} t={t} compact />
@@ -488,10 +510,11 @@ function DrillTxList({ txs, kind = "expense" }: { txs: DrillTx[]; kind?: "expens
 function MerchantsBlock({ data, sign, merchMax }: {
   data: Overview; sign: string; merchMax: number;
 }) {
+  const t = useT();
   const { data: spark } = useGetSparkQuery();
   return (
     <section>
-      <div className="section-head"><h2>Топ мерчантів</h2><InfoTip>Найбільші отримувачі витрат за період (зведено в ₴). Клік — сторінка мерчанта.</InfoTip><span className="label">клік — деталі</span></div>
+      <div className="section-head"><h2>{t("stats.merchants.title")}</h2><InfoTip>{t("stats.merchants.tip")}</InfoTip><span className="label">{t("stats.byCategory.click")}</span></div>
       {data.byMerchant.length ? (
         <div className="card flush"><div className="mrows">
           {data.byMerchant.slice(0, 7).map((m, i) => (
@@ -504,12 +527,12 @@ function MerchantsBlock({ data, sign, merchMax }: {
               {spark?.merchants[m.merchant] && <Sparkline values={spark.merchants[m.merchant]} color="var(--accent)" />}
               <div style={{ textAlign: "right" }}>
                 <div className="m-val">{formatMinor(m.spent, { decimals: false })} {sign}</div>
-                <div className="m-sub">{m.n} оп. · сер. {formatMinor(Math.round(m.spent / m.n), { decimals: false })} {sign}</div>
+                <div className="m-sub">{t("stats.merchants.avgSub", { n: m.n, amount: formatMinor(Math.round(m.spent / m.n), { decimals: false }), sign })}</div>
               </div>
             </Link>
           ))}
         </div></div>
-      ) : <div className="card empty">Немає мерчантів за період.</div>}
+      ) : <div className="card empty">{t("stats.merchants.empty")}</div>}
     </section>
   );
 }
@@ -518,12 +541,13 @@ function MerchantsBlock({ data, sign, merchMax }: {
 function EventsBlock({ data, from, to, currency, sign }: {
   data: Overview; from: number; to: number; currency: Cur; sign: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<number | null>(null);
   if (!data.byEvent || data.byEvent.length === 0) return null;
   const max = Math.max(...data.byEvent.map((e) => e.spent), 1);
   return (
     <section>
-      <div className="section-head"><h2>По групах</h2><span className="label">подорожі, проєкти, події</span></div>
+      <div className="section-head"><h2>{t("stats.events.title")}</h2><span className="label">{t("stats.events.sub")}</span></div>
       <div className="card flush"><div className="catbars">
         {data.byEvent.map((e) => {
           const isOpen = open === e.event_id;
@@ -548,12 +572,13 @@ function EventsBlock({ data, from, to, currency, sign }: {
 function AccountsBlock({ data, from, to, currency, sign }: {
   data: Overview; from: number; to: number; currency: Cur; sign: string;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<string | null>(null);
   if (data.byAccount.length <= 1) return null;
   const max = Math.max(...data.byAccount.map((a) => a.spent), 1);
   return (
     <section>
-      <div className="section-head"><h2>По картках</h2><InfoTip>Витрати згруповані за рахунком списання. Кредитний ліміт не зливається з власними коштами.</InfoTip><span className="label">клік — операції</span></div>
+      <div className="section-head"><h2>{t("stats.accounts.title")}</h2><InfoTip>{t("stats.accounts.tip")}</InfoTip><span className="label">{t("stats.accounts.click")}</span></div>
       <div className="card flush"><div className="mrows">
         {data.byAccount.map((a, i) => {
           const key = a.account_id ?? String(i);
@@ -574,7 +599,7 @@ function AccountsBlock({ data, from, to, currency, sign }: {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div className="m-val">{formatMinor(a.spent, { decimals: false })} {sign}</div>
-                  <div className="m-sub">{a.n} оп.</div>
+                  <div className="m-sub">{t("stats.accounts.nTx", { n: a.n })}</div>
                 </div>
               </button>
               {isOpen && a.account_id && <SliceDrillPanel dim="account" value={a.account_id} from={from} to={to} currency={currency} sign={sign} />}
@@ -591,17 +616,18 @@ function SliceDrillPanel({ dim, value, type, from, to, currency, sign, embedded 
   dim: "merchant" | "account" | "event" | "weekday" | "day" | "dom" | "importance" | "all"; value?: string; type?: "expense" | "income";
   from: number; to: number; currency: Cur; sign: string; embedded?: boolean;
 }) {
+  const t = useT();
   const { data, isFetching } = useGetSliceDrillQuery({ dim, value, type, from, to, currency, limit: dim === "all" ? 300 : 60 });
   if (isFetching) return <div className={embedded ? "" : "cat-drill"}><SkeletonRows n={5} /></div>;
   if (!data) return null;
-  if (!data.transactions.length) return <div className="cat-drill"><span className="muted" style={{ fontSize: 12.5 }}>Немає операцій за період.</span></div>;
+  if (!data.transactions.length) return <div className="cat-drill"><span className="muted" style={{ fontSize: 12.5 }}>{t("stats.drill.noTx")}</span></div>;
   const cap = dim === "all" ? 300 : 60;
   return (
     <div className={embedded ? "" : "cat-drill"}>
       <div className="cat-drill-block cat-drill-txs" style={{ borderTop: "none", paddingTop: 0 }}>
         <div className="label">
-          операції · {data.n}{data.n >= cap ? "+" : ""} · {formatMinor(data.spent, { decimals: false })} {sign}
-          {dim === "event" && value != null && <Link to={`/events/${value}`} className="drill-open-link">відкрити групу →</Link>}
+          {t("stats.catdrill.txs", { count: data.n, plus: data.n >= cap ? "+" : "", total: formatMinor(data.spent, { decimals: false }), sign })}
+          {dim === "event" && value != null && <Link to={`/events/${value}`} className="drill-open-link">{t("stats.drill.openEvent")}</Link>}
         </div>
         <DrillTxList txs={data.transactions} kind={type === "income" ? "income" : "expense"} />
       </div>
@@ -617,11 +643,12 @@ function deltaPct(a: number, b: number): number {
 // `goodUp` — для рядків, де зростання ДОБРЕ (надходження). Міняє лише КОЛІР, не число:
 // підмінити місцями a/b було б простіше, але тоді «+20% доходу» показалось би як «−20%».
 function DeltaChip({ a, b, goodUp }: { a: number; b: number; goodUp?: boolean }) {
+  const t = useT();
   if (a === b) return <span className="cmp-delta flat">0%</span>;
   // §R2-ST2(а): 0→X — не «+100%» (вводить в оману), а «новий»; X→0 — «зникло».
   const grew = a > b;
-  if (b === 0 && a > 0) return <span className={`cmp-delta ${goodUp ? "down" : "up"}`}>новий</span>;
-  if (a === 0 && b > 0) return <span className={`cmp-delta ${goodUp ? "up" : "down"}`}>зникло</span>;
+  if (b === 0 && a > 0) return <span className={`cmp-delta ${goodUp ? "down" : "up"}`}>{t("stats.compare.newLabel")}</span>;
+  if (a === 0 && b > 0) return <span className={`cmp-delta ${goodUp ? "up" : "down"}`}>{t("stats.compare.goneLabel")}</span>;
   const p = deltaPct(a, b);
   // Для витрат зростання — «погано» (червоне), спад — «добре» (зелене). Для доходу — навпаки.
   const cls = grew === !goodUp ? "up" : "down";
@@ -630,56 +657,60 @@ function DeltaChip({ a, b, goodUp }: { a: number; b: number; goodUp?: boolean })
 
 // §D: календарно-вирівняні періоди для чесного порівняння (MTD vs той самий відрізок
 // попереднього періоду), а не ковзне вікно 30 днів.
-function calPeriods(range: RangeKey, mode: "calendar" | "rolling"): { curFrom: number; curTo: number; prevFrom: number; prevTo: number; unitLabel: string } {
+// unitKey — i18n key (not resolved text), so the caller stays reactive to a live language switch.
+type UnitKey = "stats.unit.week" | "stats.unit.month" | "stats.unit.quarter" | "stats.unit.year";
+function calPeriods(range: RangeKey, mode: "calendar" | "rolling"): { curFrom: number; curTo: number; prevFrom: number; prevTo: number; unitKey: UnitKey } {
   const now = new Date();
   const nowS = Math.floor(now.getTime() / 1000);
   if (mode === "rolling") {
     const days = RANGES[range].days;
     const curFrom = nowS - days * 86400;
-    const unit = { week: "тиждень", month: "місяць", quarter: "квартал", year: "рік" }[range];
-    return { curFrom, curTo: nowS, prevFrom: curFrom - days * 86400, prevTo: curFrom, unitLabel: unit };
+    const unitKey = ({ week: "stats.unit.week", month: "stats.unit.month", quarter: "stats.unit.quarter", year: "stats.unit.year" } as const)[range];
+    return { curFrom, curTo: nowS, prevFrom: curFrom - days * 86400, prevTo: curFrom, unitKey };
   }
-  let curStart: Date, prevStart: Date, unitLabel: string;
+  let curStart: Date, prevStart: Date, unitKey: UnitKey;
   if (range === "week") {
     const dow = (now.getDay() + 6) % 7; // Пн=0
     curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
     prevStart = new Date(curStart); prevStart.setDate(prevStart.getDate() - 7);
-    unitLabel = "тиждень";
+    unitKey = "stats.unit.week";
   } else if (range === "month") {
     curStart = new Date(now.getFullYear(), now.getMonth(), 1);
     prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    unitLabel = "місяць";
+    unitKey = "stats.unit.month";
   } else if (range === "quarter") {
     const q = Math.floor(now.getMonth() / 3);
     curStart = new Date(now.getFullYear(), q * 3, 1);
     prevStart = new Date(now.getFullYear(), q * 3 - 3, 1);
-    unitLabel = "квартал";
+    unitKey = "stats.unit.quarter";
   } else {
     curStart = new Date(now.getFullYear(), 0, 1);
     prevStart = new Date(now.getFullYear() - 1, 0, 1);
-    unitLabel = "рік";
+    unitKey = "stats.unit.year";
   }
   const curFrom = Math.floor(curStart.getTime() / 1000);
   const curTo = nowS;
   const elapsed = curTo - curFrom; // чесний MTD: попередній період беремо такої ж довжини
   const prevFrom = Math.floor(prevStart.getTime() / 1000);
-  return { curFrom, curTo, prevFrom, prevTo: prevFrom + elapsed, unitLabel };
+  return { curFrom, curTo, prevFrom, prevTo: prevFrom + elapsed, unitKey };
 }
 
 function PeriodCompare({ range, mode, currency, sign }: {
   range: RangeKey; mode: "calendar" | "rolling"; currency: Cur; sign: string;
 }) {
-  const { curFrom, curTo, prevFrom, prevTo, unitLabel } = useMemo(() => calPeriods(range, mode), [range, mode]);
+  const t = useT();
+  const { curFrom, curTo, prevFrom, prevTo, unitKey } = useMemo(() => calPeriods(range, mode), [range, mode]);
   const { data, isFetching } = useGetCompareQuery({ from: curFrom, to: curTo, currency, bfrom: prevFrom, bto: prevTo });
   const dr = (a: number, b: number) => `${formatDate(a)}–${formatDate(b)}`;
+  const noCat = t("common.uncategorized");
   const { rows, rest, movers } = useMemo(() => {
     if (!data) return { rows: [], rest: null as null | { a: number; b: number }, movers: { up: [], down: [] } as Movers };
     const map = new Map<number | null, { name: string; color: string | null; a: number; b: number }>();
-    for (const r of data.a.byCategory) map.set(r.category_id, { name: r.category_name ?? "без категорії", color: r.color, a: r.spent, b: 0 });
+    for (const r of data.a.byCategory) map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: r.spent, b: 0 });
     for (const r of data.b.byCategory) {
       const cur = map.get(r.category_id);
       if (cur) cur.b = r.spent;
-      else map.set(r.category_id, { name: r.category_name ?? "без категорії", color: r.color, a: 0, b: r.spent });
+      else map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: 0, b: r.spent });
     }
     const all = [...map.values()].sort((x, y) => y.a - x.a);
     const top = all.slice(0, 10);
@@ -693,7 +724,7 @@ function PeriodCompare({ range, mode, currency, sign }: {
     const up = deltas.filter((r) => r.delta > 0).sort((x, y) => y.delta - x.delta).slice(0, 3);
     const down = deltas.filter((r) => r.delta < 0).sort((x, y) => x.delta - y.delta).slice(0, 3);
     return { rows: top, rest, movers: { up, down } as Movers };
-  }, [data]);
+  }, [data, noCat]);
 
   if (isFetching || !data) return null;
   if (!data.a.spend && !data.b.spend) return null;
@@ -701,41 +732,41 @@ function PeriodCompare({ range, mode, currency, sign }: {
   return (
     <section>
       <div className="section-head">
-        <h2>Порівняння періодів</h2>
-        <span className="label">цей {unitLabel} проти минулого · {dr(curFrom, curTo)} vs {dr(prevFrom, prevTo)}</span>
+        <h2>{t("stats.compare.title")}</h2>
+        <span className="label">{t("stats.compare.sub", { unit: t(unitKey), cur: dr(curFrom, curTo), prev: dr(prevFrom, prevTo) })}</span>
       </div>
 
       {(movers.up.length > 0 || movers.down.length > 0) && (
         <div className="movers">
           <div className="mv-col">
-            <div className="mv-head up">↑ Найбільше зросли</div>
+            <div className="mv-head up">{t("stats.compare.moversUp")}</div>
             {movers.up.length ? movers.up.map((r, i) => (
               <div key={i} className="mv-row">
                 <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
                 <span className="mv-delta up">+{formatMinor(r.delta, { decimals: false })} {sign}</span>
               </div>
-            )) : <div className="mv-empty">без помітних зростань</div>}
+            )) : <div className="mv-empty">{t("stats.compare.moversEmpty")}</div>}
           </div>
           <div className="mv-col">
-            <div className="mv-head down">↓ Найбільше впали</div>
+            <div className="mv-head down">{t("stats.compare.moversDown")}</div>
             {movers.down.length ? movers.down.map((r, i) => (
               <div key={i} className="mv-row">
                 <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
                 <span className="mv-delta down">−{formatMinor(-r.delta, { decimals: false })} {sign}</span>
               </div>
-            )) : <div className="mv-empty">без помітних падінь</div>}
+            )) : <div className="mv-empty">{t("stats.compare.moversEmptyDown")}</div>}
           </div>
         </div>
       )}
 
       <div className="card cmp-card">
         <div className="cmp-head">
-          <div className="cmp-col-h prev">попередній</div>
-          <div className="cmp-col-h cur">поточний</div>
+          <div className="cmp-col-h prev">{t("stats.compare.colPrev")}</div>
+          <div className="cmp-col-h cur">{t("stats.compare.colCur")}</div>
           <div className="cmp-col-h" />
         </div>
         <div className="cmp-row cmp-total">
-          <span className="cmp-name">Витрати всього</span>
+          <span className="cmp-name">{t("stats.compare.totalSpend")}</span>
           <span className="cmp-b">{formatMinor(data.b.spend, { decimals: false })} {sign}</span>
           <span className="cmp-a">{formatMinor(data.a.spend, { decimals: false })} {sign}</span>
           <DeltaChip a={data.a.spend} b={data.b.spend} />
@@ -743,8 +774,8 @@ function PeriodCompare({ range, mode, currency, sign }: {
         {rows.map((r, i) => (
           <HoverTip key={i} content={
             <><div className="tip-lbl">{r.name}</div>
-            <div className="r">попередній: {formatMinor(r.b, { decimals: false })} {sign}</div>
-            <div className="r">поточний: {formatMinor(r.a, { decimals: false })} {sign}</div></>
+            <div className="r">{t("stats.compare.drillPrev", { amount: formatMinor(r.b, { decimals: false }), sign })}</div>
+            <div className="r">{t("stats.compare.drillCur", { amount: formatMinor(r.a, { decimals: false }), sign })}</div></>
           }>
             <div className="cmp-row">
               <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
@@ -755,14 +786,14 @@ function PeriodCompare({ range, mode, currency, sign }: {
           </HoverTip>
         ))}
         {rest && (rest.a > 0 || rest.b > 0) && (
-          <div className="cmp-row" title="Решта категорій поза топ-10">
-            <span className="cmp-name"><span className="d" style={{ background: "var(--muted)" }} />інші категорії</span>
+          <div className="cmp-row" title={t("stats.compare.tipOther")}>
+            <span className="cmp-name"><span className="d" style={{ background: "var(--muted)" }} />{t("stats.compare.otherCats")}</span>
             <span className="cmp-b">{formatMinor(rest.b, { decimals: false })} {sign}</span>
             <span className="cmp-a">{formatMinor(rest.a, { decimals: false })} {sign}</span>
             <DeltaChip a={rest.a} b={rest.b} />
           </div>
         )}
-        <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>Перекази і зняття виключено з порівняння.</p>
+        <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>{t("stats.compare.excludedNote")}</p>
       </div>
     </section>
   );
@@ -772,19 +803,18 @@ function PeriodCompare({ range, mode, currency, sign }: {
 // `PeriodCompare` вище прибитий до «цей період проти минулого». Тут місяці обирає
 // користувач — «а що змінилось із березня?». Бекенд той самий `/analytics/compare`
 // (він від початку приймає дві незалежні пари меж), тож канон і фільтри спільні.
-const MONTHS_FULL = ["січень", "лютий", "березень", "квітень", "травень", "червень",
-  "липень", "серпень", "вересень", "жовтень", "листопад", "грудень"];
-
 /** Межі календарного місяця за зсувом назад від поточного. */
 function monthBounds(back: number): { from: number; to: number; label: string; y: number; m: number } {
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
   const from = Math.floor(d.getTime() / 1000);
   const to = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime() / 1000);
-  return { from, to, label: `${MONTHS_FULL[d.getMonth()]} ${d.getFullYear()}`, y: d.getFullYear(), m: d.getMonth() };
+  return { from, to, label: `${monthLong(d.getMonth())} ${d.getFullYear()}`, y: d.getFullYear(), m: d.getMonth() };
 }
 
 function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
+  const t = useT();
+  const noCat = t("common.uncategorized");
   const [aBack, setABack] = useState(0);   // A = пізніший місяць (за замовчуванням поточний)
   const [bBack, setBBack] = useState(1);   // B = база порівняння
   const options = useMemo(
@@ -801,11 +831,11 @@ function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
   const { rows, rest, movers } = useMemo(() => {
     if (!data) return { rows: [] as MoverRow[], rest: null as null | { a: number; b: number }, movers: { up: [], down: [] } as Movers };
     const map = new Map<number | null, { name: string; color: string | null; a: number; b: number }>();
-    for (const r of data.a.byCategory) map.set(r.category_id, { name: r.category_name ?? "без категорії", color: r.color, a: r.spent, b: 0 });
+    for (const r of data.a.byCategory) map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: r.spent, b: 0 });
     for (const r of data.b.byCategory) {
       const cur = map.get(r.category_id);
       if (cur) cur.b = r.spent;
-      else map.set(r.category_id, { name: r.category_name ?? "без категорії", color: r.color, a: 0, b: r.spent });
+      else map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: 0, b: r.spent });
     }
     // Сортуємо за БІЛЬШОЮ з двох сум: категорія, що зникла, має лишитись видимою —
     // саме її зникнення часто і є відповіддю на «що змінилось».
@@ -822,7 +852,7 @@ function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
         } as Movers;
       })(),
     };
-  }, [data]);
+  }, [data, noCat]);
 
   const sameMonth = A.y === B.y && A.m === B.m;
   // ⚠️ Поточний місяць ще не завершився — порівнювати його з повним місяцем нечесно.
@@ -835,35 +865,34 @@ function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
   return (
     <section>
       <div className="section-head">
-        <h2>Порівняння місяців</h2>
-        <span className="label">що зросло, що впало — по категоріях</span>
+        <h2>{t("stats.compareMonth.title")}</h2>
+        <span className="label">{t("stats.compareMonth.sub")}</span>
       </div>
 
       <div className="mc-pickers">
         <label className="mc-pick">
-          <span className="label">База</span>
+          <span className="label">{t("stats.compareMonth.base")}</span>
           <Select value={bBack} options={options} onChange={(v) => setBBack(Number(v))} searchable />
         </label>
-        <span className="mc-vs" aria-hidden="true">проти</span>
+        <span className="mc-vs" aria-hidden="true">{t("stats.compareMonth.vs")}</span>
         <label className="mc-pick">
-          <span className="label">Порівнюємо</span>
+          <span className="label">{t("stats.compareMonth.cur")}</span>
           <Select value={aBack} options={options} onChange={(v) => setABack(Number(v))} searchable />
         </label>
       </div>
 
-      <ErrorNote error={error} what="порівняння" onRetry={refetch} />
+      <ErrorNote error={error} what={t("stats.compareMonth.error")} onRetry={refetch} />
 
-      {sameMonth && <div className="card empty">Обрано той самий місяць двічі — вибери різні.</div>}
+      {sameMonth && <div className="card empty">{t("stats.compareMonth.sameMonth")}</div>}
 
       {!sameMonth && partial.length > 0 && (
         <p className="mc-note">
-          {MONTHS_FULL[now.getMonth()]} ще триває — минуло {elapsedDays} з {monthDays} днів.
-          Порівняння з повним місяцем занижене.
+          {t("stats.compareMonth.partial", { month: monthLong(now.getMonth()), elapsed: elapsedDays, total: monthDays })}
         </p>
       )}
 
       {!sameMonth && data && !isFetching && !data.a.spend && !data.b.spend && (
-        <div className="card empty">За обидва місяці витрат немає.</div>
+        <div className="card empty">{t("stats.compareMonth.empty")}</div>
       )}
 
       {!sameMonth && data && (data.a.spend > 0 || data.b.spend > 0) && (
@@ -871,22 +900,22 @@ function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
           {(movers.up.length > 0 || movers.down.length > 0) && (
             <div className="movers">
               <div className="mv-col">
-                <div className="mv-head up">↑ Найбільше зросли</div>
+                <div className="mv-head up">{t("stats.compare.moversUp")}</div>
                 {movers.up.length ? movers.up.map((r, i) => (
                   <div key={i} className="mv-row">
                     <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
                     <span className="mv-delta up">+{formatMinor(r.delta, { decimals: false })} {sign}</span>
                   </div>
-                )) : <div className="mv-empty">без помітних зростань</div>}
+                )) : <div className="mv-empty">{t("stats.compare.moversEmpty")}</div>}
               </div>
               <div className="mv-col">
-                <div className="mv-head down">↓ Найбільше впали</div>
+                <div className="mv-head down">{t("stats.compare.moversDown")}</div>
                 {movers.down.length ? movers.down.map((r, i) => (
                   <div key={i} className="mv-row">
                     <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
                     <span className="mv-delta down">−{formatMinor(-r.delta, { decimals: false })} {sign}</span>
                   </div>
-                )) : <div className="mv-empty">без помітних падінь</div>}
+                )) : <div className="mv-empty">{t("stats.compare.moversEmptyDown")}</div>}
               </div>
             </div>
           )}
@@ -898,13 +927,13 @@ function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
               <div className="cmp-col-h" />
             </div>
             <div className="cmp-row cmp-total">
-              <span className="cmp-name">Витрати всього</span>
+              <span className="cmp-name">{t("stats.compare.totalSpend")}</span>
               <span className="cmp-b">{formatMinor(data.b.spend, { decimals: false })} {sign}</span>
               <span className="cmp-a">{formatMinor(data.a.spend, { decimals: false })} {sign}</span>
               <DeltaChip a={data.a.spend} b={data.b.spend} />
             </div>
             <div className="cmp-row cmp-total">
-              <span className="cmp-name">Надходження</span>
+              <span className="cmp-name">{t("stats.compare.totalIncome")}</span>
               <span className="cmp-b">{formatMinor(data.b.income, { decimals: false })} {sign}</span>
               <span className="cmp-a">{formatMinor(data.a.income, { decimals: false })} {sign}</span>
               <DeltaChip a={data.a.income} b={data.b.income} goodUp />
@@ -919,14 +948,14 @@ function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
             ))}
             {rest && (rest.a > 0 || rest.b > 0) && (
               <div className="cmp-row">
-                <span className="cmp-name"><span className="d" style={{ background: "var(--muted)" }} />інші категорії</span>
+                <span className="cmp-name"><span className="d" style={{ background: "var(--muted)" }} />{t("stats.compare.otherCats")}</span>
                 <span className="cmp-b">{formatMinor(rest.b, { decimals: false })} {sign}</span>
                 <span className="cmp-a">{formatMinor(rest.a, { decimals: false })} {sign}</span>
                 <DeltaChip a={rest.a} b={rest.b} />
               </div>
             )}
             <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
-              Перекази і зняття виключено з порівняння.
+              {t("stats.compare.excludedNote")}
             </p>
           </div>
         </>
@@ -937,11 +966,10 @@ function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
 
 // Глибша аналітика (обчислювана, без AI-вартості) — графіки по 2 в колонку + опис (§F1).
 // Працює, коли бакет = день (тиждень/місяць): з денних сум виводимо патерни витрат.
-const WD = ["Нд", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
-const FULL_WD = ["Неділя", "Понеділок", "Вівторок", "Середа", "Четвер", "П'ятниця", "Субота"];
 function DeeperAnalytics({ series, sign, from, to, currency }: {
   series: Overview["series"]; sign: string; from: number; to: number; currency: Cur;
 }) {
+  const t = useT();
   const [openWd, setOpenWd] = useState<number | null>(null);
   const [openPriciest, setOpenPriciest] = useState(false);
   const [openDom, setOpenDom] = useState<number | null>(null);
@@ -974,81 +1002,81 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
 
   return (
     <section>
-      <div className="section-head"><h2>Глибша аналітика</h2><span className="label">патерни витрат</span></div>
+      <div className="section-head"><h2>{t("stats.patterns.title")}</h2><span className="label">{t("stats.patterns.sub")}</span></div>
       <div className="stat-facts" style={{ marginBottom: 10 }}>
         <button type="button" className={`fact fact-click ${openPriciest ? "open" : ""}`}
           disabled={!priciest || !(priciest.spend > 0)}
           onClick={() => setOpenPriciest((o) => !o)}>
-          <FactLabel info={<>День періоду з найбільшою сумою витрат. Клікни, щоб побачити, що саме куплено того дня.</>}>Найдорожчий день ›</FactLabel>
+          <FactLabel info={<>{t("stats.patterns.priciestInfo")}</>}>{t("stats.patterns.priciest")}</FactLabel>
           <span className="fact-val">{priciest && priciest.spend > 0 ? <>{labelFor(priciest.bucket)} · {formatMinor(priciest.spend, { decimals: false })} {sign}</> : "—"}</span>
         </button>
         <div className="fact">
-          <FactLabel info={<>Скільки календарних днів періоду пройшло без жодної витратної операції (не рахуємо доходи й перекази). Багато таких днів — витрати сконцентровані у кілька дат.</>}>Днів без витрат</FactLabel>
-          <span className="fact-val">{noSpendDays} <span className="muted" style={{ fontSize: 12, fontWeight: 400 }}>з {totalDays}</span></span>
+          <FactLabel info={<>{t("stats.patterns.noSpendDaysInfo")}</>}>{t("stats.patterns.noSpendDays")}</FactLabel>
+          <span className="fact-val">{noSpendDays} <span className="muted" style={{ fontSize: 12, fontWeight: 400 }}>{t("common.of")} {totalDays}</span></span>
         </div>
       </div>
       {openPriciest && priciest && priciest.spend > 0 && (
         <div className="card drill-open-card" style={{ marginBottom: 14 }}>
-          <div className="label" style={{ marginBottom: 6 }}>{labelFor(priciest.bucket)} — операції за день</div>
+          <div className="label" style={{ marginBottom: 6 }}>{t("stats.patterns.priciestDrill", { label: labelFor(priciest.bucket) })}</div>
           <SliceDrillPanel dim="day" value={priciest.bucket} from={from} to={to} currency={currency} sign={sign} embedded />
         </div>
       )}
       <div className="stats-2col">
         <div className="card deep-card">
-          <div className="deep-title">Витрати по днях тижня <span className="label" style={{ fontWeight: 400 }}>· клік — що куплено</span></div>
+          <div className="deep-title">{t("stats.patterns.byWd")} <span className="label" style={{ fontWeight: 400 }}>{t("stats.patterns.byWdSub")}</span></div>
           <div className="wd-bars">
             {byWeekday.map((v, i) => (
               <HoverTip key={i} content={
-                <><div className="tip-lbl">{FULL_WD[i]}</div>
+                <><div className="tip-lbl">{weekdayLong(i)}</div>
                 <div className="r">{formatMinor(v, { decimals: false })} {sign}</div>
-                <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{Math.round((v / total) * 100)}% періоду</div></>
+                <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{Math.round((v / total) * 100)}{t("stats.patterns.pctOfPeriod")}</div></>
               }>
                 <button type="button" className={`wd-col ${openWd === i ? "open" : ""}`}
                   onClick={() => setOpenWd(openWd === i ? null : i)}>
                   {/* scaleY замість height (layout-thrash). Мінімум 0.02 — щоб дуже малий
                       день лишався видимим: min-height трансформ не рятує. */}
                   <div className="wd-bar-wrap"><div className="wd-bar" style={{ transform: `scaleY(${Math.max(0.02, v / wdMax)})`, background: i === topWd || i === openWd ? "var(--accent)" : "var(--line-strong)" }} /></div>
-                  <span className="wd-lbl">{WD[i]}</span>
+                  <span className="wd-lbl">{weekdayShort(i)}</span>
                 </button>
               </HoverTip>
             ))}
           </div>
-          <p className="deep-desc">Найбільше витрачаєш у <b>{["неділю", "понеділок", "вівторок", "середу", "четвер", "пʼятницю", "суботу"][topWd]}</b> — {formatMinor(byWeekday[topWd], { decimals: false })} {sign} за період.</p>
+          <p className="deep-desc">{t("stats.patterns.topWdDesc", { weekday: weekdayLong(topWd), amount: formatMinor(byWeekday[topWd], { decimals: false }), sign })}</p>
           {openWd != null && (
             <div className="wd-drill">
-              <div className="label" style={{ marginBottom: 2 }}>{FULL_WD[openWd]} — операції за період</div>
+              <div className="label" style={{ marginBottom: 2 }}>{t("stats.patterns.wdDrill", { weekday: weekdayLong(openWd) })}</div>
               <SliceDrillPanel dim="weekday" value={String(openWd)} from={from} to={to} currency={currency} sign={sign} />
             </div>
           )}
         </div>
 
         <div className="card deep-card">
-          <div className="deep-title">Будні vs вихідні</div>
+          <div className="deep-title">{t("stats.patterns.weekVsWeekend")}</div>
           <div className="split-bar">
-            <HoverTip content={<><div className="tip-lbl">Будні</div><div className="r">{formatMinor(weekdaySum, { decimals: false })} {sign} · {100 - weekendPct}%</div></>}>
+            <HoverTip content={<><div className="tip-lbl">{t("stats.patterns.weekdayLabel")}</div><div className="r">{formatMinor(weekdaySum, { decimals: false })} {sign} · {100 - weekendPct}%</div></>}>
               <div className="split-seg" style={{ width: `${100 - weekendPct}%`, background: "var(--c-cobalt, var(--accent))" }}>{100 - weekendPct}%</div>
             </HoverTip>
-            <HoverTip content={<><div className="tip-lbl">Вихідні</div><div className="r">{formatMinor(weekendSum, { decimals: false })} {sign} · {weekendPct}%</div></>}>
+            <HoverTip content={<><div className="tip-lbl">{t("stats.patterns.weekendLabel")}</div><div className="r">{formatMinor(weekendSum, { decimals: false })} {sign} · {weekendPct}%</div></>}>
               <div className="split-seg alt" style={{ width: `${weekendPct}%`, background: "var(--c-teal)" }}>{weekendPct}%</div>
             </HoverTip>
           </div>
           <div className="split-legend">
-            <span><span className="d" style={{ background: "var(--accent)" }} />Будні · {formatMinor(weekdaySum, { decimals: false })} {sign}</span>
-            <span><span className="d" style={{ background: "var(--c-teal)" }} />Вихідні · {formatMinor(weekendSum, { decimals: false })} {sign}</span>
+            <span><span className="d" style={{ background: "var(--accent)" }} />{t("stats.patterns.weekdayNote", { amount: formatMinor(weekdaySum, { decimals: false }), sign })}</span>
+            <span><span className="d" style={{ background: "var(--c-teal)" }} />{t("stats.patterns.weekendNote", { amount: formatMinor(weekendSum, { decimals: false }), sign })}</span>
           </div>
-          <p className="deep-desc">{weekendPct >= 40 ? "Вихідні зʼїдають помітну частку — там найлегше зекономити." : "Основні витрати в будні — вихідні під контролем."}</p>
+          <p className="deep-desc">{weekendPct >= 40 ? t("stats.patterns.weekendHigh") : t("stats.patterns.weekendLow")}</p>
         </div>
       </div>
 
       {hasDom && (
         <div className="card deep-card" style={{ marginTop: 14 }}>
-          <div className="deep-title">Витрати за числом місяця <span className="label" style={{ fontWeight: 400 }}>· темніше = більше · клік — операції</span></div>
+          <div className="deep-title">{t("stats.patterns.byDom")} <span className="label" style={{ fontWeight: 400 }}>{t("stats.patterns.byDomSub")}</span></div>
           <div className="dom-heat">
             {byDom.map((v, i) => {
               const intensity = v > 0 ? 0.15 + 0.85 * (v / domMax) : 0;
               const dom = i + 1;
               return (
-                <HoverTip key={i} content={<><div className="tip-lbl">{dom}-е число</div><div className="r">{formatMinor(v, { decimals: false })} {sign}</div></>}>
+                <HoverTip key={i} content={<><div className="tip-lbl">{t("stats.patterns.domTip", { dom })}</div><div className="r">{formatMinor(v, { decimals: false })} {sign}</div></>}>
                   <button type="button" className={`dom-cell ${openDom === dom ? "open" : ""}`} disabled={!(v > 0)}
                     onClick={() => setOpenDom((o) => (o === dom ? null : dom))}
                     style={{ background: v > 0 ? `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, transparent)` : "var(--surface-2)" }}>
@@ -1060,11 +1088,11 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
           </div>
           {openDom != null && (
             <div className="drill-open-card" style={{ marginTop: 12, padding: 0 }}>
-              <div className="label" style={{ marginBottom: 6 }}>{openDom}-е число місяця — операції за період</div>
+              <div className="label" style={{ marginBottom: 6 }}>{t("stats.patterns.domDrill", { dom: openDom })}</div>
               <SliceDrillPanel dim="dom" value={String(openDom)} from={from} to={to} currency={currency} sign={sign} embedded />
             </div>
           )}
-          <p className="deep-desc">Дні місяця з найбільшими витратами — часто це оренда, підписки чи регулярні платежі.</p>
+          <p className="deep-desc">{t("stats.patterns.domDesc")}</p>
         </div>
       )}
     </section>
@@ -1074,13 +1102,14 @@ function DeeperAnalytics({ series, sign, from, to, currency }: {
 // §6: смуга частки витрат за вагомістю (обов'язкові / бажані / необов'язкові).
 // §E1/E2/E3: детерміновані патерни витрат цього місяця (без AI).
 function SpendingPatterns() {
+  const t = useT();
   const { data } = useGetPatternsQuery();
   if (!data) return null;
   const { recurring, anomalies, pace } = data;
   const reg = recurring.recurring.spent;
   const one = recurring.oneoff.spent;
   const tot = reg + one;
-  const dfmt = new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short" });
+  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
   const hasAny = tot > 0 || anomalies.length > 0 || pace.length > 0;
   if (!hasAny) return null;
 
@@ -1089,26 +1118,26 @@ function SpendingPatterns() {
       {tot > 0 && (
         <section>
           <div className="section-head">
-            <h2>Разові vs регулярні</h2>
-            <HoverTip content={<>Регулярні — витрати в мерчантів, що повторюються з місяця в місяць (продукти, транспорт, підписки). Разові — все інше (податки, стоматолог, велика покупка). Так видно «нормальний» місяць без викидів. <b>Цей місяць.</b></>}>
-              <span className="label">цей місяць · що це?</span>
+            <h2>{t("stats.recurring.title")}</h2>
+            <HoverTip content={<>{t("stats.recurring.tip")}</>}>
+              <span className="label">{t("stats.recurring.sub")}</span>
             </HoverTip>
           </div>
           <div className="card" style={{ padding: 16 }}>
             <div className="split-bar">
-              {reg > 0 && <span style={{ width: `${(reg / tot) * 100}%`, background: "var(--accent)" }} title={`Регулярні: ${Math.round((reg / tot) * 100)}%`} />}
-              {one > 0 && <span style={{ width: `${(one / tot) * 100}%`, background: "var(--c-teal)" }} title={`Разові: ${Math.round((one / tot) * 100)}%`} />}
+              {reg > 0 && <span style={{ width: `${(reg / tot) * 100}%`, background: "var(--accent)" }} title={t("stats.recurring.titleReg", { pct: Math.round((reg / tot) * 100) })} />}
+              {one > 0 && <span style={{ width: `${(one / tot) * 100}%`, background: "var(--c-teal)" }} title={t("stats.recurring.titleOne", { pct: Math.round((one / tot) * 100) })} />}
             </div>
             <div className="imp-legend">
-              <span className="lg"><span className="d" style={{ background: "var(--accent)" }} />Регулярні · <b>{formatMinor(reg, { decimals: false })} ₴</b> <span className="muted">({recurring.recurring.n} оп)</span></span>
-              <span className="lg"><span className="d" style={{ background: "var(--c-teal)" }} />Разові · <b>{formatMinor(one, { decimals: false })} ₴</b> <span className="muted">({recurring.oneoff.n} оп)</span></span>
+              <span className="lg"><span className="d" style={{ background: "var(--accent)" }} />{t("stats.recurring.regularLabel")} · <b>{formatMinor(reg, { decimals: false })} ₴</b> <span className="muted">({recurring.recurring.n} {t("stats.txCountShort")})</span></span>
+              <span className="lg"><span className="d" style={{ background: "var(--c-teal)" }} />{t("stats.recurring.oneoffLabel")} · <b>{formatMinor(one, { decimals: false })} ₴</b> <span className="muted">({recurring.oneoff.n} {t("stats.txCountShort")})</span></span>
             </div>
             {recurring.oneoff_items.length > 0 && (
               <div className="oneoff-list">
-                <div className="label" style={{ marginBottom: 6 }}>Найбільші разові</div>
+                <div className="label" style={{ marginBottom: 6 }}>{t("stats.recurring.topOneoff")}</div>
                 {recurring.oneoff_items.map((it, i) => (
                   <div key={i} className="oneoff-row">
-                    <span className="oor-name">{it.merchant ?? it.category ?? "операція"}</span>
+                    <span className="oor-name">{it.merchant ?? it.category ?? t("stats.recurring.fallback")}</span>
                     <span className="oor-cat muted">{it.category ?? "—"}</span>
                     <span className="oor-date muted">{dfmt.format(it.time * 1000)}</span>
                     <span className="oor-amt num-mono">{formatMinor(it.amount, { decimals: false })} ₴</span>
@@ -1123,9 +1152,9 @@ function SpendingPatterns() {
       {anomalies.length > 0 && (
         <section>
           <div className="section-head">
-            <h2>Радар аномалій</h2>
-            <HoverTip content={<>Категорії, де <b>регулярний</b> темп цього місяця помітно вищий за звичний (середнє за 6 міс). Разові витрати (податки, лікування) сюди не потрапляють — вони вже сталися й не проєктуються.</>}>
-              <span className="label">що це?</span>
+            <h2>{t("stats.anomaly.title")}</h2>
+            <HoverTip content={<>{t("stats.anomaly.tip")}</>}>
+              <span className="label">{t("common.whatIsThis")}</span>
             </HoverTip>
           </div>
           <div className="card" style={{ padding: 8 }}>
@@ -1135,7 +1164,7 @@ function SpendingPatterns() {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <b>{a.category}</b>
                   <div className="muted" style={{ fontSize: 13 }}>
-                    прогноз ≈{formatMinor(a.projected, { decimals: false })} ₴ проти звичних {formatMinor(a.usual, { decimals: false })} ₴
+                    {t("stats.anomaly.desc", { projected: formatMinor(a.projected, { decimals: false }), usual: formatMinor(a.usual, { decimals: false }) })}
                   </div>
                 </div>
                 {a.pct != null && <span className="cmp-delta up">+{a.pct - 100}%</span>}
@@ -1148,9 +1177,9 @@ function SpendingPatterns() {
       {pace.length > 0 && (
         <section>
           <div className="section-head">
-            <h2>Темп по категоріях</h2>
-            <HoverTip content={<>Скільки вже витрачено цього місяця (факт), прогноз на кінець місяця й твій звичний місяць. Прогноз = вже витрачене + історичний залишок; разові й лумпи (податки, оренда, заправка) не розганяються. Бейдж — прогноз відносно звичного: &lt;100% нижче норми, &gt;100% вище.</>}>
-              <span className="label">факт · прогноз · звичне</span>
+            <h2>{t("stats.pace.title")}</h2>
+            <HoverTip content={<>{t("stats.pace.tip")}</>}>
+              <span className="label">{t("stats.pace.sub")}</span>
             </HoverTip>
           </div>
           <div className="card" style={{ padding: 8 }}>
@@ -1158,7 +1187,7 @@ function SpendingPatterns() {
               <div key={i} className="pace-row">
                 <span className="pace-name">
                   <span className="d" style={{ background: p.color ?? "var(--accent)" }} />{p.category}
-                  {(p.mostly_oneoff || p.lumpy) && <span className="pace-tag" title="Витрата тут — разова або зосереджена в 1-2 великих платежах (податок, оренда, заправка); прогноз її не множить">не щоденне</span>}
+                  {(p.mostly_oneoff || p.lumpy) && <span className="pace-tag" title={t("stats.pace.lumpyTitle")}>{t("stats.pace.lumpyTag")}</span>}
                 </span>
                 <span className="pace-nums num-mono">
                   {formatMinor(p.spent, { decimals: false })} → <b>≈{formatMinor(p.projected, { decimals: false })}</b> ₴
@@ -1180,23 +1209,25 @@ function SpendingPatterns() {
 // категорія з малою сумою, але великим чеком (напр. техніка) інакше губиться в загальному топі.
 // Клієнтський розрахунок із byCategory (канонічні suми/кількості з overview).
 function AvgCheckByCategory({ rows, sign }: { rows: Overview["byCategory"]; sign: string }) {
+  const t = useT();
+  const noCat = t("common.uncategorized");
   const items = rows
     .filter((r) => !isSecondaryCat(r.category_name) && r.n > 0 && r.spent > 0)
-    .map((r, i) => ({ name: r.category_name ?? "без категорії", color: r.color ?? FALLBACK[i % FALLBACK.length], avg: Math.round(r.spent / r.n), n: r.n }))
+    .map((r, i) => ({ name: r.category_name ?? noCat, color: r.color ?? FALLBACK[i % FALLBACK.length], avg: Math.round(r.spent / r.n), n: r.n }))
     .sort((a, b) => b.avg - a.avg)
     .slice(0, 8);
   if (items.length < 2) return null;
   const max = Math.max(...items.map((x) => x.avg), 1);
   return (
     <section>
-      <div className="section-head"><h2>Середній чек по категоріях</h2><InfoTip>Середня сума однієї операції в категорії: витрати ÷ кількість операцій. Показує, де окремі покупки найдорожчі (не плутати з часткою в бюджеті).</InfoTip><span className="label">сума / кількість</span></div>
+      <div className="section-head"><h2>{t("stats.avgCheck.title")}</h2><InfoTip>{t("stats.avgCheck.tip")}</InfoTip><span className="label">{t("stats.avgCheck.sub")}</span></div>
       <div className="card flush"><div className="catbars">
         {items.map((it, i) => (
           <div key={i} className="catbar">
             <span className="cb-name"><span className="d" style={{ background: it.color }} />{it.name}</span>
             <span className="cb-track"><span className="cb-fill" style={{ width: `${(it.avg / max) * 100}%`, background: it.color }} /></span>
             <span className="cb-val">{formatMinor(it.avg, { decimals: false })} {sign}</span>
-            <span className="cb-pct">{it.n} оп.</span>
+            <span className="cb-pct">{t("stats.avgCheck.nTx", { n: it.n })}</span>
           </div>
         ))}
       </div></div>
@@ -1209,15 +1240,16 @@ function AvgCheckByCategory({ rows, sign }: { rows: Overview["byCategory"]; sign
 function TopSpendDays({ series, sign, from, to, currency }: {
   series: Overview["series"]; sign: string; from: number; to: number; currency: Cur;
 }) {
+  const t = useT();
   const [open, setOpen] = useState<string | null>(null);
   const daily = series.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket) && s.spend > 0);
   if (daily.length < 3) return null;
   const top = [...daily].sort((a, b) => b.spend - a.spend).slice(0, 5);
   const max = top[0]?.spend || 1;
-  const dfmt = new Intl.DateTimeFormat("uk-UA", { weekday: "short", day: "numeric", month: "short" });
+  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short", day: "numeric", month: "short" });
   return (
     <section>
-      <div className="section-head"><h2>Найдорожчі дні</h2><span className="label">клік — операції за день</span></div>
+      <div className="section-head"><h2>{t("stats.topDays.title")}</h2><span className="label">{t("stats.topDays.sub")}</span></div>
       <div className="card flush"><div className="catbars">
         {top.map((s) => {
           const isOpen = open === s.bucket;
@@ -1239,6 +1271,7 @@ function TopSpendDays({ series, sign, from, to, currency }: {
 }
 
 function ImportanceBreakdown({ data, sign, from, to, currency }: { data: Overview; sign: string; from: number; to: number; currency: Cur }) {
+  const t = useT();
   const rows = data.byImportance ?? [];
   const total = rows.reduce((s, r) => s + Math.abs(r.spent), 0);
   const [open, setOpen] = useState<Importance | null>(null);
@@ -1247,9 +1280,9 @@ function ImportanceBreakdown({ data, sign, from, to, currency }: { data: Overvie
   return (
     <section>
       <div className="section-head">
-        <h2>Вагомість витрат</h2>
-        <HoverTip content={<>Скільки з витрат — <b>обов'язкові</b> (не поріжеш), <b>бажані</b> (гнучкі) чи <b>необов'язкові</b> (можна не робити). Задається на категорії, операція може перевизначати. Клікни блок — побачиш ці операції.</>}>
-          <span className="label">що це?</span>
+        <h2>{t("stats.importance.title")}</h2>
+        <HoverTip content={<>{t("stats.importance.tip")}</>}>
+          <span className="label">{t("stats.importance.sub")}</span>
         </HoverTip>
       </div>
       <div className="card" style={{ padding: 18 }}>
@@ -1259,7 +1292,7 @@ function ImportanceBreakdown({ data, sign, from, to, currency }: { data: Overvie
             if (!v) return null;
             const pct = Math.round((v / total) * 100);
             return (
-              <span key={lv} style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }} title={`${IMPORTANCE_META[lv].label}: ${pct}%`}>
+              <span key={lv} style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }} title={`${t(IMPORTANCE_META[lv].labelKey)}: ${pct}%`}>
                 {pct >= 8 && <span className="imp-seg-lbl">{pct}%</span>}
               </span>
             );
@@ -1272,16 +1305,16 @@ function ImportanceBreakdown({ data, sign, from, to, currency }: { data: Overvie
             return (
               <button type="button" key={lv} className={`imp-card fact-click ${open === lv ? "open" : ""}`}
                 disabled={!v} onClick={() => setOpen((o) => (o === lv ? null : lv))}>
-                <span className="imp-card-top"><span className="d" style={{ background: IMPORTANCE_META[lv].color }} />{IMPORTANCE_META[lv].label} ›</span>
+                <span className="imp-card-top"><span className="d" style={{ background: IMPORTANCE_META[lv].color }} />{t(IMPORTANCE_META[lv].labelKey)} ›</span>
                 <span className="imp-card-amt num-hero">{formatMinor(v, { decimals: false })} {sign}</span>
-                <span className="imp-card-pct muted">{pct}% витрат</span>
+                <span className="imp-card-pct muted">{pct}{t("stats.importance.ofSpend")}</span>
               </button>
             );
           })}
         </div>
         {open && byLevel(open) > 0 && (
           <div className="drill-open-card" style={{ marginTop: 12 }}>
-            <div className="label" style={{ marginBottom: 6 }}>{IMPORTANCE_META[open].label} — операції за період</div>
+            <div className="label" style={{ marginBottom: 6 }}>{t("stats.importance.drill", { label: t(IMPORTANCE_META[open].labelKey) })}</div>
             <SliceDrillPanel dim="importance" value={open} from={from} to={to} currency={currency} sign={sign} embedded />
           </div>
         )}
@@ -1304,6 +1337,7 @@ function FactLabel({ children, info }: { children: ReactNode; info?: ReactNode }
 function StatKpiInner({ title, minor, prev, sign, goodWhenUp, tone, info }: {
   title: string; minor: number; prev?: number; sign: string; goodWhenUp?: boolean; tone?: "pos" | "neg"; info?: ReactNode;
 }) {
+  const t = useT();
   let deltaPct: number | null = null;
   if (prev != null && prev > 0) deltaPct = ((minor - prev) / prev) * 100;
   const up = (deltaPct ?? 0) >= 0;
@@ -1320,10 +1354,10 @@ function StatKpiInner({ title, minor, prev, sign, goodWhenUp, tone, info }: {
       {deltaPct !== null ? (
         <div className="kpi-foot">
           <span className={`delta ${good ? "up" : "down"}`}>{up ? "↑" : "↓"} {Math.abs(deltaPct).toFixed(1)}%</span>
-          <span>vs минулий</span>
+          <span>{t("stats.kpi.vsPrev")}</span>
         </div>
       ) : (
-        <div className="kpi-foot"><span>за період</span></div>
+        <div className="kpi-foot"><span>{t("stats.kpi.forPeriod")}</span></div>
       )}
     </>
   );

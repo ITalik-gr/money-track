@@ -1,15 +1,18 @@
 import { AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
+import { useT } from "../i18n/index.ts";
 
 // §1: кумулятивний потік (running balance) — накопичена чиста різниця (надходження − витрати)
 // по днях періоду. Показує траєкторію: пішов період у плюс чи в мінус і коли.
 // proj — прогноз-лінія (пунктир) на решту періоду за поточним середнім темпом.
 export interface CumRow { label: string; cum: number | null; proj?: number | null }
 
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
+const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CumTooltip({ active, payload, label, sign }: any) {
+  const t = useT();
   if (!active || !payload?.length) return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cum = payload.find((e: any) => e.dataKey === "cum" && e.value != null);
@@ -20,16 +23,17 @@ function CumTooltip({ active, payload, label, sign }: any) {
   const v = e.value as number;
   return (
     <div className="chart-tip">
-      <div className="tip-lbl">{label}{proj && !cum ? " · прогноз" : ""}</div>
+      <div className="tip-lbl">{label}{proj && !cum ? t("cum.forecastSuffix") : ""}</div>
       <div className="r" style={{ color: v >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
-        {proj && !cum ? "Прогноз" : "Накопичено"}: {v >= 0 ? "+" : "−"}{fmt0.format(Math.abs(v))} {sign}
+        {proj && !cum ? t("cum.forecastLabel") : t("cum.accumulatedLabel")}: {v >= 0 ? "+" : "−"}{fmt0.format(Math.abs(v))} {sign}
       </div>
     </div>
   );
 }
 
 export function CumulativeChart({ rows, sign, height = 220 }: { rows: CumRow[]; sign: string; height?: number }) {
-  if (rows.length < 2) return <div className="empty">Замало даних для графіка</div>;
+  const t = useT();
+  if (rows.length < 2) return <div className="empty">{t("cum.emptyData")}</div>;
   const actual = rows.filter((r) => r.cum != null).map((r) => r.cum as number);
   const last = actual[actual.length - 1] ?? 0;
   const stroke = last >= 0 ? "var(--chart-income)" : "var(--chart-expense)";

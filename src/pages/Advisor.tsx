@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
+import { useT } from "../i18n/index.ts";
 import { Link, useSearchParams } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
@@ -31,10 +33,11 @@ import { errText } from "../lib/errors.ts";
 
 // AI-порадник: числа (runway) + структуровані поради + інтерактивне «запитай/опиши».
 // Профіль «про мене» редагується лише в Налаштуваннях — AI його й так знає в усіх викликах.
-const TABS = { advice: "Поради", state: "Стан фінансів" } as const;
+const TABS = { advice: "adv.tabAdvice", state: "adv.tabState" } as const;
 type AdvTab = keyof typeof TABS;
 
 export function Advisor() {
+  const t = useT();
   const { data: stored } = useGetAdviceQuery();
   const [generate, { isLoading: generating }] = useGenerateAdviceMutation();
   const [genError, setGenError] = useState<string | null>(null);
@@ -53,12 +56,12 @@ export function Advisor() {
       // Сервер міг віддати детермінований fallback замість AI — тоді показуємо його
       // (а не стару збережену пораду) і чесно кажемо чому.
       setFallback(res.fallback ? res : null);
-      if (res.fallback) toast.info("AI недоступний — показуємо підсумок на числах");
+      if (res.fallback) toast.info(t("adv.fallbackToast"));
     } catch (e) {
       const raw = errText(e);
       const friendly = raw.includes("not set")
-        ? "AI-ключ не налаштовано на цьому середовищі."
-        : `Не вдалося отримати поради: ${raw}`;
+        ? t("adv.keyMissing")
+        : t("adv.genFailed", { error: raw });
       setGenError(friendly);
       toast.error(friendly);
     }
@@ -71,17 +74,17 @@ export function Advisor() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Порадник</div>
-          <div className="sub">AI дивиться на твої числа й радить конкретні кроки під твою ситуацію.</div>
+          <div className="greet">{t("nav.advisor")}</div>
+          <div className="sub">{t("adv.sub")}</div>
         </div>
         <div className="page-head-actions">
-          <Link to="/chat" className="btn ghost">Запитати в чаті →</Link>
+          <Link to="/chat" className="btn ghost">{t("adv.chatLink")} →</Link>
           {/* Головна дія сторінки — у шапці, а не всередині секції порад: там її не було видно
               (фідбек користувача). З вкладки «Стан фінансів» перекидає на «Поради», бо саме
               там з'явиться результат. */}
           <button className="btn primary" onClick={() => { setTab("advice"); void runAdvice(); }} disabled={generating}>
             <Icon name="spark" size={15} />
-            {generating ? "Аналізую…" : advice ? "Оновити поради" : "Отримати поради"}
+            {generating ? t("adv.analyzing") : advice ? t("adv.refresh") : t("adv.getAdvice")}
           </button>
         </div>
       </div>
@@ -89,7 +92,7 @@ export function Advisor() {
       <div className="stat-tabs" role="tablist">
         {(Object.keys(TABS) as AdvTab[]).map((k) => (
           <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>
-            {TABS[k]}
+            {t(TABS[k])}
           </button>
         ))}
       </div>
@@ -111,23 +114,23 @@ export function Advisor() {
             <Gauge
               ratio={months != null ? Math.max(0, months) / 12 : 0}
               center={months != null ? String(Math.max(0, months)) : "—"}
-              sub={months != null ? "місяців" : "нема даних"}
+              sub={months != null ? t("adv.months") : t("adv.noData")}
               tone={tone}
             />
             <div className="runway-metrics situation-metrics">
-              <Metric label="Реальна подушка" v={<Money minor={advice.cushion} decimals={false} />} tone="pos"
-                info="Скільки реально є: заощадження й плюсові рахунки (у ₴, USD зведено за курсом). Це не нетто — борг по кредитці рахується окремо." />
+              <Metric label={t("adv.realCushion")} v={<Money minor={advice.cushion} decimals={false} />} tone="pos"
+                info={t("adv.realCushionInfo")} />
               {advice.debt > 0 && (
-                <Metric label="Борг по кредитці" v={<Money minor={advice.debt} decimals={false} />} tone="neg"
-                  info="Використаний кредитний ліміт. Це борг, а не «мінус запас» — не змішується з подушкою." />
+                <Metric label={t("adv.creditDebt")} v={<Money minor={advice.debt} decimals={false} />} tone="neg"
+                  info={t("adv.creditDebtInfo")} />
               )}
               {advice.investment != null && advice.investment > 0 && (
-                <Metric label="Інвест-резерв" v={<Money minor={advice.investment} decimals={false} />}
-                  info="Крипта/брокер та інші інвестиційні рахунки. Це не ліквідна подушка й не входить у runway — остання лінія на крайній випадок." />
+                <Metric label={t("adv.investReserve")} v={<Money minor={advice.investment} decimals={false} />}
+                  info={t("adv.investReserveInfo")} />
               )}
-              <Metric label="Витрати / міс" v={<Money minor={advice.monthly_burn} decimals={false} />} />
-              <Metric label="Подушки вистачить на" v={months != null ? `${Math.max(0, months)} міс` : "—"} tone={tone}
-                info="Ліквідна подушка ÷ середні місячні витрати. Скільки протягнеш на реальні кошти за поточного темпу." />
+              <Metric label={t("adv.burnPerMonth")} v={<Money minor={advice.monthly_burn} decimals={false} />} />
+              <Metric label={t("adv.cushionLasts")} v={months != null ? t("adv.monthsShort", { n: Math.max(0, months) }) : "—"} tone={tone}
+                info={t("adv.cushionLastsInfo")} />
             </div>
             {advice.runway_comment && <p className="runway-comment" style={{ gridColumn: "1 / -1" }}>{highlightAmounts(advice.runway_comment)}</p>}
           </div>
@@ -140,7 +143,7 @@ export function Advisor() {
           <section className="advisor-main">
             {/* Кнопку генерації прибрано звідси — вона тепер у шапці сторінки (одна дія, одне місце). */}
             <div className="section-head">
-              <h2>Поради на твоїх числах</h2>
+              <h2>{t("adv.adviceOnNumbers")}</h2>
             </div>
 
             {advice?.suggestions?.length ? (
@@ -151,9 +154,9 @@ export function Advisor() {
                   <div className="fb-note" role="status">
                     <Icon name="info" size={15} />
                     <div>
-                      <b>Без AI — підсумок на твоїх числах.</b>
+                      <b>{t("adv.noAiTitle")}</b>
                       {advice.fallback_reason ? ` ${advice.fallback_reason}` : ""}
-                      {" "}Цифри канонічні, але формулювання простіші, ніж у повного розбору.
+                      {" "}{t("adv.noAiSuffix")}
                     </div>
                   </div>
                 )}
@@ -171,15 +174,15 @@ export function Advisor() {
                 ))}
                 <div className="row" style={{ justifyContent: "space-between", marginTop: 2 }}>
                   <span className="label">
-                    станом на {new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format((advice?.generated_at ?? 0) * 1000)}
+                    {t("adv.asOf", { when: new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format((advice?.generated_at ?? 0) * 1000) })}
                   </span>
                   <UsageCost usage={advice?.usage} />
                 </div>
               </div>
             ) : genError ? (
-              <div className="card empty">{genError} <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={runAdvice} disabled={generating}>Ще раз</button></div>
+              <div className="card empty">{genError} <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={runAdvice} disabled={generating}>{t("adv.retry")}</button></div>
             ) : (
-              <div className="card empty">Натисни «Отримати поради» вгорі — AI врахує твої числа, цілі й профіль із Налаштувань.</div>
+              <div className="card empty">{t("adv.emptyPrompt")}</div>
             )}
           </section>
 
@@ -203,9 +206,10 @@ export function Advisor() {
 // Дельта-пілюля: зміна метрики vs минулого разу. `goodUp` — чи «більше = краще»
 // (runway/подушка так; burn навпаки — менше краще). Гроші показуємо у ₴.
 function DeltaPill({ cur, prev, goodUp, money, unit }: { cur: number | null; prev: number | null; goodUp: boolean; money?: boolean; unit?: string }) {
+  const t = useT();
   if (cur == null || prev == null) return null;
   const diff = cur - prev;
-  if (Math.abs(diff) < (money ? 100 : 0.05)) return <span className="cmp-delta flat">без змін</span>;
+  if (Math.abs(diff) < (money ? 100 : 0.05)) return <span className="cmp-delta flat">{t("adv.noChange")}</span>;
   const good = goodUp ? diff > 0 : diff < 0;
   const abs = money ? `${formatMinor(Math.abs(diff), { decimals: false })} ₴` : `${Math.abs(Math.round(diff * 10) / 10)}${unit ?? ""}`;
   return <span className={`cmp-delta ${good ? "down" : "up"}`}>{diff > 0 ? "+" : "−"}{abs}</span>;
@@ -213,26 +217,28 @@ function DeltaPill({ cur, prev, goodUp, money, unit }: { cur: number | null; pre
 
 // §+1: «зміни від минулого разу» — порівняння поточної поради з попереднім знімком історії.
 function SinceLastTime({ advice }: { advice: Advice }) {
+  const t = useT();
   const { data: hist } = useGetAdviceHistoryQuery();
   const prev = (hist ?? []).find((h) => h.generated_at < advice.generated_at);
   if (!prev) return null;
-  const dfmt = new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short" });
+  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
   return (
     <div className="card since-last" style={{ padding: "10px 14px" }}>
-      <span className="label">від {dfmt.format(prev.generated_at * 1000)}:</span>
-      <span className="since-metric">Runway <DeltaPill cur={advice.runway_months} prev={prev.runway_months} goodUp unit="м" /></span>
-      <span className="since-metric">Витрати/міс <DeltaPill cur={advice.monthly_burn} prev={prev.monthly_burn} goodUp={false} money /></span>
-      <span className="since-metric">Подушка <DeltaPill cur={advice.cushion} prev={prev.cushion ?? null} goodUp money /></span>
+      <span className="label">{t("adv.sinceLastFrom", { date: dfmt.format(prev.generated_at * 1000) })}</span>
+      <span className="since-metric">Runway <DeltaPill cur={advice.runway_months} prev={prev.runway_months} goodUp unit={t("adv.monthsAbbr")} /></span>
+      <span className="since-metric">{t("adv.burnPerMonthCompact")} <DeltaPill cur={advice.monthly_burn} prev={prev.monthly_burn} goodUp={false} money /></span>
+      <span className="since-metric">{t("adv.cushionShort")} <DeltaPill cur={advice.cushion} prev={prev.cushion ?? null} goodUp money /></span>
     </div>
   );
 }
 
 // §2/§+1: історія порад — тренд runway + знімки з дельтами; можна очистити.
 function AdviceHistory() {
+  const t = useT();
   const { data: hist } = useGetAdviceHistoryQuery();
   const [clear, { isLoading: clearing }] = useClearAdviceHistoryMutation();
   if (!hist || hist.length < 2) return null;
-  const dfmt = new Intl.DateTimeFormat("uk-UA", { day: "2-digit", month: "short" });
+  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
 
   // Хронологічний ряд для тренду runway (від старих до нових; лише зі значенням).
   const chrono = [...hist].reverse();
@@ -241,20 +247,20 @@ function AdviceHistory() {
     .map((h) => ({ t: h.generated_at, runway: h.runway_months as number, label: dfmt.format(h.generated_at * 1000) }));
 
   async function onClear() {
-    if (!confirm("Очистити всю історію порад?")) return;
-    try { await clear().unwrap(); } catch { toast.error("Не вдалося очистити."); }
+    if (!confirm(t("adv.clearConfirm"))) return;
+    try { await clear().unwrap(); } catch { toast.error(t("adv.clearFailed")); }
   }
 
   return (
     <section>
       <div className="section-head">
-        <h2>Історія порад</h2>
-        <button className="btn ghost sm" onClick={onClear} disabled={clearing}>Очистити</button>
+        <h2>{t("adv.adviceHistory")}</h2>
+        <button className="btn ghost sm" onClick={onClear} disabled={clearing}>{t("adv.clear")}</button>
       </div>
 
       {runwayPts.length >= 2 && (
         <div className="card" style={{ padding: "12px 8px 4px", marginBottom: 10 }}>
-          <span className="label" style={{ padding: "0 8px" }}>Runway, місяців</span>
+          <span className="label" style={{ padding: "0 8px" }}>{t("adv.runwayChartLabel")}</span>
           <div className="chart-wrap" style={{ height: 130 }}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={runwayPts} margin={{ top: 10, right: 10, left: -18, bottom: 0 }}>
@@ -266,7 +272,7 @@ function AdviceHistory() {
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   content={(props: any) => {
                     const p = props?.active && props?.payload?.[0]?.payload;
-                    return p ? <div className="chart-tip"><div className="tip-lbl">{p.label}</div><div className="r"><span className="d" style={{ background: "var(--accent)" }} />{p.runway} міс</div></div> : null;
+                    return p ? <div className="chart-tip"><div className="tip-lbl">{p.label}</div><div className="r"><span className="d" style={{ background: "var(--accent)" }} />{p.runway} {t("adv.monthsUnit")}</div></div> : null;
                   }}
                 />
                 <Line type="monotone" dataKey="runway" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round" dot={{ r: 2.5 }} activeDot={{ r: 3.5 }} {...CHART_ANIM} />
@@ -285,9 +291,9 @@ function AdviceHistory() {
               <span className="adv-hist-sum">{h.summary || "—"}</span>
               <span className="adv-hist-nums">
                 {h.runway_months != null && (
-                  <>runway <b>{h.runway_months}м</b> {prev && <DeltaPill cur={h.runway_months} prev={prev.runway_months} goodUp unit="м" />} · </>
+                  <>runway <b>{h.runway_months}{t("adv.monthsAbbr")}</b> {prev && <DeltaPill cur={h.runway_months} prev={prev.runway_months} goodUp unit={t("adv.monthsAbbr")} />} · </>
                 )}
-                burn <b><Money minor={h.monthly_burn} decimals={false} /></b>/міс {prev && <DeltaPill cur={h.monthly_burn} prev={prev.monthly_burn} goodUp={false} money />}
+                burn <b><Money minor={h.monthly_burn} decimals={false} /></b>{t("adv.burnUnit")} {prev && <DeltaPill cur={h.monthly_burn} prev={prev.monthly_burn} goodUp={false} money />}
               </span>
             </div>
           );
@@ -299,6 +305,7 @@ function AdviceHistory() {
 
 // Дієва порада: створити конверт-ліміт прямо з поради (§дієві поради).
 function AdviceActionButton({ action }: { action: AdviceAction }) {
+  const t = useT();
   const [setBudget, { isLoading }] = useSetBudgetMutation();
   const [done, setDone] = useState(false);
   if (!action.category_id || !action.amount_uah) return null;
@@ -311,7 +318,7 @@ function AdviceActionButton({ action }: { action: AdviceAction }) {
         setDone(true);
       }}
     >
-      {done ? "✓ Конверт створено" : (action.label || "Створити конверт")}
+      {done ? t("adv.envelopeCreated") : (action.label || t("adv.createEnvelope"))}
     </button>
   );
 }

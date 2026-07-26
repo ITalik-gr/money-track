@@ -1,10 +1,12 @@
 import { useGetPriceDriftQuery } from "../store/api.ts";
 import { formatMinor } from "../lib/format.ts";
 import { HoverTip } from "./HoverTip.tsx";
+import { useT } from "../i18n/index.ts";
 
 // §E4: дрейф цін / персональна інфляція — як змінилась юніт-ціна позицій із чеків у часі.
 // Ховається, якщо ще нема достатньо історії чеків. Індекс кошика — медіана змін.
 export function PriceDrift() {
+  const t = useT();
   const { data } = useGetPriceDriftQuery();
   if (!data || data.tracked === 0) return null;
   const basket = data.basket_change_pct;
@@ -12,19 +14,19 @@ export function PriceDrift() {
   return (
     <section>
       <div className="section-head">
-        <h2>Дрейф цін</h2>
-        <HoverTip content={<>Як змінилась ціна за одиницю товару в твоїх чеках (рання половина покупок проти пізньої). Індекс кошика — медіана змін по всіх відстежених позиціях за ~6 міс. Твоя персональна інфляція.</>}>
-          <span className="label">персональна інфляція · що це?</span>
+        <h2>{t("pd.title")}</h2>
+        <HoverTip content={<>{t("pd.tip")}</>}>
+          <span className="label">{t("pd.subtitle")}</span>
         </HoverTip>
       </div>
       <div className="card" style={{ padding: 16 }}>
         {basket != null && (
           <div className="drift-index">
-            <span className="label">Індекс кошика (~6 міс)</span>
+            <span className="label">{t("pd.basketIndexLabel")}</span>
             <span className={`drift-index-val num-hero ${basket > 0 ? "neg" : basket < 0 ? "pos" : ""}`}>
               {basket > 0 ? "+" : ""}{basket}%
             </span>
-            <span className="muted" style={{ fontSize: 12 }}>по {data.tracked} позиц.</span>
+            <span className="muted" style={{ fontSize: 12 }}>{t("pd.trackedCount", { n: data.tracked })}</span>
           </div>
         )}
         {data.items.length > 0 ? (
@@ -43,7 +45,7 @@ export function PriceDrift() {
           </div>
         ) : (
           <p className="muted" style={{ margin: basket != null ? "10px 0 0" : 0, fontSize: 13 }}>
-            Помітних змін цін поки нема — ціни стабільні.
+            {t("pd.noChanges")}
           </p>
         )}
       </div>

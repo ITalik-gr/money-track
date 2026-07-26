@@ -16,60 +16,87 @@
 
 ## 📍 Поточний стан
 
-- **Фаза:** P0 — Платформа (блокер усього).
-- **Зроблено:** ✅ **P0.0** (шим доведено прогоном) · ✅ **P0.1** (directory + Google OAuth +
-  сесія з `userId` + owner-only invite-API) · ✅ **P0.2** (DO, ранер міграцій, ембед, `Env["DB"]`
-  звужено до `AppDb`) · ✅ **P0.3** (уся data-частина виконується ВСЕРЕДИНІ DO) ·
-  ✅ **P0.4** (per-user ключі, зашифровані в DO) ·
-  ✅ **P0.5** (вебхук mono + TG форвардяться в DO) · ✅ **P0.6** (крон-фан-аут, бекфіл на alarm,
-  курси в спільному кеші).
-- **Наступний крок:** **P0.7** — перенос даних власника зі старої D1 у його DO. Це остання
-  картка, що знімає блокер деплою.
-
-### 🛑 НЕ ДЕПЛОЇТИ до завершення P0.7
-
-Записувальні шляхи вже зведені: вебхук mono, TG і крон працюють над **DO юзера** (P0.5/P0.6),
-тож «банк пише в базу, якої ніхто не читає» більше не станеться.
-Лишилось одне: **вся наявна історія власника досі в старій D1 `finance`**, а його DO —
-порожній. Задеплоїти зараз = власник відкриє застосунок і побачить нуль операцій.
-Знімається **P0.7** (одноразовий перенос + звірка контрольних сум).
-- **Чекає ТЕБЕ:** див. чекліст «🧰 Ops-черга» одразу нижче — єдине місце, нічого не блокує код.
+- **Фаза:** ✅ **P0 · P1 · P3 · P4 · P5** — код портфоліо закрито. **✅ ЗАПУЩЕНО В ПРОДІ
+  (2026-07-26):** `https://money-track.vitaliy-50a.workers.dev`. Ops-звірку пройдено:
+  міграції `finance` (до 0034) і `directory` (0001–0003) накочені на remote, D1 `directory`
+  створена (`c72e2571…`), 12 секретів на місці, деплой зроблено.
+  ⏸ Відкладене: P1.3 PrivatBank, P2 level-up-и (Goals/Accounts/Groups).
+- **🔴 Що далі:** `ROADMAP.md §Хвости живого запуску (L1–L8)` — зібрані з живої перевірки.
+  L8 — ops (перенос історії, Google Cloud), решта — код.
+- **⚠️ Порядок роботи (користувач, 2026-07-24):** логін → англійська → демо → README.
+  Level-up-и (P2) і нові банки (P1.3) — ПІСЛЯ портфоліо. Деталі — `PLATFORM.md §9`.
+- **P3.2 — COMPLETE** (перевірено 2026-07-26): локатор дає 27 рядків, усі — свідомо
+  неперекладні матч-ключі/регекси. `I18N_GUIDE.md` видалено як інструкцію завершеної фази;
+  чинне правило «що не перекладати» — у `CLAUDE.md §i18n`.
 
 ---
 
-## 🧰 Ops-черга (робиш ти, коли зручно)
+## 🧰 Ops — зроблено (2026-07-26)
 
-> Код їх не чекає — усе написане проходить `check`+`build` і перевірене локально.
-> Порядок вільний, **крім** блокера деплою на початку.
+Пройдено повністю: `wrangler login` · D1 `directory` створена й прописана в `wrangler.jsonc` ·
+міграції remote (finance до 0034, directory 0001–0003) · секрети `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `SECRETS_MASTER_KEY`, `OWNER_EMAIL` (+ раніші
+`ANTHROPIC_API_KEY`/`MONO_TOKEN`/`WEBHOOK_SECRET`/`APP_PASSWORD`/`TG_*`) · `npm run deploy` ·
+вхід через Google працює.
 
-- [ ] ⚠️ **БЛОКЕР ДЕПЛОЮ (не з цієї фази, висить давно):** накотити міграції **0029 → 0030**
-      на remote (`npm run db:migrate:remote`), саме в цьому порядку. `reimbursed`/
-      `reimburses_total` вшиті в `EFF_AMOUNT`/`SPEND_WHERE`/`INCOME_WHERE`, тож без них
-      remote D1 кине `no such column` і вся Статистика/Порадник/Чат упадуть. Деталі —
-      `CLAUDE.md §Ops`.
-- [ ] **D1 `directory`:** `npx wrangler d1 create directory` → вставити реальний `database_id`
-      у `wrangler.jsonc` (зараз плейсхолдер `…d1e0`) → `npm run db:dir:migrate:remote`.
-- [ ] **Google Cloud Console:** проєкт → OAuth consent screen → credentials → OAuth client
-      **Web application**. Authorized redirect URI: `https://<worker-домен>/auth/google/callback`
-      (локально ще `http://127.0.0.1:8799/auth/google/callback`).
-- [ ] **Секрети** (`npx wrangler secret put <NAME>`): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-      `SESSION_SECRET` (будь-який довгий рандом), `OWNER_EMAIL`.
-      ⚠️ **`OWNER_EMAIL` = пошта твого Google-акаунта.** Не збігається — перший вхід через
-      Google скаже «not_invited», а вся історія лишиться під owner-id.
-- [ ] **Секрет `SECRETS_MASTER_KEY`** (P0.4, шифрує ключі юзерів at-rest):
-      `npx wrangler secret put SECRETS_MASTER_KEY` — значення `openssl rand -hex 32`.
-      ⚠️ Втратиш його — збережені mono/Anthropic ключі стануть нечитабельними (їх треба буде
-      ввести заново). Ротація ключа = те саме. Локальний уже дописано в `.dev.vars`.
-- [ ] **Міграція directory 0002** (`shared_state` — спільний кеш курсів):
-      `npm run db:dir:migrate:remote` накотить обидві разом.
-- [ ] **Після деплою — перереєструвати вебхук monobank** (Налаштування → «Зареєструвати
-      вебхук»): URL став per-user і підписаним. Старий URL продовжить працювати, тож це не
-      терміново, але поки не натиснеш — події їдуть старим шляхом.
-- [ ] Ті самі значення в `.dev.vars` для локальної перевірки (шаблон — `.dev.vars.example`).
-- [ ] Після налаштування: зайти через Google, звірити `/api/me` (має віддати твою пошту й
-      `is_owner: true`), тоді запросити когось: `POST /api/admin/users/invite {"email": "…"}`.
+**Лишилось у користувача — `ROADMAP.md §L8`:** перенос історії (`POST /api/admin/import-legacy`),
+redirect URI + Test users у Google Cloud, перереєстрація вебхука monobank (Налаштування →
+«Зареєструвати вебхук») — URL став per-user і підписаним.
 
-**Green-бар:** `npm run check` + `npm run build` зелені станом на 2026-07-24.
+**Green-бар:** `npm run check` + `npm run build` зелені станом на 2026-07-26.
+
+### 2026-07-26 — ЗАПУСК У ПРОДІ + хвости живої перевірки
+
+**Ops пройдено:** D1 `directory` створена, міграції remote (finance→0034, directory 0001–0003),
+секрети, деплой. Застосунок живий.
+
+**Полагоджено за живим фідбеком (усе задеплоєно):**
+- 🔴 **Статика перекривала воркер.** `assets.not_found_handling: "single-page-application"` без
+  `run_worker_first`: роутер статики Cloudflare відповідає на **навігаційні** GET сам і воркер не
+  будить. `<a href="/demo">` і `/auth/google/start` отримували `index.html`, React Router малював
+  404. **Оманливо:** `fetch` (POST `/api/login`) працював, тож читалось як «Google зламався».
+- 🔴 **Service worker глушив те саме, але в браузері.** `navigateFallbackDenylist` не містив
+  `/auth` і `/demo`. Полагодив двічі списком — повернулось. **Рішення: `navigateFallback: null`** —
+  SW більше не відповідає на навігації взагалі, клас бага зник разом із фолбеком. Ціна: нема
+  офлайн-глибоких посилань (застосунок і так онлайн-only). **Урок:** `curl` цей шар не бачить,
+  тож перевірка роуту курлом нічого про нього не доводить.
+- 🔴 **Чат: розмови не були прив'язані до акаунта.** Глобальний ключ `localStorage` `mt-chats` →
+  демо в тому ж браузері показувало приватні розмови власника. Тепер `mt-chats:<user_id>`.
+  Сервер тут ні до чого (для чату він stateless) — витік був суто клієнтський.
+- **Розсинхрон мови.** Назви категорій резолвляться на сервері (`catNameSql`), решта — на клієнті;
+  ефект синку був `[]` (вхід паролем не перемонтовує застосунок), а `hasStoredLocale()` взагалі
+  блокував звірку. Звідси «UI українською + категорії англійською» назавжди. Синк тепер
+  двонаправлений і перезапускається на зміну особи; демо — виняток, серверна мова виграє.
+- **Пароль прибрано** (рішення користувача): `POST /api/login` видалено, Google єдиний вхід,
+  кнопка лендінгу веде прямо на `/auth/google/start`. **Пастка, закрита в тому ж коміті:**
+  owner-рядок створювався побічним ефектом парольного входу, тож наївне видалення зробило б
+  чисту інсталяцію неможливою для входу. Бутстрап переїхав у OAuth-callback, спрацьовує рівно
+  для `OWNER_EMAIL`.
+- **AI транслітерував мерчантів** (`SILPO` → «Силпо»): промт enrich цілком українською, а поле
+  було описане як «людська назва» без правил. Додано заборону перекладати/транслітерувати —
+  назва мерчанта є ключем, за яким сходяться alias/консенсус/сторінка мерчанта.
+- **Дрібне:** `{period}` протікав у підзаголовок Статистики; `.lang-seg` зникав на лендінгу
+  (`--surface-2` ≈ `--bg`) — доданий бордер; кнопка «назад» на екрані входу; лендінг тепер
+  каже про два ключі й що дані йдуть до Anthropic.
+
+**Прибирання документів:** видалено `I18N_GUIDE.md` (фаза завершена) і `OPS_TODO.md`
+(відпрацював), а також 7 старих знімків `graphify-out/` (18M→9M). Незроблене зібрано в
+`ROADMAP.md §Хвости живого запуску L1–L8`.
+
+### 2026-07-24 (продовження 4) — P0.7, P1.1, P1.2 + перегляд пріоритетів
+
+- **P0.7 — перенос власника.** `import-legacy.ts` копіює стару D1 у DO **всередині обʼєкта**
+  (він має і шим, і сиру `this.env.DB`) — ні дампів, ні аплоаду. Спершу читає все, потім пише в
+  одному `transactionSync` під `defer_foreign_keys`; `INSERT OR REPLACE` (сід уже є); відмова,
+  якщо в DO вже є tx; `ok` = зійшлись ГРОШІ. Прогнано: 5 tx, −14230, баланси 150000 — точно.
+- **P1.1 — банк-абстракція.** Міграція 0032; `worker/lib/banks/` (provider/mono/manual/csv/index).
+  `provider` бекфілиться з `is_manual`; `setup.ts` ходить через `getProvider("mono")`.
+- **P1.2 — CSV-імпорт.** `banks/csv.ts` + `routes/import.ts` + `CsvImportCard`. Preview/commit
+  роздільно; детект роздільника по заголовку; суми з пробілами/дужками/обома десятковими
+  стилями; дедуп по хешу вмісту; MCC мапиться. Прогнано на реальному форматі виписки.
+- **⚠️ ПЕРЕГЛЯД ПРІОРИТЕТІВ (користувач).** Level-up-и (P2) й реальні нові банки (P1.3) — ПІСЛЯ
+  портфоліо. Зараз: **P3 англійська → P4 демо → P5 README**. Демо після англійської — тверда
+  залежність. P1.3/P2 перенесені в `ROADMAP.md §⏸ Відкладено`.
 
 ### ✅ Закрите питання: як віддати per-user БД без round-trip
 
@@ -124,6 +151,248 @@ _(поповнюється по ходу; кожен пункт — з реал�
 ---
 
 ## 📜 Журнал сесій
+
+### 2026-07-25 (продовження 7) — P2.2 + P2.3 core + OPS_TODO
+
+- **P2.2 Accounts** ✅ — групування карток по ІНСТИТУЦІЇ (`accounts.provider`), не по типу; групи з
+  ₴-підсумком, сорт за величиною; `Account`-тип += `provider`; прапорці картки → per-account.
+- **P2.3 Groups core** ✅ — міграція **0034 `event_planned`** (план-лайн-айтеми, ₴); `/events/:id` віддає
+  `planned`/`planned_total`; `POST/DELETE /events/:id/planned`; `EventPlan` (смуга план↔факт + айтеми +
+  шаблони подорож/проєкт/подія). Відкладено: goal-link (dep P2.1), AI-close-out на плані.
+- **`OPS_TODO.md`** — детальний покроковий чекліст для користувача (що/де взяти/що вставити).
+  ⚠️ **Міграції finance тепер до `0034`** (было 0033) — оновлено в OPS_TODO.
+- check+build зелені; embed 34 міграції.
+
+### 2026-07-25 (продовження 6) — аудит (ізоляція/безпека/стилі/i18n) + прибрано спайк
+
+Прогін на запит користувача. Результат — **чисто, один фікс.**
+- **Ізоляція юзерів (найважливіше):** фізична — усе `/api/*`+`/ingest/*` форвардиться в DO юзера
+  (`toUserDo`), канон рахує в ЙОГО базі, нема `WHERE user_id` і нема доступу до чужого DO (DO не
+  публічно адресується, лише через воркер; `x-mt-user` воркер ПЕРЕЗАПИСУЄ). Демо-namespace `demo:`
+  disjoint. Directory (спільна БД) чіпає лише auth/admin. **Витоку між юзерами нема.**
+- **Безпека:** сесія HMAC (httpOnly/secure/SameSite=Lax); OAuth state/nonce+claims валідуються;
+  per-user ключі AES-GCM, клієнту не вертаються; admin — owner-only ПРОТИ directory (не проти куки,
+  revocable); демо-кука не резолвить реального юзера, а демо-сесія на `/api/admin` → 403 (не owner).
+  Пошук `LIKE` параметризований (`?`-binds). `catNameSql` CASE — з хардкод-словника, не з вводу.
+  **Нема `dangerouslySetInnerHTML`** ніде (React екранує; markdown/citations будують React-елементи).
+- **Стилі:** нові Landing/демо-банер — лише токени (`--warn`/`--accent`/color-mix), нуль хардкод-hex
+  поза `var()`; світла+темна ок. impeccable-хук чисто.
+- **i18n-витоки:** `find-i18n-todo` — 27 збігів, УСІ матч-регекси/власні імена (не UI). Нові рядки
+  через `t()`. Змішування мов нема. (Відомий свідомий виняток: назви категорій у КОНТЕКСТІ AI лишаються
+  uk — AI перекладає при відповіді; пре-беки демо — англ. плейн-текст.)
+- **🔧 Фікс:** прибрано мертвий P0.0-спайк (`routes/spike.ts`, `do/spike-*.ts`, `SPIKE_DB`,
+  DO `query/script/spikeProbe/migrationReport`, `execScript`, роут `/api/__spike`) — зайва
+  автентифікована поверхня + скретч-D1 у портфоліо-репо. check+build зелені.
+
+### 2026-07-25 (продовження 5) — P5.2 лендінг (ПОРТФОЛІО-ФОРВАРД ЗАКРИТО)
+
+`src/pages/Landing.tsx` + гейт `LoggedOut` в `App.tsx` (лендінг замість форми входу; `Login` за кліком
+«Sign in» або коли є `?error=` від OAuth-callback — щоб причина відмови була видна, а не проковтнута
+лендінгом). Лендінг: hero (2 CTA — «Try the demo» `<a href="/demo">` primary + «Sign in»), 3 фіче-картки,
+UA/EN-перемикач, футер. i18n `landing.*` (en+uk parity), CSS `.lp-*`/`.btn.lg` на токенах. `/demo` —
+звичайне посилання (воркер-роут сідає пісочницю й редіректить). check+build зелені.
+**Портфоліо-фаза по КОДУ завершена** (P0→P5). Далі — лише ops/деплой користувача + скріншоти/домен.
+
+### 2026-07-25 (продовження 4) — P5.1 README
+
+`README.md` створено (файлу не було). Англійською, портфоліо-орієнтований. Структура: hero+demo-лінк →
+«What it does» → **«Architecture» з mermaid-діаграмою** (Worker-роутер → forward у DO-на-юзера → shim →
+канон stats.ts + R2; directory-D1; Anthropic; Mono-вебхук) + 3 «чому» (DO замість user_id; forward замість
+RPC-проксі; демо = той самий DO) → **«Built with AI — and kept honest»** (єдине джерело чисел, numbersAreGrounded,
+SQL-лінт, гейт фактів, типізовані i18n-ключі, робочі документи) → стек-таблиця → локальний запуск + green-бар →
+структура проєкту → статус. **Mermaid: тільки `<br/>`, без `\n`/`<`/`&`** (інакше літерали/ламання на GitHub).
+Демо-хост — плейсхолдер. **Хвіст:** реальні скріншоти з `/demo` (користувач) + справжній домен.
+
+### 2026-07-25 (продовження 3) — P4.4 демо-банер (P4 демо ЗАКРИТО)
+
+`DemoBanner` у `Layout.tsx` — слім warn-смуга, sticky `top:0 z25` НАД топбаром (топбар теж sticky top:0,
+тож `.shell.has-demo-banner .topbar{top:34px}` зсуває його). Рендер за `me.demo`. `/me` тепер віддає
+`demo_expires_at` (парситься з exp демо-cookie `demo.<id>.<exp>.<hmac>` у воркері) → банер рахує години.
+Текст i18n `demo.*` (badge/fictional/resets{h}/aiLimited/exit) — «Demo · data is fictional · resets in Nh ·
+AI is limited» + «Exit demo» (logout→`window.location=/`). **Non-dismissable** (нема close-контролу — за
+дизайном). Аватар-чіп demo-aware. Токени `--warn`/`--warn-soft` (світла+темна). `Me` тип += `demo`/
+`demo_expires_at`. check+build зелені. ⏳ live: вигляд на `/demo`.
+
+### 2026-07-25 (продовження 2) — P4.3 AI-ліміти в демо + пре-беки
+
+**Кап AI (`worker/lib/demo.ts`).** `demoAiGate(env)` перед КОЖНИМ fetch до Anthropic (3 точки ai.ts —
+`callHaiku`/`callHaikuMessages`/`callMessagesRaw`, тож 6-ходова tool-розмова = 6 списань, консервативно).
+No-op для реальних. Два рівні: (1) per-session — `app_state.demo_ai_count` у демо-DO (кап 12, локально,
+без гонок бо DO однопотоковий); (2) **глобальний денний** — атомарний
+`INSERT…ON CONFLICT DO UPDATE SET value=CAST(value AS INTEGER)+1 RETURNING value` у directory
+`shared_state` (ключ `demo_ai_<день>`, кап 300). **RETURNING дає число ЦЬОГО виклику одним стейтментом**
+→ конкурентні сандбокси не проскочать стелю. Спільний KV не потрібен (directory `shared_state` уже є з
+0002). IP-кап — покривається глобальним. Вичерпано → `DemoAiLimitError` (текст user-facing через `errText`).
+**Примусово Haiku:** `getTaskModel` → `MODEL_FAST` для демо. **DEMO-ключ:** `UserDO.appEnv` для демо ставить
+`ANTHROPIC_API_KEY=DEMO_ANTHROPIC_KEY??глобальний` + `MONO_TOKEN=""`. Env += `DEMO_ANTHROPIC_KEY?`.
+**Важкі гілки:** демо не в directory users → крон його не будить (репорти/insight); backfill — демо-гілка
+alarm() виходить рано; setup/import/credentials — guard P4.2.
+
+**Пре-беки в датасеті** (генератор + лоадер отримали `notifications`+`ai_reports` у COLUMNS/ORDER/timeFields):
+6 сповіщень (5 детермінованих плейн-title + 1 `kind='ai'`, всі unread → бейдж дзвіночка; свідомо
+`notif_key=null` плейн-англ. текст, щоб не залежати від param-shape шаблонів), 2 `ai_reports` (week+month,
+data_json = валідний `FinancialReport`), `app_state.advisor` (StoredAdvice: runway_comment/summary/4 facts/
+3 suggestions вкл. create_budget-action; funds у МІНОРАХ як `fundsBreakdown`, текст у ₴), `advisor_history`
+(3 точки тренду), 8 `ai_note` на операціях. Insight пропущено (картка має empty-state). Суми у пре-беках —
+англ. текст із ₴ (демо-аудиторія).
+
+**Перевірено:** check+build зелені; лоадер прогнано — **449 стейтментів=449 рядків** (+6 notif +2 report),
+binds примітивні, data_json/advisor JSON парситься. ⏳ live (користувач): реальний кап-хіт + вигляд
+Advisor/Reports/стрічки з пре-беками.
+**НЕ в P4.3:** банер (P4.4).
+
+### 2026-07-25 (продовження) — P4.2 ефемерний демо-DO зроблено
+
+**Вхід/життєвий цикл.** `GET /demo` (worker, поза guard) → `newDemoId()` (random hex) → DO-name
+`demo:<id>` → `stub.seedDemo(now)` → підписана `mt_demo`-cookie (24h) → redirect `/`. Демо-токен —
+окремі `createDemoToken`/`verifyDemoToken` (auth.ts), НЕ сесія: сесія валідить голий hex userId,
+демо-id префіксований — **два простори імен фізично disjoint** (демо-cookie не резолвить реального
+юзера й навпаки). `resolveRequestUser(env,{session,demo})` — сесія виграє; вживається в guard і `/me`.
+**`/me` для демо віддає `{authenticated:true, demo:true, user:{…синтетичний…}}`** (директорі-рядка нема).
+
+**Лоадер `worker/do/demo-load.ts`** (чистий білдер, юніт-тестований проти шима): імпортує
+`dataset.json`, `buildDemoStatements(now)` → `{sql,binds}[]` у FK-БЕЗПЕЧНОМУ порядку (accounts→plans→
+receipts→transactions→splits/reimb→…; категорії вже сідовані міграціями). **Ребейс часу:** shift =
+now − `meta.anchor`, зсуває кожне поле з `meta.timeFields`; `health_history.day` перераховано з `ts`.
+`INSERT OR REPLACE` (ідемпотентно). ⚠️ Потрібен `resolveJsonModule:true` у `tsconfig.worker.json`.
+`UserDO.seedDemo` — ідемпотентний (порожній об'єкт тільки), `db.batch` за один захід, ставить
+`app_state.demo_expires_at` + `setAlarm(+24h)`.
+
+**Прибирання.** `UserDO.alarm()` спершу читає `demo_expires_at`: є → це демо (не backfill, mono нема)
+→ прострочений → `reset()` (wipe+remigrate). **Backstop для evicted-alarm:** directory-міграція
+**0003 `demo_sessions`** (`registerDemoSession`/`listExpiredDemoSessions`/`deleteDemoSession`) +
+добовий крон-sweep (`reset()` DO + видалення рядка). Обидва best-effort try/catch — без таблиці
+лишається alarm-only.
+
+**Guard в ОДНОМУ місці** (`user-app.ts` middleware, isDemo з `env.USER_ID.startsWith("demo:")`):
+блокує НЕ-GET до `/api/{credentials,setup,import,admin}` (зовнішні ефекти/секрети/owner-адмін),
+читання відкриті (демо-Налаштування рендеряться). AI-кап свідомо НЕ тут — P4.3.
+
+**Перевірено:** check+build зелені; лоадер прогнано (439 стейтментів = 439 рядків датасету; найновіша
+tx ≈ −1 день після ребейсу; health day↔ts збіг; нема undefined/непримітивних binds).
+**⏳ Live (користувач):** сам /demo-флоу (потрібен signing key — є APP_PASSWORD/SESSION_SECRET; secure-
+cookie → на localhost http може не ставитись, як і наявний session-cookie).
+**НЕ в P4.2:** пре-беки AI + 3-рівневий кап (P4.3), банер (P4.4).
+
+### 2026-07-25 — P4.1 демо-датасет зроблено
+
+**`scripts/seed-demo.mjs` → `worker/demo/dataset.json`** (детермінований, mulberry32, БЕЗ Date.now/
+Math.random — регенерація байт-ідентична, чистий git-diff).
+- **Обсяг:** 351 tx / 184 дн / 8 рахунків усіх типів / 6 підписок / 2 цілі / 1 подія-з-бюджетом /
+  5 бюджетів / 2 спліти / компенсація v2 (одне надходження → дві витрати) / пара-переказ / рефанд /
+  3 зняття з `real_category_id` / 12 без категорії / 2 receipts+items / 46 точок health / курси /
+  `locale='en'` / finance_profile.
+- **Схема звірена з міграціями** (ключова причина, чому спершу читав schema): `transactions` з усіма
+  ALTER-колонками (is_transfer, event_id, real_category_id, original_*, transfer_pair_id, importance,
+  name_locked, reimbursed, reimburses_total), `accounts` (role/ai_note/credit-terms/provider),
+  `planned_payments.currency_code` (§CUR-PLAN — period_amount у валюті плану), `tx_reimbursements`
+  (v2: expense_id/source_tx_id/amount + денорм `reimbursed`/`reimburses_total`).
+- **Курси:** rates JSON лише для чужих валют (`{"840":41.5,"978":45}`) — 980 хардкоджено в 1 у
+  `toUAHMinor`/`uahMult`. Перевірено формулою (cents×rate = ₴-копійки).
+- **⚠️ Час — АБСОЛЮТНИЙ, anchored `meta.anchor`** (фіксована дата генерації, тому файл стабільний).
+  **Контракт для P4.2 у `meta.timeFields`:** лоадер зсуває кожне поле на `nowAtLoad − anchor` (найновіша
+  tx ≈ сьогодні, 6-міс спарклайни завжди повні). `health_history.day` — деривується з `ts`, перерахувати
+  ПІСЛЯ зсуву. Поки anchor=25.07.2026 (≈сьогодні), тож і без ребейсу датасет когерентний.
+- **Валідація (JS-інваріанти, прогнано):** спліт=сума tx; компенсація ≤ витрати, `reimbursed`/
+  `reimburses_total` збігаються з `tx_reimbursements`; пара опозитна; рефанд є; uncat=12(≥10). Funds:
+  cushion ₴245 550 / debt ₴1 200 / invest ₴273 900 → runway ≈ 7.5 міс (осмислено).
+- **НЕ в P4.1 (свідомо):** пре-беки AI (репорти/порадник/стрічка `kind='ai'`) — це P4.3; лоадер +
+  ефемерний DO + demo-guard — P4.2. Датасет 288K/12k рядків — норм для репо-асета.
+
+### 2026-07-24 (продовження 7) — P3.4 зроблено (P3 англійська ЗАКРИТА)
+
+Рішення користувача перед стартом: категорії — **сервер-резолв**; AI-локаль — **лише user-facing**.
+
+**Категорії — двомовні через сервер-резолв, БЕЗ `name_key`/міграції.**
+- Обидва «канонічні» підходи (name_key-колонка АБО client-reactive) вимагали протягти локаль/ключ
+  через ~40 місць. Обрано простіше й еквівалентне: **резолв keyed по ЗНАЧЕННЮ сідової назви** —
+  чиста функція рядка (сід фіксований, ids 1-47). Юзер-назва не в мапі → проходить як є = §12.4
+  «перейменував → його». Єдина слабкість: перейменування в ТОЧНУ іншу сідову назву (нехтовно).
+- `worker/lib/categories-i18n.ts`: `CAT_EN` (uk-сід → en, 43 записи), `catNameSql(locale, expr)`
+  (інлайн-CASE як `uahMult`; для uk — no-op, повертає expr; для en — `CASE expr WHEN 'Продукти'
+  THEN 'Groceries' … ELSE expr END`), `localizeCatName` (JS), `ownerLocale(db)`.
+- `api` дістав middleware `c.set("locale", ownerLocale)` раз/запит + `Variables:{locale}`. ~15
+  продюсерів обгорнуто: tx-список/деталь (`c.name`/`rc.name`), аналітика (`EFF_CAT_NAME AS
+  category_name`/`AS name` — replace_all), сплити (`cat.name`), теги, budgets/auto, пошук
+  (`c.name`+`p.name AS parent_name`; WHERE-orLike НЕ чіпав — це матч по даних). `/categories` і
+  `oneoff_items` зі stats.ts — пост-локалізація в JS (`localizeCatName`).
+  ⚠️ **Пастка replace_all:** `c.name AS category_name` — підрядок у `rc.name AS category_name`;
+  replace_all зіпсував рядок (`r${…}`), полагоджено вручну. Перевіряти підрядкові збіги.
+- **Клієнт незмінний** (сервер віддає готову назву). Перемикання мови в `i18n/index.ts change()`
+  тепер інвалідує RTK-теги (Tx/Summary/Category/Insight/Advice/Report/Event/Budget/Planned) ПІСЛЯ
+  PUT локалі — інакше refetch перегнав би сервер і взяв стару мову. (i18n→store безпечно, циклу нема.)
+- **Реактивність:** демо стартує в en (усі фетчі вже en); живий тумблер власника → refetch.
+
+**AI-локаль — user-facing.** `replyLangDirective(env)` (ai.ts): no-op для uk; для en — емфатична
+директива «RESPONSE LANGUAGE (overrides Ukrainian wording above): write everything in English,
+keep JSON keys/enums». Додано в `chatAdvice` (у ДИНАМІЧНИЙ блок, не в кеш-стабільну персону —
+prompt-cache не ламається), `generateAdvice`, `budgetChat`, `generateFinancialReport`,
+`generateInsight`, `generateNotifyObservations`. **Enrich/receipt/parse НЕ чіпані** (структурований
+вивід — id, не проза; `numbersAreGrounded` мовонезалежний).
+
+**Свідомо НЕ зроблено:** назви категорій у КОНТЕКСТІ для AI лишаються uk (знімок серверний, не UI);
+модель перекладає при відповіді. EN-версії доків корпусу знань — окремий хвіст.
+
+**Перевірено:** check+build зелені; `catNameSql`/`localizeCatName` прогнано (uk no-op; en CASE
+валідний; `Здоровʼя`→Health підтверджує байт-матч модиф.-апострофа; юзер-назва проходить).
+
+### 2026-07-24 (продовження 6) — P3.2 підтверджено закритим + P3.3 зроблено
+
+**P3.2 (переклад клієнта) — підтверджено COMPLETE** (уже було закрито в `I18N_GUIDE.md §Session end`).
+`node scripts/find-i18n-todo.mjs` (без арга) → 27 збігів, УСІ коректно лишені (матч-регекси
+`brands.tsx`/`merchant.ts`/`highlight.tsx`, категорійні `/переказ|зняття/i`, власне ім'я в `Layout`).
+Жодного реального UI-рядка. check+build зелені.
+
+**P3.3 (локалізація тексту, що лежить у БД — стрічка сповіщень) — зроблено.**
+- **Корінь проблеми:** `notifications.title/body` зберігались готовою УКРАЇНСЬКОЮ фразою → перемикання
+  мови лишало б стрічку українською назавжди (PLATFORM.md §12.3).
+- **`shared/notif-i18n.ts`** (НОВИЙ, чистий модуль) — ЄДИНЕ джерело композиції: `renderNotif(locale,
+  key, params) → {title, body}`. 14 шаблонів. Гроші/дати форматуються В ЛОКАЛІ на рендері (params
+  несуть сирі копійки/unix, не готові рядки) — тож «₴1,234» vs «1 234 ₴» слухається глядача, а не
+  крону. Імпортують ОБИДВА боки: воркер (fallback + TG) і клієнт (стрічка). Це single-source §14.2 —
+  нема другого місця, де число могло б відформатуватись інакше.
+- **`worker/lib/notify.ts`** — 13 детермінованих генераторів пишуть `tkey`+`tparams` замість
+  готового рядка (13-й `deadline` дає два шаблони: `deadline_plan`/`deadline_credit`). `ai` — БЕЗ
+  шаблону (вільний текст моделі, лишається як є). При вставці fallback `title`/`body` рендериться в
+  локалі власника (`app_state.locale`); `INSERT` пише ще `notif_key`/`notif_params`. TG-пуш рендерить
+  у локалі власника на момент відправлення (не на момент створення). `getState(DB,"locale")` — джерело
+  локалі власника серверно.
+- **Міграція 0033** — `notif_key`/`notif_params` (обидві nullable). Старі `title`/`body` НЕ видалені —
+  fallback для legacy-рядків і для `ai`. Мʼяка (не блокер): без неї стрічка показує старий `title`.
+  DO-ембед перегенеровано (`gen-migrations.mjs`, 33 файли).
+- **Клієнт:** `src/store/api.ts` `Notification` += `notif_key`/`notif_params`; `Notifications.tsx`
+  `Row` рендерить через `renderNotif(getLocale(), …)` коли є ключ, інакше стрічку `title`/`body`;
+  `useLocale()` у `Row` дає живий ре-рендер на перемиканні мови.
+- **Перевірено:** check (tsc+SQL-лінт+i18n-лінт+міграції) + build зелені; `renderNotif` прогнано в
+  обох локалях — uk байт-у-байт збігається зі старим текстом, en осмислений.
+- **Свідомо НЕ в скоупі P3.3:** назви категорій/мерчантів у params лишаються мовою, якою їх назвав
+  юзер/банк (це дані, не словник) — сідовані категорії двомовними робить P3.4 (`categories.name_key`).
+
+### 2026-07-24 (продовження 5) — P3.1 i18n-каркас закрито
+
+**Зроблено (каркас, БЕЗ масового перекладу):**
+- **`src/i18n/locale.ts`** — ЄДИНЕ місце, де живуть BCP-47 теги (`localeTag()` віддає `uk-UA`/`en-US`).
+  Модульна `getLocale()`/`setLocale()`, тож не-React format-хелпери (`formatMinor`/`formatDate`/
+  markdown/highlight) лишили СИГНАТУРИ — просто читають поточну локаль. Boot-локаль: явний вибір
+  (`localStorage.mt-locale`) → мова браузера → дефолт `en` (укр. браузер → `uk`, власник лишається укр.).
+- **`src/i18n/index.ts`** — `t()` з типізованими ключами (`keyof typeof en` → `tsc` ловить ключ, якого
+  нема в `en`), `{param}`-інтерполяція, `LocaleProvider`/`useT`/`useLocale`. Провайдер підхоплює
+  серверну локаль ЛИШЕ якщо локального вибору ще нема; зміна — fire-and-forget PUT, UI не блокується.
+- **`src/i18n/{en,uk}.json`** — стартові словники (nav/layout/common, ~34 ключі). Решта — P3.2.
+- **Сервер `/settings/locale`** (GET/PUT у `api.ts`, дзеркалить `/settings/period-mode`) — `app_state.locale`
+  у DO: durable + читабельно серверно для AI/notify (P3.4). Клієнт рендерить із localStorage (миттєво),
+  це лише durable-дзеркало.
+- **`scripts/check-i18n.mjs`** (у `npm run check`): (1) падає на будь-якому хардкоді тега поза
+  `locale.ts`; (2) звіряє парність `en`/`uk`. Перевірка > інструкція (`PLATFORM.md §14.2`).
+- **44 наявних хардкоди `uk-UA` у 25 файлах** переведено на `localeTag(getLocale())` кодмодом
+  (мех. заміна + вставка імпорту) — це крок 3 картки P3.1, не переклад.
+- **Layout:** nav-лейбли через `t()`, сегментний перемикач `UA/EN` у side-foot (`.lang-seg`), `LocaleProvider` у `main.tsx`.
+
+**Перевірено:** `npm run check` (tsc + SQL-лінт + **i18n-лінт** + міграції) і `npm run build` — зелені.
+Перемикач міняє мову без перезавантаження (nav/layout/common + усі числа/дати через локаль-теги).
+
+**Не зроблено свідомо:** масовий переклад UI (~767 рядків / 89 файлів) — P3.2, чекає рішення користувача
+про спосіб (токен-важко). Словники поки лише каркасні.
 
 ### 2026-07-24 — старт фази, P0.0 закрито
 

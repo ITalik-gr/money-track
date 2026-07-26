@@ -3,9 +3,11 @@ import { Link } from "react-router-dom";
 import { useGetBudgetsQuery, useGetByCategoryQuery, useGetCategoriesQuery } from "../store/api.ts";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { Money } from "./Money.tsx";
+import { useT } from "../i18n/index.ts";
 
 // Конверти: кожна бюджетна категорія — кишеня, що спорожняється в міру витрат (§8).
 export function EnvelopeGrid() {
+  const t = useT();
   const from = startOfMonthUnix();
   const to = Math.floor(Date.now() / 1000);
   const { data: budgets } = useGetBudgetsQuery();
@@ -45,7 +47,7 @@ export function EnvelopeGrid() {
   if (!envelopes.length) {
     return (
       <Link to="/plan" className="card empty" style={{ display: "block" }}>
-        Бюджетів ще немає. Постав ліміт категорії у «Бюджетах» →
+        {t("eg.empty")}
       </Link>
     );
   }
@@ -63,9 +65,9 @@ export function EnvelopeGrid() {
             </div>
             <div className="env-bar"><span style={{ transform: `scaleX(${Math.min(e.pct, 100) / 100})`, background: bar }} /></div>
             <div className="env-sub">
-              <span><Money minor={e.spent} decimals={false} /> з <Money minor={e.budget} decimals={false} /></span>
+              <span><Money minor={e.spent} decimals={false} /> {t("common.of")} <Money minor={e.budget} decimals={false} /></span>
               <span className="env-remain">
-                {e.remain >= 0 ? <>ще <Money minor={e.remain} decimals={false} /></> : <>перевищено</>}
+                {e.remain >= 0 ? <>{t("eg.left")} <Money minor={e.remain} decimals={false} /></> : <>{t("eg.exceeded")}</>}
               </span>
             </div>
           </Link>

@@ -1,45 +1,61 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useChatAdviceMutation, useGetTransactionsQuery } from "../store/api.ts";
+import { useChatAdviceMutation, useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { Icon } from "../components/Icon.tsx";
 import { errText } from "../lib/errors.ts";
+import { useT, translate } from "../i18n/index.ts";
+import { getLocale } from "../i18n/locale.ts";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type Attached = { id: string; label: string };
 type Convo = { id: string; title: string; messages: Msg[]; updatedAt: number };
 const sign = (c: number) => (c === 840 ? "$" : c === 978 ? "€" : "₴");
-const STORE_KEY = "mt-chats";
 
-const SUGGESTIONS = [
-  "Проаналізуй мою ситуацію як фінменеджер",
-  "Куди зараз краще спрямувати гроші?",
-  "На чому мені зекономити цього місяця?",
-  "Що платити першим, а що почекає?",
-];
+// Розмови зберігаються ПО АКАУНТУ. Один глобальний ключ `mt-chats` означав, що демо-візит у тому
+// самому браузері бачив приватні розмови власника — сервер тут ні до чого (він stateless і бере
+// лише ходи однієї розмови), витік був суто клієнтський, але виглядав як витік даних акаунта.
+// Демо ділять один скоуп навмисно: пісочниця ефемерна, а її id змінюється щосесії.
+const LEGACY_KEY = "mt-chats";
+const storeKey = (scope: string) => `mt-chats:${scope}`;
+
+const SUGGESTION_KEYS = ["chat.suggest1", "chat.suggest2", "chat.suggest3", "chat.suggest4"] as const;
 
 const newId = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-const emptyConvo = (): Convo => ({ id: newId(), title: "Нова розмова", messages: [], updatedAt: Date.now() });
+const emptyConvo = (): Convo => ({ id: newId(), title: translate(getLocale(), "chat.newConvo"), messages: [], updatedAt: Date.now() });
 
 // Заголовок розмови = перше питання користувача (обрізане), очищене від чипів-операцій.
 function titleFrom(text: string): string {
   const clean = text.replace(/\[tx:[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
-  return clean ? clean.slice(0, 40) : "Нова розмова";
+  return clean ? clean.slice(0, 40) : translate(getLocale(), "chat.newConvo");
 }
 
-function load(): Convo[] {
+function load(scope: string, adoptLegacy: boolean): Convo[] {
   try {
-    const raw = localStorage.getItem(STORE_KEY);
+    const raw = localStorage.getItem(storeKey(scope));
     if (raw) {
       const arr = JSON.parse(raw) as Convo[];
       if (Array.isArray(arr) && arr.length) return arr;
     }
+    // Міграція з доскоупового спільного ключа. Тільки для реального акаунта: віддати ці розмови
+    // демо-візиту означало б відтворити рівно той витік, який скоуп і закриває.
+    if (adoptLegacy) {
+      const shared = localStorage.getItem(LEGACY_KEY);
+      if (shared) {
+        const arr = JSON.parse(shared) as Convo[];
+        if (Array.isArray(arr) && arr.length) {
+          localStorage.setItem(storeKey(scope), shared);
+          localStorage.removeItem(LEGACY_KEY);
+          return arr;
+        }
+      }
+    }
     // Міграція зі старого одиночного чату (`mt-chat`).
-    const legacy = localStorage.getItem("mt-chat");
+    const legacy = adoptLegacy ? localStorage.getItem("mt-chat") : null;
     if (legacy) {
       const msgs = JSON.parse(legacy) as Msg[];
       if (Array.isArray(msgs) && msgs.length) {
         const first = msgs.find((m) => m.role === "user");
-        return [{ id: newId(), title: first ? titleFrom(first.content) : "Розмова", messages: msgs, updatedAt: Date.now() }];
+        return [{ id: newId(), title: first ? titleFrom(first.content) : translate(getLocale(), "chat.convoFallback"), messages: msgs, updatedAt: Date.now() }];
       }
     }
   } catch { /* ignore */ }
@@ -50,8 +66,13 @@ function load(): Convo[] {
 // Кілька розмов у localStorage (сервер stateless — бере останні ходи однієї розмови).
 // Стійка до переходу під час запиту: якщо відповідь не дійшла — «надіслати ще раз».
 export function Chat() {
+  const tr = useT();
   const [chat, { isLoading }] = useChatAdviceMutation();
-  const [convos, setConvos] = useState<Convo[]>(load);
+  const { data: me } = useGetMeQuery();
+  // Скоуп сховища. Демо — свій спільний бакет; реальний акаунт — по id.
+  const scope = me?.demo ? "demo" : (me?.user?.id ?? null);
+  const [convos, setConvos] = useState<Convo[]>(() => [emptyConvo()]);
+  const [loadedScope, setLoadedScope] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string>(() => convos[0]?.id ?? "");
   const [input, setInput] = useState("");
   const [attached, setAttached] = useState<Attached[]>([]);
@@ -72,13 +93,25 @@ export function Chat() {
   const active = useMemo(() => convos.find((c) => c.id === activeId) ?? convos[0], [convos, activeId]);
   const messages = active?.messages ?? [];
 
-  // Персист усіх розмов (обрізаємо історію кожної до 100 повідомлень).
+  // Завантаження розмов чекає на /api/me: до нього ми не знаємо, ЧИЇ розмови читати.
   useEffect(() => {
+    if (!scope || scope === loadedScope) return;
+    const list = load(scope, !me?.demo);
+    setConvos(list);
+    setActiveId(list[0]?.id ?? "");
+    setLoadedScope(scope);
+  }, [scope, loadedScope, me?.demo]);
+
+  // Персист усіх розмов (обрізаємо історію кожної до 100 повідомлень).
+  // Пишемо ЛИШЕ після завантаження скоупу — інакше стартова порожня розмова затерла б
+  // збережену історію в той момент, поки /api/me ще летить.
+  useEffect(() => {
+    if (!loadedScope) return;
     try {
       const trimmed = convos.map((c) => ({ ...c, messages: c.messages.slice(-100) }));
-      localStorage.setItem(STORE_KEY, JSON.stringify(trimmed.slice(0, 40)));
+      localStorage.setItem(storeKey(loadedScope), JSON.stringify(trimmed.slice(0, 40)));
     } catch { /* ignore */ }
-  }, [convos]);
+  }, [convos, loadedScope]);
 
   // Скрол: після надсилання пінимо МОЄ повідомлення вгору в'юпорту (як ChatGPT),
   // щоб бачити питання + початок відповіді; в решті випадків — донизу.
@@ -114,7 +147,7 @@ export function Chat() {
       if (mounted.current) { pinTo.current = "user"; setMessages((m) => [...m, { role: "assistant", content: res.reply }]); }
     } catch (e) {
       // Реальна причина, не глухе «спробуй ще раз» (див. `lib/errors.ts`).
-      const msg = `⚠️ Не вдалося відповісти: ${errText(e)}`;
+      const msg = tr("tx.chatReplyFailed", { error: errText(e) });
       if (mounted.current) { pinTo.current = "bottom"; setMessages((m) => [...m, { role: "assistant", content: msg }]); }
     }
   }
@@ -195,12 +228,12 @@ export function Chat() {
     <div className={`chat-layout ${railOpen ? "rail-open" : ""}`}>
       {/* Рейл розмов */}
       <aside className="chat-rail">
-        <button className="btn primary chat-new" onClick={newChat}><Icon name="plus" size={15} />Нова розмова</button>
+        <button className="btn primary chat-new" onClick={newChat}><Icon name="plus" size={15} />{tr("chat.newConvo")}</button>
         <div className="chat-rail-list">
           {sortedConvos.map((c) => (
             <div key={c.id} className={`chat-rail-item ${c.id === activeId ? "active" : ""}`} onClick={() => openChat(c.id)}>
               <span className="cri-title">{c.title}</span>
-              <button className="cri-del" aria-label="Видалити розмову" title="Видалити"
+              <button className="cri-del" aria-label={tr("chat.deleteConvoAria")} title={tr("common.delete")}
                 onClick={(e) => { e.stopPropagation(); deleteChat(c.id); }}>×</button>
             </div>
           ))}
@@ -211,13 +244,13 @@ export function Chat() {
       {/* Основна колонка */}
       <div className="chat-page">
         <div className="page-head chat-head">
-          <button className="chat-rail-toggle" aria-label="Розмови" onClick={() => setRailOpen(true)}><Icon name="menu" size={18} /></button>
+          <button className="chat-rail-toggle" aria-label={tr("chat.convosAria")} onClick={() => setRailOpen(true)}><Icon name="menu" size={18} /></button>
           <div>
-            <div className="greet">Чат з AI</div>
-            <div className="sub">Особистий фінменеджер — бачить усі твої числа, рахунки, підписки й бюджети.</div>
+            <div className="greet">{tr("chat.title")}</div>
+            <div className="sub">{tr("chat.sub")}</div>
           </div>
           <div className="page-head-actions">
-            <button className="btn ghost sm" onClick={newChat}><Icon name="plus" size={14} />Нова</button>
+            <button className="btn ghost sm" onClick={newChat}><Icon name="plus" size={14} />{tr("chat.newShort")}</button>
           </div>
         </div>
 
@@ -225,10 +258,10 @@ export function Chat() {
           <div className="chat-log2" ref={logRef}>
             {messages.length === 0 ? (
               <div className="chat-empty">
-                <p>Спитай будь-що про свої гроші — відповім на твоїх реальних числах:</p>
+                <p>{tr("chat.emptyPrompt")}</p>
                 <div className="chat-suggest">
-                  {SUGGESTIONS.map((s) => (
-                    <button key={s} className="chat-chip" onClick={() => send(s)}>{s}</button>
+                  {SUGGESTION_KEYS.map((k) => (
+                    <button key={k} className="chat-chip" onClick={() => send(tr(k))}>{tr(k)}</button>
                   ))}
                 </div>
               </div>
@@ -240,11 +273,11 @@ export function Chat() {
                     <div className={`chat-msg ${m.role}`}>{renderMarkdown(m.content)}</div>
                     {m.role === "assistant" && m.content && (
                       <div className="chat-msg-actions">
-                        <button onClick={() => copyMsg(m.content, i)} title="Копіювати">
-                          <Icon name={copiedIdx === i ? "check" : "copy"} size={13} />{copiedIdx === i ? "Скопійовано" : "Копіювати"}
+                        <button onClick={() => copyMsg(m.content, i)} title={tr("tx.copy")}>
+                          <Icon name={copiedIdx === i ? "check" : "copy"} size={13} />{copiedIdx === i ? tr("tx.copied") : tr("tx.copy")}
                         </button>
                         {i === lastAssistantIdx && !isLoading && (
-                          <button onClick={regenerate} title="Перегенерувати"><Icon name="repeat" size={13} />Ще раз</button>
+                          <button onClick={regenerate} title={tr("chat.regenerateTitle")}><Icon name="repeat" size={13} />{tr("chat.regenerateBtn")}</button>
                         )}
                       </div>
                     )}
@@ -256,7 +289,7 @@ export function Chat() {
               <div className="chat-msg assistant chat-typing"><span></span><span></span><span></span></div>
             )}
             {awaitingReply && (
-              <button className="chat-retry" onClick={retry}>Відповідь не дійшла — надіслати ще раз ↻</button>
+              <button className="chat-retry" onClick={retry}>{tr("chat.retryBtn")}</button>
             )}
           </div>
 
@@ -264,38 +297,38 @@ export function Chat() {
             <div className="chat-attach">
               {attached.map((a) => (
                 <span key={a.id} className="tx-chip static">{a.label}
-                  <button className="chip-x" onClick={() => setAttached((p) => p.filter((x) => x.id !== a.id))} aria-label="Прибрати">×</button>
+                  <button className="chip-x" onClick={() => setAttached((p) => p.filter((x) => x.id !== a.id))} aria-label={tr("chat.removeAttachAria")}>×</button>
                 </span>
               ))}
               {pickerOpen && (
                 <div className="chat-picker">
-                  <input autoFocus placeholder="пошук операції для прикріплення…" value={pquery} onChange={(e) => setPquery(e.target.value)} />
+                  <input autoFocus placeholder={tr("chat.attachSearchPlaceholder")} value={pquery} onChange={(e) => setPquery(e.target.value)} />
                   <div className="chat-picker-list">
                     {picks.slice(0, 8).map((t) => (
                       <button key={t.id} className="chat-picker-row"
-                        onClick={() => addAttach({ id: t.id, label: `${(t.merchant || t.comment || "операція").slice(0, 22)} ${Math.round(t.amount / 100)}${sign(t.currency_code)}` })}>
-                        <span className="cp-name">{t.merchant || t.comment || "операція"}</span>
+                        onClick={() => addAttach({ id: t.id, label: `${(t.merchant || t.comment || tr("chat.txFallback")).slice(0, 22)} ${Math.round(t.amount / 100)}${sign(t.currency_code)}` })}>
+                        <span className="cp-name">{t.merchant || t.comment || tr("chat.txFallback")}</span>
                         <span className="cp-amt">{Math.round(t.amount / 100)} {sign(t.currency_code)}</span>
                       </button>
                     ))}
-                    {!picks.length && <div className="muted" style={{ fontSize: 12.5, padding: 8 }}>Нічого не знайдено.</div>}
+                    {!picks.length && <div className="muted" style={{ fontSize: 12.5, padding: 8 }}>{tr("chat.noResults")}</div>}
                   </div>
                 </div>
               )}
             </div>
           )}
           <div className="chat-input">
-            <button className="chat-attach-btn" onClick={() => setPickerOpen((o) => !o)} aria-label="Прикріпити операцію" title="Прикріпити операцію">＋</button>
+            <button className="chat-attach-btn" onClick={() => setPickerOpen((o) => !o)} aria-label={tr("chat.attachTxAria")} title={tr("chat.attachTxAria")}>＋</button>
             <textarea
               ref={taRef}
               rows={1}
               autoFocus
-              placeholder="напр. «куди зараз краще спрямувати гроші?»  (Enter — надіслати, Shift+Enter — новий рядок)"
+              placeholder={tr("chat.inputPlaceholder")}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
             />
-            <button className="btn primary chat-send" onClick={() => send()} disabled={isLoading || !input.trim()} aria-label="Надіслати">➤</button>
+            <button className="btn primary chat-send" onClick={() => send()} disabled={isLoading || !input.trim()} aria-label={tr("tx.chatSend")}>➤</button>
           </div>
         </div>
       </div>

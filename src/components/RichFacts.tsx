@@ -1,11 +1,12 @@
 import { useMemo } from "react";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { useGetCategoriesQuery } from "../store/api.ts";
 import type { AiFact } from "../store/api.ts";
 
 // Стилізований рендер структурованого AI-виводу: headline + факти (суми/категорії/
 // дельти виділені) + порада. Спільний для інсайту й порад (DESIGN.md §7 F6).
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
+const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
 
 export function RichFacts({ headline, facts, note }: { headline?: string; facts?: AiFact[]; note?: string | null }) {
   // Колір категорії тягнемо з реальних категорій за назвою (AI дає лише назву).

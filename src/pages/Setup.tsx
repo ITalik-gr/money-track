@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useT } from "../i18n/index.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { Icon } from "../components/Icon.tsx";
@@ -29,6 +30,7 @@ import { CsvImportCard } from "../components/CsvImportCard.tsx";
 const STEP_INTERVAL_MS = 60_000;
 
 export function Setup() {
+  const t = useT();
   const { data: status } = useGetSetupStatusQuery(undefined, { pollingInterval: 5000 });
   const [syncAccounts, syncState] = useSyncAccountsMutation();
   const [registerWebhook, whState] = useRegisterWebhookMutation();
@@ -66,8 +68,8 @@ export function Setup() {
     <>
       <div className="page-head">
         <div>
-          <div className="greet">Налаштування</div>
-          <div className="sub">Профіль, синхронізація Monobank, AI-моделі та інтеграції.</div>
+          <div className="greet">{t("setup.title")}</div>
+          <div className="sub">{t("setup.sub")}</div>
         </div>
       </div>
 
@@ -80,107 +82,107 @@ export function Setup() {
         <CsvImportCard />
 
         <div className="card set-card">
-          <div className="set-card-h"><Icon name="stats" size={16} />Стан бази</div>
+          <div className="set-card-h"><Icon name="stats" size={16} />{t("setup.dbState")}</div>
           <div className="stack" style={{ marginTop: 12 }}>
-            <Status label="Рахунків у базі" value={status?.accounts ?? "…"} />
-            <Status label="Транзакцій" value={status?.transactions ?? "…"} />
-            <Status label="Вебхук моно" value={status?.webhookRegistered ? "зареєстровано" : "ні"} />
+            <Status label={t("setup.accountsInDb")} value={status?.accounts ?? "…"} />
+            <Status label={t("setup.txCount")} value={status?.transactions ?? "…"} />
+            <Status label={t("setup.webhookStatus")} value={status?.webhookRegistered ? t("setup.registered") : t("setup.notRegistered")} />
           </div>
         </div>
 
         <div className="card set-card">
-          <div className="set-card-h"><Icon name="repeat" size={16} />Перший запуск</div>
-          <p className="set-card-sub">Одноразово, у цьому порядку.</p>
+          <div className="set-card-h"><Icon name="repeat" size={16} />{t("setup.firstRun")}</div>
+          <p className="set-card-sub">{t("setup.firstRunSub")}</p>
           <div className="stack">
             <button className="btn" onClick={() => syncAccounts()} disabled={syncState.isLoading}>
-              1. Підтягнути рахунки та банки з Monobank
+              {t("setup.step1")}
             </button>
             <button className="btn" onClick={() => registerWebhook()} disabled={whState.isLoading}>
-              2. Зареєструвати вебхук (онлайн-оновлення)
+              {t("setup.step2")}
             </button>
             <button className="btn" onClick={runBackfill} disabled={running}>
-              3. Бекфіл за ~90 днів {running && progress ? `— ${progress.progress}/${progress.total}` : ""}
+              {t("setup.step3")} {running && progress ? `— ${progress.progress}/${progress.total}` : ""}
             </button>
             <button className="btn" onClick={() => refreshRates()} disabled={ratesState.isLoading}>
-              Оновити курси валют
+              {t("setup.refreshRates")}
             </button>
           </div>
           {running && (
             <p className="set-card-sub" style={{ marginTop: 10, marginBottom: 0 }}>
-              Бекфіл іде по одному запиту раз на 60 секунд (обмеження Monobank). Можна лишити вкладку відкритою.
+              {t("setup.backfillNote")}
             </p>
           )}
         </div>
 
         <div className="card set-card">
-          <div className="set-card-h"><Icon name="settings" size={16} />Обслуговування</div>
-          <p className="set-card-sub">Періодично, за потреби.</p>
+          <div className="set-card-h"><Icon name="settings" size={16} />{t("setup.maintenance")}</div>
+          <p className="set-card-sub">{t("setup.maintenanceSub")}</p>
           <div className="stack">
             <button
               className="btn"
               disabled={transfersState.isLoading}
               onClick={async () => {
                 const r = await detectTransfers().unwrap();
-                toast.success(`Позначено переказами: ${r.marked}`);
+                toast.success(t("setup.transfersMarked", { n: r.marked }));
               }}
             >
-              Знайти перекази між своїми картками
+              {t("setup.findTransfers")}
             </button>
             <button
               className="btn"
               disabled={subCatsState.isLoading}
               onClick={async () => {
                 const r = await applySubCats().unwrap();
-                toast.success(`Категорію підписки застосовано до ${r.fixed} операцій`);
+                toast.success(t("setup.subCatsApplied", { n: r.fixed }));
               }}
             >
-              Застосувати категорії підписок
+              {t("setup.applySubCats")}
             </button>
           </div>
         </div>
 
         <div className="card set-card">
           <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
-          <p className="set-card-sub">Бот для пушів і швидкого запису.</p>
+          <p className="set-card-sub">{t("setup.telegramSub")}</p>
           <div className="stack">
             <button
               className="btn"
               disabled={tgState.isLoading}
               onClick={async () => {
                 const r = await registerTelegram().unwrap();
-                if (r.error) toast.error(`Помилка: ${r.error}`); else toast.success("Telegram-бот підключено");
+                if (r.error) toast.error(t("setup.tgError", { error: r.error })); else toast.success(t("setup.tgConnected"));
               }}
             >
-              Підключити Telegram-бота
+              {t("setup.connectTg")}
             </button>
             <button
               className="btn"
               disabled={tgPushState.isLoading}
               onClick={async () => {
                 const r = await tgProactive().unwrap();
-                if (r.sent) toast.success("Проактивний пуш надіслано (глянь у Telegram)");
-                else toast.info(`Пуш не надіслано: ${r.reason ?? "TG не налаштовано"}`);
+                if (r.sent) toast.success(t("setup.tgPushSent"));
+                else toast.info(t("setup.tgPushNotSent", { reason: r.reason ?? t("setup.tgNotConfigured") }));
               }}
             >
-              Тест: надіслати підсумок + бюджети в TG
+              {t("setup.tgTestSummary")}
             </button>
             <button
               className="btn"
               disabled={scanState.isLoading}
               onClick={async () => {
                 const r = await scanAlerts().unwrap();
-                if (r.sent > 0) toast.success(`Надіслано алертів: ${r.sent} (глянь у Telegram)`);
-                else toast.info("Вагомих непояснених операцій за 14 днів не знайдено.");
+                if (r.sent > 0) toast.success(t("setup.alertsSent", { n: r.sent }));
+                else toast.info(t("setup.noSignificantTx"));
               }}
             >
-              Тест: сканувати вагомі операції → алерти в TG
+              {t("setup.tgTestScan")}
             </button>
           </div>
         </div>
       </div>
 
       <div className="set-footer">
-        <button className="btn ghost" onClick={() => logout()}>Вийти з акаунта</button>
+        <button className="btn ghost" onClick={() => logout()}>{t("setup.logout")}</button>
       </div>
     </>
   );
@@ -198,6 +200,7 @@ function Status({ label, value }: { label: string; value: string | number }) {
 // §B1: опис «про мене» — щоб AI знав користувача. Використовується в порадах, збагаченні
 // транзакцій, чаті по операції та розумінні підписок (спільний finance_profile).
 function ProfileCard() {
+  const t = useT();
   const { data: profile } = useGetProfileQuery();
   const [saveProfile, { isLoading }] = useSetProfileMutation();
   const [text, setText] = useState("");
@@ -206,22 +209,21 @@ function ProfileCard() {
   return (
     <div className="card ai-block set-full">
       <div className="ai-block-head">
-        <span className="ai-block-title"><Icon name="spark" size={16} />Про мене — щоб AI мене розумів</span>
+        <span className="ai-block-title"><Icon name="spark" size={16} />{t("setup.aboutMeTitle")}</span>
       </div>
       <p className="ai-block-hint">
-        Коротко опиши себе й свою ситуацію: чим займаєшся, дохід/робота, цілі, звички витрат, що для тебе «податки» чи
-        «робочі витрати». AI враховує це <b>всюди</b> — у порадах, розпізнаванні операцій, чаті та підписках.
+        {t("setup.aboutMeHintPre")}<b>{t("setup.aboutMeHintBold")}</b>{t("setup.aboutMeHintPost")}
       </p>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={4}
-        placeholder="напр. «Фрилансер-розробник, дохід у $. Плачу податки ФОП щокварталу. Мета — подушка на 6 міс. Знімаю готівку переважно на продукти.»"
+        placeholder={t("setup.aboutMePlaceholder")}
       />
       <div className="row" style={{ justifyContent: "flex-end" }}>
         <button className="btn primary" disabled={isLoading}
-          onClick={async () => { try { await saveProfile(text).unwrap(); toast.success("Збережено"); } catch (e) { toast.error(errText(e)); } }}>
-          {isLoading ? "Зберігаю…" : "Зберегти профіль"}
+          onClick={async () => { try { await saveProfile(text).unwrap(); toast.success(t("setup.saved")); } catch (e) { toast.error(errText(e)); } }}>
+          {isLoading ? t("setup.saving") : t("setup.saveProfile")}
         </button>
       </div>
     </div>
@@ -234,28 +236,29 @@ function money(usd: number): string {
   return "$" + (usd < 0.01 && usd > 0 ? usd.toFixed(4) : usd.toFixed(2));
 }
 function AiUsageCard() {
+  const t = useT();
   const { data } = useGetAiUsageQuery();
   if (!data) return null;
   const rows: { label: string; cost: number; calls: number }[] = [
-    { label: "Сьогодні", cost: data.today.cost_usd, calls: data.today.calls },
-    { label: "Цей місяць", cost: data.month.cost_usd, calls: data.month.calls },
-    { label: "За весь час", cost: data.total.cost_usd, calls: data.total.calls },
+    { label: t("setup.aiToday"), cost: data.today.cost_usd, calls: data.today.calls },
+    { label: t("setup.aiMonth"), cost: data.month.cost_usd, calls: data.month.calls },
+    { label: t("setup.aiTotal"), cost: data.total.cost_usd, calls: data.total.calls },
   ];
   return (
     <div className="card set-full">
-      <div className="set-card-h"><Icon name="spark" size={16} />AI: витрати й моделі</div>
+      <div className="set-card-h"><Icon name="spark" size={16} />{t("setup.aiCosts")}</div>
       <div className="ai-usage-row">
         {rows.map((r) => (
           <div key={r.label} className="ai-usage-tile">
             <span className="label">{r.label}</span>
             <span className="ai-usage-cost num-hero">{money(r.cost)}</span>
-            <span className="ai-usage-calls muted">{r.calls} викл.</span>
+            <span className="ai-usage-calls muted">{t("setup.callsShort", { n: r.calls })}</span>
           </div>
         ))}
       </div>
       <AiModelToggle />
       <p className="ai-block-hint" style={{ marginTop: 12, marginBottom: 0 }}>
-        Модель окремо на задачу. Категоризація/OCR завжди на Haiku. Вартість — оцінка за токенами, не рахунок.
+        {t("setup.aiModelHint")}
       </p>
     </div>
   );
@@ -267,27 +270,28 @@ const MODEL_META: Record<AiModelToken, { name: string; price: string }> = {
   sonnet: { name: "Sonnet 5", price: "$3/$15" },
   opus: { name: "Opus 4.8", price: "$5/$25" },
 };
-const AI_MODEL_ROWS: { task: AiTask; label: string; hint: string; options: AiModelToken[] }[] = [
-  { task: "report", label: "Репорти", hint: "глибокий розбір періоду — варто найкращої моделі", options: ["sonnet", "opus"] },
-  { task: "advisor", label: "Порадник", hint: "поради-картки на сторінці Порадника", options: ["haiku", "sonnet", "opus"] },
-  { task: "chat", label: "Чат з AI", hint: "розмова про твої гроші як з фінменеджером", options: ["haiku", "sonnet", "opus"] },
-  { task: "insight", label: "AI-огляд у Статистиці", hint: "короткий коментар — масово, дешево", options: ["haiku", "sonnet"] },
-  { task: "notify", label: "Спостереження у сповіщеннях", hint: "1-2 короткі думки щодоби — дешево", options: ["haiku", "sonnet"] },
+const AI_MODEL_TASKS: { task: AiTask; labelKey: "setup.task.report" | "setup.task.advisor" | "setup.task.chat" | "setup.task.insight" | "setup.task.notify"; hintKey: "setup.task.reportHint" | "setup.task.advisorHint" | "setup.task.chatHint" | "setup.task.insightHint" | "setup.task.notifyHint"; options: AiModelToken[] }[] = [
+  { task: "report", labelKey: "setup.task.report", hintKey: "setup.task.reportHint", options: ["sonnet", "opus"] },
+  { task: "advisor", labelKey: "setup.task.advisor", hintKey: "setup.task.advisorHint", options: ["haiku", "sonnet", "opus"] },
+  { task: "chat", labelKey: "setup.task.chat", hintKey: "setup.task.chatHint", options: ["haiku", "sonnet", "opus"] },
+  { task: "insight", labelKey: "setup.task.insight", hintKey: "setup.task.insightHint", options: ["haiku", "sonnet"] },
+  { task: "notify", labelKey: "setup.task.notify", hintKey: "setup.task.notifyHint", options: ["haiku", "sonnet"] },
 ];
 
 function AiModelToggle() {
+  const t = useT();
   const { data } = useGetAiModelsQuery();
   const [setModel, { isLoading }] = useSetAiModelMutation();
   const models = data?.models;
   return (
     <div className="ai-model-list">
-      {AI_MODEL_ROWS.map((row) => {
+      {AI_MODEL_TASKS.map((row) => {
         const cur = models?.[row.task] ?? "sonnet";
         return (
           <div key={row.task} className="ai-model-row">
             <div className="ai-model-info">
-              <span className="ai-model-label">{row.label}</span>
-              <span className="ai-model-hint">{row.hint} · {MODEL_META[cur].price} за MTok</span>
+              <span className="ai-model-label">{t(row.labelKey)}</span>
+              <span className="ai-model-hint">{t(row.hintKey)} · {MODEL_META[cur].price} {t("setup.perMtok")}</span>
             </div>
             <div className="seg">
               {row.options.map((m) => (

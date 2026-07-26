@@ -3,8 +3,10 @@ import { highlightAmounts } from "../lib/highlight.tsx";
 import { RichFacts } from "./RichFacts.tsx";
 import { UsageCost } from "./UsageCost.tsx";
 import { Icon } from "./Icon.tsx";
+import { useT } from "../i18n/index.ts";
 
 export function AiInsightCard({ days = 30 }: { days?: number }) {
+  const t = useT();
   const { data } = useGetInsightQuery();
   const [gen, { isLoading }] = useGenerateInsightMutation();
   const structured = data && !data.empty ? data.structured : undefined;
@@ -16,11 +18,11 @@ export function AiInsightCard({ days = 30 }: { days?: number }) {
       <div className="ai-head">
         <span className="ai-badge"><Icon name="spark" size={18} /></span>
         <div>
-          <div className="ai-title">AI-огляд фінансів</div>
-          <div className="label">на основі твоїх операцій</div>
+          <div className="ai-title">{t("ai.title")}</div>
+          <div className="label">{t("ai.subtitle")}</div>
         </div>
         <button className="btn" style={{ marginLeft: "auto" }} disabled={isLoading} onClick={() => gen(days)}>
-          {isLoading ? "Аналізую…" : has ? "Оновити" : "Згенерувати"}
+          {isLoading ? t("ai.analyzing") : has ? t("ai.update") : t("ai.generate")}
         </button>
       </div>
       {data?.usage && !data.empty && (
@@ -31,9 +33,7 @@ export function AiInsightCard({ days = 30 }: { days?: number }) {
       ) : text ? (
         <p className="ai-text">{highlightAmounts(text)}</p>
       ) : (
-        <p className="ai-text muted">
-          Натисни «Згенерувати» — AI подивиться твої витрати й надходження за період і коротко прокоментує, де можна зекономити.
-        </p>
+        <p className="ai-text muted">{t("ai.emptyPrompt")}</p>
       )}
     </div>
   );

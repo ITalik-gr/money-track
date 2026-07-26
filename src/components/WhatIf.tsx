@@ -3,6 +3,7 @@ import { useGetAdviceQuery, useGetPatternsQuery } from "../store/api.ts";
 import { formatMinor } from "../lib/format.ts";
 import { InfoTip } from "./InfoTip.tsx";
 import { Range } from "./Range.tsx";
+import { useT } from "../i18n/index.ts";
 
 // §P4: What-if симулятор — «що якщо зрізати категорію на N%». Клієнтський розрахунок від
 // наявних агрегатів: cushion/burn з Порадника (`/advisor`) + місячні рівні категорій
@@ -12,6 +13,7 @@ const fmt = (minor: number) => formatMinor(minor, { decimals: false });
 const rw = (m: number | null) => (m == null ? "—" : m.toFixed(1));
 
 export function WhatIf() {
+  const t = useT();
   const { data: advice } = useGetAdviceQuery();
   const { data: patterns } = useGetPatternsQuery();
   const [cuts, setCuts] = useState<Record<string, number>>({});
@@ -39,9 +41,9 @@ export function WhatIf() {
   return (
     <div className="card whatif">
       <div className="section-head" style={{ marginBottom: 4 }}>
-        <h2>Симулятор «що якщо»</h2>
-        <InfoTip>Посунь повзунок вправо — зрізати витрати категорії, вліво — навпаки додати. Побачиш, як зміниться запас (runway). Рахунок від поточної подушки й місячних рівнів; узгоджено з Порадником.</InfoTip>
-        {changed && <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setCuts({})}>Скинути</button>}
+        <h2>{t("wif.title")}</h2>
+        <InfoTip>{t("wif.tip")}</InfoTip>
+        {changed && <button className="btn ghost sm" style={{ marginLeft: "auto" }} onClick={() => setCuts({})}>{t("wif.resetBtn")}</button>}
       </div>
 
       <div className="whatif-body">
@@ -52,11 +54,11 @@ export function WhatIf() {
               <div key={c.category} className="whatif-row">
                 <div className="whatif-row-head">
                   <span className="whatif-cat"><span className="d" style={{ background: c.color ?? "var(--muted)" }} />{c.category}</span>
-                  <span className="whatif-usual">{fmt(c.usual)} ₴/міс</span>
+                  <span className="whatif-usual">{fmt(c.usual)} ₴/{t("adv.monthsUnit")}</span>
                 </div>
                 <div className="whatif-slider-line">
                   <Range value={cut} min={-100} max={100} step={5} origin={0}
-                    ariaLabel={`${c.category}: зрізати або додати витрат, %`}
+                    ariaLabel={t("wif.sliderAriaLabel", { category: c.category })}
                     onChange={(v) => setCuts((p) => ({ ...p, [c.category]: v }))} />
                   <span className={`whatif-cut ${cut > 0 ? "cut" : cut < 0 ? "raise" : ""}`}>
                     {cut > 0 ? "−" : cut < 0 ? "+" : ""}{Math.abs(cut)}%
@@ -74,21 +76,21 @@ export function WhatIf() {
               <span className="wr-base">{rw(baseRunway)}</span>
               <span className="wr-arrow">→</span>
               <span className={`wr-new num-hero ${tone}`}>{rw(newRunway)}</span>
-              <span className="wr-unit">міс</span>
+              <span className="wr-unit">{t("adv.monthsUnit")}</span>
             </span>
             <span className={`whatif-delta ${tone}`}>
-              {changed ? <>{deltaR >= 0 ? "+" : "−"}{Math.abs(deltaR).toFixed(1)} міс запасу</> : "посунь повзунок ↑"}
+              {changed ? <>{deltaR >= 0 ? "+" : "−"}{Math.abs(deltaR).toFixed(1)}{t("wif.deltaSuffix")}</> : t("wif.slideHint")}
             </span>
           </div>
           {/* Від'ємні заощадження — це перевитрата: називаємо річ своїм ім'ям, не «−3 068». */}
           <div className="whatif-stat">
-            <span>{savings < 0 ? "Додаткові витрати" : "Заощадження"}</span>
-            <b className={savings < 0 ? "neg" : ""}>{changed ? `${fmt(Math.abs(savings))} ₴/міс` : "—"}</b>
+            <span>{savings < 0 ? t("wif.extraSpending") : t("wif.savings")}</span>
+            <b className={savings < 0 ? "neg" : ""}>{changed ? `${fmt(Math.abs(savings))} ₴/${t("adv.monthsUnit")}` : "—"}</b>
           </div>
-          <div className="whatif-stat"><span>Новий burn</span><b>{fmt(newBurn)} ₴/міс</b></div>
+          <div className="whatif-stat"><span>{t("wif.newBurnLabel")}</span><b>{fmt(newBurn)} ₴/{t("adv.monthsUnit")}</b></div>
           {changed && (
             <div className="whatif-stat">
-              <span>За рік</span>
+              <span>{t("wif.perYearLabel")}</span>
               <b className={savings < 0 ? "neg" : ""}>{fmt(Math.abs(savings) * 12)} ₴</b>
             </div>
           )}

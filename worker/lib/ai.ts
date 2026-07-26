@@ -5,6 +5,7 @@
 import type { Env } from "../env.ts";
 import { getState, setState } from "./repo.ts";
 import { buildKnowledgeCorpus } from "./knowledge/index.ts";
+import { demoAiGate, isDemoEnv } from "./demo.ts";
 
 // Гібрид (рішення користувача 2026-07-06): масові/фонові задачі — дешевий Haiku;
 // розумні user-facing (чат по операції, поради, розуміння підписок, рев'ю) — Sonnet 5.
@@ -34,6 +35,9 @@ export const TOKEN_BY_MODEL: Record<string, string> = { [MODEL_FAST]: "haiku", [
 
 // Модель для задачі: збережений токен (якщо валідний) інакше дефолт задачі.
 export async function getTaskModel(env: Env, task: AiTask): Promise<string> {
+  // Demo sandboxes are forced onto the cheapest model regardless of the saved `ai_model_*`
+  // preference (P4.3) — a visitor must not be able to point our billing at Opus.
+  if (isDemoEnv(env)) return MODEL_FAST;
   const saved = await getState(env.DB, `ai_model_${task}`);
   if (saved && MODEL_BY_TOKEN[saved]) return MODEL_BY_TOKEN[saved];
   return AI_TASK_DEFAULTS[task];
@@ -205,6 +209,7 @@ async function callHaiku(
   maxTokens = 1024,
   model: string = MODEL_FAST,
 ): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
+  await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -243,6 +248,7 @@ async function callHaikuMessages(
   maxTokens = 700,
   model: string = MODEL_FAST,
 ): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
+  await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -276,6 +282,7 @@ async function callMessagesRaw(
   model: string,
   tools?: unknown[], // client-side ChatTool[] та/або серверні блоки (web_search)
 ): Promise<{ content: RawBlock[]; usage: AnthropicUsage; stop: string | null }> {
+  await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
   const res = await fetch(API, {
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -393,7 +400,8 @@ export async function chatAdvice(
       text:
         toolNote +
         "Ось повний фінансовий контекст користувача (суми в грн): " + JSON.stringify(context) +
-        ". Спирайся ЛИШЕ на ці дані; якщо потрібної інформації нема — скажи чесно, не вигадуй транзакцій чи чисел.",
+        ". Спирайся ЛИШЕ на ці дані; якщо потрібної інформації нема — скажи чесно, не вигадуй транзакцій чи чисел." +
+        (await replyLangDirective(env)),
     },
   ];
   const model = await getTaskModel(env, "chat");
@@ -778,7 +786,14 @@ export async function enrichTransaction(
   const system = await buildSystemPrefix(
     env,
     "визначити суть банківської транзакції за сирими полями і повернути JSON " +
-      "{clean_name (людська назва), category_id (id основної категорії або null), " +
+      "{clean_name (людська назва бренду), category_id (id основної категорії або null), " +
+      // Промт цілком українською, тож модель за інерцією «олюднювала» латиницю в кирилицю:
+      // «SILPO» приїжджало як «Силпо». Назва мерчанта — це ім'я власне й ключ, за яким
+      // сходяться merchant_alias/консенсус/сторінка мерчанта, тож транслітерація ще й дробить
+      // історію одного магазину на два різні написання.
+      "⚠️ clean_name — ІМʼЯ ВЛАСНЕ: зберігай написання бренду з raw_description, НЕ транслітеруй " +
+      "і НЕ перекладай (SILPO → «Silpo», НЕ «Силпо»; NOVUS → «Novus»). Якщо в описі назва вже " +
+      "кирилицею — лишай кирилицею. Прибирай лише банківський шум: номери терміналів, міста, коди. " +
       "kind ('expense'|'income'|'transfer'|'withdrawal'; transfer=переказ між своїми рахунками/округлення, " +
       "withdrawal=зняття готівки), tag_ids (масив 0-3 id вторинних категорій), note (короткий здогад або null)}. " +
       "ПРІОРИТЕТ №1 — user_note: якщо користувач прямо написав, що це (напр. «це відпочинок», «подарунок», " +
@@ -948,12 +963,28 @@ export async function generateNotifyObservations(
         "Жодних англійських слів і внутрішніх термінів у тексті: не «optional/discretionary», а " +
         "«необовʼязкові витрати»; не «burn», а «витрати на місяць»; не «runway», а «запас/на скільки вистачить». " +
         "title ≤ 60 символів, body ≤ 200 символів, без markdown. " +
-        'Відповідай ВИКЛЮЧНО валідним JSON: {"observations":[{"title","body","severity":"info"|"warn"}]}',
+        'Відповідай ВИКЛЮЧНО валідним JSON: {"observations":[{"title","body","severity":"info"|"warn"}]}' +
+        (await replyLangDirective(env)),
     },
   ];
   return callHaikuJson<{ observations?: NotifyObservation[] }>(
     env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "notify"),
   );
+}
+
+// P3.4/§12.5: make USER-FACING free-text answers come back in the owner's UI language. It is a
+// no-op for `uk` (the prompts are already Ukrainian) and, for `en`, an emphatic LATE directive
+// that overrides the inline "українською" wording without touching the cache-stable persona
+// block. Structured tasks (enrich/OCR/parse) intentionally do NOT use this — their output is ids,
+// and the numeric guard (`numbersAreGrounded`) is language-independent.
+async function replyLangDirective(env: Env): Promise<string> {
+  const en = (await getState(env.DB, "locale")) === "en";
+  return en
+    ? " 🌐 RESPONSE LANGUAGE (overrides any Ukrainian wording above): write EVERYTHING the user reads " +
+      "— headlines, advice, labels, section titles, chart/table captions — in natural English. Keep JSON " +
+      "keys and enum values (e.g. 'pos'/'neg', 'info'/'warn') exactly as specified; translate only " +
+      "human-readable text. Do NOT reply in Ukrainian."
+    : "";
 }
 
 export async function generateAdvice(
@@ -986,7 +1017,8 @@ export async function generateAdvice(
         "facts:[{label, amount (грн число або null), category (назва або null), delta_pct (число або null), tone ('pos'|'neg'|'neutral')}] (2-5 ключових фактів), " +
         "suggestions:[{title, detail, action}]} — 3-5 порад, кожна дієва (що саме скоротити/зробити і ефект у грн). " +
         "action — або null, або {type:'create_budget', label, category_id (з top_categories), category_name, amount_uah} " +
-        "коли доречно запропонувати ліміт-конверт на категорію. Суми — у гривнях.",
+        "коли доречно запропонувати ліміт-конверт на категорію. Суми — у гривнях." +
+        (await replyLangDirective(env)),
     },
   ];
   return callHaikuJson<AdviceResult>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 2200, await getTaskModel(env, "advisor"));
@@ -1026,7 +1058,8 @@ export async function budgetChat(
         "Коли пропонуєш конкретні ліміти — клади їх у proposals, щоб користувач прийняв одним тапом. " +
         "Відповідай ВИКЛЮЧНО валідним JSON: {reply (2-5 речень, можна **жирний**), " +
         "proposals:[{category_id (лише з переліку), limit_uah (ціле грн), reason (коротко чому)}] " +
-        "(порожній масив, якщо це просто відповідь без нових пропозицій лімітів)}.",
+        "(порожній масив, якщо це просто відповідь без нових пропозицій лімітів)}." +
+        (await replyLangDirective(env)),
     },
     { type: "text", text: "Контекст: " + JSON.stringify(ctx) },
   ];
@@ -1067,7 +1100,8 @@ export async function generateFinancialReport(
         "anomalies:[{label, detail, severity ('info'|'warn'|'high')}] (незвичні/разові витрати, подорожчання підписок; " +
         "порожній масив якщо нема), predictions:{next_period_spend_uah (число або null), runway_months (число або null), " +
         "note}, advice:[{title, detail, action}] (3-5 дієвих порад з ефектом у грн; action — null або " +
-        "{type:'create_budget', label, category_id, category_name, amount_uah})}. Суми — цілі числа гривень.",
+        "{type:'create_budget', label, category_id, category_name, amount_uah})}. Суми — цілі числа гривень." +
+        (await replyLangDirective(env)),
     },
   ];
   return callHaikuJson<FinancialReport>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 3000, await getTaskModel(env, "report"));
@@ -1099,7 +1133,8 @@ export async function generateInsight(
         "Відповідай ВИКЛЮЧНО валідним JSON без markdown: {headline (1 речення — головне за період), " +
         "facts:[{label, amount (грн число або null), category (назва або null), delta_pct (зміна проти минулого " +
         "періоду, число +/- або null), tone ('pos'|'neg'|'neutral')}] (2-5 фактів — куди пішло найбільше, помітні " +
-        "зміни, аномалії, розподіл за вагомістю), note (1 коротка конкретна порада або null)}. Суми — у гривнях.",
+        "зміни, аномалії, розподіл за вагомістю), note (1 коротка конкретна порада або null)}. Суми — у гривнях." +
+        (await replyLangDirective(env)),
     },
   ];
   return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "insight"));

@@ -1,10 +1,13 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { getLocale, localeTag } from "../i18n/locale.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
+import { translate } from "../i18n/index.ts";
+import { useT } from "../i18n/index.ts";
 
 // Спільний dual-line графік: витрати + надходження (DESIGN.md §7 F1).
 export interface CfRow { label: string; spend: number; income: number }
 
-const fmt0 = new Intl.NumberFormat("uk-UA", { maximumFractionDigits: 0 });
+const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CfTooltip(props: any) {
@@ -18,17 +21,18 @@ function CfTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{label}</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />Надходження: {fmt0.format(inc)} ₴</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />Витрати: {fmt0.format(exp)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{translate(getLocale(), "mp.income")}: {fmt0.format(inc)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{translate(getLocale(), "common.expenses")}: {fmt0.format(exp)} ₴</div>
       <div className="r tip-net" style={{ color: net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
-        <span className="d" style={{ background: "transparent" }} />Баланс: {net >= 0 ? "+" : ""}{fmt0.format(net)} ₴
+        <span className="d" style={{ background: "transparent" }} />{translate(getLocale(), "common.balance")}: {net >= 0 ? "+" : ""}{fmt0.format(net)} ₴
       </div>
     </div>
   );
 }
 
 export function CashflowChart({ rows, height = 230 }: { rows: CfRow[]; height?: number }) {
-  if (rows.length === 0) return <div className="empty">Ще нема даних для графіка</div>;
+  const t = useT();
+  if (rows.length === 0) return <div className="empty">{t("chart.noData")}</div>;
   return (
     <div className="chart-wrap" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">

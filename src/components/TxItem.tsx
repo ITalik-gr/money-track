@@ -4,6 +4,7 @@ import { Money } from "./Money.tsx";
 import { MerchantLogo } from "./MerchantLogo.tsx";
 import { Icon } from "./Icon.tsx";
 import { isNeutralTransfer, transferRoute } from "../lib/transfer.ts";
+import { useT } from "../i18n/index.ts";
 
 // Спільний рядок транзакції (роадмап §1 «TxRow»): один вигляд для списку операцій і для
 // дрилів Статистики. `compact` — менша висота/шрифт для вкладених дрилів. Приймає широку
@@ -39,6 +40,7 @@ interface Props {
 }
 
 export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
+  const tr = useT();
   const transfer = !!t.is_transfer;
   const groupColor = t.event_id ? (t.event_color ?? "var(--accent)") : null;
   const isSel = selected ?? false;
@@ -63,7 +65,7 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
         <div className="tx-line1">
           <span className="who-name">{t.merchant ?? t.comment ?? "—"}</span>
           {t.planned_id != null && !transfer && (
-            <span className="m-sub" title="Списання підписки">🔁</span>
+            <span className="m-sub" title={tr("tx.subCharge")}>🔁</span>
           )}
           {t.event_name && (
             <span className="m-group" style={{ color: groupColor ?? undefined }} title={t.event_name}>
@@ -82,7 +84,7 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
                 <span className="tr-acc">{route.to}</span>
               </span>
             ) : (
-              <span className="tx-cat-name">{transfer ? "переказ" : (t.category_name ?? "без категорії")}</span>
+              <span className="tx-cat-name">{transfer ? tr("tx.transfer") : (t.category_name ?? tr("tx.noCategory"))}</span>
             )}
           </span>
           <span className="tx-date">{formatDate(t.time)}</span>

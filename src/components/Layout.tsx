@@ -3,23 +3,50 @@ import { NavLink, Outlet, Link } from "react-router-dom";
 import { Icon } from "./Icon.tsx";
 import { Toaster } from "./Toaster.tsx";
 import { CommandPalette, openCommandPalette } from "./CommandPalette.tsx";
-import { useGetNotificationsQuery } from "../store/api.ts";
+import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation } from "../store/api.ts";
+import { useLocale, useT } from "../i18n/index.ts";
+import type { Locale } from "../i18n/index.ts";
+import type { TranslationKey } from "../i18n/index.ts";
 
 // Пункти навігації. desktop=сайдбар (усі), mobile=нижній таб-бар (тільки core).
-const items = [
-  { to: "/", label: "Огляд", icon: "overview", end: true, core: true },
-  { to: "/tx", label: "Транзакції", icon: "tx", end: false, core: true },
-  { to: "/accounts", label: "Рахунки", icon: "accounts", end: false, core: false },
-  { to: "/stats", label: "Статистика", icon: "stats", end: false, core: true },
-  { to: "/reports", label: "Репорти", icon: "report", end: false, core: false },
-  { to: "/advisor", label: "Порадник", icon: "advisor", end: false, core: true },
-  { to: "/chat", label: "Чат з AI", icon: "spark", end: false, core: false },
-  { to: "/plan", label: "Бюджети", icon: "plan", end: false, core: false },
-  { to: "/goals", label: "Цілі", icon: "target", end: false, core: false },
-  { to: "/categories", label: "Категорії", icon: "tag", end: false, core: false },
-  { to: "/subs", label: "Підписки", icon: "repeat", end: false, core: false },
-  { to: "/events", label: "Групи", icon: "folder", end: false, core: false },
+// `label` is a translation key resolved at render (see PLATFORM.md §12) — not a literal.
+const items: { to: string; label: TranslationKey; icon: string; end: boolean; core: boolean }[] = [
+  { to: "/", label: "nav.overview", icon: "overview", end: true, core: true },
+  { to: "/tx", label: "nav.tx", icon: "tx", end: false, core: true },
+  { to: "/accounts", label: "nav.accounts", icon: "accounts", end: false, core: false },
+  { to: "/stats", label: "nav.stats", icon: "stats", end: false, core: true },
+  { to: "/reports", label: "nav.reports", icon: "report", end: false, core: false },
+  { to: "/advisor", label: "nav.advisor", icon: "advisor", end: false, core: true },
+  { to: "/chat", label: "nav.chat", icon: "spark", end: false, core: false },
+  { to: "/plan", label: "nav.plan", icon: "plan", end: false, core: false },
+  { to: "/goals", label: "nav.goals", icon: "target", end: false, core: false },
+  { to: "/categories", label: "nav.categories", icon: "tag", end: false, core: false },
+  { to: "/subs", label: "nav.subs", icon: "repeat", end: false, core: false },
+  { to: "/events", label: "nav.events", icon: "folder", end: false, core: false },
 ];
+
+const LOCALES: Locale[] = ["uk", "en"];
+
+// Segmented UA/EN switch. Two languages → a plain segmented control reads clearer than a
+// toggle whose label would have to name the OTHER language.
+function LangSwitch() {
+  const { locale, setLocale } = useLocale();
+  return (
+    <div className="lang-seg" role="group" aria-label="Language">
+      {LOCALES.map((l) => (
+        <button
+          key={l}
+          type="button"
+          className={l === locale ? "on" : ""}
+          aria-pressed={l === locale}
+          onClick={() => setLocale(l)}
+        >
+          {l === "uk" ? "UA" : "EN"}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function useTheme() {
   const [dark, setDark] = useState(
@@ -42,10 +69,11 @@ function useTheme() {
 // на /tx?q= — панель уміє те саме й більше, тож два пошуки поруч були зайвим вибором.
 // Кнопка лишається головним способом ЗНАЙТИ шорткат: без неї про ⌘K ніхто б не дізнався.
 function TopSearch() {
+  const t = useT();
   return (
     <button type="button" className="top-search" onClick={openCommandPalette}>
       <span className="ico"><Icon name="search" size={16} /></span>
-      <span className="ts-ph">Пошук…</span>
+      <span className="ts-ph">{t("layout.search")}</span>
       <kbd className="ts-kbd">⌘K</kbd>
     </button>
   );
@@ -54,6 +82,7 @@ function TopSearch() {
 // Дзвіночок → /notifications. Бейдж — РЕАЛЬНИЙ лічильник непрочитаних (раніше тут висіла
 // статична червона крапка, яка світилась завжди й нічого не означала).
 function NotifBell() {
+  const t = useT();
   // Стрічку наповнює добовий крон, тож рідкого опитування досить — без нього бейдж
   // застигав би до перезавантаження сторінки (RTK кешує, а інвалідації ззовні нема).
   const { data } = useGetNotificationsQuery({ limit: 1 }, { pollingInterval: 600_000 });
@@ -62,7 +91,7 @@ function NotifBell() {
     <Link
       to="/notifications"
       className="icon-btn"
-      aria-label={unread ? `Сповіщення, непрочитаних: ${unread}` : "Сповіщення"}
+      aria-label={unread ? t("layout.notificationsUnread", { count: unread }) : t("layout.notifications")}
     >
       <Icon name="bell" />
       {unread > 0 && <span className="count-badge">{unread > 9 ? "9+" : unread}</span>}
@@ -70,12 +99,39 @@ function NotifBell() {
   );
 }
 
+// Demo banner (P4.4). Shown on EVERY screen of a demo sandbox, non-dismissable: it must be
+// obvious the numbers are fictional, that the sandbox resets, and that AI is limited.
+function DemoBanner({ expiresAt }: { expiresAt?: number | null }) {
+  const t = useT();
+  const [logout] = useLogoutMutation();
+  const hours = expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now() / 1000) / 3600)) : null;
+  async function exit() {
+    await logout().unwrap().catch(() => {});
+    window.location.href = "/"; // full reload → unauthenticated → landing/login
+  }
+  return (
+    <div className="demo-banner" role="status">
+      <Icon name="info" size={15} />
+      <span className="db-badge">{t("demo.badge")}</span>
+      <span className="db-text">
+        {t("demo.fictional")}
+        {hours != null && <> · {t("demo.resets", { h: hours })}</>}
+        {" · "}{t("demo.aiLimited")}
+      </span>
+      <button type="button" className="db-exit" onClick={exit}>{t("demo.exit")}</button>
+    </div>
+  );
+}
+
 export function Layout() {
   const { dark, toggle } = useTheme();
   const [moreOpen, setMoreOpen] = useState(false);
+  const t = useT();
+  const { data: me } = useGetMeQuery();
+  const isDemo = me?.demo === true;
 
   return (
-    <div className="shell">
+    <div className={`shell${isDemo ? " has-demo-banner" : ""}`}>
       <Toaster />
       <CommandPalette />
       <aside className="sidebar">
@@ -84,30 +140,31 @@ export function Layout() {
           <span className="name">money<span className="dot">·</span>track</span>
         </div>
 
-        <div className="side-group">Меню</div>
+        <div className="side-group">{t("nav.menu")}</div>
         <nav className="side-nav">
-          {items.map((t) => (
-            <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive ? "active" : "")}>
-              <span className="ico"><Icon name={t.icon} /></span>
-              {t.label}
+          {items.map((it) => (
+            <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => (isActive ? "active" : "")}>
+              <span className="ico"><Icon name={it.icon} /></span>
+              {t(it.label)}
             </NavLink>
           ))}
           <NavLink to="/add" className={({ isActive }) => `add ${isActive ? "active" : ""}`}>
             <span className="ico"><Icon name="add" /></span>
-            Додати
+            {t("nav.add")}
           </NavLink>
         </nav>
 
         <div className="side-foot side-nav">
           <NavLink to="/setup" className={({ isActive }) => (isActive ? "active" : "")}>
             <span className="ico"><Icon name="settings" /></span>
-            Налаштування
+            {t("nav.settings")}
           </NavLink>
+          <LangSwitch />
           <div className="theme-toggle" onClick={toggle} role="button" tabIndex={0}
             onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") toggle(); }}>
             <span className="row">
               <span className="ico"><Icon name={dark ? "sun" : "moon"} /></span>
-              {dark ? "Світла тема" : "Темна тема"}
+              {dark ? t("layout.themeLight") : t("layout.themeDark")}
             </span>
             <span className={`switch ${dark ? "on" : ""}`} />
           </div>
@@ -115,6 +172,7 @@ export function Layout() {
       </aside>
 
       <main className="main">
+        {isDemo && <DemoBanner expiresAt={me?.demo_expires_at} />}
         <header className="topbar">
           <Link to="/" className="topbar-brand">
             <span className="mark">₴</span>
@@ -124,10 +182,10 @@ export function Layout() {
             <TopSearch />
             <NotifBell />
             <Link to="/setup" className="avatar-chip">
-              <span className="avatar">В</span>
+              <span className="avatar">{isDemo ? "D" : "В"}</span>
               <span className="who2">
-                <b>Віталій</b>
-                <small>особистий</small>
+                <b>{isDemo ? t("demo.badge") : "Віталій"}</b>
+                <small>{isDemo ? t("demo.aiLimited") : t("layout.personal")}</small>
               </span>
             </Link>
           </div>
@@ -139,19 +197,19 @@ export function Layout() {
       </main>
 
       <nav className="nav bottom">
-        {items.filter((t) => t.core).map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.end} className={({ isActive }) => (isActive ? "active" : "")}>
-            <span className="ico"><Icon name={t.icon} size={20} /></span>
-            {t.label}
+        {items.filter((it) => it.core).map((it) => (
+          <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => (isActive ? "active" : "")}>
+            <span className="ico"><Icon name={it.icon} size={20} /></span>
+            {t(it.label)}
           </NavLink>
         ))}
         <NavLink to="/add" className={({ isActive }) => (isActive ? "active" : "")}>
           <span className="ico"><Icon name="add" size={20} /></span>
-          Додати
+          {t("nav.add")}
         </NavLink>
         <button type="button" className={`more-btn ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
           <span className="ico"><Icon name="overview" size={20} /></span>
-          Ще
+          {t("nav.more")}
         </button>
       </nav>
 
@@ -160,22 +218,22 @@ export function Layout() {
           <div className="more-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="more-grip" />
             <div className="more-grid">
-              {items.filter((t) => !t.core).map((t) => (
-                <NavLink key={t.to} to={t.to} end={t.end} onClick={() => setMoreOpen(false)}
+              {items.filter((it) => !it.core).map((it) => (
+                <NavLink key={it.to} to={it.to} end={it.end} onClick={() => setMoreOpen(false)}
                   className={({ isActive }) => `more-item ${isActive ? "active" : ""}`}>
-                  <span className="ico"><Icon name={t.icon} size={22} /></span>
-                  {t.label}
+                  <span className="ico"><Icon name={it.icon} size={22} /></span>
+                  {t(it.label)}
                 </NavLink>
               ))}
               <NavLink to="/setup" onClick={() => setMoreOpen(false)}
                 className={({ isActive }) => `more-item ${isActive ? "active" : ""}`}>
                 <span className="ico"><Icon name="settings" size={22} /></span>
-                Налаштування
+                {t("nav.settings")}
               </NavLink>
             </div>
             <button className="more-theme" onClick={toggle}>
               <span className="ico"><Icon name={dark ? "sun" : "moon"} size={20} /></span>
-              {dark ? "Світла тема" : "Темна тема"}
+              {dark ? t("layout.themeLight") : t("layout.themeDark")}
             </button>
           </div>
         </div>

@@ -27,6 +27,24 @@ import { telegram } from "./routes/telegram.ts";
 
 export const userApp = new Hono<{ Bindings: Env }>();
 
+// Demo sandbox guard (P4.2, PLATFORM.md §11.4). The object learns it is a demo from its OWN
+// `demo:`-prefixed name (`env.USER_ID`), not from anything the client sends. The rule lives in
+// ONE place here rather than as scattered `if (isDemo)` checks: block the writes that reach
+// OUTSIDE the sandbox or touch secrets — connecting a bank, storing API keys, importing legacy
+// data, owner admin — while leaving every read open so the demo's Settings page still renders.
+// (AI cost caps are a separate concern handled in P4.3.)
+const DEMO_BLOCKED_PREFIXES = ["/api/credentials", "/api/setup", "/api/import", "/api/admin"];
+userApp.use("*", async (c, next) => {
+  const isDemo = (c.env.USER_ID ?? "").startsWith("demo:");
+  if (isDemo && c.req.method !== "GET") {
+    const path = new URL(c.req.url).pathname;
+    if (DEMO_BLOCKED_PREFIXES.some((p) => path.startsWith(p))) {
+      return c.json({ error: "demo_readonly", detail: "This action is disabled in the demo." }, 403);
+    }
+  }
+  await next();
+});
+
 // Paths are the ORIGINAL absolute ones: the Worker forwards the untouched Request, so the
 // routing table in here must match what the browser asked for.
 userApp.route("/api/setup", setup);

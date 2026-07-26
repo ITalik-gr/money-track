@@ -93,6 +93,45 @@ export async function verifyWebhookToken(env: Env, token: string | undefined): P
   return timingSafeEqual(sig, expected) ? userId : null;
 }
 
+// ---- demo sandbox (P4.2, PLATFORM.md §11) -----------------------------------
+// A demo visitor has no directory account and no invite — the whole point is that a stranger
+// (a recruiter) can look without one. Their identity is a signed random id in a SEPARATE cookie,
+// and the Durable Object serving them is named `demo:<id>`. That `demo:` prefix keeps the demo
+// namespace physically disjoint from real users (whose ids are bare hex): a demo cookie can never
+// resolve to a real user's object, and a session cookie can never resolve to a demo one.
+export const DEMO_COOKIE = "mt_demo";
+const DEMO_VERSION = "demo";
+const DEMO_TTL = 60 * 60 * 24; // 24h — matches the sandbox's self-destruct alarm
+
+/** A fresh random demo id (hex), used both as the cookie subject and the `demo:<id>` DO name. */
+export function newDemoId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Token shape: `demo.<demoId>.<expiryUnix>.<hmac>`. */
+export async function createDemoToken(env: Env, demoId: string): Promise<string> {
+  const key = signingKey(env);
+  if (!key) throw new Error("no signing key: set SESSION_SECRET (or APP_PASSWORD)");
+  const exp = String(Math.floor(Date.now() / 1000) + DEMO_TTL);
+  const payload = `${DEMO_VERSION}.${demoId}.${exp}`;
+  return `${payload}.${await hmacHex(key, payload)}`;
+}
+
+/** Returns the demo id, or `null`. Never throws. */
+export async function verifyDemoToken(env: Env, token: string | undefined): Promise<string | null> {
+  const key = signingKey(env);
+  if (!token || !key) return null;
+  const parts = token.split(".");
+  if (parts.length !== 4) return null;
+  const [version, demoId, exp, sig] = parts as [string, string, string, string];
+  if (version !== DEMO_VERSION) return null;
+  if (!/^[0-9a-f]+$/.test(demoId) || !/^\d+$/.test(exp)) return null;
+  if (Number(exp) < Date.now() / 1000) return null;
+  const expected = await hmacHex(key, `${version}.${demoId}.${exp}`);
+  return timingSafeEqual(sig, expected) ? demoId : null;
+}
+
 /**
  * Short-lived signed value for the OAuth `state` and `nonce` round-trip.
  *

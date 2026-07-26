@@ -10,8 +10,19 @@ import {
   type PeriodMode, type Preset,
 } from "../lib/stats.ts";
 import type { AppDb } from "../lib/db-shim.ts";
+import { catNameSql, localizeCatName, ownerLocale } from "../lib/categories-i18n.ts";
+import type { NotifLocale } from "../../shared/notif-i18n.ts";
 
-export const api = new Hono<{ Bindings: Env }>();
+export const api = new Hono<{ Bindings: Env; Variables: { locale: NotifLocale } }>();
+
+// Resolve the owner's UI locale once per request (P3.4). Category display names are stored in
+// Ukrainian; when the owner runs the app in English they are translated SERVER-SIDE via
+// `catNameSql`/`localizeCatName`, so the client stays unchanged. `uk` sessions pay nothing —
+// `catNameSql` is a no-op for them. Read here (not per-handler) to avoid repeating the lookup.
+api.use("*", async (c, next) => {
+  c.set("locale", await ownerLocale(c.env.DB));
+  await next();
+});
 
 // §6 Вагомість: приймаємо лише валідні рівні; будь-що інше (вкл. "" / null) → NULL (скидання).
 const IMPORTANCE = new Set(["essential", "discretionary", "optional"]);
@@ -22,8 +33,11 @@ function normImportance(v: string | null | undefined): string | null {
 // ---- reference data ---------------------------------------------------------
 
 api.get("/categories", async (c) => {
-  const rows = await c.env.DB.prepare("SELECT * FROM categories ORDER BY is_income, id").all();
-  return c.json(rows.results);
+  const rows = await c.env.DB.prepare("SELECT * FROM categories ORDER BY is_income, id").all<{ name: string }>();
+  const loc = c.get("locale");
+  // Localize seed names in JS (the row already carries `name`); user categories pass through.
+  const out = (rows.results ?? []).map((r) => ({ ...r, name: localizeCatName(loc, r.name) }));
+  return c.json(out);
 });
 
 api.get("/accounts", async (c) => {
@@ -123,7 +137,7 @@ api.get("/transactions", async (c) => {
   // t.transfer_pair_id` не з'єднує нічого, коли pair_id NULL (NULL = NULL хибне), тож
   // звичайні операції join не чіпає.
   const rows = await c.env.DB.prepare(
-    `SELECT t.*, c.name AS category_name, c.color AS category_color, c.icon AS category_icon,
+    `SELECT t.*, ${catNameSql(c.get("locale"), "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
             a.title AS account_title, e.name AS event_name, e.color AS event_color,
             ap.title AS pair_account_title
      FROM transactions t
@@ -153,7 +167,7 @@ api.get("/export/transactions.csv", async (c) => {
   if (to) { where.push("t.time <= ?"); binds.push(Number(to)); }
   const rows = await c.env.DB.prepare(
     `SELECT t.time, t.merchant, t.comment, t.user_note, t.amount, t.currency_code, t.is_transfer,
-            c.name AS category_name, a.title AS account_title, e.name AS event_name
+            ${catNameSql(c.get("locale"), "c.name")} AS category_name, a.title AS account_title, e.name AS event_name
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN accounts a ON a.id = t.account_id
@@ -256,8 +270,8 @@ api.post("/transactions/bulk", async (c) => {
 api.get("/transactions/:id", async (c) => {
   const id = c.req.param("id");
   const tx = await c.env.DB.prepare(
-    `SELECT t.*, c.name AS category_name, c.color AS category_color, c.icon AS category_icon,
-            rc.name AS real_category_name, rc.color AS real_category_color,
+    `SELECT t.*, ${catNameSql(c.get("locale"), "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
+            ${catNameSql(c.get("locale"), "rc.name")} AS real_category_name, rc.color AS real_category_color,
             a.title AS account_title, a.type AS account_type,
             e.name AS event_name, e.color AS event_color,
             p.title AS planned_title,
@@ -285,7 +299,7 @@ api.get("/transactions/:id", async (c) => {
     }
   }
   const tags = await c.env.DB.prepare(
-    `SELECT c.id, c.name, c.color FROM transaction_tags tt JOIN categories c ON c.id = tt.category_id
+    `SELECT c.id, ${catNameSql(c.get("locale"), "c.name")} AS name, c.color FROM transaction_tags tt JOIN categories c ON c.id = tt.category_id
      WHERE tt.transaction_id = ?`,
   ).bind(id).all();
   return c.json({ ...tx, receipt, tags: tags.results ?? [] });
@@ -442,7 +456,7 @@ api.get("/budgets/auto", async (c) => {
   const [levels, cats, existing] = await Promise.all([
     categoryMonthlyLevels(c.env, mult, { now }),
     c.env.DB.prepare(
-      `SELECT c.id, c.name, c.color, c.importance FROM categories c
+      `SELECT c.id, ${catNameSql(c.get("locale"), "c.name")} AS name, c.color, c.importance FROM categories c
        WHERE c.parent_id IS NULL AND COALESCE(c.is_income, 0) = 0`,
     ).all<{ id: number; name: string; color: string | null; importance: string | null }>(),
     c.env.DB.prepare("SELECT category_id, amount FROM budgets WHERE period = 'month'")
@@ -785,9 +799,9 @@ api.get("/events/:id", async (c) => {
   // на сторінці меншу суму, ніж у списку. Одна цифра має бути одна.
   const rates = await getRates(c.env.DB);
   const mult = uahMult(rates);
-  const [txs, agg] = await Promise.all([
+  const [txs, agg, planned] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT t.*, c.name AS category_name, c.color AS category_color, a.title AS account_title
+      `SELECT t.*, ${catNameSql(c.get("locale"), "c.name")} AS category_name, c.color AS category_color, a.title AS account_title
        FROM transactions t
        LEFT JOIN categories c ON c.id = t.category_id
        LEFT JOIN accounts a ON a.id = t.account_id
@@ -798,11 +812,39 @@ api.get("/events/:id", async (c) => {
               CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER) AS income
        FROM transactions t WHERE t.event_id = ?`,
     ).bind(id).first<{ spent: number; income: number }>(),
+    // Plan line items (P2.3) — amounts already in ₴, so they compare directly to the ₴ roll-up.
+    c.env.DB.prepare(
+      `SELECT p.id, p.label, p.amount, p.category_id, ${catNameSql(c.get("locale"), "c.name")} AS category_name
+       FROM event_planned p LEFT JOIN categories c ON c.id = p.category_id
+       WHERE p.event_id = ? ORDER BY p.amount DESC`,
+    ).bind(id).all<{ id: number; label: string; amount: number; category_id: number | null; category_name: string | null }>(),
   ]);
+  const plannedItems = planned.results ?? [];
   return c.json({
     event, transactions: txs.results ?? [],
     spent: agg?.spent ?? 0, income: agg?.income ?? 0,
+    planned: plannedItems,
+    planned_total: plannedItems.reduce((s, p) => s + p.amount, 0),
   });
+});
+
+// Plan line items CRUD (P2.3). Amounts arrive in ₴ minor units.
+api.post("/events/:id/planned", async (c) => {
+  const id = Number(c.req.param("id"));
+  const b = await c.req.json<{ label?: string; amount?: number; category_id?: number | null }>()
+    .catch(() => ({} as { label?: string; amount?: number; category_id?: number | null }));
+  if (!b.label?.trim() || !b.amount || b.amount <= 0) return c.json({ error: "label and positive amount required" }, 400);
+  const catId = typeof b.category_id === "number" ? b.category_id : null;
+  const r = await c.env.DB.prepare(
+    "INSERT INTO event_planned (event_id, label, amount, category_id, created_at) VALUES (?, ?, ?, ?, ?)",
+  ).bind(id, b.label.trim(), Math.round(b.amount), catId, Math.floor(Date.now() / 1000)).run();
+  return c.json({ ok: true, id: r.meta.last_row_id });
+});
+
+api.delete("/events/:id/planned/:pid", async (c) => {
+  await c.env.DB.prepare("DELETE FROM event_planned WHERE id = ? AND event_id = ?")
+    .bind(Number(c.req.param("pid")), Number(c.req.param("id"))).run();
+  return c.json({ ok: true });
 });
 
 // ---- savings goals (§7) -----------------------------------------------------
@@ -998,7 +1040,7 @@ api.get("/analytics/overview", async (c) => {
     ).bind(from, to).all(),
     // Розбивка по ЕФЕКТИВНІЙ категорії (готівка/зняття за реальною суттю; рол-ап у батька).
     c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS category_id, ${EFF_CAT_NAME} AS category_name,
+      `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name,
               ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
@@ -1296,6 +1338,22 @@ api.put("/settings/period-mode", async (c) => {
   return c.json({ ok: true, mode });
 });
 
+// UI locale (PLATFORM.md §12). Stored per-user in app_state so it is durable across devices
+// and readable server-side (AI/notify locale, P3.4). The client renders from localStorage for
+// instant paint; this endpoint is the durable mirror, not the render source. Empty = unset,
+// the client then falls back to the browser language.
+api.get("/settings/locale", async (c) => {
+  const locale = (await getState(c.env.DB, "locale")) || "";
+  return c.json({ locale });
+});
+api.put("/settings/locale", async (c) => {
+  const { locale } = await c.req.json<{ locale: string }>();
+  const v = locale === "uk" ? "uk" : locale === "en" ? "en" : null;
+  if (!v) return c.json({ error: "invalid locale" }, 400);
+  await setState(c.env.DB, "locale", v);
+  return c.json({ ok: true, locale: v });
+});
+
 // AI-моделі ОКРЕМО НА ЗАДАЧУ (report/advisor/insight/…): токен haiku|sonnet|opus на кожну.
 // UI редагує три головні (report/advisor/insight); решта — дефолти. Enrich/OCR завжди Haiku.
 const AI_MODEL_TASKS = ["report", "advisor", "insight", "chat", "budget", "group", "notify"] as const;
@@ -1340,12 +1398,12 @@ api.get("/analytics/merchant", async (c) => {
        GROUP BY m ORDER BY m`,
     ).bind(name, from6).all<{ m: string; spent: number }>(),
     c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
+      `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?
        GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 1`,
     ).bind(name).first<{ id: number | null; name: string | null; color: string | null; spent: number }>(),
     c.env.DB.prepare(
-      `SELECT t.*, ${EFF_CAT_NAME} AS category_name, ${EFF_CAT_COLOR} AS category_color,
+      `SELECT t.*, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color,
               COALESCE(rc.icon, c.icon) AS category_icon
        FROM transactions t ${STATS_JOINS} WHERE t.merchant = ? ORDER BY t.time DESC LIMIT 40`,
     ).bind(name).all(),
@@ -1398,7 +1456,7 @@ api.get("/analytics/compare", async (c) => {
   ).bind(f, t).first<{ spend: number; income: number }>();
 
   const cats = (f: number, t: number) => c.env.DB.prepare(
-    `SELECT ${EFF_CAT_ID} AS category_id, ${EFF_CAT_NAME} AS category_name, ${EFF_CAT_COLOR} AS color,
+    `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS color,
             ${amountSum(mult)} AS spent
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
@@ -1510,7 +1568,7 @@ api.get("/analytics/income", async (c) => {
 
   const [sources, curTot, prevTot, monthly] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS category_id, ${EFF_CAT_NAME} AS name, ${EFF_CAT_COLOR} AS color,
+      `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
               ${incSum} AS amount, COUNT(*) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${INCOME_WHERE}${curFilter}
@@ -1743,7 +1801,7 @@ api.get("/analytics/patterns", async (c) => {
   const levels = await categoryMonthlyLevels(c.env, mult, { now }); // канонічний «місячний рівень»
   const [matrix, split, curSplit] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${EFF_CAT_COLOR} AS color,
+      `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
               strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
@@ -1763,6 +1821,11 @@ api.get("/analytics/patterns", async (c) => {
        GROUP BY ${EFF_CAT_ID}`,
     ).bind(monthStart, now).all<{ id: number | null; recurring: number; oneoff: number; n: number; biggest: number }>(),
   ]);
+  // `recurringOneoffSplit` builds category names in stats.ts (no locale there); localize the
+  // displayed one-off items here instead of threading locale through the canon.
+  const loc = c.get("locale");
+  split.oneoff_items = split.oneoff_items.map((it) => ({ ...it, category: localizeCatName(loc, it.category) ?? it.category }));
+
   const curSplitMap = new Map<string, { recurring: number; oneoff: number; n: number; biggest: number }>();
   for (const r of curSplit.results ?? []) curSplitMap.set(String(r.id ?? "null"), { recurring: r.recurring, oneoff: r.oneoff, n: r.n, biggest: r.biggest });
 
@@ -1843,7 +1906,7 @@ api.get("/analytics/category", async (c) => {
       ).bind(from, to).all(),
       c.env.DB.prepare(
         `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
-                rc.name AS category_name, rc.color AS category_color
+                ${catNameSql(c.get("locale"), "rc.name")} AS category_name, rc.color AS category_color
          FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
                               LEFT JOIN categories rc ON rc.id = t.real_category_id
          WHERE ${base} ORDER BY t.amount ASC LIMIT 60`,
@@ -1917,7 +1980,7 @@ api.get("/analytics/slice", async (c) => {
     ).bind(...binds).first<{ spent: number; n: number }>(),
     c.env.DB.prepare(
       `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment, t.user_note,
-              ${EFF_CAT_NAME} AS category_name, ${EFF_CAT_COLOR} AS category_color
+              ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color
        FROM transactions t ${STATS_JOINS}
        WHERE ${base} ORDER BY t.amount ${order} LIMIT ?`,
     ).bind(...binds, limit).all(),
@@ -1943,7 +2006,7 @@ api.get("/analytics/by-category", async (c) => {
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
   const rows = await c.env.DB.prepare(
-    `SELECT ${EFF_CAT_ID} AS category_id, ${EFF_CAT_NAME} AS category_name, ${EFF_CAT_COLOR} AS color,
+    `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS color,
             ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
@@ -2168,7 +2231,7 @@ api.get("/facts", async (c) => {
 // Спліт міняє категорійну аналітику → інвалідуємо Tx/Summary/Advice на клієнті.
 api.get("/transactions/:id/splits", async (c) => {
   const rows = await c.env.DB.prepare(
-    `SELECT s.id, s.category_id, s.amount, cat.name AS category_name, cat.color AS category_color
+    `SELECT s.id, s.category_id, s.amount, ${catNameSql(c.get("locale"), "cat.name")} AS category_name, cat.color AS category_color
      FROM tx_splits s LEFT JOIN categories cat ON cat.id = s.category_id
      WHERE s.tx_id = ? ORDER BY s.id`,
   ).bind(c.req.param("id")).all();
@@ -2511,12 +2574,12 @@ api.get("/search", async (c) => {
        GROUP BY t.merchant ORDER BY spent DESC LIMIT 6`,
     ).bind(...likes).all<{ name: string; n: number; spent: number }>(),
     c.env.DB.prepare(
-      `SELECT c.id, c.name, c.color, p.name AS parent_name
+      `SELECT c.id, ${catNameSql(c.get("locale"), "c.name")} AS name, c.color, ${catNameSql(c.get("locale"), "p.name")} AS parent_name
        FROM categories c LEFT JOIN categories p ON p.id = c.parent_id
        WHERE ${orLike("c.name")} ORDER BY c.parent_id IS NOT NULL, c.name LIMIT 6`,
     ).bind(...likes).all<{ id: number; name: string; color: string | null; parent_name: string | null }>(),
     c.env.DB.prepare(
-      `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, c.name AS category_name
+      `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, ${catNameSql(c.get("locale"), "c.name")} AS category_name
        FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
        WHERE ${orLike("t.merchant")} OR ${orLike("t.comment")} OR ${orLike("t.user_note")}
        ORDER BY t.time DESC LIMIT 6`,
