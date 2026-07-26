@@ -11,6 +11,7 @@
 //  • Ліміт на прохід (`MAX_PER_RUN`) — стрічка не має перетворюватись на спам.
 import type { Env } from "../../env.ts";
 import { getRates } from "../finance/finance.ts";
+import { st } from "../platform/i18n.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
@@ -279,9 +280,10 @@ async function monthPace(env: Env, now: number): Promise<MonthPace> {
      GROUP BY ${EFF_CAT_ID}`,
   ).bind(monthStart, now).all<{ id: number | null; name: string | null; spent: number; n: number }>();
 
+  const loc = await ownerLocale(env);
   const rows = (cur.results ?? [])
     .filter((r): r is { id: number; name: string | null; spent: number; n: number } => r.id != null)
-    .map((r) => ({ id: r.id, name: r.name ?? "без категорії", spent: r.spent, n: r.n, usual: levels.get(r.id)?.level ?? 0 }));
+    .map((r) => ({ id: r.id, name: r.name ?? st(loc, "uncategorized"), spent: r.spent, n: r.n, usual: levels.get(r.id)?.level ?? 0 }));
   return { monthKey: new Date(now * 1000).toISOString().slice(0, 7), elapsedFrac, rows };
 }
 

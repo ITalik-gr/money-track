@@ -11,6 +11,7 @@ import {
 } from "../lib/finance/stats.ts";
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import { catNameSql, localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
+import { st, stLit } from "../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 
 export const api = new Hono<{ Bindings: Env; Variables: { locale: NotifLocale } }>();
@@ -208,7 +209,12 @@ api.get("/export/transactions.csv", async (c) => {
     if (/^[=+\-@\t\r]/.test(s) && !/^-?\d+(\.\d+)?$/.test(s)) s = `'${s}`;
     return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const header = ["Дата", "Мерчант", "Коментар", "Нотатка", "Сума", "Валюта", "Категорія", "Рахунок", "Група", "Переказ"];
+  const loc = c.get("locale");
+  const header = [
+    st(loc, "csvDate"), st(loc, "csvMerchant"), st(loc, "csvComment"), st(loc, "csvNote"),
+    st(loc, "csvAmount"), st(loc, "csvCurrency"), st(loc, "csvCategory"), st(loc, "csvAccount"),
+    st(loc, "csvGroup"), st(loc, "csvTransfer"),
+  ];
   const lines = [header.join(",")];
   for (const r of rows.results ?? []) {
     lines.push([
@@ -216,7 +222,7 @@ api.get("/export/transactions.csv", async (c) => {
       r.merchant ?? "", r.comment ?? "", r.user_note ?? "",
       (r.amount / 100).toFixed(2), CUR_ALPHA[r.currency_code] ?? String(r.currency_code),
       r.category_name ?? "", r.account_title ?? "", r.event_name ?? "",
-      r.is_transfer ? "так" : "",
+      r.is_transfer ? st(loc, "csvYes") : "",
     ].map(esc).join(","));
   }
   const csv = "﻿" + lines.join("\r\n");
@@ -523,7 +529,7 @@ api.post("/budgets/auto", async (c) => {
   const items = (b.items ?? [])
     .map((i) => ({ category_id: Number(i.category_id), amount: Math.round(Number(i.amount)) }))
     .filter((i) => Number.isFinite(i.category_id) && i.amount > 0);
-  if (!items.length) return c.json({ error: "Нема що застосовувати" }, 400);
+  if (!items.length) return c.json({ error: st(c.get("locale"), "errNothingToApply") }, 400);
 
   // Той самий delete-then-insert, що й у PUT /budgets (унікального індексу на таблиці нема).
   const stmts = items.flatMap((i) => [
@@ -975,7 +981,7 @@ api.get("/categories/:id/usage", async (c) => {
 // Захищена лише категорія «Перекази і зняття» (13) — на ній тримається логіка бакета.
 api.delete("/categories/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  if (id === 13) return c.json({ error: "категорію «Перекази і зняття» видаляти не можна" }, 400);
+  if (id === 13) return c.json({ error: st(c.get("locale"), "errTransferCatLocked") }, 400);
   const cat = await c.env.DB.prepare("SELECT id FROM categories WHERE id = ?").bind(id).first();
   if (!cat) return c.json({ error: "not_found" }, 404);
 
@@ -1341,12 +1347,12 @@ api.get("/analytics/networth", async (c) => {
   // Кажемо про курс лише коли це справді так: коли історія покриває весь період, попередження
   // було б неправдою в інший бік — воно применшувало б точність, якої ми вже досягли.
   if (!covered) {
-    caveats.push("Для частини періоду історії курсів ще нема — ті місяці перераховано поточним курсом, тож рух курсу там виглядає як рух грошей. Історія накопичується щодоби.");
+    caveats.push(st(c.get("locale"), "networthRatesCaveat"));
   }
   // Плоскі назад — лише ручні БЕЗ жодного зрізу історії. Ті, що мають історію, тепер крокують.
   const flat = accs.filter((a) => a.is_manual === 1 && !(histByAcc.get(a.id)?.length)).map((a) => a.title ?? a.type ?? a.id);
   if (flat.length) {
-    caveats.push(`Рахунки без історії операцій (${flat.join(", ")}) назад показані плоскими — їхній баланс це ручний зріз «на зараз».`);
+    caveats.push(st(c.get("locale"), "networthFlatCaveat", { accounts: flat.join(", ") }));
   }
 
   return c.json({ months, points, now: points[points.length - 1] ?? null, caveats });
@@ -1622,20 +1628,20 @@ api.get("/analytics/income", async (c) => {
   const deltaPct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : (total > 0 ? null : 0);
 
   const srcRows = (sources.results ?? []).map((s) => ({
-    category_id: s.category_id, name: s.name ?? "Інше", color: s.color,
+    category_id: s.category_id, name: s.name ?? st(c.get("locale"), "other"), color: s.color,
     amount: s.amount, n: s.n, pct: total > 0 ? Math.round((s.amount / total) * 100) : 0,
   }));
 
   // Стабільність: коеф. варіації (stddev/mean) по ПОВНИХ місяцях (без поточного часткового).
   const nowMonth = new Date().toISOString().slice(0, 7);
   const complete = (monthly.results ?? []).filter((r) => r.m !== nowMonth).map((r) => r.income);
-  let cvPct: number | null = null, label = "мало даних";
+  let cvPct: number | null = null, label = st(c.get("locale"), "stabilityUnknown");
   if (complete.length >= 2) {
     const mean = complete.reduce((a, b) => a + b, 0) / complete.length;
     if (mean > 0) {
       const variance = complete.reduce((a, b) => a + (b - mean) ** 2, 0) / complete.length;
       cvPct = Math.round((Math.sqrt(variance) / mean) * 100);
-      label = cvPct <= 15 ? "стабільний" : cvPct <= 40 ? "помірний" : "нестабільний";
+      label = st(c.get("locale"), cvPct <= 15 ? "stabilityStable" : cvPct <= 40 ? "stabilityModerate" : "stabilityVolatile");
     }
   }
 
@@ -1859,7 +1865,7 @@ api.get("/analytics/patterns", async (c) => {
   for (const r of matrix.results ?? []) {
     const key = String(r.id ?? "null");
     let cat = cats.get(key);
-    if (!cat) { cat = { id: r.id, name: r.name ?? "без категорії", color: r.color, months: new Map() }; cats.set(key, cat); }
+    if (!cat) { cat = { id: r.id, name: r.name ?? st(c.get("locale"), "uncategorized"), color: r.color, months: new Map() }; cats.set(key, cat); }
     cat.months.set(r.m, r.spent);
   }
 
@@ -1919,7 +1925,7 @@ api.get("/analytics/category", async (c) => {
     const base = "t.time >= ? AND t.time <= ? AND t.amount < 0 AND t.hold = 0 AND COALESCE(c.parent_id, t.category_id) = 13" + curFilter;
     const [subs, merchants, txs] = await Promise.all([
       c.env.DB.prepare(
-        `SELECT t.real_category_id AS category_id, COALESCE(rc.name, 'не визначено') AS name, rc.color AS color,
+        `SELECT t.real_category_id AS category_id, COALESCE(${catNameSql(c.get("locale"), "rc.name")}, ${stLit(c.get("locale"), "unidentified")}) AS name, rc.color AS color,
                 ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
          FROM transactions t ${STATS_JOINS}
          WHERE ${base} GROUP BY t.real_category_id ORDER BY spent DESC`,
@@ -1945,7 +1951,8 @@ api.get("/analytics/category", async (c) => {
   const base = `t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?${curFilter}`;
   const [subs, merchants, txs] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT COALESCE(rc.id, c.id) AS category_id, COALESCE(rc.name, c.name, 'без категорії') AS name,
+      `SELECT COALESCE(rc.id, c.id) AS category_id,
+              COALESCE(${catNameSql(c.get("locale"), "COALESCE(rc.name, c.name)")}, ${stLit(c.get("locale"), "uncategorized")}) AS name,
               COALESCE(rc.color, c.color) AS color, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
        FROM transactions t ${STATS_JOINS}
        WHERE ${base} GROUP BY COALESCE(rc.id, c.id) ORDER BY spent DESC`,
@@ -2212,7 +2219,7 @@ api.delete("/advisor/history", async (c) => {
 api.post("/advisor/generate", async (c) => {
   const { buildAdvice, fallbackAdvice } = await import("../lib/ai/advisor.ts");
   if (!c.env.ANTHROPIC_API_KEY) {
-    return c.json(await fallbackAdvice(c.env, "AI-ключ не налаштовано на цьому середовищі."));
+    return c.json(await fallbackAdvice(c.env, st(c.get("locale"), "errAiKeyMissing")));
   }
   try {
     return c.json(await buildAdvice(c.env));
@@ -2266,18 +2273,18 @@ api.put("/transactions/:id/splits", async (c) => {
   const body = await c.req.json<{ splits?: { category_id: number; amount: number }[] }>().catch(() => ({ splits: [] }));
   const splits = (body.splits ?? []).map((p) => ({ category_id: Number(p.category_id), amount: Math.round(Number(p.amount)) }));
   const tx = await c.env.DB.prepare("SELECT amount FROM transactions WHERE id = ?").bind(id).first<{ amount: number }>();
-  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
+  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
   if (splits.length > 0) {
-    if (tx.amount >= 0) return c.json({ error: "Ділити можна лише витрату" }, 400);
+    if (tx.amount >= 0) return c.json({ error: st(c.get("locale"), "errSplitOnlyExpense") }, 400);
     // Дзеркало перевірки в `/reimbursement`: спліт і компенсація взаємовиключні (див. там же).
     const r = await c.env.DB.prepare("SELECT reimbursed FROM transactions WHERE id = ?").bind(id).first<{ reimbursed: number | null }>();
-    if ((r?.reimbursed ?? 0) > 0) return c.json({ error: "На операції вказано компенсацію — прибери її, щоб поділити на категорії" }, 400);
-    if (splits.length < 2) return c.json({ error: "Потрібно щонайменше 2 частини" }, 400);
+    if ((r?.reimbursed ?? 0) > 0) return c.json({ error: st(c.get("locale"), "errSplitHasReimbursement") }, 400);
+    if (splits.length < 2) return c.json({ error: st(c.get("locale"), "errSplitMinParts") }, 400);
     if (splits.some((p) => !p.category_id || !Number.isFinite(p.amount) || p.amount >= 0)) {
-      return c.json({ error: "Кожна частина: категорія + сума < 0" }, 400);
+      return c.json({ error: st(c.get("locale"), "errSplitPartShape") }, 400);
     }
     const sum = splits.reduce((s, p) => s + p.amount, 0);
-    if (sum !== tx.amount) return c.json({ error: `Сума частин має дорівнювати сумі операції (${tx.amount})` }, 400);
+    if (sum !== tx.amount) return c.json({ error: st(c.get("locale"), "errSplitSumMismatch", { amount: tx.amount }) }, 400);
   }
   const now = Math.floor(Date.now() / 1000);
   const stmts = [c.env.DB.prepare("DELETE FROM tx_splits WHERE tx_id = ?").bind(id)];
@@ -2296,7 +2303,10 @@ api.put("/transactions/:id/splits", async (c) => {
 // Підпис збираємо на СЕРВЕРІ: у вхідних P2P `merchant` часто порожній, і рядок-кандидат
 // виходив без назви — сама дата й сума, зрозуміти неможливо. Черга: мерчант → коментар
 // банку → нотатка → назва рахунку.
-const RB_LABEL = `COALESCE(NULLIF(TRIM(t.merchant), ''), NULLIF(TRIM(t.comment), ''), NULLIF(TRIM(t.user_note), ''), a.title, 'Надходження')`;
+// The last resort of that chain is a generic word, so it follows the reader's locale like any
+// other label — hence a function of the locale rather than a module constant.
+const rbLabel = (loc: NotifLocale) =>
+  `COALESCE(NULLIF(TRIM(t.merchant), ''), NULLIF(TRIM(t.comment), ''), NULLIF(TRIM(t.user_note), ''), a.title, ${stLit(loc, "incoming")})`;
 
 // Перерахунок обох денормалізованих сум із таблиці розподілів. ЄДИНЕ місце, де вони пишуться —
 // інакше `reimbursed`/`reimburses_total` розійшлися б із `tx_reimbursements`, а канон читає саме їх.
@@ -2319,7 +2329,7 @@ api.get("/transactions/:id/reimbursement", async (c) => {
   const tx = await c.env.DB.prepare(
     "SELECT id, amount, currency_code, time, reimbursed FROM transactions WHERE id = ?",
   ).bind(id).first<{ id: string; amount: number; currency_code: number; time: number; reimbursed: number | null }>();
-  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
+  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
 
   type RbTx = {
     id: string; label: string; account_title: string | null;
@@ -2328,7 +2338,7 @@ api.get("/transactions/:id/reimbursement", async (c) => {
     allocated_here: number;       // скільки з нього вже пішло саме на цю витрату
   };
   const SELECT_TX = `
-    SELECT t.id, ${RB_LABEL} AS label, a.title AS account_title, t.amount, t.currency_code, t.time,
+    SELECT t.id, ${rbLabel(c.get("locale"))} AS label, a.title AS account_title, t.amount, t.currency_code, t.time,
            t.amount - COALESCE(t.reimburses_total, 0) AS available,
            COALESCE((SELECT r.amount FROM tx_reimbursements r WHERE r.source_tx_id = t.id AND r.expense_id = ?), 0) AS allocated_here
     FROM transactions t LEFT JOIN accounts a ON a.id = t.account_id`;
@@ -2366,8 +2376,8 @@ api.put("/transactions/:id/reimbursement", async (c) => {
   const tx = await c.env.DB.prepare(
     "SELECT amount, currency_code FROM transactions WHERE id = ?",
   ).bind(id).first<{ amount: number; currency_code: number }>();
-  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
-  if (tx.amount >= 0) return c.json({ error: "Компенсацію можна вказати лише для витрати" }, 400);
+  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
+  if (tx.amount >= 0) return c.json({ error: st(c.get("locale"), "errReimbOnlyExpense") }, 400);
   const expenseTotal = -tx.amount;
 
   // §SPLIT×§COMPENSATION: свідомо взаємовиключні. Компенсація каже «скільки з цього моє»,
@@ -2375,7 +2385,7 @@ api.put("/transactions/:id/reimbursement", async (c) => {
   // з округленням, і сума частин перестала б сходитись із сумою операції.
   const hasSplits = await c.env.DB.prepare("SELECT 1 FROM tx_splits WHERE tx_id = ? LIMIT 1").bind(id).first();
   if (hasSplits && (wanted.length || body.manual_amount)) {
-    return c.json({ error: "Операція вже поділена на категорії — прибери поділ, щоб указати компенсацію" }, 400);
+    return c.json({ error: st(c.get("locale"), "errReimbHasSplit") }, 400);
   }
 
   const rows: { source_id: string; amount: number }[] = [];
@@ -2392,24 +2402,24 @@ api.put("/transactions/:id/reimbursement", async (c) => {
                 + COALESCE((SELECT r.amount FROM tx_reimbursements r WHERE r.source_tx_id = t.id AND r.expense_id = ?), 0) AS available
        FROM transactions t WHERE t.id IN (${ph})`,
     ).bind(id, ...ids).all<{ id: string; amount: number; currency_code: number; available: number }>()).results ?? [];
-    if (found.length !== ids.length) return c.json({ error: "Частину операцій не знайдено" }, 400);
+    if (found.length !== ids.length) return c.json({ error: st(c.get("locale"), "errReimbSomeNotFound") }, 400);
     const byId = new Map(found.map((r) => [r.id, r]));
 
     for (const a of wanted) {
       const r = byId.get(String(a.source_id))!;
-      if (r.id === id) return c.json({ error: "Операція не може компенсувати сама себе" }, 400);
-      if (r.amount <= 0) return c.json({ error: "Компенсацією може бути лише надходження" }, 400);
+      if (r.id === id) return c.json({ error: st(c.get("locale"), "errReimbSelf") }, 400);
+      if (r.amount <= 0) return c.json({ error: st(c.get("locale"), "errReimbOnlyIncome") }, 400);
       // Валюти не зводимо: компенсація живе в тій самій валюті, що й витрата (`reimbursed`
       // додається до `t.amount` напряму). Інакше курс мовчки спотворив би суму витрати.
-      if (r.currency_code !== tx.currency_code) return c.json({ error: "Надходження має бути в тій самій валюті, що й витрата" }, 400);
+      if (r.currency_code !== tx.currency_code) return c.json({ error: st(c.get("locale"), "errReimbCurrency") }, 400);
 
       // Без явної суми беремо рівно стільки, скільки ще треба і скільки лишилось у джерела.
       const need = Math.max(0, expenseTotal - running);
       const take = a.amount == null ? Math.min(r.available, need) : Math.round(Number(a.amount));
-      if (!Number.isFinite(take) || take < 0) return c.json({ error: "Сума розподілу має бути ≥ 0" }, 400);
+      if (!Number.isFinite(take) || take < 0) return c.json({ error: st(c.get("locale"), "errReimbNegative") }, 400);
       if (take === 0) continue;
       if (take > r.available) {
-        return c.json({ error: `З надходження лишилось ${(r.available / 100).toFixed(2)} — не можна взяти ${(take / 100).toFixed(2)}` }, 400);
+        return c.json({ error: st(c.get("locale"), "errReimbSourceExceeded", { left: (r.available / 100).toFixed(2), take: (take / 100).toFixed(2) }) }, 400);
       }
       running += take;
       rows.push({ source_id: r.id, amount: take });
@@ -2417,12 +2427,12 @@ api.put("/transactions/:id/reimbursement", async (c) => {
   }
 
   const manual = body.manual_amount == null ? 0 : Math.round(Number(body.manual_amount));
-  if (!Number.isFinite(manual) || manual < 0) return c.json({ error: "Сума компенсації має бути ≥ 0" }, 400);
+  if (!Number.isFinite(manual) || manual < 0) return c.json({ error: st(c.get("locale"), "errReimbTotalNegative") }, 400);
   const total = running + manual;
   // Стеля — сума самої витрати. Компенсація більша за витрату зробила б `EFF_AMOUNT` додатним,
   // і рядок випав би з аналітики взагалі (ні витрата, ні дохід).
   if (total > expenseTotal) {
-    return c.json({ error: `Компенсація ${(total / 100).toFixed(2)} перевищує суму витрати ${(expenseTotal / 100).toFixed(2)}` }, 400);
+    return c.json({ error: st(c.get("locale"), "errReimbExceedsExpense", { total: (total / 100).toFixed(2), expense: (expenseTotal / 100).toFixed(2) }) }, 400);
   }
 
   // Джерела, яких торкаємось: старі (їх треба перерахувати після видалення) + нові.
@@ -2455,12 +2465,12 @@ api.get("/transactions/:id/reimbursement-usage", async (c) => {
   const tx = await c.env.DB.prepare(
     "SELECT id, amount, currency_code, reimburses_total FROM transactions WHERE id = ?",
   ).bind(id).first<{ id: string; amount: number; currency_code: number; reimburses_total: number | null }>();
-  if (!tx) return c.json({ error: "Операцію не знайдено" }, 404);
+  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
   if (tx.amount <= 0) return c.json({ used: [], allocated: 0, available: 0 });
 
   const used = (await c.env.DB.prepare(
     `SELECT e.id, r.amount,
-            COALESCE(NULLIF(TRIM(e.merchant), ''), NULLIF(TRIM(e.comment), ''), 'Витрата') AS label,
+            COALESCE(NULLIF(TRIM(e.merchant), ''), NULLIF(TRIM(e.comment), ''), ${stLit(c.get("locale"), "expense")}) AS label,
             e.time, e.amount AS expense_amount
      FROM tx_reimbursements r JOIN transactions e ON e.id = r.expense_id
      WHERE r.source_tx_id = ? ORDER BY e.time`,
@@ -2545,11 +2555,11 @@ api.post("/settings/saved-filters", async (c) => {
   const b = await c.req.json<{ name?: string; query?: string }>().catch(() => ({} as { name?: string; query?: string }));
   const name = (b.name ?? "").trim().slice(0, 60);
   const query = (b.query ?? "").replace(/^\?/, "").slice(0, 500);
-  if (!name) return c.json({ error: "Потрібна назва" }, 400);
-  if (!query) return c.json({ error: "Немає жодного активного фільтра" }, 400);
+  if (!name) return c.json({ error: st(c.get("locale"), "errFilterNameRequired") }, 400);
+  if (!query) return c.json({ error: st(c.get("locale"), "errFilterNoActive") }, 400);
 
   const list = await readFilters(c.env.DB);
-  if (list.length >= 24) return c.json({ error: "Забагато збережених фільтрів (максимум 24)" }, 400);
+  if (list.length >= 24) return c.json({ error: st(c.get("locale"), "errFilterTooMany", { max: 24 }) }, 400);
   // Та сама назва — перезапис, а не дубль: інакше список швидко заростає «Робочі (2)».
   const idx = list.findIndex((f) => f.name.toLowerCase() === name.toLowerCase());
   const item: SavedFilter = { id: idx >= 0 ? list[idx].id : crypto.randomUUID(), name, query };
@@ -2629,7 +2639,7 @@ api.get("/knowledge", async (c) => {
 api.get("/knowledge/:id", async (c) => {
   const { knowledgeBody } = await import("../lib/ai/knowledge/index.ts");
   const doc = await knowledgeBody(c.env.DB, c.req.param("id"), c.get("locale"));
-  if (!doc) return c.json({ error: "Документ не знайдено" }, 404);
+  if (!doc) return c.json({ error: st(c.get("locale"), "errDocNotFound") }, 404);
   return c.json(doc);
 });
 
@@ -2639,12 +2649,12 @@ api.post("/knowledge", async (c) => {
   const b = await c.req.json<{ title?: string; summary?: string; body?: string }>();
   const title = (b.title ?? "").trim();
   const body = (b.body ?? "").trim();
-  if (!title) return c.json({ error: "Потрібна назва документа" }, 400);
-  if (!body) return c.json({ error: "Документ порожній" }, 400);
-  if (body.length > DOC_MAX_CHARS) return c.json({ error: `Задовгий документ: ${body.length} символів, максимум ${DOC_MAX_CHARS}` }, 400);
+  if (!title) return c.json({ error: st(c.get("locale"), "errDocTitleRequired") }, 400);
+  if (!body) return c.json({ error: st(c.get("locale"), "errDocEmpty") }, 400);
+  if (body.length > DOC_MAX_CHARS) return c.json({ error: st(c.get("locale"), "errDocTooLong", { len: body.length, max: DOC_MAX_CHARS }) }, 400);
   const used = await userCharsExcept(c.env.DB);
   if (used + body.length > USER_TOTAL_MAX_CHARS) {
-    return c.json({ error: `Не влазить у корпус: власні документи займуть ${used + body.length} символів із ${USER_TOTAL_MAX_CHARS}. Скороти або вимкни щось.` }, 400);
+    return c.json({ error: st(c.get("locale"), "errCorpusFullEdit", { used: used + body.length, max: USER_TOTAL_MAX_CHARS }) }, 400);
   }
   const now = Math.floor(Date.now() / 1000);
   const id = `user:${now}:${Math.random().toString(36).slice(2, 7)}`;
@@ -2661,21 +2671,21 @@ api.put("/knowledge/:id", async (c) => {
   const b = await c.req.json<{ title?: string; summary?: string; body?: string; enabled?: boolean }>();
   const base = KNOWLEDGE_DOCS.find((d) => d.id === id);
   // Канон розрахунків не редагується: інакше AI пояснював би цифри не так, як їх рахує код.
-  if (isLocked(id)) return c.json({ error: "Цей документ описує канон розрахунків застосунку — його не можна змінити" }, 400);
-  if (!base && !id.startsWith("user:")) return c.json({ error: "Документ не знайдено" }, 404);
+  if (isLocked(id)) return c.json({ error: st(c.get("locale"), "errDocLocked") }, 400);
+  if (!base && !id.startsWith("user:")) return c.json({ error: st(c.get("locale"), "errDocNotFound") }, 404);
 
   const body = (b.body ?? "").trim();
-  if (!body) return c.json({ error: "Документ порожній" }, 400);
-  if (body.length > DOC_MAX_CHARS) return c.json({ error: `Задовгий документ: ${body.length} символів, максимум ${DOC_MAX_CHARS}` }, 400);
+  if (!body) return c.json({ error: st(c.get("locale"), "errDocEmpty") }, 400);
+  if (body.length > DOC_MAX_CHARS) return c.json({ error: st(c.get("locale"), "errDocTooLong", { len: body.length, max: DOC_MAX_CHARS }) }, 400);
   if (!base) {
     const used = await userCharsExcept(c.env.DB, id);
     if (used + body.length > USER_TOTAL_MAX_CHARS) {
-      return c.json({ error: `Не влазить у корпус: власні документи займуть ${used + body.length} символів із ${USER_TOTAL_MAX_CHARS}.` }, 400);
+      return c.json({ error: st(c.get("locale"), "errCorpusFull", { used: used + body.length, max: USER_TOTAL_MAX_CHARS }) }, 400);
     }
   }
   const now = Math.floor(Date.now() / 1000);
   const title = (b.title ?? base?.title ?? "").trim();
-  if (!title) return c.json({ error: "Потрібна назва документа" }, 400);
+  if (!title) return c.json({ error: st(c.get("locale"), "errDocTitleRequired") }, 400);
   const kind = base ? "override" : "user";
   const enabled = b.enabled === false ? 0 : 1;
   await c.env.DB.prepare(
@@ -2691,7 +2701,7 @@ api.put("/knowledge/:id", async (c) => {
 api.delete("/knowledge/:id", async (c) => {
   const { isLocked } = await import("../lib/ai/knowledge/index.ts");
   const id = c.req.param("id");
-  if (isLocked(id)) return c.json({ error: "Цей документ не можна прибрати" }, 400);
+  if (isLocked(id)) return c.json({ error: st(c.get("locale"), "errDocCannotHide") }, 400);
   await c.env.DB.prepare("DELETE FROM knowledge_docs WHERE id = ?").bind(id).run();
   return c.json({ ok: true });
 });
@@ -2948,10 +2958,10 @@ api.patch("/accounts/:id/active", async (c) => {
 api.delete("/accounts/:id", async (c) => {
   const id = c.req.param("id");
   const acc = await c.env.DB.prepare("SELECT is_manual FROM accounts WHERE id = ?").bind(id).first<{ is_manual: number }>();
-  if (!acc) return c.json({ error: "рахунок не знайдено" }, 404);
-  if (!acc.is_manual) return c.json({ error: "лише ручний рахунок можна видалити; mono — архівуй" }, 400);
+  if (!acc) return c.json({ error: st(c.get("locale"), "errAccountNotFound") }, 404);
+  if (!acc.is_manual) return c.json({ error: st(c.get("locale"), "errAccountOnlyManual") }, 400);
   const cnt = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ?").bind(id).first<{ n: number }>();
-  if ((cnt?.n ?? 0) > 0) return c.json({ error: "на рахунку є операції — заархівуй замість видалення" }, 400);
+  if ((cnt?.n ?? 0) > 0) return c.json({ error: st(c.get("locale"), "errAccountHasTx") }, 400);
   await c.env.DB.prepare("DELETE FROM accounts WHERE id = ? AND is_manual = 1").bind(id).run();
   return c.json({ ok: true });
 });

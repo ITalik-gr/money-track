@@ -3,6 +3,7 @@
 // власних коштів (§5, кредитний ліміт) і останні транзакції. Одне джерело правди.
 import type { Env } from "../../env.ts";
 import type { AppDb } from "../platform/db-shim.ts";
+import { getState } from "./repo.ts";
 
 // §R2-CUR2: єдине джерело правди для зведення сум у гривню. rates — мапа
 // «код валюти → скільки ₴ за 1 одиницю» (див. cron/rates). Суми в мінімальних
@@ -85,14 +86,20 @@ export function toUAHMinor(amountMinor: number, code: number, rates: Rates): num
 }
 
 // Find or create the dedicated cash account so cash entries never land on a card.
+//
+// The title is written ONCE, at creation, in whatever locale the owner had then (B3) — it is
+// stored user data from that point on, and renaming it is the owner's call. Localizing it on
+// read would be wrong for the same reason: it would silently rename an account the user may
+// have deliberately called something else.
 export async function ensureCashAccount(db: AppDb, currency = 980): Promise<string> {
   const existing = await db.prepare("SELECT id FROM accounts WHERE type = 'cash' LIMIT 1").first<{ id: string }>();
   if (existing) return existing.id;
   const id = crypto.randomUUID();
+  const title = (await getState(db, "locale")) === "en" ? "Cash" : "Готівка";
   await db.prepare(
     `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, is_manual, is_active, updated_at)
-     VALUES (?, 'cash', 'Готівка', ?, 0, 0, 1, 1, ?)`,
-  ).bind(id, currency, Math.floor(Date.now() / 1000)).run();
+     VALUES (?, 'cash', ?, ?, 0, 0, 1, 1, ?)`,
+  ).bind(id, title, currency, Math.floor(Date.now() / 1000)).run();
   return id;
 }
 

@@ -14,6 +14,7 @@ import {
   toCanonical,
   type ColumnMapping,
 } from "../lib/bank/providers/csv.ts";
+import { ownerLocale } from "../lib/finance/categories-i18n.ts";
 
 export const importRoutes = new Hono<{ Bindings: Env }>();
 
@@ -65,6 +66,7 @@ importRoutes.post("/csv/preview", async (c) => {
     account?.id ?? "preview",
     account?.currency_code ?? 980,
     hasHeader,
+    await ownerLocale(c.env.DB),
   );
 
   // Which of these rows are already in the database. Shown BEFORE writing, because "imported
@@ -123,6 +125,7 @@ importRoutes.post("/csv/commit", async (c) => {
     account.id,
     account.currency_code ?? 980,
     hasHeader,
+    await ownerLocale(c.env.DB),
   );
   const result = await importTransactions(c.env.DB, txs);
 

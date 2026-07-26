@@ -166,25 +166,45 @@ app.post("/api/logout", (c) => {
 // Open by design — no invite, no key: a stranger clicks "Try the demo" and gets their OWN
 // ephemeral Durable Object, seeded with the fixed dataset and armed to self-destruct in 24h.
 // Two tabs = two independent sandboxes (two random ids). A returning valid cookie reuses its own.
+//
+// Two response shapes, one route (B1). Seeding ~350 transactions takes seconds, and as a plain
+// navigation that time is a blank white page — the visitor's very first impression is a browser
+// that looks hung. So the landing calls `?json=1` from a click handler, keeps its own progress
+// state, and navigates itself once the sandbox exists. The redirect form stays the default and
+// still works without JS (and is what a shared `/demo` link hits directly).
 app.get("/demo", async (c) => {
+  const wantsJson = c.req.query("json") === "1";
+  const done = (status: 200 | 429 | 503, body: Record<string, unknown>, headers?: Record<string, string>) =>
+    wantsJson ? c.json(body, status, headers) : c.redirect("/", 302);
+
   const existing = await verifyDemoToken(c.env, getCookie(c, DEMO_COOKIE));
-  if (existing) return c.redirect("/", 302);
+  if (existing) return done(200, { ok: true, reused: true });
 
   // Creating a sandbox is unauthenticated and writes a seeded Durable Object, so it needs its
   // own daily ceiling — see `demoSandboxAllowed`. Checked BEFORE the object is created.
   const { demoSandboxAllowed } = await import("./lib/platform/demo.ts");
   if (!(await demoSandboxAllowed(c.env))) {
-    return c.text(
-      "The demo has reached today's limit of new sandboxes. Please try again tomorrow.",
-      429,
-      { "retry-after": "3600" },
-    );
+    // `reason` is what the client branches on; `error` carries the human text for the plain
+    // navigation case and for any client that doesn't know the reason codes.
+    const msg = "The demo has reached today's limit of new sandboxes. Please try again tomorrow.";
+    if (wantsJson) return c.json({ error: msg, reason: "daily_limit" }, 429, { "retry-after": "3600" });
+    return c.text(msg, 429, { "retry-after": "3600" });
   }
 
   const demoId = newDemoId();
   const nowSec = Math.floor(Date.now() / 1000);
   const stub = c.env.USER_DO.get(c.env.USER_DO.idFromName(`demo:${demoId}`));
-  await stub.seedDemo(nowSec);
+  try {
+    await stub.seedDemo(nowSec);
+  } catch (e) {
+    // Seeding is the one slow, failure-prone step. Report it as such instead of letting it
+    // surface as an empty 500 — a visitor who gets a blank page reads it as "the app is broken",
+    // which is exactly the conclusion the demo exists to prevent.
+    console.error("[demo] seed failed:", e instanceof Error ? e.message : e);
+    const msg = "Could not prepare the demo sandbox. Please try again.";
+    if (wantsJson) return c.json({ error: msg, reason: "seed_failed" }, 503);
+    return c.text(msg, 503);
+  }
 
   // Register for the daily orphan sweep (backstop for sandboxes whose 24h alarm never fires after
   // an eviction). Best-effort: if the directory table isn't migrated yet, the alarm still cleans
@@ -198,7 +218,7 @@ app.get("/demo", async (c) => {
   setCookie(c, DEMO_COOKIE, await createDemoToken(c.env, demoId), {
     httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 60 * 60 * 24,
   });
-  return c.redirect("/", 302);
+  return done(200, { ok: true });
 });
 
 // Guard everything registered below (all of /api and /ingest). The auth + health

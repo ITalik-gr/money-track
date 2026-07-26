@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocale, useT } from "../i18n/index.ts";
 import type { Locale } from "../i18n/index.ts";
 import { Icon } from "../components/ui/Icon.tsx";
@@ -19,6 +20,36 @@ const LOCALES: Locale[] = ["uk", "en"];
 export function Landing() {
   const t = useT();
   const { locale, setLocale } = useLocale();
+
+  // Demo entry state (B1). `GET /demo` seeds ~350 transactions into a fresh Durable Object before
+  // it can redirect, and as a plain <a> that shows as several seconds of blank page — the first
+  // thing a visitor sees is a browser that looks hung. So the click is intercepted, the wait is
+  // named, and failures (daily sandbox ceiling, seeding error) get a sentence instead of a white
+  // screen. The href stays real: without JS, or on a shared /demo link, the redirect form runs.
+  const [demoState, setDemoState] = useState<"idle" | "loading">("idle");
+  const [demoError, setDemoError] = useState<string | null>(null);
+
+  async function startDemo(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; // let "open in new tab" work
+    e.preventDefault();
+    if (demoState === "loading") return;
+    setDemoState("loading");
+    setDemoError(null);
+    try {
+      const res = await fetch("/demo?json=1", { credentials: "same-origin" });
+      if (res.ok) {
+        // Full navigation, not a router push: the demo cookie now exists, and the app has to
+        // boot with it (App.tsx decides logged-in vs landing from /me at mount).
+        window.location.assign("/");
+        return;
+      }
+      const body = (await res.json().catch(() => null)) as { reason?: string } | null;
+      setDemoError(body?.reason === "daily_limit" ? t("landing.demoLimit") : t("landing.demoFailed"));
+    } catch {
+      setDemoError(t("landing.demoFailed"));
+    }
+    setDemoState("idle");
+  }
 
   const features: [string, string][] = [
     [t("landing.f1Title"), t("landing.f1Body")],
@@ -51,13 +82,32 @@ export function Landing() {
           <h1>{t("landing.h1")}</h1>
           <p className="lp-sub">{t("landing.sub")}</p>
           <div className="lp-cta">
-            {/* Plain links, not fetches: both are Worker routes that redirect. */}
-            <a className="btn primary lg" href="/demo">{t("landing.tryDemo")} →</a>
+            {/* Both are Worker routes. Sign-in stays a plain link (OAuth is a redirect flow);
+                the demo is intercepted so the seeding wait is visible — see `startDemo`. */}
+            <a
+              className={`btn primary lg${demoState === "loading" ? " is-busy" : ""}`}
+              href="/demo"
+              onClick={startDemo}
+              aria-busy={demoState === "loading"}
+            >
+              {demoState === "loading" ? (
+                <>
+                  <span className="lp-spin" aria-hidden="true" />
+                  {t("landing.demoPreparing")}
+                </>
+              ) : (
+                <>{t("landing.tryDemo")} →</>
+              )}
+            </a>
             {/* Straight to Google — there is no password any more, so an intermediate login
                 screen would just be a page with one button on it. */}
             <a className="btn lg" href="/auth/google/start">{t("landing.signInGoogle")}</a>
           </div>
-          <p className="lp-note">{t("landing.demoNote")}</p>
+          {/* The wait is a few seconds of seeding, so say what is happening rather than leaving
+              a spinner to speak for itself. `role="status"` announces both states to a reader. */}
+          <p className={`lp-note${demoError ? " is-error" : ""}`} role="status">
+            {demoError ?? (demoState === "loading" ? t("landing.demoPreparingNote") : t("landing.demoNote"))}
+          </p>
         </div>
 
         {/* The product claim, drawn instead of asserted: one canonical layer feeding both the

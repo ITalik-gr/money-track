@@ -7,6 +7,7 @@
 // numbers. So: the delimiter is detected, the mapping is GUESSED but shown to the user for
 // confirmation, and every row is previewed before anything is written.
 import type { AppDb } from "../../platform/db-shim.ts";
+import { st, type ServerLocale } from "../../platform/i18n.ts";
 import type { BankProvider, CanonicalTx } from "./provider.ts";
 
 // ---- parsing ---------------------------------------------------------------------------
@@ -229,6 +230,10 @@ export async function toCanonical(
   accountId: string,
   currencyCode: number,
   hasHeader = true,
+  // Skip reasons are printed row-by-row in the import preview, so they follow the reader's
+  // locale (B3). Defaulted rather than required: this stays callable from a test or a script
+  // that has no user context.
+  locale: ServerLocale = "uk",
 ): Promise<ConvertResult> {
   const txs: CanonicalTx[] = [];
   const skipped: { line: number; reason: string }[] = [];
@@ -239,16 +244,16 @@ export async function toCanonical(
     const line = i + (hasHeader ? 2 : 1);
     const time = parseDateUnix(row[mapping.date] ?? "");
     if (time === null) {
-      skipped.push({ line, reason: `не розпізнав дату: «${(row[mapping.date] ?? "").slice(0, 32)}»` });
+      skipped.push({ line, reason: st(locale, "csvBadDate", { value: (row[mapping.date] ?? "").slice(0, 32) }) });
       continue;
     }
     const amount = parseAmountMinor(row[mapping.amount] ?? "");
     if (amount === null) {
-      skipped.push({ line, reason: `не розпізнав суму: «${(row[mapping.amount] ?? "").slice(0, 32)}»` });
+      skipped.push({ line, reason: st(locale, "csvBadAmount", { value: (row[mapping.amount] ?? "").slice(0, 32) }) });
       continue;
     }
     if (amount === 0) {
-      skipped.push({ line, reason: "нульова сума" });
+      skipped.push({ line, reason: st(locale, "csvZeroAmount") });
       continue;
     }
     const description = (row[mapping.description] ?? "").trim();

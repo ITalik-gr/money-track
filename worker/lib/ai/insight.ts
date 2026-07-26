@@ -4,6 +4,8 @@ import type { Env } from "../../env.ts";
 import { generateInsight, briefUsage, logUsage, type StructuredInsight, type AiUsageBrief } from "./ai.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { getRates } from "../finance/finance.ts";
+import { st } from "../platform/i18n.ts";
+import { ownerLocale } from "../finance/categories-i18n.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "../finance/stats.ts";
 
 const DAY = 86400;
@@ -38,7 +40,8 @@ async function spendByCategory(env: Env, from: number, to: number, mult: string)
      WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 8`,
   ).bind(from, to).all<{ name: string; spent: number; n: number }>();
-  return (r.results ?? []).map((x) => ({ name: x.name ?? "без категорії", spent: x.spent / 100, n: x.n }));
+  const loc = await ownerLocale(env.DB);
+  return (r.results ?? []).map((x) => ({ name: x.name ?? st(loc, "uncategorized"), spent: x.spent / 100, n: x.n }));
 }
 
 export async function buildAndStoreInsight(env: Env, periodDays?: number): Promise<StoredInsight> {
@@ -80,12 +83,13 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
   ]);
 
   const totalUAH = (totalRow?.total ?? 0) / 100;
-  const label = days === 7 ? "тиждень" : days === 30 ? "місяць" : `${days} дн`;
+  const loc = await ownerLocale(env.DB);
+  const label = days === 7 ? st(loc, "insightWeek") : days === 30 ? st(loc, "insightMonth") : st(loc, "insightDays", { n: days });
   const base = { generated_at: now, period_from: from, period_to: now, period_days: days };
 
   let stored: StoredInsight;
   if (!totalUAH) {
-    stored = { ...base, text: `За обраний період (${label}) витрат не було.`, empty: true };
+    stored = { ...base, text: st(loc, "insightEmpty", { label }), empty: true };
   } else {
     // Топ-аномалії: категорії з найбільшою зміною суми проти минулого періоду (детерміновано,
     // без прогнозу — просто «що змінилось найпомітніше»). spent тут від'ємний (витрата).

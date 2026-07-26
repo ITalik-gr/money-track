@@ -1325,6 +1325,21 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .lp-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
 .btn.lg { padding: 12px 22px; font-size: 15px; border-radius: 12px; }
 .lp-note { margin-top: 14px; color: var(--muted); font-size: 12.5px; }
+/* Failure state of the same line — it replaces the note rather than stacking under it, so the
+   CTA never shifts down while the visitor is reading it. */
+.lp-note.is-error { color: var(--neg); }
+
+/* Demo button while the sandbox is seeded. Pointer events stay on (the button is a link and
+   `startDemo` guards re-entry) so the cursor doesn't turn into "disabled" mid-wait. */
+.lp-cta .btn.is-busy { opacity: 0.82; cursor: progress; }
+.lp-spin {
+  width: 14px; height: 14px; flex: none; /* spacing comes from .btn's own gap */
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: lp-spin 0.7s linear infinite;
+  /* The label ("Preparing your sandbox…") carries the meaning, so the global
+     prefers-reduced-motion rule can stop this spinning without losing information. */
+}
+@keyframes lp-spin { to { transform: rotate(360deg); } }
 
 /* Диаграма «один канон → два споживачі». Малюємо те, що інакше довелось би стверджувати
    словами; заразом це слот, який пізніше займе реальний скріншот. */

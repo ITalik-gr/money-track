@@ -4,6 +4,8 @@
 // кличе Sonnet 5, зберігає структурований репорт у ai_reports. Ідемпотентно по періоду.
 import type { Env } from "../../env.ts";
 import { getRates } from "../finance/finance.ts";
+import { st } from "../platform/i18n.ts";
+import { ownerLocale } from "../finance/categories-i18n.ts";
 import { fundsBreakdown } from "./advisor.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum,
@@ -124,10 +126,11 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
   const trend: TrendPoint[] = (trendRows.results ?? []).map((r) => ({ month: r.m, spend_uah: money(r.spend), income_uah: money(r.income) }));
 
   const prevMap = new Map(prevCats.map((c) => [c.id, c.spent]));
+  const loc = await ownerLocale(env.DB);
   const categories = curCats.map((c) => {
     const p = prevMap.get(c.id) ?? 0;
     const delta = p > 0 ? Math.round(((c.spent - p) / p) * 100) : (c.spent > 0 ? null : 0);
-    return { name: c.name ?? "без категорії", amount_uah: money(c.spent), prev_uah: money(p), delta_pct: delta };
+    return { name: c.name ?? st(loc, "uncategorized"), amount_uah: money(c.spent), prev_uah: money(p), delta_pct: delta };
   });
 
   const net = cur.income - cur.spend;

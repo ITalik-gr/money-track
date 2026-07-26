@@ -5,18 +5,20 @@ import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { parseText } from "../lib/ai/ai.ts";
 import { ingestReceipt } from "../lib/ai/receipt.ts";
+import { st } from "../lib/platform/i18n.ts";
+import { ownerLocale } from "../lib/finance/categories-i18n.ts";
 
 export const ingest = new Hono<{ Bindings: Env }>();
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXT_CHARS = 4000; // a hand-typed expense note; anything longer is a paste-bomb
 
-function requireKey(env: Env): string | null {
-  return env.ANTHROPIC_API_KEY ? null : "ANTHROPIC_API_KEY not set — див. інструкцію в README";
+async function requireKey(env: Env): Promise<string | null> {
+  return env.ANTHROPIC_API_KEY ? null : st(await ownerLocale(env.DB), "errAiKeyMissingIngest");
 }
 
 ingest.post("/receipt", async (c) => {
-  const err = requireKey(c.env);
+  const err = await requireKey(c.env);
   if (err) return c.json({ error: err }, 400);
 
   const form = await c.req.formData();
@@ -34,7 +36,7 @@ ingest.post("/receipt", async (c) => {
 });
 
 ingest.post("/text", async (c) => {
-  const err = requireKey(c.env);
+  const err = await requireKey(c.env);
   if (err) return c.json({ error: err }, 400);
   const { text } = await c.req.json<{ text: string }>();
   if (!text?.trim()) return c.json({ error: "text required" }, 400);

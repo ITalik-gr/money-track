@@ -6,6 +6,8 @@ import { getState, setState } from "../finance/repo.ts";
 import { getRates, toUAHMinor } from "../finance/finance.ts";
 import { nextChargeUnix, plannedUAH } from "../finance/subscriptions.ts";
 import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels } from "../finance/stats.ts";
+import { ownerLocale } from "../finance/categories-i18n.ts";
+import { st, num } from "../platform/i18n.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -116,13 +118,16 @@ export async function financeHealth(env: Env): Promise<FinanceHealth> {
   const band: FinanceHealth["band"] = score >= 70 ? "good" : score >= 45 ? "ok" : "risk";
 
   const pct = (x: number) => `${Math.round(x * 100)}%`;
+  // Labels and hints are rendered as-is by `HealthIndexCard`/`HealthMini`, so they follow the
+  // reader's locale like any other UI string (B3).
+  const loc = await ownerLocale(env.DB);
   return {
     score, band,
     components: [
-      { key: "runway", label: "Подушка (runway)", value: runway >= 12 ? "12+ міс" : `${Math.round(runway * 10) / 10} міс`, score: Math.round(sRunway * 100), hint: "Скільки протягнеш на ліквідну подушку при поточному burn. 6+ міс — добре." },
-      { key: "savings", label: "Норма заощаджень", value: pct(savingsRate), score: Math.round(sSavings * 100), hint: "Частка доходу, що лишається після витрат (за повними місяцями). 20%+ — добре." },
-      { key: "debt", label: "Борг / дохід", value: funds.debt <= 0 ? "нема боргу" : `${Math.round(debtRatio * 10) / 10}× міс`, score: Math.round(sDebt * 100), hint: "Скільки місяців доходу треба, щоб покрити борг по кредитці. Менше — краще." },
-      { key: "stability", label: "Стабільність доходу", value: pct(1 - cv), score: Math.round(sStable * 100), hint: "Наскільки рівний дохід по місяцях (менший розкид = стабільніше)." },
+      { key: "runway", label: st(loc, "healthRunway"), value: runway >= 12 ? st(loc, "healthMonthsMax") : st(loc, "healthMonths", { n: Math.round(runway * 10) / 10 }), score: Math.round(sRunway * 100), hint: st(loc, "healthRunwayHint") },
+      { key: "savings", label: st(loc, "healthSavings"), value: pct(savingsRate), score: Math.round(sSavings * 100), hint: st(loc, "healthSavingsHint") },
+      { key: "debt", label: st(loc, "healthDebt"), value: funds.debt <= 0 ? st(loc, "healthNoDebt") : st(loc, "healthDebtRatio", { n: Math.round(debtRatio * 10) / 10 }), score: Math.round(sDebt * 100), hint: st(loc, "healthDebtHint") },
+      { key: "stability", label: st(loc, "healthStability"), value: pct(1 - cv), score: Math.round(sStable * 100), hint: st(loc, "healthStabilityHint") },
     ],
   };
 }
@@ -373,8 +378,12 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
 export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredAdvice> {
   const snap = await collectFinanceSnapshot(env);
   const { funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, context } = snap;
+  // This whole block is rendered verbatim on the Advisor screen — including for a demo visitor
+  // whose AI budget ran out — so it is localized, digit grouping included (B3).
+  const loc = await ownerLocale(env.DB);
   const uah = (minor: number) => Math.round(minor / 100);
-  const fmt = (minor: number) => `${uah(minor).toLocaleString("uk-UA")} ₴`;
+  const n = (v: number) => num(loc, v);
+  const fmt = (minor: number) => `${n(uah(minor))} ₴`;
 
   type Cat = { id: number; name: string; avg_month_uah: number };
   const cats = (context.top_categories as Cat[] | undefined) ?? [];
@@ -383,8 +392,8 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   const upcoming = (context.upcoming_charges as { title: string; in_days: number; amount_uah: number }[] | undefined) ?? [];
 
   const runwayText = runwayMonths == null
-    ? "Місячних витрат поки замало, щоб порахувати запас."
-    : `Ліквідної подушки ${fmt(funds.cushion)} вистачить приблизно на ${runwayMonths.toFixed(1)} міс за поточних витрат ${fmt(monthlyBurn)}/міс.`;
+    ? st(loc, "advRunwayTooLittle")
+    : st(loc, "advRunwayText", { cushion: fmt(funds.cushion), months: runwayMonths.toFixed(1), burn: fmt(monthlyBurn) });
 
   const suggestions: AdviceResult["suggestions"] = [];
 
@@ -393,9 +402,9 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   if (top && top.avg_month_uah > 0) {
     const cut = Math.round(top.avg_month_uah * 0.15);
     suggestions.push({
-      title: `«${top.name}» — найбільша стаття витрат`,
-      detail: `У середньому ${top.avg_month_uah.toLocaleString("uk-UA")} ₴/міс. Скорочення на 15% дає ${cut.toLocaleString("uk-UA")} ₴/міс — це ${(cut * 12).toLocaleString("uk-UA")} ₴ за рік.`,
-      action: { type: "create_budget", label: `Ліміт ${(top.avg_month_uah - cut).toLocaleString("uk-UA")} ₴ на «${top.name}»`, category_id: top.id, category_name: top.name, amount_uah: top.avg_month_uah - cut },
+      title: st(loc, "advTopCatTitle", { name: top.name }),
+      detail: st(loc, "advTopCatDetail", { avg: n(top.avg_month_uah), cut: n(cut), year: n(cut * 12) }),
+      action: { type: "create_budget", label: st(loc, "advTopCatAction", { amount: n(top.avg_month_uah - cut), name: top.name }), category_id: top.id, category_name: top.name, amount_uah: top.avg_month_uah - cut },
     });
   }
 
@@ -403,8 +412,8 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   const optional = importance.find((x) => x.level === "optional");
   if (optional && optional.spent_90d_uah > 0) {
     suggestions.push({
-      title: "Необовʼязкові витрати — найбезпечніше скорочення",
-      detail: `За 90 днів ${optional.spent_90d_uah.toLocaleString("uk-UA")} ₴ (≈ ${Math.round(optional.spent_90d_uah / 3).toLocaleString("uk-UA")} ₴/міс) у категоріях, позначених як необовʼязкові. Це те, що ріжеться без шкоди для базових потреб.`,
+      title: st(loc, "advOptionalTitle"),
+      detail: st(loc, "advOptionalDetail", { sum: n(optional.spent_90d_uah), perMonth: n(Math.round(optional.spent_90d_uah / 3)) }),
       action: null,
     });
   }
@@ -413,8 +422,8 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   const over = budgets.filter((b) => (b.used_pct ?? 0) > 100);
   if (over.length) {
     suggestions.push({
-      title: over.length === 1 ? `Бюджет «${over[0].category}» перевищено` : `Перевищено бюджетів: ${over.length}`,
-      detail: over.map((b) => `${b.category} — ${b.used_pct}%`).join(" · ") + ". Або підтягни витрати до ліміту, або визнай, що ліміт нереалістичний, і онови його.",
+      title: over.length === 1 ? st(loc, "advBudgetOverOne", { category: over[0].category }) : st(loc, "advBudgetOverMany", { n: over.length }),
+      detail: over.map((b) => `${b.category} — ${b.used_pct}%`).join(" · ") + st(loc, "advBudgetOverTail"),
       action: null,
     });
   }
@@ -422,8 +431,8 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   // 4. Підписки — фіксований відтік, який легко не помічати.
   if (subsMonthly > 0) {
     suggestions.push({
-      title: "Підписки йдуть фоном",
-      detail: `${subsMonthly.toLocaleString("uk-UA")} ₴/міс — це ${(subsMonthly * 12).toLocaleString("uk-UA")} ₴ за рік, які списуються без окремого рішення. Перевір, чи всіма користуєшся.`,
+      title: st(loc, "advSubsTitle"),
+      detail: st(loc, "advSubsDetail", { month: n(subsMonthly), year: n(subsMonthly * 12) }),
       action: null,
     });
   }
@@ -433,30 +442,30 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   if (soon.length) {
     const total = soon.reduce((s, u) => s + u.amount_uah, 0);
     suggestions.push({
-      title: `Найближчі 7 днів: ${total.toLocaleString("uk-UA")} ₴ списань`,
-      detail: soon.slice(0, 4).map((u) => `${u.title} — ${u.amount_uah.toLocaleString("uk-UA")} ₴ (через ${u.in_days} дн)`).join(" · "),
+      title: st(loc, "advUpcomingTitle", { total: n(total) }),
+      detail: soon.slice(0, 4).map((u) => st(loc, "advUpcomingItem", { title: u.title, amount: n(u.amount_uah), days: u.in_days })).join(" · "),
       action: null,
     });
   }
 
   if (!suggestions.length) {
     suggestions.push({
-      title: "Даних поки замало",
-      detail: "Коли назбирається історія витрат за кілька місяців, тут зʼявляться конкретні кроки на твоїх числах.",
+      title: st(loc, "advEmptyTitle"),
+      detail: st(loc, "advEmptyDetail"),
       action: null,
     });
   }
 
   const facts: AiFact[] = [
-    { label: "Ліквідна подушка", amount: uah(funds.cushion), category: null, delta_pct: null, tone: funds.cushion > 0 ? "pos" : "neg" },
-    { label: "Витрати на місяць", amount: uah(monthlyBurn), category: null, delta_pct: null, tone: "neutral" },
+    { label: st(loc, "advFactCushion"), amount: uah(funds.cushion), category: null, delta_pct: null, tone: funds.cushion > 0 ? "pos" : "neg" },
+    { label: st(loc, "advFactBurn"), amount: uah(monthlyBurn), category: null, delta_pct: null, tone: "neutral" },
   ];
-  if (funds.debt > 0) facts.push({ label: "Борг по кредитці", amount: uah(funds.debt), category: null, delta_pct: null, tone: "neg" });
-  if (top) facts.push({ label: "Найбільша категорія", amount: top.avg_month_uah, category: top.name, delta_pct: null, tone: "neutral" });
+  if (funds.debt > 0) facts.push({ label: st(loc, "advFactDebt"), amount: uah(funds.debt), category: null, delta_pct: null, tone: "neg" });
+  if (top) facts.push({ label: st(loc, "advFactTopCat"), amount: top.avg_month_uah, category: top.name, delta_pct: null, tone: "neutral" });
 
   return {
     runway_comment: runwayText,
-    summary: "Це підсумок на твоїх числах без AI — детерміновані спостереження з тих самих канонічних розрахунків, що й уся статистика.",
+    summary: st(loc, "advSummary"),
     facts,
     suggestions: suggestions.slice(0, 5),
     own_funds: ownFunds,
