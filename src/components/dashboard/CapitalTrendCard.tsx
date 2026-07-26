@@ -1,4 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { useGetCapitalTrendQuery } from "../../store/api.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
@@ -51,7 +52,7 @@ export function CapitalTrendCard() {
       </div>
       <div className="chart-wrap" style={{ height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={rows} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
+          <AreaChart data={rows} margin={{ top: 8, right: 6, left: Y_AXIS_LEFT_MARGIN, bottom: 0 }}>
             <defs>
               <linearGradient id="gCap" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.08} />
@@ -61,8 +62,8 @@ export function CapitalTrendCard() {
             <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={28}
               tick={{ fontSize: 11, fill: "var(--muted)" }} />
-            <YAxis tickLine={false} axisLine={false} width={46} tickCount={4}
-              tick={{ fontSize: 11, fill: "var(--muted)" }}
+            <YAxis {...Y_AXIS} tickCount={4}
+             
               tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
             <Tooltip content={<CapTooltip />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />
             <Area type="monotone" dataKey="capital_uah" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round" fill="url(#gCap)" dot={false} activeDot={{ r: 3.5 }} {...CHART_ANIM} />

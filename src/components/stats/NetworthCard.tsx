@@ -3,6 +3,7 @@
 // подушка, скільки інвестиції, скільки з'їдає борг. Саме розклад відповідає на «чому нетворт
 // не росте» — часто активи ростуть, а борг росте швидше.
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { useT } from "../../i18n/index.ts";
 import { useGetNetworthQuery } from "../../store/api.ts";
@@ -79,14 +80,14 @@ export function NetworthCard({ months = 12 }: { months?: number }) {
         <ResponsiveContainer width="100%" height="100%">
           {/* right:14 — щоб остання точка («зараз») не впиралась у край: інакше її курсор/тултіп
               ловився важко, а маркер зрізався. */}
-          <ComposedChart data={rows} margin={{ top: 8, right: 14, left: -6, bottom: 0 }} stackOffset="sign">
+          <ComposedChart data={rows} margin={{ top: 8, right: 14, left: Y_AXIS_LEFT_MARGIN, bottom: 0 }} stackOffset="sign">
             <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
             {/* interval=preserveStartEnd + малий minTickGap: підписи місяців короткі (`лип 26`),
                 тож влазять усі; головне — щоб крайні (перший і «зараз») лишались завжди. */}
             <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={6}
               interval="preserveStartEnd" tick={{ fontSize: 11, fill: "var(--muted)" }} />
-            <YAxis tickLine={false} axisLine={false} width={54} tickCount={5}
-              tick={{ fontSize: 11, fill: "var(--muted)" }} tickFormatter={(v: number) => fmt0.format(Math.round(v / 100))} />
+            <YAxis {...Y_AXIS} tickCount={5}
+              tickFormatter={(v: number) => fmt0.format(Math.round(v / 100))} />
             <Tooltip content={<NwTooltip />} cursor={{ stroke: "var(--line-strong)" }} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
             {/* Борг — від'ємним стеком: він має ТЯГНУТИ ВНИЗ, а не стояти окремою колонкою.

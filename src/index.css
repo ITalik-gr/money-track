@@ -2207,12 +2207,28 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .cat-drill-txs .label { display: flex; align-items: center; gap: 8px; }
 
 /* ===== ADVISOR (runway + gauge) ========================================== */
-.runway-card { display: flex; gap: 22px 28px; align-items: center; padding: 20px 22px; flex-wrap: wrap; }
+/* GRID, not flex (fixed 2026-07-26 — B5). The card has three children: gauge, KPI strip and the
+   runway comment. The comment already carried `grid-column: 1 / -1`, but the card was `flex`,
+   where that declaration means nothing — so the comment stayed a third flex sibling, took width
+   from the KPI strip, squeezed it to its `min-width`, and `auto-fit minmax(148px)` then resolved
+   to a SINGLE column: five metrics stacked down the left with half the card empty. Two columns
+   with an explicit full-width second row say the intended layout instead of hoping flex-wrap
+   lands on it. (Same failure as `.advisor-grid.single` — a layout declaration with no container
+   to honour it.) */
+.runway-card {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px 28px; align-items: center; padding: 20px 22px;
+}
 /* Метрики — щільна авто-fit KPI-стрічка (заповнює ширину, без порожнеч праворуч на десктопі). */
-.runway-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 16px 24px; flex: 1; min-width: 240px; }
+.runway-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 16px 24px; min-width: 0; }
 .runway-metric .label { margin-bottom: 3px; }
 .runway-val { font-size: 22px; }
 .runway-comment { grid-column: 1 / -1; margin: 6px 0 0; font-size: 14px; line-height: 1.55; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-2); }
+/* Narrow: the gauge stops being a column of its own and sits above the metrics. */
+@media (max-width: 640px) {
+  .runway-card { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .runway-metrics { width: 100%; }
+}
 .gauge { position: relative; flex-shrink: 0; line-height: 0; }
 .gauge-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
 .gauge-val { font-size: 30px; line-height: 1; }
@@ -3306,7 +3322,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
   color: var(--muted); margin: 0 2px var(--sp-2);
 }
-.nt-list { display: flex; flex-direction: column; }
+/* `overflow: hidden` clips the rows to the card's radius (B8). Without it the unread row's
+   square `border-left` accent ran past the rounded corner and read as a stray bar floating
+   beside the card rather than as part of it. */
+.nt-list { display: flex; flex-direction: column; overflow: hidden; border-radius: inherit; }
 .nt-row {
   display: grid; grid-template-columns: auto 1fr auto; align-items: start;
   gap: var(--sp-3); width: 100%; text-align: left;

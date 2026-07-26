@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
 import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { Link, useSearchParams } from "react-router-dom";
@@ -117,7 +118,7 @@ export function Advisor() {
               sub={months != null ? t("adv.months") : t("adv.noData")}
               tone={tone}
             />
-            <div className="runway-metrics situation-metrics">
+            <div className="runway-metrics">
               <Metric label={t("adv.realCushion")} v={<Money minor={advice.cushion} decimals={false} />} tone="pos"
                 info={t("adv.realCushionInfo")} />
               {advice.debt > 0 && (
@@ -132,7 +133,9 @@ export function Advisor() {
               <Metric label={t("adv.cushionLasts")} v={months != null ? t("adv.monthsShort", { n: Math.max(0, months) }) : "—"} tone={tone}
                 info={t("adv.cushionLastsInfo")} />
             </div>
-            {advice.runway_comment && <p className="runway-comment" style={{ gridColumn: "1 / -1" }}>{highlightAmounts(advice.runway_comment)}</p>}
+            {/* Full-width second row — the span lives in `.runway-comment`, not inline, so it
+                stays true if the card's columns ever change. */}
+            {advice.runway_comment && <p className="runway-comment">{highlightAmounts(advice.runway_comment)}</p>}
           </div>
         )}
 
@@ -263,10 +266,10 @@ function AdviceHistory() {
           <span className="label" style={{ padding: "0 8px" }}>{t("adv.runwayChartLabel")}</span>
           <div className="chart-wrap" style={{ height: 130 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={runwayPts} margin={{ top: 10, right: 10, left: -18, bottom: 0 }}>
+              <LineChart data={runwayPts} margin={{ top: 10, right: 10, left: Y_AXIS_LEFT_MARGIN, bottom: 0 }}>
                 <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={28} tick={{ fontSize: 11, fill: "var(--muted)" }} />
-                <YAxis tickLine={false} axisLine={false} width={40} tickCount={4} tick={{ fontSize: 11, fill: "var(--muted)" }} />
+                <YAxis {...Y_AXIS} tickCount={4} />
                 <Tooltip
                   cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }}
                   // eslint-disable-next-line @typescript-eslint/no-explicit-any

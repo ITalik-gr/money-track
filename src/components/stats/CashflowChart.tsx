@@ -1,4 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { translate } from "../../i18n/index.ts";
@@ -38,7 +39,7 @@ export function CashflowChart({ rows, height = 230 }: { rows: CfRow[]; height?: 
       <ResponsiveContainer width="100%" height="100%">
         {/* DESIGN.md §10.3: система-тони (cobalt-витрата дом. + green-дохід тихий),
             без пунктир-сітки, 2px round-лінії без крапок, одна делікатна area. */}
-        <AreaChart data={rows} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
+        <AreaChart data={rows} margin={{ top: 8, right: 6, left: Y_AXIS_LEFT_MARGIN, bottom: 0 }}>
           <defs>
             <linearGradient id="gExp" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--chart-expense)" stopOpacity={0.08} />
@@ -48,8 +49,8 @@ export function CashflowChart({ rows, height = 230 }: { rows: CfRow[]; height?: 
           <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={24}
             tick={{ fontSize: 11, fill: "var(--muted)" }} />
-          <YAxis tickLine={false} axisLine={false} width={46} tickCount={4}
-            tick={{ fontSize: 11, fill: "var(--muted)" }}
+          <YAxis {...Y_AXIS} tickCount={4}
+           
             tickFormatter={(v: number) => (v >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
           <Tooltip content={<CfTooltip />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />
           {/* дохід — тиха лінія без заливки */}

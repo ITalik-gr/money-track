@@ -1,4 +1,5 @@
 import { AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { useT } from "../../i18n/index.ts";
@@ -41,7 +42,7 @@ export function CumulativeChart({ rows, sign, height = 220 }: { rows: CumRow[]; 
   return (
     <div className="chart-wrap" style={{ height }}>
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={rows} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
+        <AreaChart data={rows} margin={{ top: 8, right: 6, left: Y_AXIS_LEFT_MARGIN, bottom: 0 }}>
           <defs>
             <linearGradient id="gCum" x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={stroke} stopOpacity={0.08} />
@@ -51,8 +52,8 @@ export function CumulativeChart({ rows, sign, height = 220 }: { rows: CumRow[]; 
           <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={24}
             tick={{ fontSize: 11, fill: "var(--muted)" }} />
-          <YAxis tickLine={false} axisLine={false} width={46} tickCount={4}
-            tick={{ fontSize: 11, fill: "var(--muted)" }}
+          <YAxis {...Y_AXIS} tickCount={4}
+           
             tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
           <ReferenceLine y={0} stroke="var(--line-strong)" strokeWidth={1} />
           <Tooltip content={<CumTooltip sign={sign} />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />

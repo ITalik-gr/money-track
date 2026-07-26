@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
 import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -91,7 +92,7 @@ export function Merchant() {
               </div>
               <div className="chart-wrap" style={{ height: 190 }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={rows} margin={{ top: 8, right: 6, left: -14, bottom: 0 }}>
+                  <AreaChart data={rows} margin={{ top: 8, right: 6, left: Y_AXIS_LEFT_MARGIN, bottom: 0 }}>
                     <defs>
                       <linearGradient id="gMerch" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.1} />
@@ -100,7 +101,7 @@ export function Merchant() {
                     </defs>
                     <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
                     <XAxis dataKey="label" tickLine={false} axisLine={false} dy={6} minTickGap={20} tick={{ fontSize: 11, fill: "var(--muted)" }} />
-                    <YAxis tickLine={false} axisLine={false} width={46} tickCount={4} tick={{ fontSize: 11, fill: "var(--muted)" }}
+                    <YAxis {...Y_AXIS} tickCount={4}
                       tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
                     <Tooltip content={<MTooltip />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />
                     <Area type="monotone" dataKey="spent" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round" fill="url(#gMerch)" dot={{ r: 2.5 }} activeDot={{ r: 3.5 }} {...CHART_ANIM} />

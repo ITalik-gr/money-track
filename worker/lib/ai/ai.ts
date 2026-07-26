@@ -439,7 +439,7 @@ export async function chatAdvice(
         toolNote +
         "Ось повний фінансовий контекст користувача (суми в грн): " + JSON.stringify(context) +
         ". Спирайся ЛИШЕ на ці дані; якщо потрібної інформації нема — скажи чесно, не вигадуй транзакцій чи чисел." +
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env, "conversation")),
     },
   ];
   const model = await getTaskModel(env, "chat");
@@ -513,7 +513,9 @@ export async function txChat(
   );
   const system: AnthropicContentBlock[] = [
     ...base,
-    { type: "text", text: "Контекст операції (суми в її валюті): " + JSON.stringify(ctx) },
+    // This inline chat had NO language directive at all (found while fixing B6) — its prose
+    // answer simply inherited the Ukrainian prompt regardless of who was reading.
+    { type: "text", text: "Контекст операції (суми в її валюті): " + JSON.stringify(ctx) + (await replyLangDirective(env, "conversation")) },
   ];
   return callHaikuMessagesJson<TxChatResult>(env, system, messages, 700, await getTaskModel(env, "chat"));
 }
@@ -1013,19 +1015,43 @@ export async function generateNotifyObservations(
   );
 }
 
-// P3.4/§12.5: make USER-FACING free-text answers come back in the owner's UI language. It is a
-// no-op for `uk` (the prompts are already Ukrainian) and, for `en`, an emphatic LATE directive
-// that overrides the inline "українською" wording without touching the cache-stable persona
-// block. Structured tasks (enrich/OCR/parse) intentionally do NOT use this — their output is ids,
-// and the numeric guard (`numbersAreGrounded`) is language-independent.
-async function replyLangDirective(env: Env): Promise<string> {
+// P3.4/§12.5: make USER-FACING free-text answers come back in the right language. Structured
+// tasks (enrich/OCR/parse) intentionally do NOT use this — their output is ids, and the numeric
+// guard (`numbersAreGrounded`) is language-independent.
+//
+// Two modes, because the two situations have DIFFERENT right answers (B6, 2026-07-26):
+//
+//   "content"      — generated text with no user utterance to answer (advice, report, insight,
+//                    feed observations). The app locale is the only signal, so it wins.
+//   "conversation" — the user just wrote a message. Their language wins; the locale is only the
+//                    fallback for something too short to judge.
+//
+// Why the split is not cosmetic: the single old rule ("write everything in English, do NOT reply
+// in Ukrainian") was applied to the chat as well. A visitor running the English UI asked a
+// question IN UKRAINIAN, and the model — told to avoid both the user's language and its own
+// Ukrainian prompt — answered in RUSSIAN, mid-reply, having found a third Slavic language that
+// broke neither instruction literally. Hence also the explicit ban below: it is stated in BOTH
+// modes, including `uk`, which previously carried no language instruction at all.
+const NEVER_RUSSIAN =
+  " Never answer in Russian under any circumstances — not a sentence, not a clause, not even if " +
+  "the user writes to you in Russian (in that case answer in Ukrainian).";
+
+async function replyLangDirective(env: Env, mode: "content" | "conversation" = "content"): Promise<string> {
   const en = (await getState(env.DB, "locale")) === "en";
-  return en
+
+  if (mode === "conversation") {
+    return " 🌐 RESPONSE LANGUAGE (overrides any language wording above): reply in the SAME language " +
+      "the user wrote their latest message in — Ukrainian question, Ukrainian answer; English question, " +
+      `English answer. If the message is too short to tell, use ${en ? "English" : "Ukrainian"}. ` +
+      "Never mix two languages inside one reply." + NEVER_RUSSIAN;
+  }
+
+  return (en
     ? " 🌐 RESPONSE LANGUAGE (overrides any Ukrainian wording above): write EVERYTHING the user reads " +
       "— headlines, advice, labels, section titles, chart/table captions — in natural English. Keep JSON " +
       "keys and enum values (e.g. 'pos'/'neg', 'info'/'warn') exactly as specified; translate only " +
       "human-readable text. Do NOT reply in Ukrainian."
-    : "";
+    : " 🌐 RESPONSE LANGUAGE: write everything the user reads in natural Ukrainian.") + NEVER_RUSSIAN;
 }
 
 export async function generateAdvice(
@@ -1100,7 +1126,7 @@ export async function budgetChat(
         "Відповідай ВИКЛЮЧНО валідним JSON: {reply (2-5 речень, можна **жирний**), " +
         "proposals:[{category_id (лише з переліку), limit_uah (ціле грн), reason (коротко чому)}] " +
         "(порожній масив, якщо це просто відповідь без нових пропозицій лімітів)}." +
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env, "conversation")),
     },
     { type: "text", text: "Контекст: " + JSON.stringify(ctx) },
   ];

@@ -134,6 +134,29 @@ export function renderMarkdown(text: string): ReactNode {
       }
       continue;
     }
+    // GFM pipe table: a `| … |` row followed by a `|---|---|` separator (B7).
+    //
+    // The custom `[table]` directive above is what the prompt asks for, but the model writes an
+    // ordinary markdown table anyway — that is what it was trained on, and no amount of prompt
+    // wording reliably beats that. Unparsed, it reached the user as literal `|------|------|`
+    // rubble in the middle of an answer. Rendering both means the output is right whichever
+    // syntax the model reaches for, instead of depending on it obeying.
+    if (/^\s*\|.*\|\s*$/.test(line) && idx + 1 < lines.length && /^\s*\|[\s:|-]+\|\s*$/.test(lines[idx + 1])) {
+      flushList();
+      const cells = (l: string) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+      const header = cells(line);
+      idx += 2; // header + separator
+      const body: string[][] = [];
+      while (idx < lines.length && /^\s*\|.*\|\s*$/.test(lines[idx])) {
+        const r = cells(lines[idx]);
+        while (r.length < header.length) r.push("");
+        body.push(r.slice(0, header.length));
+        idx++;
+      }
+      blocks.push(<TableBlock key={`table${key++}`} keyBase={`table${key}`} title={null} header={header} rows={body} />);
+      idx--; // the loop's own `idx++` must land ON the first non-table line, not past it
+      continue;
+    }
     if (!line.trim()) { flushList(); continue; }
     const heading = line.match(/^#{1,4}\s+(.*)$/);
     if (heading) { flushList(); blocks.push(<div className="md-h" key={`h${key++}`}>{inline(heading[1], `h${key}`)}</div>); continue; }
