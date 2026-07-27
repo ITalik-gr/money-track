@@ -377,7 +377,7 @@ allowlist chat_id. Знайдене й закрите:
 
 ## 🔴 Ops / деплой (рутина КОРИСТУВАЧА)
 
-**✅ ЗАПУЩЕНО В ПРОДІ 2026-07-26 — `https://money-track.vitaliy-50a.workers.dev`.**
+**✅ ЗАПУЩЕНО В ПРОДІ 2026-07-26 — `https://money.italik.dev`.**
 Усі попередні блокери зняті: міграції `finance` накочені **до 0034**, `directory` (0001–0003)
 теж, D1 `directory` = `c72e2571-1fbb-44b2-8308-5a961aef9670`, секрети на місці, деплой зроблено.
 Історія блокерів більше не потрібна — вона в `HISTORY.md`.
@@ -396,7 +396,7 @@ allowlist chat_id. Знайдене й закрите:
    ⚠️ **`SECRETS_MASTER_KEY` не ротувати** — збережені ключі юзерів стануть нечитабельними.
    `APP_PASSWORD` лишився лише як legacy-фолбек ключа підпису (парольного входу вже НЕМА).
 3. **Google Cloud:** redirect URI мусить збігатись байт-у-байт із тим, що шле воркер —
-   `https://money-track.vitaliy-50a.workers.dev/auth/google/callback`. Поки застосунок у
+   `https://money.italik.dev/auth/google/callback`. Поки застосунок у
    **Testing**, кожна пошта, якою заходиш, має бути в **Test users**. Скоупи лише
    `openid`/`email`/`profile` — вони non-sensitive, тож publish не потребує verification.
 4. **Вхід — тільки Google** (2026-07-26). Owner-рядок бутстрапиться в OAuth-callback рівно

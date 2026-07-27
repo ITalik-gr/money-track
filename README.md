@@ -7,7 +7,7 @@ It connects to a Ukrainian bank (Monobank) or a CSV export, categorizes every tr
 deterministic-first pipeline, and layers an AI financial advisor on top that reasons over the
 **same canonical numbers** the UI shows — never its own.
 
-> **Try it:** [`/demo`](https://money-track.vitaliy-50a.workers.dev/demo) — spins up a private,
+> **Try it:** [`/demo`](https://money.italik.dev/demo) — spins up a private,
 > throwaway sandbox seeded with ~6 months of realistic data. No sign-up, resets in 24 hours.
 
 ![Dashboard](docs/screenshots/dashboard-welcome.jpg)

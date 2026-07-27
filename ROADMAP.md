@@ -58,7 +58,7 @@ CSV), TG-бот (він owner-only й українською свідомо). Я
 
 **L8 — Ops, не код (твоє).** (а) `POST /api/admin/import-legacy` — перенести стару історію
 (417 tx / 9 рахунків) у свій DO, інакше акаунт порожній. (б) Google Cloud: redirect URI
-`https://money-track.vitaliy-50a.workers.dev/auth/google/callback` + усі пошти в **Test users**,
+`https://money.italik.dev/auth/google/callback` + усі пошти в **Test users**,
 поки застосунок у Testing. (в) `OWNER_EMAIL` = `italik.dev@gmail.com` — заходити саме ним.
 
 ---

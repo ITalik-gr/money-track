@@ -23,9 +23,10 @@ export function getLocale(): Locale {
   return current;
 }
 
-/** Resolve the boot locale: explicit user choice (localStorage) wins; otherwise the browser
- *  language decides, defaulting to English. A Ukrainian browser therefore still boots `uk`
- *  (the owner keeps Ukrainian), while an unknown visitor gets English — the demo audience. */
+/** Resolve the boot locale: explicit user choice (localStorage) wins; otherwise English —
+ *  the landing page is the portfolio's first impression and must not flip to Ukrainian just
+ *  because a visitor's browser reports `uk`. The owner's own preference survives across visits
+ *  via localStorage / server sync (`LocaleProvider`), not via browser-language sniffing. */
 export function initialLocale(): Locale {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -33,8 +34,7 @@ export function initialLocale(): Locale {
   } catch {
     /* ignore — private mode / no storage */
   }
-  const nav = (typeof navigator !== "undefined" && navigator.language) || "";
-  return nav.toLowerCase().startsWith("uk") ? "uk" : "en";
+  return "en";
 }
 
 /** Whether the user has made an explicit choice yet. Used so a fresh device can adopt the
