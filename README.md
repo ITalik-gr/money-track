@@ -52,7 +52,7 @@ The whole app is one Cloudflare Worker. The interesting decision is **isolation 
 Object per user** instead of `user_id` columns.
 
 ```mermaid
-flowchart TB
+mermaid TB
     Browser["React PWA (SPA)"]
 
     subgraph Worker["Cloudflare Worker (Hono)"]

@@ -166,7 +166,7 @@ export function Landing() {
           the CTA — it is a thing to read, not a thing to skim past on the way to the button. */}
       <section className="lp-disclosure">
         <Icon name="info" size={15} />
-        <p>{t("landing.aiNote")}</p>
+        <p style={{maxWidth: '820px'}}>{t("landing.aiNote")}</p>
       </section>
 
       {/* Author link: this page is a portfolio piece, so the person behind it has to be one click
@@ -176,8 +176,8 @@ export function Landing() {
         <p>{t("landing.footer")}</p>
         <p className="lp-author">
           {t("landing.authorPre")}{" "}
-          <a href="https://italik-dev.web.app/" target="_blank" rel="me noreferrer noopener">
-            italik-dev.web.app<Icon name="arrowUpRight" size={12} />
+          <a href="https://italik.dev/" target="_blank" rel="me noreferrer noopener">
+            italik.dev<Icon name="arrowUpRight" size={12} />
           </a>
         </p>
       </footer>
