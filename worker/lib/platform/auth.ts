@@ -6,9 +6,18 @@
 // logged in?" but "WHOSE database is this?", and the answer must be unforgeable.
 import type { Env } from "../../env.ts";
 
-export const SESSION_COOKIE = "mt_session";
+/**
+ * `__Host-` prefix (2026-08-01): the browser itself then enforces what we already set by hand —
+ * Secure, `Path=/`, and NO `Domain` attribute. The last one is the point: without it, anything
+ * that could set a cookie on a sibling subdomain could plant a session cookie that this origin
+ * would happily read. Renaming logs everyone out once, which is why it shipped together with
+ * `token_version` (that bump invalidates the old cookies anyway).
+ */
+export const SESSION_COOKIE = "__Host-mt_session";
 const TTL = 60 * 60 * 24 * 30; // 30 days
-const VERSION = "v2"; // v1 = the single-password era; those tokens no longer verify
+// v1 = the single-password era; v2 = pre-revocation tokens with no `token_version` field.
+// Neither shape verifies any more — the payload has a different number of segments.
+const VERSION = "v3";
 
 /**
  * Key the session is signed with.
@@ -41,27 +50,44 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-/** Token shape: `v2.<userId>.<expiryUnix>.<hmac>` — `userId` is hex, so `.` stays a safe separator. */
-export async function createSession(env: Env, userId: string): Promise<string> {
+/**
+ * Token shape: `v3.<userId>.<expiryUnix>.<tokenVersion>.<hmac>` — `userId` is hex, so `.` stays
+ * a safe separator.
+ *
+ * `tokenVersion` is what makes a stateless session revocable. It is SIGNED, so it cannot be
+ * edited, and it is compared against the user's current value from the directory row the guard
+ * already reads. Bumping that value makes every cookie ever issued to that user stop matching:
+ * signed out of every device, with no session table and no extra query on the hot path.
+ */
+export async function createSession(env: Env, userId: string, tokenVersion: number): Promise<string> {
   const key = signingKey(env);
   if (!key) throw new Error("no signing key: set SESSION_SECRET (or APP_PASSWORD)");
   const exp = String(Math.floor(Date.now() / 1000) + TTL);
-  const payload = `${VERSION}.${userId}.${exp}`;
+  const payload = `${VERSION}.${userId}.${exp}.${tokenVersion}`;
   return `${payload}.${await hmacHex(key, payload)}`;
 }
 
-/** Returns the signed-in `userId`, or `null`. Never throws — a bad cookie is just "no". */
-export async function verifySession(env: Env, token: string | undefined): Promise<string | null> {
+/**
+ * Returns the signed-in `userId` and the `tokenVersion` the cookie was minted with, or `null`.
+ * Never throws — a bad cookie is just "no".
+ *
+ * ⚠️ Verifying the signature is only HALF the check. The caller MUST still compare
+ * `tokenVersion` with the directory's current value; a correctly signed cookie from before a
+ * revocation is a valid signature over a stale claim.
+ */
+export async function verifySession(
+  env: Env, token: string | undefined,
+): Promise<{ userId: string; tokenVersion: number } | null> {
   const key = signingKey(env);
   if (!token || !key) return null;
   const parts = token.split(".");
-  if (parts.length !== 4) return null;
-  const [version, userId, exp, sig] = parts as [string, string, string, string];
+  if (parts.length !== 5) return null;
+  const [version, userId, exp, tv, sig] = parts as [string, string, string, string, string];
   if (version !== VERSION) return null;
-  if (!/^[0-9a-f]+$/.test(userId) || !/^\d+$/.test(exp)) return null;
+  if (!/^[0-9a-f]+$/.test(userId) || !/^\d+$/.test(exp) || !/^\d+$/.test(tv)) return null;
   if (Number(exp) < Date.now() / 1000) return null;
-  const expected = await hmacHex(key, `${version}.${userId}.${exp}`);
-  return timingSafeEqual(sig, expected) ? userId : null;
+  const expected = await hmacHex(key, `${version}.${userId}.${exp}.${tv}`);
+  return timingSafeEqual(sig, expected) ? { userId, tokenVersion: Number(tv) } : null;
 }
 
 /**

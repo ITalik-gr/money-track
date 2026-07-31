@@ -18,11 +18,14 @@ import { ensureOwner, findUserById, registerDemoSession } from "./lib/platform/d
 // so the two cookie types can never cross-resolve. A real session wins if both are present.
 async function resolveRequestUser(env: Env, cookieHeader: {
   session: string | undefined; demo: string | undefined;
-}): Promise<{ userId: string; isDemo: boolean } | null> {
+}): Promise<{ userId: string; isDemo: boolean; tokenVersion: number } | null> {
   const sess = await verifySession(env, cookieHeader.session);
-  if (sess) return { userId: sess, isDemo: false };
+  // ⚠️ A verified signature is not yet an admitted user: `tokenVersion` still has to match the
+  // directory (see `userAccess`). Resolving and admitting are separate on purpose — a demo
+  // sandbox has no directory row at all, so it can never carry a real generation number.
+  if (sess) return { userId: sess.userId, isDemo: false, tokenVersion: sess.tokenVersion };
   const demoId = await verifyDemoToken(env, cookieHeader.demo);
-  if (demoId) return { userId: `demo:${demoId}`, isDemo: true };
+  if (demoId) return { userId: `demo:${demoId}`, isDemo: true, tokenVersion: 0 };
   return null;
 }
 
@@ -36,12 +39,18 @@ async function resolveRequestUser(env: Env, cookieHeader: {
 // of every single API call; an outright revocation still needs the cookie to expire, which is the
 // known trade-off of stateless sessions.
 const ACCESS_TTL_MS = 60_000;
-const accessCache = new Map<string, { at: number; ok: boolean; isOwner: boolean }>();
-async function userAccess(env: Env, userId: string): Promise<{ ok: boolean; isOwner: boolean }> {
+interface Access { ok: boolean; isOwner: boolean; tokenVersion: number }
+const accessCache = new Map<string, Access & { at: number }>();
+async function userAccess(env: Env, userId: string): Promise<Access> {
   const hit = accessCache.get(userId);
-  if (hit && Date.now() - hit.at < ACCESS_TTL_MS) return { ok: hit.ok, isOwner: hit.isOwner };
+  if (hit && Date.now() - hit.at < ACCESS_TTL_MS) return { ok: hit.ok, isOwner: hit.isOwner, tokenVersion: hit.tokenVersion };
   const user = await findUserById(env.DIRECTORY, userId);
-  const val = { ok: !!user && user.status !== "disabled", isOwner: user?.is_owner === 1 };
+  const val: Access = {
+    ok: !!user && user.status !== "disabled",
+    isOwner: user?.is_owner === 1,
+    // Generation the user's cookies must carry to still count (migration 0005).
+    tokenVersion: user?.token_version ?? 0,
+  };
   accessCache.set(userId, { at: Date.now(), ...val });
   return val;
 }
@@ -238,6 +247,10 @@ const guard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isO
     const access = await userAccess(c.env, resolved.userId);
     // A valid signature for a disabled or deleted account is not an authenticated request.
     if (!access.ok) return c.json({ error: "unauthorized" }, 401);
+    // …nor is one from a REVOKED generation (migration 0005). This is the half that
+    // `verifySession` cannot do: the signature proves the number was not tampered with, and
+    // only the directory knows whether it is still the current one.
+    if (resolved.tokenVersion !== access.tokenVersion) return c.json({ error: "unauthorized" }, 401);
     isOwner = access.isOwner;
     // "Last seen", for the owner's admin screen. `last_login_at` cannot answer it: a 30-day
     // session means someone can use the app every day for a month without logging in again.

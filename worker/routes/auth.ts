@@ -144,7 +144,9 @@ auth.get("/google/callback", async (c) => {
   // disabled user told "not invited" will simply try again forever.
   if (isRefusal(user)) return fail(user);
 
-  setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id), {
+  // The cookie is minted with the user's CURRENT generation; a later bump makes it stop
+  // verifying (migration 0005). `?? 0` covers a directory that has not taken 0005 yet.
+  setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id, user.token_version ?? 0), {
     httpOnly: true,
     secure: true,
     sameSite: "Lax",

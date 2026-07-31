@@ -17,6 +17,7 @@ import {
   useApplyTranslitFixesMutation,
   useGetMeQuery,
   useEraseMyDataMutation,
+  useLogoutAllMutation,
   useLogoutMutation,
 } from "../store/api.ts";
 import type { AiTask, AiModelToken } from "../store/api.ts";
@@ -186,6 +187,7 @@ function DangerZone() {
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [eraseMyData, delState] = useEraseMyDataMutation();
+  const [logoutAll, logoutAllState] = useLogoutAllMutation();
 
   async function run() {
     try {
@@ -202,6 +204,24 @@ function DangerZone() {
     <div className="card set-card set-full danger-zone">
       <div className="set-card-h"><Icon name="alert" size={16} />{t("setup.dangerTitle")}</div>
       <p className="set-card-sub">{t("setup.dangerBody")}</p>
+      {/* Не в самому «небезпечному» блоці за змістом, але поруч із ним за призначенням: це
+          те, що робиш, коли підозрюєш, що твоєю сесією користується хтось інший. */}
+      <div className="stack" style={{ marginBottom: 12 }}>
+        <button
+          className="btn sm"
+          disabled={logoutAllState.isLoading}
+          onClick={async () => {
+            try {
+              await logoutAll().unwrap();
+              clearLocalUserData();
+              window.location.href = "/";
+            } catch (e) { toast.error(errText(e)); }
+          }}
+        >
+          {t("setup.logoutAll")}
+        </button>
+        <p className="set-card-sub" style={{ margin: 0 }}>{t("setup.logoutAllHint")}</p>
+      </div>
       {!open ? (
         <button className="btn sm ghost danger-text" onClick={() => setOpen(true)}>{t("setup.deleteAccount")}</button>
       ) : (

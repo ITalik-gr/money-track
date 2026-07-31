@@ -1,0 +1,14 @@
+-- Session revocation (security review 2026-07-26, tail closed 2026-08-01).
+--
+-- The session is a stateless HMAC cookie, which is what keeps a D1 read off the hot path — but
+-- it also meant there was NO way to end a session early. A stolen cookie stayed valid for its
+-- full 30 days, and "disable this user" only took effect once the 60s `userAccess` cache
+-- expired, on the ACCESS check — the token itself never stopped being a valid token.
+--
+-- The fix is one integer baked into the signature. Bump it and every cookie ever issued for
+-- that user stops verifying: sign-out everywhere, immediately, with no session table and no
+-- extra read (the value rides along in the already-cached directory row).
+--
+-- NOT NULL DEFAULT 0 so existing rows get a version without a backfill pass; cookies issued
+-- before this shipped carry no version and are rejected by the token VERSION bump instead.
+ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0;

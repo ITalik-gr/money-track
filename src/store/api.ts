@@ -502,6 +502,11 @@ export const api = createApi({
     eraseMyData: b.mutation<{ ok: boolean }, void>({
       query: () => ({ url: "/account/delete", method: "POST", body: { confirm: "DELETE" } }),
     }),
+    // Сесія stateless, тож `logout` чистить кукі лише в ЦЬОМУ браузері. Проти вкраденої
+    // копії це нічого не дає — для того є `logout-all`, який інкрементує token_version.
+    logoutAll: b.mutation<{ ok: boolean }, void>({
+      query: () => ({ url: "/account/logout-all", method: "POST" }),
+    }),
     logout: b.mutation<unknown, void>({
       query: () => ({ url: "/logout", method: "POST" }),
       invalidatesTags: ["Me"],
@@ -1090,6 +1095,7 @@ export const {
   useGetMeQuery,
   useLogoutMutation,
   useEraseMyDataMutation,
+  useLogoutAllMutation,
   useGetSummaryQuery,
   useGetAccountsQuery,
   useGetArchivedAccountsQuery,

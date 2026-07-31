@@ -9,9 +9,31 @@ import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
 import { DEMO_COOKIE, SESSION_COOKIE } from "../lib/platform/auth.ts";
-import { deleteUser, findUserById } from "../lib/platform/directory.ts";
+import { bumpTokenVersion, deleteUser, findUserById } from "../lib/platform/directory.ts";
 
 export const account = new Hono<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>();
+
+/**
+ * Sign out of every device (migration 0005).
+ *
+ * The one action a stateless session could not offer before: `POST /api/logout` clears the
+ * cookie in THIS browser, which is useless against a cookie already copied somewhere else.
+ * Bumping the generation makes every cookie ever issued to this user fail verification — the
+ * honest answer to "I think someone has my session".
+ *
+ * Effective within 60s on warm isolates, immediately on cold ones: the guard caches the
+ * directory row for a minute, and putting a D1 read in front of every API call is the cost
+ * this whole design exists to avoid.
+ */
+account.post("/logout-all", async (c) => {
+  const userId = c.get("userId");
+  // A sandbox has no directory row to bump; its cookie dies with the sandbox in 24h anyway.
+  if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
+  await bumpTokenVersion(c.env.DIRECTORY, userId);
+  setCookie(c, SESSION_COOKIE, "", { path: "/", maxAge: 0 });
+  setCookie(c, DEMO_COOKIE, "", { path: "/", maxAge: 0 });
+  return c.json({ ok: true });
+});
 
 /**
  * Erase this account: finance data first, identity second, session last.

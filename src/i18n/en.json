@@ -544,6 +544,8 @@
   "setup.alertsSent": "Alerts sent: {n} (check Telegram)",
   "setup.noSignificantTx": "No significant unexplained transactions found in the last 14 days.",
   "setup.logout": "Log out",
+  "setup.logoutAll": "Sign out everywhere",
+  "setup.logoutAllHint": "Revokes every active session — for when you think someone else has access.",
   "setup.aboutMeTitle": "About me — so AI understands me",
   "setup.aboutMeHintPre": "Briefly describe yourself and your situation: what you do, income/work, goals, spending habits, what \"taxes\" or \"work expenses\" mean for you. AI takes this into account ",
   "setup.aboutMeHintBold": "everywhere",

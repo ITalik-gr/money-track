@@ -26,6 +26,9 @@ export interface DirectoryUser {
   has_mono_key: number | null;
   has_ai_key: number | null;
   stats_at: number | null;
+  /** Session generation (migration 0005). Baked into the session signature; bump = sign out
+   *  everywhere. See `bumpTokenVersion`. */
+  token_version: number;
 }
 
 /** What a user's Durable Object reports about itself. Volume only — never amounts. */
@@ -210,6 +213,29 @@ export async function saveUserStats(db: D1Database, id: string, s: UserStats): P
 
 export async function setUserStatus(db: D1Database, id: string, status: UserStatus): Promise<void> {
   await db.prepare("UPDATE users SET status = ? WHERE id = ?").bind(status, id).run();
+  // Disabling must also kill the sessions. Status alone only fails the ACCESS check, which the
+  // guard caches for a minute; the cookie itself stayed a valid cookie for its full 30 days, so
+  // "banned" and "still holding a working key to the API" were the same state.
+  if (status === "disabled") {
+    // Tolerated failure, deliberately: on a directory that has not taken 0005 yet the column
+    // does not exist, and a ban that throws is worse than a ban that only closes the door.
+    try { await bumpTokenVersion(db, id); } catch { /* pre-0005 directory */ }
+  }
+}
+
+/**
+ * Invalidate every session cookie ever issued to this user.
+ *
+ * The counter is baked into the session signature (`auth.createSession`), so incrementing it
+ * makes existing cookies fail verification outright — no session table, and no extra read on
+ * the request path, because the guard is already reading this row.
+ *
+ * ⚠️ Honest limit: the guard caches the directory row for 60s per isolate, so a revocation
+ * lands within a minute on already-warm isolates and immediately on cold ones. Making it truly
+ * instant would mean a D1 read in front of every API call — the trade this design exists to avoid.
+ */
+export async function bumpTokenVersion(db: D1Database, id: string): Promise<void> {
+  await db.prepare("UPDATE users SET token_version = token_version + 1 WHERE id = ?").bind(id).run();
 }
 
 /**
