@@ -153,6 +153,12 @@ export function incomeSum(mult: string): string {
 // кількість і виходив заниженим.
 export const SPEND_COUNT = `SUM(CASE WHEN (${SPEND_WHERE}) AND ${EFF_AMOUNT} < 0 THEN 1 ELSE 0 END)`;
 export const INCOME_COUNT = `SUM(CASE WHEN ${INCOME_WHERE} THEN 1 ELSE 0 END)`;
+// §CADENCE: скільки РЕАЛЬНИХ списань, а не рядків. `SPEND_COUNT` рахує рядки після
+// STATS_JOINS, тож витрата, розбита на 3 частини (§SPLIT), важить у ньому 3 — для середнього
+// чека це свідомо, а для «як часто ця категорія списується» — ні: підписка виглядала б
+// щоденною. Використовується там, де рахуємо РИТМ (звіт коротшого за місяць періоду).
+// SPEND_WHERE мусить бути у WHERE рядка — тут лише відсів рефандів (вони не списання).
+export const SPEND_TX_COUNT = `COUNT(DISTINCT CASE WHEN ${EFF_AMOUNT} < 0 THEN t.id END)`;
 // Сума однієї канонічної гілки (byCategory/byMerchant — SPEND_WHERE уже у WHERE рядка).
 export function amountSum(mult: string): string {
   return `CAST(ROUND(COALESCE(SUM((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER)`;

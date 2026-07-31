@@ -26,7 +26,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import {
   STATS_JOINS, SPEND_WHERE, INCOME_WHERE, EFF_AMOUNT, EFF_CAT_ID, EFF_IMPORTANCE,
-  SPEND_COUNT, spendSum, incomeSum, amountSum, uahMult,
+  SPEND_COUNT, SPEND_TX_COUNT, spendSum, incomeSum, amountSum, uahMult,
 } from "./stats.ts";
 
 // Rates matching the demo dataset, so the numbers below are checkable by hand.
@@ -119,6 +119,25 @@ test("§SPLIT: a split expense is counted once, not once per part", () => {
      FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID} ORDER BY cat`,
   ).all() as { cat: number; spent: number }[];
   assert.deepEqual(plainAll(byCat), [{ cat: 1, spent: 20000 }, { cat: 2, spent: 10000 }]);
+});
+
+test("§CADENCE: SPEND_TX_COUNT counts charges, not joined rows", () => {
+  // What this protects: a weekly report decides whether a category's delta is meaningful by how
+  // many charges produced it. Overcount and a once-a-month subscription looks like a daily habit,
+  // which is exactly the reading that produced "підписки впали на 92%" in a real report.
+  const d = db();
+  tx(d, { id: "sub", time: 1, amount: -9900, category_id: 2 });        // one monthly charge
+  tx(d, { id: "s", time: 2, amount: -30000, category_id: 2 });         // one charge, split in two
+  d.prepare("INSERT INTO tx_splits (tx_id, category_id, amount) VALUES (?,?,?)").run("s", 2, -20000);
+  d.prepare("INSERT INTO tx_splits (tx_id, category_id, amount) VALUES (?,?,?)").run("s", 2, -10000);
+  tx(d, { id: "ref", time: 3, amount: 5000, category_id: 2 });         // refund — not a charge
+
+  const r = d.prepare(
+    `SELECT ${SPEND_TX_COUNT} AS n, ${amountSum(MULT)} AS spent
+     FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE}`,
+  ).get() as { n: number; spent: number };
+  assert.equal(r.n, 2, "two charges: the split is one, the refund is none");
+  assert.equal(r.spent, 34900, "9900 + 30000 - 5000");
 });
 
 test("§REFUND: a refund reduces its category, is not income, and is not an operation", () => {

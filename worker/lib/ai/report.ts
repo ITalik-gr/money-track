@@ -8,12 +8,12 @@ import { st } from "../platform/i18n.ts";
 import { ownerLocale } from "../finance/categories-i18n.ts";
 import { fundsBreakdown } from "./advisor.ts";
 import {
-  STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum,
-  lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit,
+  STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_COUNT, SPEND_TX_COUNT, valueMode, spendSum, incomeSum, amountSum,
+  lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit, categoryMonthlyLevels,
 } from "../finance/stats.ts";
 import { plannedActuals } from "../finance/subscriptions.ts";
 import { getState } from "../finance/repo.ts";
-import { generateFinancialReport, logUsage, getTaskModel, callCostUsd } from "./ai.ts";
+import { generateFinancialReport, logUsage, getTaskModel, callCostUsd, type FinancialReport } from "./ai.ts";
 
 // `custom` — довільний діапазон, заданий користувачем (кнопка «за свої дати»). Він НЕ має
 // пресетних меж, тож `scope` для нього не має сенсу — межі приходять явно в `range`.
@@ -46,12 +46,15 @@ function resolveBounds(
   return scope === "current" ? currentPeriodToDate(type) : lastCompletePeriod(type);
 }
 
-interface CatRow { id: number | null; name: string | null; spent: number }
+// `n` — скільки СПИСАНЬ дало цю суму (канонічний `SPEND_TX_COUNT`). Потрібне не для показу,
+// а щоб знати ритм категорії: дельта «−92%» по категорії з одним платежем на місяць — це
+// таймінг, а не поведінка (§CADENCE).
+interface CatRow { id: number | null; name: string | null; spent: number; n: number }
 
 // Розбивка по ефективній категорії (канонічно, зведено в ₴).
 async function cats(env: Env, from: number, to: number, mult: string): Promise<CatRow[]> {
   const r = await env.DB.prepare(
-    `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent
+    `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent, ${SPEND_TX_COUNT} AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 14`,
@@ -59,12 +62,14 @@ async function cats(env: Env, from: number, to: number, mult: string): Promise<C
   return r.results ?? [];
 }
 
-async function totals(env: Env, from: number, to: number, mult: string): Promise<{ spend: number; income: number }> {
+// `income_n` — та сама ідея для доходу: одна зарплата/інвойс на місяць у тижневому вікні
+// дає «дохід впав до нуля», хоча він просто прийшов іншого тижня.
+async function totals(env: Env, from: number, to: number, mult: string): Promise<{ spend: number; income: number; income_n: number }> {
   const r = await env.DB.prepare(
-    `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
+    `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income, ${INCOME_COUNT} AS income_n
      FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?`,
-  ).bind(from, to).first<{ spend: number; income: number }>();
-  return { spend: r?.spend ?? 0, income: r?.income ?? 0 };
+  ).bind(from, to).first<{ spend: number; income: number; income_n: number }>();
+  return { spend: r?.spend ?? 0, income: r?.income ?? 0, income_n: r?.income_n ?? 0 };
 }
 
 // §6 Вагомість: частка обов'язкових/бажаних/необов'язкових витрат (канонічно, зведено в ₴).
@@ -102,7 +107,7 @@ export async function buildReportContext(
   const { from, to, prevFrom, prevTo } = resolveBounds(type, scope, range);
   const periodDays = Math.max(1, Math.round((to - from) / 86400));
 
-  const [cur, prev, curCats, prevCats, merchants, notable, big, funds, actuals, imp, split, profile] = await Promise.all([
+  const [cur, prev, curCats, prevCats, merchants, notable, big, funds, actuals, imp, split, profile, levels] = await Promise.all([
     totals(env, from, to, mult),
     totals(env, prevFrom, prevTo, mult),
     cats(env, from, to, mult),
@@ -134,6 +139,9 @@ export async function buildReportContext(
     importance(env, from, to, mult),
     recurringOneoffSplit(env, from, to, mult),
     getState(env.DB, "finance_profile"),
+    // Канонічний місячний рівень категорії — щоб у тижневому звіті було з ЧИМ порівняти
+    // місячний платіж, окрім сусіднього тижня (де його просто не було).
+    categoryMonthlyLevels(env, mult, { now: to }),
   ]);
 
   const money = (minor: number) => Math.round(minor / 100);
@@ -155,11 +163,31 @@ export async function buildReportContext(
   const trend: TrendPoint[] = (trendRows.results ?? []).map((r) => ({ month: r.m, spend_uah: money(r.spend), income_uah: money(r.income) }));
 
   const prevMap = new Map(prevCats.map((c) => [c.id, c.spent]));
+  const prevNMap = new Map(prevCats.map((c) => [c.id, c.n]));
   const loc = await ownerLocale(env.DB);
   const categories = curCats.map((c) => {
     const p = prevMap.get(c.id) ?? 0;
     const delta = p > 0 ? Math.round(((c.spent - p) / p) * 100) : (c.spent > 0 ? null : 0);
     return { name: c.name ?? st(loc, "uncategorized"), amount_uah: money(c.spent), prev_uah: money(p), delta_pct: delta };
+  });
+
+  // §CADENCE — ритм списань. Період, коротший за місяць, не може чесно порівнювати категорію,
+  // яку списують раз на місяць: підписка 99 ₴ цього тижня проти 1300 ₴ минулого читалась моделлю
+  // як «підписки впали на 92%», хоча це той самий календар, а не зміна поведінки. Дельта осмислена
+  // лише коли з ОБОХ боків є ≥2 списання; інакше даємо канонічний місячний рівень як точку опори.
+  const shortPeriod = periodDays < 28;
+  const categoriesForAi = curCats.map((c, i) => {
+    const lvl = c.id != null ? levels.get(c.id) : undefined;
+    const prevN = prevNMap.get(c.id) ?? 0;
+    return {
+      ...categories[i],
+      charges_n: c.n,
+      prev_charges_n: prevN,
+      monthly_usual_uah: lvl ? money(lvl.level) : null,
+      // `fixed` з canonical categoryMonthlyLevels: стабільна сума останніх місяців = підписка/оренда.
+      billing: lvl?.fixed ? "monthly_fixed" : "variable",
+      delta_meaningful: !shortPeriod || (c.n >= 2 && prevN >= 2),
+    };
   });
 
   const net = cur.income - cur.spend;
@@ -201,10 +229,13 @@ export async function buildReportContext(
     user_profile: profile || "(не вказано)",
     current: {
       spend_uah: money(cur.spend), income_uah: money(cur.income), net_uah: money(net),
-      savings_rate_pct: savingsRate,
+      savings_rate_pct: savingsRate, income_charges_n: cur.income_n,
     },
-    previous: { spend_uah: money(prev.spend), income_uah: money(prev.income) },
-    categories,
+    previous: { spend_uah: money(prev.spend), income_uah: money(prev.income), income_charges_n: prev.income_n },
+    // §CADENCE: у короткому періоді різниця доходу з ≤1 надходженням з будь-якого боку означає
+    // «зарплата/інвойс прийшов іншого тижня», а не «дохід зник».
+    income_delta_meaningful: !shortPeriod || (cur.income_n >= 2 && prev.income_n >= 2),
+    categories: categoriesForAi,
     // §B разові (податки/стоматолог/велика покупка) vs регулярний ритм — не проєктуй разові в майбутнє.
     recurring_vs_oneoff: {
       recurring_uah: money(split.recurring.spent),
@@ -248,15 +279,33 @@ export async function generateAndStoreReport(
   // підсумки за той самий час уже лежать поруч і саме вони й описують «звідки ми йдемо».
   const prior = type === "custom"
     ? await env.DB.prepare(
-        "SELECT summary FROM ai_reports WHERE period_type <> 'custom' ORDER BY period_to DESC LIMIT 3",
-      ).all<{ summary: string | null }>()
+        "SELECT summary, data_json FROM ai_reports WHERE period_type <> 'custom' ORDER BY period_to DESC LIMIT 3",
+      ).all<{ summary: string | null; data_json: string | null }>()
     : await env.DB.prepare(
-        "SELECT summary FROM ai_reports WHERE period_type = ? ORDER BY period_to DESC LIMIT 3",
-      ).bind(type).all<{ summary: string | null }>();
+        "SELECT summary, data_json FROM ai_reports WHERE period_type = ? ORDER BY period_to DESC LIMIT 3",
+      ).bind(type).all<{ summary: string | null; data_json: string | null }>();
   const priorSummaries = (prior.results ?? []).map((r) => r.summary).filter(Boolean);
 
+  // §NOVELTY — що вже прозвучало. Самих `summary` було замало: модель щотижня «відкривала»
+  // те саме («квартира забрала багато»), бо найбільша категорія найбільша щомісяця, і звіт
+  // читався як копія попереднього. Даємо ЯВНИЙ список тем — заголовки, мітки аномалій і назви
+  // порад останніх звітів — і забороняємо подавати їх як новину вдруге.
+  const covered = new Set<string>();
+  for (const r of prior.results ?? []) {
+    try {
+      const d = JSON.parse(r.data_json ?? "{}") as Partial<FinancialReport>;
+      if (d.headline) covered.add(String(d.headline));
+      for (const a of d.anomalies ?? []) if (a?.label) covered.add(String(a.label));
+      for (const a of d.advice ?? []) if (a?.title) covered.add(String(a.title));
+    } catch {
+      // Старий або пошкоджений data_json не має валити генерацію нового звіту.
+    }
+  }
+
   const model = await getTaskModel(env, "report");
-  const { result, usage } = await generateFinancialReport(env, { ...(context as object), prior_reports: priorSummaries });
+  const { result, usage } = await generateFinancialReport(env, {
+    ...(context as object), prior_reports: priorSummaries, already_covered: [...covered].slice(0, 24),
+  });
   logUsage("report", usage);
   const cost = callCostUsd(model, usage);
   const now = Math.floor(Date.now() / 1000);
