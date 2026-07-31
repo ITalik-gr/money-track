@@ -10,6 +10,8 @@ import {
   useGetAdviceHistoryQuery,
   useClearAdviceHistoryMutation,
   useSetBudgetMutation,
+  useCreateJobMutation,
+  useGetJobsQuery,
 } from "../store/api.ts";
 import type { AdviceAction, Advice, AdviceHistoryItem } from "../store/api.ts";
 import { Money } from "../components/ui/Money.tsx";
@@ -31,7 +33,7 @@ import { renderRich } from "../lib/citations.tsx";
 import { formatMinor } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { toast } from "../lib/toast.ts";
-import { errText } from "../lib/errors.ts";
+import { errText, errStatus } from "../lib/errors.ts";
 
 // AI-порадник: числа (runway) + структуровані поради + інтерактивне «запитай/опиши».
 // Профіль «про мене» редагується лише в Налаштуваннях — AI його й так знає в усіх викликах.
@@ -41,7 +43,14 @@ type AdvTab = keyof typeof TABS;
 export function Advisor() {
   const t = useT();
   const { data: stored, isLoading: loadingAdvice } = useGetAdviceQuery();
-  const [generate, { isLoading: generating }] = useGenerateAdviceMutation();
+  const [generate] = useGenerateAdviceMutation();
+  // §A6: генерація живе в черзі на сервері, тож «іде» — це стан ЗАДАЧІ, а не цієї сторінки.
+  // Завдяки цьому спінер лишається правдивим, якщо піти й повернутись посеред прогону.
+  const [createJob, { isLoading: queueing }] = useCreateJobMutation();
+  const { data: jobs } = useGetJobsQuery();
+  const generating = queueing || (jobs?.items ?? []).some(
+    (j) => j.kind === "advisor" && (j.status === "queued" || j.status === "running"),
+  );
   const [genError, setGenError] = useState<string | null>(null);
   // Детермінований fallback свідомо НЕ зберігається на сервері (щоб не затер останню
   // нормальну AI-пораду), тож тримаємо його тут і показуємо замість збереженої.
@@ -54,16 +63,23 @@ export function Advisor() {
   async function runAdvice() {
     setGenError(null);
     try {
-      const res = await generate().unwrap();
-      // Сервер міг віддати детермінований fallback замість AI — тоді показуємо його
-      // (а не стару збережену пораду) і чесно кажемо чому.
-      setFallback(res.fallback ? res : null);
-      if (res.fallback) toast.info(t("adv.fallbackToast"));
+      await createJob({ kind: "advisor" }).unwrap();
+      setFallback(null);
+      toast.info(t("jobs.started"));
     } catch (e) {
+      // Без AI-ключа сервер відмовляє ЩЕ ДО черги (400). Це саме той випадок, заради якого
+      // існує детермінований fallback: беремо його старим синхронним шляхом — там він
+      // рахується без жодного виклику моделі. Порожня сторінка гірша за слабшу пораду.
+      if (errStatus(e) === 400) {
+        try {
+          const res = await generate().unwrap();
+          setFallback(res.fallback ? res : null);
+          if (res.fallback) toast.info(t("adv.fallbackToast"));
+          return;
+        } catch { /* впав і fallback — покажемо чесну помилку нижче */ }
+      }
       const raw = errText(e);
-      const friendly = raw.includes("not set")
-        ? t("adv.keyMissing")
-        : t("adv.genFailed", { error: raw });
+      const friendly = raw.includes("not set") ? t("adv.keyMissing") : t("adv.genFailed", { error: raw });
       setGenError(friendly);
       toast.error(friendly);
     }

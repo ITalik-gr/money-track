@@ -2,6 +2,19 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { Account, Budget, Category, EventGroup, PlannedPayment, AiUsageStats, PlannedActual } from "../../shared/types.ts";
 import type { NotifTemplateKey } from "../../shared/notif-i18n.ts";
 
+// §A6 — фонова AI-генерація. Дзеркалить рядок `ai_jobs` у БД юзера.
+export type AiJobKind = "advisor" | "report" | "budget";
+export interface AiJob {
+  id: number;
+  kind: AiJobKind;
+  status: "queued" | "running" | "done" | "failed";
+  result_json: string | null;
+  error: string | null;
+  created_at: number;
+  finished_at: number | null;
+  seen_at: number | null;
+}
+
 export interface EventWithAgg extends EventGroup {
   tx_count: number;
   spent: number;
@@ -469,7 +482,7 @@ export type NotifPrefs = Record<NotifKind, boolean>
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -1042,6 +1055,21 @@ export const api = createApi({
       query: (body) => ({ url: "/notifications/prefs", method: "PUT", body }),
       invalidatesTags: ["Notification"],
     }),
+
+    // §A6 — довгі AI-генерації у фоні. Ставимо задачу й одразу відпускаємо користувача;
+    // `JobsProvider` сам довідається про «готово» і оновить потрібний екран.
+    createJob: b.mutation<{ job_id: number; created: boolean }, { kind: AiJobKind; params?: unknown }>({
+      query: (body) => ({ url: "/jobs", method: "POST", body }),
+      invalidatesTags: ["Job"],
+    }),
+    getJobs: b.query<{ items: AiJob[] }, void>({
+      query: () => "/jobs",
+      providesTags: ["Job"],
+    }),
+    // Без інвалідації: тост уже показано, і зайвий рефетч лише повернув би той самий список.
+    markJobSeen: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/jobs/${id}/seen`, method: "POST" }),
+    }),
   }),
 });
 
@@ -1194,4 +1222,7 @@ export const {
   useGenerateNotificationsMutation,
   useGetNotifPrefsQuery,
   useSetNotifPrefsMutation,
+  useCreateJobMutation,
+  useGetJobsQuery,
+  useMarkJobSeenMutation,
 } = api;

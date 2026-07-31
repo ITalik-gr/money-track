@@ -37,6 +37,25 @@ export async function startBackfill(env: Env): Promise<Cursor> {
   return cursor;
 }
 
+/**
+ * Чи лишилась робота по бекфілу. Питає планувальник alarm'ів у `UserDO`.
+ *
+ * Джерело правди — САМ КУРСОР, а не окремий прапорець: він переживає евікшн і рестарт, і —
+ * головне — він уже виставлений у тих, хто був посеред бекфілу, коли планувальник виїхав.
+ * Якби «чи є робота» трималось лише на новому полі з таймстампом, їхній прогін мовчки
+ * обірвався б на першому ж alarm після деплою, і ніщо його б не підхопило.
+ */
+export async function backfillPending(db: Env["DB"]): Promise<boolean> {
+  const raw = await getState(db, CURSOR_KEY);
+  if (!raw) return false;
+  try {
+    const c: Cursor = JSON.parse(raw);
+    return c.idx < c.jobs.length;
+  } catch {
+    return false; // зіпсований курсор — не крутимо alarm вічно
+  }
+}
+
 // Виконує рівно один запит виписки і просуває курсор. null = бекфілу немає.
 export async function stepBackfill(env: Env): Promise<StepResult | null> {
   const raw = await getState(env.DB, CURSOR_KEY);

@@ -3,6 +3,7 @@ import { NavLink, Outlet, Link } from "react-router-dom";
 import { Icon } from "../ui/Icon.tsx";
 import { Toaster } from "../ui/Toaster.tsx";
 import { CommandPalette, openCommandPalette } from "./CommandPalette.tsx";
+import { AiJobChip } from "./AiJobs.tsx";
 import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation } from "../../store/api.ts";
 import { useLocale, useT } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
@@ -186,6 +187,9 @@ export function Layout() {
           </Link>
           <div className="topbar-right">
             <TopSearch />
+            {/* §A6: поки фонова генерація йде, вона видима з БУДЬ-ЯКОЇ сторінки — інакше
+                «пішов і забув» нічим не відрізняється від «нічого не запустилось». */}
+            <AiJobChip />
             <NotifBell />
             <Link to="/setup" className="avatar-chip">
               {/* Name and initial come from the signed-in account — they were hardcoded to the

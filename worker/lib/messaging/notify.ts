@@ -153,6 +153,77 @@ function safeParse(json: string | null): NotifParams {
 }
 
 /**
+ * Записати чернетки у стрічку. ЄДИНЕ місце, де подія стає рядком.
+ *
+ * Винесено з `generateNotifications`, коли зʼявився другий писар (§A6: фонова AI-задача
+ * оголошує себе одразу після завершення, не чекаючи добового крону). Два незалежні
+ * `INSERT INTO notifications` розійшлись би на першій же зміні — напр. рядок без
+ * `notif_key` замерз би однією мовою, хоча вся суть P3.3 у зворотному.
+ */
+async function insertDrafts(env: Env, drafts: Draft[], now: number, max = MAX_PER_RUN): Promise<number> {
+  // Fallback title/body are composed in the owner's locale at insert (P3.3): they serve
+  // legacy/`ai` rows and TG. The client re-renders templated rows live from key/params.
+  const locale = await ownerLocale(env);
+  let created = 0;
+  for (const d of drafts) {
+    // Ліміт рахуємо по СТВОРЕНИХ, а не по переглянутих: інакше десяток уже наявних
+    // (і мовчки проігнорованих) чернеток зʼїдав би квоту й глушив справді нові події.
+    if (created >= max) break;
+    let title = d.title ?? "";
+    let body: string | null = d.body ?? null;
+    if (d.tkey) {
+      const r = renderNotif(locale, d.tkey, d.tparams ?? {});
+      title = r.title;
+      body = r.body;
+    }
+    // INSERT OR IGNORE + UNIQUE(dedup_key): крон щодня бачить ті самі події — вставиться
+    // лише те, чого ще не було. `changes` каже, чи справді додався рядок.
+    const res = await env.DB.prepare(
+      `INSERT OR IGNORE INTO notifications
+         (kind, title, body, notif_key, notif_params, severity, entity_type, entity_id, dedup_key, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      d.kind, title, body, d.tkey ?? null, d.tparams ? JSON.stringify(d.tparams) : null,
+      d.severity ?? "info", d.entity_type ?? null, d.entity_id ?? null, d.dedup_key, now,
+    ).run();
+    if (res.meta.changes > 0) created++;
+  }
+  return created;
+}
+
+/**
+ * §A6 — фонова AI-задача завершилась: рядок у стрічку ОДРАЗУ, а не з наступним кроном.
+ *
+ * Це половина сценарію «закрив вкладку»: тост побачить лише той, хто повернувся, а стрічка —
+ * слід для всіх інших. Правило «подія оголошується в тому ж прогоні, що й народилась» тут
+ * буквальне: чекати добового проходу означало б сповіщення про пораду через день після поради.
+ *
+ * Для `report` навмисно перевикористано `draftReports` із тим самим `dedup_key` (`report:<id>`) —
+ * інакше та сама подія лягла б у стрічку двічі: раз звідси, раз із крону.
+ * Провал задачі у стрічку НЕ пишемо: користувач і так побачить його тостом із `GET /api/jobs`,
+ * а рядок «не вдалось» у журналі подій — це шум, а не подія його фінансів.
+ */
+export async function pushJobNotification(
+  env: Env, kind: "advisor" | "report" | "budget", jobId: number, error: string | null,
+): Promise<void> {
+  if (error) return;
+  const now = Math.floor(Date.now() / 1000);
+  if (kind === "report") {
+    await insertDrafts(env, await draftReports(env, now), now);
+    return;
+  }
+  await insertDrafts(env, [{
+    kind: "ai",
+    tkey: "job_done",
+    tparams: { job: kind },
+    severity: "info",
+    // Ключ по id задачі: кожен ЗАПУСК — окрема подія, яку користувач сам замовив. Ключ із
+    // датою («job:advisor:2026-08-01») зробив би два запуски за день одним рядком.
+    dedup_key: `job:${kind}:${jobId}`,
+  }], now);
+}
+
+/**
  * Свіжі AI-репорти, про які ще не сповіщали. Ідемпотентність — по `report:<id>`.
  *
  * ⚠️ Вікно СВІДОМО вузьке (3 дні, ≤2 шт). З 14-денним вікном перший же прогін вивалював
@@ -893,33 +964,7 @@ export async function generateNotifications(
   const rank: Record<Severity, number> = { urgent: 0, warn: 1, info: 2 };
   deduped.sort((a, b) => rank[a.severity ?? "info"] - rank[b.severity ?? "info"]);
 
-  // Fallback title/body are composed in the owner's locale at insert (P3.3): they serve
-  // legacy/`ai` rows and TG. The client re-renders templated rows live from key/params.
-  const locale = await ownerLocale(env);
-  let created = 0;
-  for (const d of deduped) {
-    // Ліміт рахуємо по СТВОРЕНИХ, а не по переглянутих: інакше десяток уже наявних
-    // (і мовчки проігнорованих) чернеток зʼїдав би квоту й глушив справді нові події.
-    if (created >= MAX_PER_RUN) break;
-    let title = d.title ?? "";
-    let body: string | null = d.body ?? null;
-    if (d.tkey) {
-      const r = renderNotif(locale, d.tkey, d.tparams ?? {});
-      title = r.title;
-      body = r.body;
-    }
-    // INSERT OR IGNORE + UNIQUE(dedup_key): крон щодня бачить ті самі події — вставиться
-    // лише те, чого ще не було. `changes` каже, чи справді додався рядок.
-    const res = await env.DB.prepare(
-      `INSERT OR IGNORE INTO notifications
-         (kind, title, body, notif_key, notif_params, severity, entity_type, entity_id, dedup_key, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).bind(
-      d.kind, title, body, d.tkey ?? null, d.tparams ? JSON.stringify(d.tparams) : null,
-      d.severity ?? "info", d.entity_type ?? null, d.entity_id ?? null, d.dedup_key, now,
-    ).run();
-    if (res.meta.changes > 0) created++;
-  }
+  const created = await insertDrafts(env, deduped, now, MAX_PER_RUN);
 
   // Пуш і прибирання — теж best-effort: збій TG не має валити саму генерацію.
   let pushed = 0;

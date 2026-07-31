@@ -1,8 +1,11 @@
 import { useState } from "react";
 import { getLocale, dateFmt } from "../i18n/locale.ts";
 import { useT, translate } from "../i18n/index.ts";
-import { Link, useParams, useNavigate } from "react-router-dom";
-import { useGetReportsQuery, useGetReportQuery, useGenerateReportMutation, useDeleteReportMutation } from "../store/api.ts";
+import { Link, useParams } from "react-router-dom";
+import { useGetReportsQuery, useGetReportQuery, useDeleteReportMutation, useCreateJobMutation, useGetJobsQuery } from "../store/api.ts";
+
+// Параметри фонової задачі `report` — дзеркалять те, що читає `executeJob` на сервері.
+type ReportJobParams = { type: "week" | "month" | "custom"; scope?: "last" | "current"; range?: { from: number; to: number } };
 import type { ReportListItem, FinancialReport } from "../store/api.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
@@ -51,22 +54,27 @@ function Delta({ pct }: { pct: number | null }) {
 export function Reports() {
   const t = useT();
   const { data: reports } = useGetReportsQuery();
-  const [generate, { isLoading }] = useGenerateReportMutation();
   const [deleteReport] = useDeleteReportMutation();
   const [busy, setBusy] = useState<string | null>(null);
-  const navigate = useNavigate();
+  // §A6: звіт рахується у фоні. Свідомо втратили авто-перехід на щойно згенерований звіт —
+  // ми не знаємо його id у момент постановки, а чекати на нього означало б рівно ту саму
+  // прикутість до сторінки, заради якої черга й робилась. Готовий звіт зʼявиться в списку сам.
+  const [createJob, { isLoading: queueing }] = useCreateJobMutation();
+  const { data: jobs } = useGetJobsQuery();
+  const isLoading = queueing || (jobs?.items ?? []).some(
+    (j) => j.kind === "report" && (j.status === "queued" || j.status === "running"),
+  );
   // Локальна «сьогодні», не `toISOString()`: у Києві ввечері UTC-дата вже вчорашня, і `max`
   // на інпуті мовчки забороняв би вибрати сьогоднішній день.
   const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
-  const run = async (id: string, body: Parameters<typeof generate>[0]) => {
+  const run = async (id: string, params: ReportJobParams) => {
     setBusy(id);
     try {
-      const r = await generate(body).unwrap();
-      toast.success(t("report.ready"));
-      navigate(`/reports/${r.id}`);
+      await createJob({ kind: "report", params }).unwrap();
+      toast.info(t("jobs.started"));
     } catch (e) { toast.error(errText(e)); }
     finally { setBusy(null); }
   };
@@ -85,8 +93,8 @@ export function Reports() {
   // останнього обраного дня не потрапили б у звіт.
   const customValid = !!from && !!to && from <= to;
   const runCustom = () => run("custom", {
-    type: "custom", force: true,
-    from: dayStartUnix(from), to: dayStartUnix(to) + 86400,
+    type: "custom",
+    range: { from: dayStartUnix(from), to: dayStartUnix(to) + 86400 },
   });
 
   // Видалення тестових репортів. Кнопка всередині картки-Link → гасимо навігацію.

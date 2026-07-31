@@ -65,7 +65,13 @@ export interface Env extends Omit<Cloudflare.Env, "DB"> {
    * Object to schedule the next paced step (monobank allows 1 statement request / 60s).
    * The alarm lives on the object; the handler that starts a backfill only knows it wants one.
    */
-  scheduleBackfillStep?: (delayMs: number) => void;
+  scheduleBackfillStep?: (delayMs: number) => void | Promise<void>;
+  /**
+   * Internal wiring, NOT a Cloudflare binding: "I put work in a queue, re-arm your alarm."
+   * Used by §A6 after a job row is inserted — the object owns the single alarm and decides
+   * which deadline is nearest; the endpoint only knows it created work.
+   */
+  scheduleWork?: () => void | Promise<void>;
   // Telegram-бот (§ROADMAP 1): токен бота, секрет шляху/заголовка вебхука, дозволений chat_id.
   TG_BOT_TOKEN: string;
   TG_SECRET: string;

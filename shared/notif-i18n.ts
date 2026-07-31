@@ -25,7 +25,7 @@ export type NotifParams = Record<string, string | number | boolean | null>;
 export type NotifTemplateKey =
   | "report" | "deadline_plan" | "deadline_credit" | "anomaly" | "win" | "budget"
   | "price_up" | "liquidity" | "big_tx" | "duplicate" | "health_drop"
-  | "goal_risk" | "dead_sub" | "todo";
+  | "goal_risk" | "dead_sub" | "todo" | "job_done";
 
 export interface RenderedNotif { title: string; body: string | null }
 
@@ -75,6 +75,23 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
         title: `${period} ${kind} · ${dm(num(p, "from"))} – ${dm(num(p, "to"))}`,
         // Body is the AI summary — free text, kept verbatim in whatever locale it was written.
         body: s(p, "summary") || null,
+      };
+    }
+
+    // §A6: a long generation the user started finished while they were elsewhere in the app —
+    // or with the tab closed. `report` has its own richer template above; this covers the two
+    // kinds whose result has no period to name.
+    case "job_done": {
+      // Заголовок складаємо цілком, а не з «що» + «готово»: українською рід підмета міняє
+      // закінчення («План готовий», але «Порада готова»), і склейка дала б аграматичний рядок.
+      const title = s(p, "job") === "budget"
+        ? (uk ? "План бюджетів готовий" : "Budget plan is ready")
+        : (uk ? "Порада готова" : "Advice is ready");
+      return {
+        title,
+        body: uk
+          ? "Згенерували у фоні — можна дивитись."
+          : "Generated in the background — ready to view.",
       };
     }
 

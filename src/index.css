@@ -1680,6 +1680,31 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   position: absolute; top: 8px; right: 9px; width: 7px; height: 7px; border-radius: 50%;
   background: var(--neg); border: 1.5px solid var(--surface);
 }
+/* §A6 — індикатор фонової AI-генерації в топбарі. Живе поруч із дзвіночком і зникає, щойно
+   робота скінчилась: постійний елемент, який 99% часу нічого не означає, — це шум.
+   Акцентна пігулка, а не ще одна `icon-btn`: це СТАН, а не дія, і сплутати їх не має бути як. */
+.ai-job-chip {
+  display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 13px;
+  border-radius: 999px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  color: var(--accent); font-size: 12.5px; font-weight: 600;
+  transition: background 0.12s;
+}
+.ai-job-chip:hover { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
+/* Іконка пульсує, підпис — ні: рухомий текст важче читати, а сигнал «щось іде» дає й крапка. */
+.ai-job-chip svg { animation: ajc-pulse 1.6s ease-in-out infinite; }
+@keyframes ajc-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.ai-job-chip .ajc-more { opacity: 0.7; font-variant-numeric: tabular-nums; }
+/* На вузькому екрані лишається сама іконка: підпис у рівномірній стрічці топбару інакше
+   розіпхав би її ширше за viewport (правило §Клієнт і розкладка). */
+@media (max-width: 720px) {
+  .ai-job-chip { padding: 0; width: 40px; justify-content: center; }
+  .ai-job-chip .ajc-text { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-job-chip svg { animation: none; }
+}
+
 .avatar-chip {
   display: flex; align-items: center; gap: 10px; padding: 5px 13px 5px 5px;
   border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface);

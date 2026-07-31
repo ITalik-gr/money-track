@@ -94,7 +94,15 @@ export class UserDO extends DurableObject<Env> {
       USER_ID: userId,
       IS_OWNER: isOwner,
       onSecretsChanged: () => this.invalidateCredentials(),
-      scheduleBackfillStep: (delayMs: number) => this.ctx.storage.setAlarm(Date.now() + delayMs),
+      // Both of these used to be `setAlarm` calls at the call site. They now record WHEN the
+      // work is owed and let `armAlarm` pick the earliest — the object has one alarm and more
+      // than one claimant on it (§A6).
+      scheduleBackfillStep: async (delayMs: number) => {
+        const { setState } = await import("../lib/finance/repo.ts");
+        await setState(this.db, UserDO.BACKFILL_NEXT_KEY, String(Date.now() + delayMs));
+        await this.armAlarm();
+      },
+      scheduleWork: () => this.armAlarm(),
     };
   }
 
@@ -156,6 +164,12 @@ export class UserDO extends DurableObject<Env> {
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
         await generateNotifications(env);
+      });
+      // §A6 retention: a finished job row is a receipt, not history. Kept a week so a toast
+      // missed over a weekend still has something to show.
+      await step("prune_jobs", async () => {
+        const { pruneJobs } = await import("../lib/ai/jobs.ts");
+        await pruneJobs(env);
       });
     }
 
@@ -231,32 +245,106 @@ export class UserDO extends DurableObject<Env> {
     const expiresAt = nowSec + 24 * 3600;
     // The marker doubles as "this is a demo object" for `alarm()` — a real user never has it.
     await setState(this.db, "demo_expires_at", String(expiresAt));
-    this.ctx.storage.setAlarm(expiresAt * 1000);
+    await this.armAlarm();
     return { seeded: true, statements: stmts.length };
   }
 
-  override async alarm(): Promise<void> {
-    // A demo sandbox's alarm is its 24h self-destruct, not a backfill tick (a demo has no mono
-    // token to backfill). Distinguished by the marker `seedDemo` wrote; real users never have it.
+  /**
+   * When the paced backfill may take its next step, as a unix-ms string in `app_state`.
+   *
+   * It has to be persisted rather than implied by the alarm time, because the alarm no longer
+   * belongs to the backfill alone (§A6). An AI job firing 20s into the 60s window would
+   * otherwise run `stepBackfill` early, and monobank answers a too-frequent statement request
+   * with a rate limit — the visible symptom being a sync that simply stops making progress.
+   */
+  private static readonly BACKFILL_NEXT_KEY = "backfill_next_at_ms";
+
+  /**
+   * The object's single alarm, shared by everything that needs one.
+   *
+   * A Durable Object holds exactly ONE pending alarm, so the moment a second job wanted it the
+   * alarm had to stop meaning "backfill tick" and start meaning "the earliest deadline I owe".
+   * `alarm()` therefore does what is DUE and re-arms for the earliest of what is left; nothing
+   * else in the object calls `setAlarm` directly.
+   */
+  private async armAlarm(): Promise<void> {
     const { getState } = await import("../lib/finance/repo.ts");
+    const now = Date.now();
+    const deadlines: number[] = [];
+
+    const demoExpires = await getState(this.db, "demo_expires_at");
+    if (demoExpires != null) deadlines.push(Number(demoExpires) * 1000);
+
+    const { backfillPending } = await import("../lib/bank/backfill.ts");
+    if (await backfillPending(this.db)) {
+      const at = await getState(this.db, UserDO.BACKFILL_NEXT_KEY);
+      // No timestamp yet means either a freshly started backfill or one that predates this
+      // scheduler — both are due now, which is also what the old code did.
+      deadlines.push(at == null ? now : Number(at));
+    }
+
+    const { hasQueuedJobs } = await import("../lib/ai/jobs.ts");
+    // Not "now": a job that dies before it can record why would otherwise re-arm the alarm for
+    // the next millisecond, and the object would spin. `runNextJob` gives up after MAX_ATTEMPTS,
+    // so the spin is bounded either way — this just keeps the bound cheap.
+    if (await hasQueuedJobs(this.db)) deadlines.push(now + 2_000);
+
+    if (!deadlines.length) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    // `now + 1`: a deadline already in the past must still become a real alarm rather than a
+    // timestamp the runtime treats as "immediately, again".
+    await this.ctx.storage.setAlarm(Math.max(Math.min(...deadlines), now + 1));
+  }
+
+  override async alarm(): Promise<void> {
+    const now = Date.now();
+    // A demo sandbox's alarm is its 24h self-destruct and nothing else: it has no mono token to
+    // backfill, and §A6 jobs run inline there (the demo output cap makes a queue pointless).
+    // Distinguished by the marker `seedDemo` wrote; real users never have it.
+    const { getState, setState } = await import("../lib/finance/repo.ts");
     const demoExpires = await getState(this.db, "demo_expires_at");
     if (demoExpires != null) {
-      if (Date.now() / 1000 >= Number(demoExpires)) await this.reset(); // wipe back to empty schema
+      if (now / 1000 >= Number(demoExpires)) await this.reset(); // wipe back to empty schema
+      else await this.armAlarm();
       return;
     }
 
     const env = await this.appEnv(undefined, await this.storedOwnerFlag());
+
+    // 1) One queued AI generation (§A6). One per pass on purpose: two Sonnet calls back to back
+    //    stretch a single alarm past any sane budget, and `armAlarm` picks the rest up anyway.
     try {
-      const { stepBackfill } = await import("../lib/bank/backfill.ts");
-      const res = await stepBackfill(env);
-      // Reschedule while there is work left. `retry` means monobank rate-limited us, which is
-      // expected pacing rather than an error — same 60s wait either way.
-      if (res && !res.done) this.ctx.storage.setAlarm(Date.now() + 60_000);
-    } catch {
-      // Keep the chain alive: dropping the alarm on one bad step would silently abandon a
-      // half-finished backfill, and nothing else would ever pick it up.
-      this.ctx.storage.setAlarm(Date.now() + 60_000);
+      const { runNextJob } = await import("../lib/ai/jobs.ts");
+      await runNextJob(env);
+    } catch (e) {
+      // runNextJob records failure on the row itself; anything thrown past it is ours, and it
+      // must not take the backfill down with it.
+      console.error("[jobs] alarm pass failed:", e instanceof Error ? e.message : String(e));
     }
+
+    // 2) The backfill step — ONLY if there is one AND its own 60s pacing says so. Both halves
+    //    matter: without the pacing check an AI job firing 20s in would spend the statement
+    //    request monobank only allows once a minute, and the sync would quietly stall.
+    const { backfillPending } = await import("../lib/bank/backfill.ts");
+    const dueAt = await getState(this.db, UserDO.BACKFILL_NEXT_KEY);
+    if (await backfillPending(this.db) && now >= (dueAt == null ? now : Number(dueAt))) {
+      try {
+        const { stepBackfill } = await import("../lib/bank/backfill.ts");
+        const res = await stepBackfill(env);
+        // `retry` means monobank rate-limited us, which is expected pacing rather than an
+        // error — same 60s wait either way.
+        if (res && !res.done) await setState(this.db, UserDO.BACKFILL_NEXT_KEY, String(Date.now() + 60_000));
+      } catch {
+        // Keep the chain alive: dropping the pacing on one bad step would silently abandon a
+        // half-finished backfill, and nothing else would ever pick it up.
+        await setState(this.db, UserDO.BACKFILL_NEXT_KEY, String(Date.now() + 60_000));
+      }
+    }
+
+    // 3) Re-arm for whatever is still owed — this is the only exit that keeps the chain alive.
+    await this.armAlarm();
   }
 
   /**

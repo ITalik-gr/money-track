@@ -194,6 +194,7 @@ const S = {
     en: "AI features need your own Anthropic key — add it in Settings → “Keys & data”.",
   },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
+  jobBadKind: { uk: "Невідомий тип задачі", en: "Unknown job kind" },
 
   errSplitOnlyExpense: { uk: "Ділити можна лише витрату", en: "Only an expense can be split" },
   errSplitHasReimbursement: {

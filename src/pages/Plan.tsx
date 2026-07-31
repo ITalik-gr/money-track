@@ -5,9 +5,10 @@ import {
   useGetBudgetsQuery,
   useGetByCategoryQuery,
   useGetCategoriesQuery,
-  useProposeBudgetsMutation,
   useBudgetChatMutation,
   useSetBudgetMutation,
+  useCreateJobMutation,
+  useGetJobsQuery,
 } from "../store/api.ts";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
@@ -16,7 +17,7 @@ import { AutoBudget } from "../components/planning/AutoBudget.tsx";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { toast } from "../lib/toast.ts";
-import type { BudgetProposalRow } from "../store/api.ts";
+import type { BudgetProposalRow, BudgetPlanResult } from "../store/api.ts";
 
 // Планування (§7): місячні бюджети-конверти по категоріях. Підписки — окрема сторінка.
 export function Plan() {
@@ -142,7 +143,19 @@ function BudgetChat() {
 // AI-планувальник: пропонує ліміти з історії + цілей, приймаєш одним тапом.
 function BudgetPlanner() {
   const t = useT();
-  const [propose, { data, isLoading, isError }] = useProposeBudgetsMutation();
+  // §A6: план рахується у фоні. `budget` — єдиний вид задачі без власного сховища, тож його
+  // результат приїжджає в `result_json` рядка задачі, а не окремим ендпоінтом.
+  const [createJob, { isLoading: queueing }] = useCreateJobMutation();
+  const { data: jobs } = useGetJobsQuery();
+  const budgetJobs = (jobs?.items ?? []).filter((j) => j.kind === "budget");
+  const isLoading = queueing || budgetJobs.some((j) => j.status === "queued" || j.status === "running");
+  const last = budgetJobs.find((j) => j.status === "done" || j.status === "failed");
+  const isError = last?.status === "failed";
+  const data = useMemo<BudgetPlanResult | undefined>(() => {
+    if (!last?.result_json) return undefined;
+    try { return JSON.parse(last.result_json) as BudgetPlanResult; } catch { return undefined; }
+  }, [last?.result_json]);
+  const propose = () => createJob({ kind: "budget" });
   const [setBudget] = useSetBudgetMutation();
   const [accepted, setAccepted] = useState<Set<number>>(new Set());
 
