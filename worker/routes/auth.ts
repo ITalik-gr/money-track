@@ -6,7 +6,8 @@ import { Hono } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
 import { createSession, SESSION_COOKIE, signShortLived, verifyShortLived } from "../lib/platform/auth.ts";
-import { ensureOwner, loginWithGoogle } from "../lib/platform/directory.ts";
+import { ensureOwner, loginWithGoogle, isRefusal } from "../lib/platform/directory.ts";
+import { signupAllowed } from "../lib/platform/demo.ts";
 
 export const auth = new Hono<{ Bindings: Env }>();
 
@@ -113,26 +114,35 @@ auth.get("/google/callback", async (c) => {
   const sub = String(claims["sub"] ?? "");
   if (!email || !sub) return fail("no_email");
 
-  // Invite-only lives entirely in `loginWithGoogle`: an unknown or disabled email gets no
-  // session, no Durable Object, no row. One place to audit.
+  // The door is guarded entirely inside `loginWithGoogle` — one place to audit. Since
+  // 2026-07-31 the default is OPEN signup: an unknown address gets a row and a sandbox of its
+  // own. `SIGNUP=invite` in `wrangler.jsonc` puts the whitelist back without touching code.
   const profile = {
     sub,
     email,
     name: claims["name"] ? String(claims["name"]) : undefined,
     picture: claims["picture"] ? String(claims["picture"]) : undefined,
   };
-  let user = await loginWithGoogle(c.env.DIRECTORY, profile);
+  const openSignup = (c.env.SIGNUP ?? "open") !== "invite";
 
-  // Bootstrap. `loginWithGoogle` only ever MATCHES existing rows, so on a fresh install nobody
-  // can log in — the owner row used to be created as a side effect of the password gate, which
-  // no longer exists. Seeding it here keeps that from being a lockout, and keeps invite-only
-  // intact: this branch fires for exactly one address, the configured OWNER_EMAIL.
+  // The ceiling counts NEW accounts, not sign-ins — hence a callback: `loginWithGoogle` invokes
+  // it only when it is about to create a row, so a day of returning users never spends the quota.
+  let user = await loginWithGoogle(c.env.DIRECTORY, profile, {
+    allowSignup: openSignup ? () => signupAllowed(c.env) : undefined,
+  });
+
+  // Bootstrap. On a fresh install the owner row used to be created as a side effect of the
+  // password gate, which no longer exists. Seeding it here keeps that from being a lockout —
+  // and it must stay even with open signup, because the owner needs `is_owner = 1`, which
+  // self-registration deliberately never grants.
   const ownerEmail = (c.env.OWNER_EMAIL || "").trim().toLowerCase();
-  if (!user && ownerEmail && email.toLowerCase() === ownerEmail) {
+  if (isRefusal(user) && ownerEmail && email.toLowerCase() === ownerEmail) {
     await ensureOwner(c.env.DIRECTORY, ownerEmail);
     user = await loginWithGoogle(c.env.DIRECTORY, profile);
   }
-  if (!user) return fail("not_invited");
+  // Distinct reasons: "we don't know you" and "you were shown out" are different facts, and a
+  // disabled user told "not invited" will simply try again forever.
+  if (isRefusal(user)) return fail(user);
 
   setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id), {
     httpOnly: true,

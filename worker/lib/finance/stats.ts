@@ -326,6 +326,57 @@ export function sumLevels(levels: Map<number, MonthLevel>): number {
   return s;
 }
 
+// ---- Бюджети-конверти: скільки з ліміту зʼїдено (ЄДИНЕ джерело) --------------
+//
+// Існує, бо цю саму пару «ліміт ↔ витрачено» рахували у ДВОХ місцях: стрічка сповіщень
+// (`notify.draftBudgets`) — канонічно, а тижневий TG-пуш (`proactive.overBudget`) — власним
+// SQL `t.hold = 0 AND t.is_transfer = 0 AND t.currency_code = 980`. Той другий:
+//   • ігнорував спліти (`EFF_AMOUNT`) — розділена витрата рахувалась повною сумою в одну категорію;
+//   • не віднімав компенсації й не враховував рефанди (§REFUND/§COMPENSATION);
+//   • викидав УСІ валютні витрати замість зводити їх у ₴ (`t.currency_code = 980`);
+//   • не виключав бакет 13 і не робив рол-ап по РЕАЛЬНІЙ категорії зняття.
+// Тобто Telegram казав про той самий бюджет інше число, ніж застосунок. Тепер обидва шляхи
+// викликають цю функцію — розійтись більше нема де.
+export interface BudgetStatus {
+  id: number;
+  name: string;
+  /** ліміт місяця, ₴-мінор */
+  amount: number;
+  /** витрачено з початку місяця, ₴-мінор (канон) */
+  spent: number;
+  /** spent / amount; ≥1 = перевитрата */
+  ratio: number;
+}
+
+export async function budgetStatus(
+  env: Env, mult: string, now = Math.floor(Date.now() / 1000),
+): Promise<BudgetStatus[]> {
+  const d = new Date(now * 1000);
+  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+
+  const [budgets, spend] = await Promise.all([
+    env.DB.prepare(
+      `SELECT b.category_id AS id, b.amount AS amount, c.name AS name
+       FROM budgets b JOIN categories c ON c.id = b.category_id
+       WHERE b.period = 'month' AND b.amount > 0`,
+    ).all<{ id: number; amount: number; name: string }>(),
+    env.DB.prepare(
+      `SELECT ${EFF_CAT_ID} AS id, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
+       GROUP BY ${EFF_CAT_ID}`,
+    ).bind(monthStart, now).all<{ id: number | null; spent: number }>(),
+  ]);
+
+  const spentByCat = new Map<number, number>();
+  for (const r of spend.results ?? []) if (r.id != null) spentByCat.set(r.id, r.spent);
+
+  return (budgets.results ?? []).map((b) => {
+    const spent = spentByCat.get(b.id) ?? 0;
+    return { id: b.id, name: b.name, amount: b.amount, spent, ratio: spent / b.amount };
+  });
+}
+
 // ---- Прогноз витрати «зі здоровим глуздом» ----------------------------------
 // Проблема наївного темпу (`spent / elapsedFrac`): рано в місяці або для «лумпів»
 // (податки, оренда, одна заправка) він роздуває прогноз у рази — 3000₴ податку на 9-й

@@ -26,8 +26,9 @@ import type { AiTask, AiModelToken } from "../store/api.ts";
 import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
 import { clearLocalUserData } from "../lib/localdata.ts";
 import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
+import { ExportCard } from "../components/settings/ExportCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
-import { InviteCard } from "../components/settings/InviteCard.tsx";
+import { UsersCard } from "../components/settings/UsersCard.tsx";
 
 // Settings used to be one flat stack of ten cards — every screen's worth of configuration on one
 // page, so finding anything meant scrolling and recognising it by shape. Tabs group it the way
@@ -38,6 +39,10 @@ const TABS = {
   data: "setup.tabData",
   ai: "setup.tabAi",
   maintenance: "setup.tabMaintenance",
+  // Owner-only, filtered out below. Its own tab rather than a card inside "Account": with open
+  // registration this is a list that grows, and a growing table wedged between personal settings
+  // pushes everything the owner actually configures below the fold.
+  users: "setup.tabUsers",
 } as const;
 type SetupTab = keyof typeof TABS;
 
@@ -73,11 +78,15 @@ export function Setup() {
       </div>
 
       <div className="stat-tabs" role="tablist">
-        {(Object.keys(TABS) as SetupTab[]).map((k) => (
-          <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>
-            {t(TABS[k])}
-          </button>
-        ))}
+        {(Object.keys(TABS) as SetupTab[])
+          // A tab nobody but the owner may open must not be visible to anyone else — a 403 behind
+          // a tab still promises a feature that does not exist for that person.
+          .filter((k) => k !== "users" || isOwner)
+          .map((k) => (
+            <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>
+              {t(TABS[k])}
+            </button>
+          ))}
       </div>
 
       {/* Профіль і AI-блоки — на всю ширину (текстове поле / перемикачі моделей потребують місця);
@@ -85,8 +94,6 @@ export function Setup() {
       {tab === "account" && (
         <div className="settings-grid">
           <ProfileCard />
-          {/* Invite-only is enforced server-side; this is the only way to operate it. */}
-          {isOwner && <InviteCard />}
           {/* Owner-only: one global bot, one global chat id (see `isOwner` above). */}
           {isOwner && (
             <div className="card set-card set-full">
@@ -147,12 +154,22 @@ export function Setup() {
             </div>
           </div>
           <CsvImportCard />
+          {/* L10: єдиний бекап, який у користувача взагалі є — тож стоїть поруч з імпортом. */}
+          <ExportCard />
         </div>
       )}
 
       {tab === "ai" && (
         <div className="settings-grid">
           <AiUsageCard />
+        </div>
+      )}
+
+      {/* Guarded twice: the tab is hidden above, and the content is gated here — a hidden tab is
+          still reachable by typing `?tab=users` into the address bar. */}
+      {tab === "users" && isOwner && (
+        <div className="settings-grid">
+          <UsersCard />
         </div>
       )}
 

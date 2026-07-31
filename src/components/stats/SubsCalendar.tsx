@@ -2,12 +2,12 @@ import { useGetUpcomingSubsQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { useT } from "../../i18n/index.ts";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { dateFmt } from "../../i18n/locale.ts";
 
 // §Беклог: календар майбутніх списань — сітка на ~5 тижнів наперед, дні з підписками
 // підсвічені сумою. Дає побачити «важкі» дні місяця й вплив на кешфлоу.
 // Пн-перший тиждень (2021-01-04 — понеділок), рахуємо в рендері для живого перемикача мови.
-const weekdayShort = (idx: number) => new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short" }).format(new Date(2021, 0, 4 + idx));
+const weekdayShort = (idx: number) => dateFmt({ weekday: "short" }).format(new Date(2021, 0, 4 + idx));
 const DAY = 86400;
 
 function dayKey(unix: number): string {

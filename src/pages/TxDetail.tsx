@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { getLocale, dateFmt, numFmt } from "../i18n/locale.ts";
 import { translate, useT } from "../i18n/index.ts";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -45,8 +45,8 @@ const MCC_HINT_KEY = "tx.mccHint";
 // Текстовий дамп транзакції для буфера обміну — щоб скинути AI (в інший чат) або собі.
 function buildTxDump(tx: TxDetail): string {
   const money = (minor: number, cur: number) =>
-    `${new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)} ${currencySign(cur)}`;
-  const when = new Intl.DateTimeFormat(localeTag(getLocale()), { dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
+    `${numFmt({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(minor / 100)} ${currencySign(cur)}`;
+  const when = dateFmt({ dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
   const lk = (k: string, p?: Record<string, string | number>) => translate(getLocale(), k as never, p);
   const lines = [
     `${tx.merchant ?? tx.comment ?? lk("tx.dumpFallback")} — ${tx.amount > 0 ? "+" : ""}${money(tx.amount, tx.currency_code)}`,
@@ -120,7 +120,7 @@ export function TxDetail() {
   if (!tx) return <div className="card empty">{t("tx.notFound")}</div>;
 
   const isMono = tx.source === "mono";
-  const when = new Intl.DateTimeFormat(localeTag(getLocale()), { dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
+  const when = dateFmt({ dateStyle: "long", timeStyle: "short" }).format(tx.time * 1000);
   // Операція у бакеті «Перекази і зняття» — показуємо поле «реальна категорія» (§F2 крок 2).
   const looksTransfer = /переказ|зняття/i.test(tx.category_name ?? "") || isTransfer;
   // Подача — від збереженого факту (не від пенд-тогла у формі): див. `lib/transfer.ts`.
@@ -204,18 +204,18 @@ export function TxDetail() {
             <div className={`num-hero ${neutralTx ? "neutral" : heroAmount < 0 ? "neg" : "pos"}`} style={{ fontSize: 30 }}>
               {neutralTx && <Icon name="swap" size={19} className="hero-swap" />}
               {!neutralTx && heroAmount > 0 ? "+" : ""}
-              {new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(heroAmount) : heroAmount) / 100)}
+              {numFmt({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(heroAmount) : heroAmount) / 100)}
               <span className="cur">{tx.currency_code === 840 ? "$" : tx.currency_code === 978 ? "€" : "₴"}</span>
             </div>
             {reimbursedMinor > 0 && (
               <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-                <s>{new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(tx.amount / 100)}</s>
-                {" · "}{t("tx.reimbursedBy", { amount: new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(reimbursedMinor / 100) })}
+                <s>{numFmt({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(tx.amount / 100)}</s>
+                {" · "}{t("tx.reimbursedBy", { amount: numFmt({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(reimbursedMinor / 100) })}
               </div>
             )}
             {tx.original_amount != null && tx.original_currency != null && tx.original_currency !== tx.currency_code && (
               <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-                {t("tx.paymentLabel")} {new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(tx.original_amount) / 100)}
+                {t("tx.paymentLabel")} {numFmt({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Math.abs(tx.original_amount) / 100)}
                 {" "}{currencySign(tx.original_currency)}
               </div>
             )}

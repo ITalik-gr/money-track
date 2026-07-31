@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { getLocale, dateFmt } from "../i18n/locale.ts";
 import { useT, translate } from "../i18n/index.ts";
 import {
   useAddPlannedMutation,
@@ -20,10 +20,11 @@ import { CashflowCalendar } from "../components/stats/CashflowCalendar.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { Select } from "../components/ui/Select.tsx";
+import { SubGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { toUAHMinor, formatMinor } from "../lib/format.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
 
-const fmtDate = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
+const fmtDate = dateFmt({ day: "numeric", month: "short" });
 const CUR_OPTS = [
   { value: 980, label: "₴ UAH" },
   { value: 840, label: "$ USD" },
@@ -103,7 +104,7 @@ function plannedFromCandidate(
 
 export function Subscriptions() {
   const t = useT();
-  const { data: planned } = useGetPlannedQuery();
+  const { data: planned, isLoading: loadingPlanned } = useGetPlannedQuery();
   const { data: actuals } = useGetPlannedActualsQuery();
   const { data: cats } = useGetCategoriesQuery();
   const { data: ratesData } = useGetRatesQuery();
@@ -156,6 +157,9 @@ export function Subscriptions() {
             <div className="num-hero" style={{ fontSize: 30 }}>{list.length}</div>
           </div>
         </div>
+
+        {/* Порожня сітка й «ще не завантажилось» виглядають однаково — а це різні речі. */}
+        {loadingPlanned && <SubGridSkeleton />}
 
         {list.length > 0 && (
           <div className="sub-grid">

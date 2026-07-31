@@ -5,6 +5,8 @@ import type { Env } from "../../env.ts";
 import { sendMessage } from "./telegram.ts";
 import { getStoredInsight, buildAndStoreInsight, type StoredInsight } from "../ai/insight.ts";
 import { nextChargeUnix } from "../finance/subscriptions.ts";
+import { budgetStatus, valueMode } from "../finance/stats.ts";
+import { getRates } from "../finance/finance.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const uah = (minor: number) => Math.round(minor / 100).toLocaleString("uk-UA");
@@ -23,30 +25,19 @@ function insightText(ins: StoredInsight): string {
   return `<b>${esc(s.headline)}</b>\n\n${facts}${s.note ? `\n\n💡 ${esc(s.note)}` : ""}`;
 }
 
-// Перевищені / майже вичерпані бюджети-конверти цього місяця (рол-ап підкатегорій).
+// Перевищені / майже вичерпані бюджети-конверти цього місяця.
+//
+// Розрахунок — канонічний `budgetStatus` (stats.ts), той самий, що наповнює стрічку сповіщень.
+// Раніше тут жив власний SQL (`t.hold = 0 AND t.is_transfer = 0 AND t.currency_code = 980`), і
+// саме тому Telegram казав про той самий бюджет інше число, ніж застосунок: він рахував спліт
+// повною сумою, не віднімав компенсації, викидав усі валютні витрати замість зводити їх у ₴ і
+// не робив рол-ап зняття за реальною категорією.
 async function overBudget(env: Env): Promise<{ name: string; spent: number; budget: number; ratio: number }[]> {
-  const now = Math.floor(Date.now() / 1000);
-  const d = new Date(now * 1000);
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
-
-  const budgets = await env.DB.prepare(
-    `SELECT b.category_id AS id, b.amount AS amount, c.name AS name
-     FROM budgets b JOIN categories c ON c.id = b.category_id
-     WHERE b.period = 'month' AND b.amount > 0`,
-  ).all<{ id: number; amount: number; name: string }>();
-  if (!budgets.results?.length) return [];
-
-  const spendRows = await env.DB.prepare(
-    `SELECT COALESCE(c.parent_id, t.category_id) AS cat, SUM(-t.amount) AS spent
-     FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.time >= ? AND t.amount < 0 AND t.hold = 0 AND t.is_transfer = 0 AND t.currency_code = 980
-     GROUP BY COALESCE(c.parent_id, t.category_id)`,
-  ).bind(monthStart).all<{ cat: number; spent: number }>();
-  const spentByCat = new Map((spendRows.results ?? []).map((r) => [r.cat, r.spent]));
-
-  return (budgets.results ?? [])
-    .map((b) => { const spent = spentByCat.get(b.id) ?? 0; return { name: b.name, spent, budget: b.amount, ratio: spent / b.amount }; })
-    .filter((x) => x.ratio >= 0.9)
+  const rates = await getRates(env.DB);
+  const { mult } = valueMode(rates, null);
+  return (await budgetStatus(env, mult))
+    .filter((b) => b.ratio >= 0.9)
+    .map((b) => ({ name: b.name, spent: b.spent, budget: b.amount, ratio: b.ratio }))
     .sort((a, b) => b.ratio - a.ratio);
 }
 

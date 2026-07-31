@@ -95,6 +95,27 @@ export async function demoSandboxAllowed(env: Env): Promise<boolean> {
   return n == null || n <= DEMO_DAILY_NEW_SANDBOXES;
 }
 
+/** New REAL accounts per day, across everyone (open signup, 2026-07-31). */
+export const DAILY_NEW_SIGNUPS = 50;
+
+/**
+ * Gate the creation of a NEW self-registered account.
+ *
+ * Same shape as the demo ceiling and for the same reason: with the door open, a Google sign-in
+ * becomes a write endpoint — each new account seeds a Durable Object with categories and ~90
+ * rules. This bounds a scripted flood.
+ *
+ * ⚠️ Called ONLY when a row is actually about to be created (`loginWithGoogle`'s `allowSignup`
+ * hook), never on a plain sign-in. Bumping it per login attempt would let a handful of returning
+ * users burn the day's quota and lock out strangers for no reason.
+ *
+ * Fails OPEN: a broken counter must not stop people from signing up.
+ */
+export async function signupAllowed(env: Env): Promise<boolean> {
+  const n = await bumpShared(env, `signup_new_${dayKey()}`, 1);
+  return n == null || n <= DAILY_NEW_SIGNUPS;
+}
+
 export async function demoRecordSpend(env: Env, usd: number): Promise<void> {
   if (!isDemoEnv(env) || !(usd > 0)) return;
   await bumpShared(env, `demo_usd_${dayKey()}`, usd);

@@ -73,6 +73,27 @@ const S = {
   csvBadAmount: { uk: "не розпізнав суму: «{value}»", en: "could not parse the amount: “{value}”" },
   csvZeroAmount: { uk: "нульова сума", en: "zero amount" },
 
+  // ---- manual transfer (`POST /transactions/transfer`) ----------------------
+  errTransferAccounts: {
+    uk: "Оберіть два РІЗНІ свої рахунки.",
+    en: "Pick two DIFFERENT accounts of your own.",
+  },
+  errTransferAmount: { uk: "Сума переказу має бути більшою за нуль.", en: "The transfer amount must be greater than zero." },
+  errTransferToAmount: {
+    uk: "Рахунки в різних валютах — вкажіть, скільки саме надійшло на другий рахунок.",
+    en: "The accounts use different currencies — state how much actually arrived on the second one.",
+  },
+
+  // ---- custom-range report (`POST /reports/generate`) -----------------------
+  reportBadRange: {
+    uk: "Некоректний діапазон дат: кінець має бути пізніше за початок.",
+    en: "Invalid date range: the end must be later than the start.",
+  },
+  reportRangeLimits: {
+    uk: "Діапазон має бути від {min} дн. до {max} дн.",
+    en: "The range must be between {min} and {max} days.",
+  },
+
   // Bank provider `label`s are deliberately NOT here: nothing returns them to the client (the
   // client keeps its own `BANK_LABEL` map, since bank names are proper nouns), so they are
   // registry metadata rather than UI.
@@ -161,8 +182,17 @@ const S = {
   // ---- validation and failure messages -------------------------------------
   errNothingToApply: { uk: "Нема що застосовувати", en: "Nothing to apply" },
   errTransferCatLocked: { uk: "категорію «Перекази і зняття» видаляти не можна", en: "the “Transfers & withdrawals” category cannot be deleted" },
-  errAiKeyMissing: { uk: "AI-ключ не налаштовано на цьому середовищі.", en: "No AI key is configured in this environment." },
-  errAiKeyMissingIngest: { uk: "ANTHROPIC_API_KEY не налаштовано — див. інструкцію в README", en: "ANTHROPIC_API_KEY is not set — see the README" },
+  // ONE phrase for "there is no AI key", used by all ~16 sites that check for it.
+  //
+  // Since signup opened (2026-07-31) this is the most common thing a new account runs into:
+  // there is no deployment-wide fallback for anyone but the owner. The old wordings —
+  // "не налаштовано на цьому середовищі" and "ANTHROPIC_API_KEY не налаштовано — див. README" —
+  // named an environment variable at a person and pointed at a file they will never open.
+  // Say where the button is instead.
+  errAiKeyMissing: {
+    uk: "Щоб працювали AI-функції, додай свій ключ Anthropic у Налаштуваннях → «Ключі й дані».",
+    en: "AI features need your own Anthropic key — add it in Settings → “Keys & data”.",
+  },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
 
   errSplitOnlyExpense: { uk: "Ділити можна лише витрату", en: "Only an expense can be split" },

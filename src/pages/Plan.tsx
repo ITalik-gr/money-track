@@ -11,6 +11,7 @@ import {
 } from "../store/api.ts";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
+import { BudgetCardsSkeleton } from "../components/ui/Skeleton.tsx";
 import { AutoBudget } from "../components/planning/AutoBudget.tsx";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
@@ -207,7 +208,7 @@ function BudgetPlanner() {
 
 function Budgets() {
   const t = useT();
-  const { data: cats } = useGetCategoriesQuery();
+  const { data: cats, isLoading: loadingCats } = useGetCategoriesQuery();
   const { data: budgets } = useGetBudgetsQuery();
   const [setBudget] = useSetBudgetMutation();
 
@@ -250,7 +251,10 @@ function Budgets() {
     return (spentByCat.get(b.id) ?? 0) - (spentByCat.get(a.id) ?? 0);
   });
 
-  if (!ordered.length) return <div className="card empty">{t("plan.loadingCats")}</div>;
+  // «Завантаження» і «категорій справді нема» — різні стани, і другий раніше показувався
+  // текстом про перший, тобто порожній акаунт виглядав як вічний спінер.
+  if (loadingCats) return <BudgetCardsSkeleton />;
+  if (!ordered.length) return <div className="card empty">{t("plan.noCats")}</div>;
 
   return (
     <div className="budget-cards">

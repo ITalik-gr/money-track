@@ -23,17 +23,29 @@ export default defineConfig({
     cloudflare(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg"],
+      includeAssets: ["favicon.svg", "icons/apple-touch-icon.png"],
       manifest: {
         name: "Money Track",
         short_name: "Money",
-        description: "Персональний фінансовий трекер",
-        theme_color: "#16211D",
-        background_color: "#EEF1EF",
+        description: "Personal finance tracker with an AI advisor",
+        // Tokens, not the pre-redesign dark-green palette these used to carry: the splash screen
+        // is the first thing an installed PWA shows, and it was a different product's colours.
+        // Light-first, so both match the light `--bg` the `<meta name="theme-color">` starts on.
+        // (The meta tag is rewritten live by the theme toggle; the manifest value cannot be, and
+        // a dark title bar over a light app is the wrong default.)
+        theme_color: "#f3f5f8",
+        background_color: "#f3f5f8",
         display: "standalone",
         orientation: "portrait",
+        // PNGs are not optional. iOS ignores SVG icons in a manifest entirely, so an installed
+        // app showed a blank tile; Android needs a separate `maskable` variant or the launcher
+        // crops the mark. `any` and `maskable` must be DIFFERENT files — one image cannot satisfy
+        // both (the maskable one has to waste 20% on the safe zone, which looks wrong unmasked).
         icons: [
-          { src: "favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" },
+          { src: "icons/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+          { src: "favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
         ],
       },
       workbox: {

@@ -1,6 +1,6 @@
 import { Link, useParams } from "react-router-dom";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { dateFmt, numFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useGetMerchantQuery } from "../store/api.ts";
@@ -12,9 +12,9 @@ import { CHART_ANIM } from "../lib/motion.ts";
 
 // §P3: сторінка одного мерчанта — уся історія витрат, тренд 6 міс, середній чек, частка в
 // категорії, перша/остання покупка. Дані канонічні (stats.ts), зведені в ₴.
-const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
-const monthShort = new Intl.DateTimeFormat(localeTag(getLocale()), { month: "short" });
-const dateFull = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short", year: "numeric" });
+const fmt0 = numFmt({ maximumFractionDigits: 0 });
+const monthShort = dateFmt({ month: "short" });
+const dateFull = dateFmt({ day: "numeric", month: "short", year: "numeric" });
 const monthLabel = (m: string) => { const [y, mm] = m.split("-"); return monthShort.format(new Date(Number(y), Number(mm) - 1, 1)); };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

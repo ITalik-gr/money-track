@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { dateFmt } from "../../i18n/locale.ts";
 import { useT } from "../../i18n/index.ts";
 import { Link } from "react-router-dom";
 import { Icon } from "../ui/Icon.tsx";
@@ -22,7 +22,7 @@ import type { ReimbursementTx } from "../../store/api.ts";
 // прив'язати надходження рівно до однієї витрати й обрізала суму стелею витрати — на реальних
 // даних «+2400 за витрату −1870» це означало, що 530 ₴ зависали: ні на іншу витрату, ні в дохід.
 // Тепер береться рівно стільки, скільки треба, а залишок лишається вільним для інших витрат.
-const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
+const dfmt = dateFmt({ day: "2-digit", month: "short" });
 const toMinor = (major: string) => Math.round(Number(major.replace(",", ".")) * 100) || 0;
 const toMajor = (minor: number) => (Math.max(0, minor) / 100).toFixed(2);
 

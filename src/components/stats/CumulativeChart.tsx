@@ -1,6 +1,6 @@
 import { AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { numFmt } from "../../i18n/locale.ts";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { useT } from "../../i18n/index.ts";
 
@@ -9,7 +9,7 @@ import { useT } from "../../i18n/index.ts";
 // proj — прогноз-лінія (пунктир) на решту періоду за поточним середнім темпом.
 export interface CumRow { label: string; cum: number | null; proj?: number | null }
 
-const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
+const fmt0 = numFmt({ maximumFractionDigits: 0 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CumTooltip({ active, payload, label, sign }: any) {

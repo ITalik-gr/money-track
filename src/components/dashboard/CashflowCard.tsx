@@ -1,5 +1,5 @@
 import { useGetOverviewQuery } from "../../store/api.ts";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { numFmt } from "../../i18n/locale.ts";
 import { CashflowChart } from "../stats/CashflowChart.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { monthShort } from "../../lib/format.ts";
@@ -9,7 +9,7 @@ import { useT } from "../../i18n/index.ts";
 
 export function CashflowCard() {
   const t = useT();
-  const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
+  const fmt0 = numFmt({ maximumFractionDigits: 0 });
   const now = new Date();
   const to = Math.floor(Date.now() / 1000);
   const from = Math.floor(new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime() / 1000);

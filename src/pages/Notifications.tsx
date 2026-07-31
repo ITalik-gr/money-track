@@ -2,7 +2,7 @@
 // готові репорти, дедлайни списань, аномалії темпу, бюджети, подорожчання, провал ліквідності.
 // Усі цифри рахує бекенд по канону `stats.ts` — тут лише подача.
 import { useMemo, useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { getLocale, dateFmt } from "../i18n/locale.ts";
 import { useT, translate, useLocale } from "../i18n/index.ts";
 import { Link } from "react-router-dom";
 import {
@@ -53,8 +53,8 @@ const KIND_META: Record<NotifKind, { labelKey:
 };
 const KINDS = Object.keys(KIND_META) as NotifKind[];
 
-const dayFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "long" });
-const timeFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { hour: "2-digit", minute: "2-digit" });
+const dayFmt = dateFmt({ day: "numeric", month: "long" });
+const timeFmt = dateFmt({ hour: "2-digit", minute: "2-digit" });
 
 // Заголовок групи: «Сьогодні» / «Вчора» / дата. Стрічку читають зверху вниз за днями.
 function dayLabel(unix: number): string {

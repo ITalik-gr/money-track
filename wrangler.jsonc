@@ -89,6 +89,10 @@
 		]
 	},
 	"vars": {
-		"APP_TZ": "Europe/Kyiv"
+		"APP_TZ": "Europe/Kyiv",
+		// Registration policy. "open" — anyone with a Google account signs themselves up;
+		// "invite" restores the whitelist (POST /api/admin/users/invite) without a code change.
+		// A disabled account is refused in either mode — that is the ban.
+		"SIGNUP": "open"
 	}
 }

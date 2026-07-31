@@ -65,3 +65,38 @@ export function setLocale(l: Locale, persist = true): void {
 // Prime the module value at import time so format helpers used before the provider mounts
 // still pick the right locale.
 current = initialLocale();
+
+// ---- lazy Intl formatters ----------------------------------------------------
+//
+// 🐞 Why these exist (reported on the live app: "next 19 серп." while the UI is English).
+// Twenty modules held a formatter built at IMPORT time:
+//
+//     const dFmt = dateFmt({ … });
+//
+// That snapshots whatever the locale was when the module first loaded. Switching the language
+// afterwards re-renders every label through `t()` — but the dates keep the OLD locale, because
+// the formatter object never changes. The result is an English screen with Ukrainian months in
+// it, which reads as a broken product rather than a missing translation.
+//
+// These helpers resolve the locale on every call and cache the constructed `Intl` object per
+// (locale + options), so a switch is picked up immediately and hot paths (a list of 200 rows)
+// still build the formatter once. Call sites keep the same `.format(x)` shape.
+const fmtCache = new Map<string, Intl.DateTimeFormat | Intl.NumberFormat>();
+
+function cached<T extends Intl.DateTimeFormat | Intl.NumberFormat>(kind: string, opts: object, make: (tag: string) => T): T {
+  const tag = localeTag(current);
+  const key = `${kind}|${tag}|${JSON.stringify(opts)}`;
+  let f = fmtCache.get(key);
+  if (!f) { f = make(tag); fmtCache.set(key, f); }
+  return f as T;
+}
+
+/** Locale-aware date formatter that follows a language switch. Drop-in for `Intl.DateTimeFormat`. */
+export function dateFmt(opts: Intl.DateTimeFormatOptions): { format: (d: Date | number) => string } {
+  return { format: (d) => cached("d", opts, (tag) => new Intl.DateTimeFormat(tag, opts)).format(d) };
+}
+
+/** Locale-aware number formatter that follows a language switch. */
+export function numFmt(opts: Intl.NumberFormatOptions): { format: (n: number) => string } {
+  return { format: (n) => cached("n", opts, (tag) => new Intl.NumberFormat(tag, opts)).format(n) };
+}

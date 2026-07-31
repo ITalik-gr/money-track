@@ -1,6 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#16211D"/>
-  <path d="M5 11l11 6 11-6" fill="none" stroke="#EEF1EF" stroke-width="2" stroke-linejoin="round"/>
-  <rect x="5" y="9" width="22" height="15" rx="2.5" fill="none" stroke="#EEF1EF" stroke-width="2"/>
-  <circle cx="16" cy="18" r="2.4" fill="#D99414"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="money track">
+  <!-- Same mark as the in-app brand chip (`.brand .mark`): ink square, surface glyph, accent dot.
+       The app icon and the header logo must be the same object — two different marks read as two
+       different products the moment the PWA sits next to the browser tab.
+       Colours are the live tokens (`--ink`, `--surface`, `--accent`); the old envelope was still
+       on the pre-redesign dark-green palette. -->
+  <rect width="64" height="64" rx="15" fill="#0f1620"/>
+  <text x="32" y="34" fill="#ffffff" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+        font-size="36" font-weight="700" text-anchor="middle" dominant-baseline="central">₴</text>
+  <circle cx="47.5" cy="47.5" r="4.5" fill="#2e6be6"/>
 </svg>

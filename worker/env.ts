@@ -26,6 +26,13 @@ export interface Env extends Omit<Cloudflare.Env, "DB"> {
   // Email of the pre-existing single user, seeded into the directory as the owner. Only used
   // by the transitional password login and by the P0.7 data migration.
   OWNER_EMAIL: string;
+  /**
+   * Who may create an account: `"open"` (default — anyone with a Google account) or `"invite"`
+   * (the original whitelist, `POST /api/admin/users/invite`). A plain var rather than a secret,
+   * because it is a policy switch and its value is visible from the outside anyway — a stranger
+   * finds out by trying to sign in.
+   */
+  SIGNUP?: "open" | "invite";
   // Dedicated Anthropic key for the public demo (PLATFORM.md §11.3), given its own billing limit
   // on Anthropic's side as the last backstop behind the per-session/global caps. Optional: if
   // unset, demo AI falls back to the regular key (still capped + forced to Haiku).

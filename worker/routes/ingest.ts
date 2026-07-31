@@ -14,7 +14,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXT_CHARS = 4000; // a hand-typed expense note; anything longer is a paste-bomb
 
 async function requireKey(env: Env): Promise<string | null> {
-  return env.ANTHROPIC_API_KEY ? null : st(await ownerLocale(env.DB), "errAiKeyMissingIngest");
+  return env.ANTHROPIC_API_KEY ? null : st(await ownerLocale(env.DB), "errAiKeyMissing");
 }
 
 ingest.post("/receipt", async (c) => {

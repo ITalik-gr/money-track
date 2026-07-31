@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { dateFmt } from "../../i18n/locale.ts";
 import { useT } from "../../i18n/index.ts";
 import { useGetCashflowCalendarQuery } from "../../store/api.ts";
 import { formatMinor, currencySign } from "../../lib/format.ts";
@@ -10,9 +10,9 @@ import { Icon } from "../ui/Icon.tsx";
 // проєкція ліквідної подушки «наперед» → видно провали ліквідності. Дані — /analytics/cashflow-calendar.
 // Пн-перший тиждень (2021-01-04 — понеділок). Рахуємо в рендері (не на модульному рівні),
 // щоб живий перемикач мови одразу оновив підписи днів тижня.
-const weekdayShort = (idx: number) => new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short" }).format(new Date(2021, 0, 4 + idx));
-const monthFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { month: "long", year: "numeric" });
-const dayFmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
+const weekdayShort = (idx: number) => dateFmt({ weekday: "short" }).format(new Date(2021, 0, 4 + idx));
+const monthFmt = dateFmt({ month: "long", year: "numeric" });
+const dayFmt = dateFmt({ day: "numeric", month: "short" });
 const pad = (n: number) => String(n).padStart(2, "0");
 
 interface DayItem { title: string; amount: number; amountOrig: number; currency: number; kind: string }

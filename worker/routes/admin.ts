@@ -23,6 +23,18 @@ admin.use("*", async (c, next) => {
   await next();
 });
 
+/**
+ * The admin list. Since registration opened (2026-07-31) the owner no longer knows every user
+ * personally, so the row has to answer "is this account actually in use?".
+ *
+ * The activity numbers come from the directory columns added in migration 0004, written by the
+ * daily cron fan-out — NOT by asking each Durable Object here. A live fan-out would wake every
+ * object on every page load and get slower precisely as the user count it reports grows.
+ * The cost is that counters lag by up to a day, which is the right trade for this question.
+ *
+ * ⚠️ Volume only — counts of transactions and accounts, never balances or spending. The owner
+ * administers accounts; they do not get to read other people's finances.
+ */
 admin.get("/users", async (c) => {
   const users = await listUsers(c.env.DIRECTORY);
   return c.json({
@@ -30,12 +42,47 @@ admin.get("/users", async (c) => {
       id: u.id,
       email: u.email,
       name: u.name,
+      picture: u.picture,
       status: u.status,
       is_owner: u.is_owner === 1,
       created_at: u.created_at,
       last_login_at: u.last_login_at,
+      last_seen_at: u.last_seen_at,
+      // `null` (never reported) stays `null` all the way to the UI: rendering it as 0 would
+      // claim "this person has no transactions", which is a different and possibly false fact.
+      tx_count: u.tx_count,
+      accounts_count: u.accounts_count,
+      has_mono_key: u.has_mono_key == null ? null : u.has_mono_key === 1,
+      has_ai_key: u.has_ai_key == null ? null : u.has_ai_key === 1,
+      stats_at: u.stats_at,
     })),
+    signup: c.env.SIGNUP ?? "open",
   });
+});
+
+/**
+ * Refresh the counters for everyone, on demand.
+ *
+ * The cron writes them once a day, which is right for the steady state and useless in the one
+ * moment the owner cares most — right after telling somebody "try it, sign up". Owner-initiated,
+ * so the cost of waking every object is paid by the person who asked for it.
+ */
+admin.post("/users/refresh-stats", async (c) => {
+  const { saveUserStats } = await import("../lib/platform/directory.ts");
+  const users = await listUsers(c.env.DIRECTORY);
+  const ns = c.env.USER_DO;
+  let updated = 0;
+  const failed: string[] = [];
+  for (const u of users) {
+    try {
+      await saveUserStats(c.env.DIRECTORY, u.id, await ns.get(ns.idFromName(u.id)).selfStats());
+      updated++;
+    } catch (e) {
+      // One unreachable object must not hide the rest of the list.
+      failed.push(`${u.email}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return c.json({ ok: true, updated, failed });
 });
 
 admin.post("/users/invite", async (c) => {

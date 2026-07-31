@@ -10,13 +10,14 @@ import type { TranslationKey } from "../../i18n/index.ts";
 
 // Пункти навігації. desktop=сайдбар (усі), mobile=нижній таб-бар (тільки core).
 // `label` is a translation key resolved at render (see PLATFORM.md §12) — not a literal.
-const items: { to: string; label: TranslationKey; icon: string; end: boolean; core: boolean }[] = [
-  { to: "/", label: "nav.overview", icon: "overview", end: true, core: true },
-  { to: "/tx", label: "nav.tx", icon: "tx", end: false, core: true },
+// `tab` is the SHORT label for the bottom bar, where six items share one phone width.
+const items: { to: string; label: TranslationKey; tab?: TranslationKey; icon: string; end: boolean; core: boolean }[] = [
+  { to: "/", label: "nav.overview", tab: "nav.tab.overview", icon: "overview", end: true, core: true },
+  { to: "/tx", label: "nav.tx", tab: "nav.tab.tx", icon: "tx", end: false, core: true },
   { to: "/accounts", label: "nav.accounts", icon: "accounts", end: false, core: false },
-  { to: "/stats", label: "nav.stats", icon: "stats", end: false, core: true },
+  { to: "/stats", label: "nav.stats", tab: "nav.tab.stats", icon: "stats", end: false, core: true },
   { to: "/reports", label: "nav.reports", icon: "report", end: false, core: false },
-  { to: "/advisor", label: "nav.advisor", icon: "advisor", end: false, core: true },
+  { to: "/advisor", label: "nav.advisor", tab: "nav.tab.advisor", icon: "advisor", end: false, core: true },
   { to: "/chat", label: "nav.chat", icon: "spark", end: false, core: false },
   { to: "/plan", label: "nav.plan", icon: "plan", end: false, core: false },
   { to: "/goals", label: "nav.goals", icon: "target", end: false, core: false },
@@ -55,6 +56,10 @@ function useTheme() {
   function toggle() {
     const next = dark ? "light" : "dark";
     document.documentElement.setAttribute("data-theme", next);
+    // Same rewrite `public/theme.js` does before first paint — otherwise the browser/PWA chrome
+    // keeps the previous theme's colour until the next reload.
+    document.querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", next === "dark" ? "#0b0f14" : "#f3f5f8");
     try {
       localStorage.setItem("mt-theme", next);
     } catch {
@@ -199,20 +204,25 @@ export function Layout() {
         </div>
       </main>
 
+      {/* Bottom bar labels come from `nav.tab.*`, not from the sidebar's `label`: six tabs of
+          "Транзакції"/"Transactions" at 10.5px are wider than an iPhone, and a flex item's
+          default `min-width: auto` let that text push the fixed bar past the viewport — which
+          is what made every page scroll sideways. Short label + `.lbl` truncation, so a longer
+          translation degrades to an ellipsis instead of breaking the layout. */}
       <nav className="nav bottom">
         {items.filter((it) => it.core).map((it) => (
           <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => (isActive ? "active" : "")}>
             <span className="ico"><Icon name={it.icon} size={20} /></span>
-            {t(it.label)}
+            <span className="lbl">{t(it.tab ?? it.label)}</span>
           </NavLink>
         ))}
         <NavLink to="/add" className={({ isActive }) => (isActive ? "active" : "")}>
           <span className="ico"><Icon name="add" size={20} /></span>
-          {t("nav.add")}
+          <span className="lbl">{t("nav.add")}</span>
         </NavLink>
         <button type="button" className={`more-btn ${moreOpen ? "active" : ""}`} onClick={() => setMoreOpen(true)}>
           <span className="ico"><Icon name="overview" size={20} /></span>
-          {t("nav.more")}
+          <span className="lbl">{t("nav.more")}</span>
         </button>
       </nav>
 

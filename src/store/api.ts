@@ -241,8 +241,9 @@ export interface FinancialReport {
   // §R6: детерміновані категорії (надійні суми + дельта + prev) з приклеєною AI-нотаткою.
   categories?: { name: string; amount_uah: number; prev_uah: number; delta_pct: number | null; note?: string | null }[];
 }
+export type ReportPeriodType = "week" | "month" | "custom";
 export interface ReportListItem {
-  id: number; period_type: "week" | "month"; period_from: number; period_to: number;
+  id: number; period_type: ReportPeriodType; period_from: number; period_to: number;
   created_at: number; model: string | null; cost_usd: number | null; summary: string | null;
 }
 export interface ReportFull extends ReportListItem { data: FinancialReport }
@@ -324,10 +325,41 @@ export interface AdminUser {
   id: string;
   email: string;
   name: string | null;
+  picture: string | null;
   status: "invited" | "active" | "disabled";
   is_owner: boolean;
   created_at: number;
   last_login_at: number | null;
+  /** Last authenticated API call. Answers "is this in use?", which `last_login_at` cannot —
+   *  a 30-day session lets someone use the app daily without ever logging in again. */
+  last_seen_at: number | null;
+  // `null` = never reported yet (directory migration 0004 + one daily cron pass). Rendering a
+  // null as 0 would claim the account is empty, which is a different — and possibly false — fact.
+  tx_count: number | null;
+  accounts_count: number | null;
+  has_mono_key: boolean | null;
+  has_ai_key: boolean | null;
+  stats_at: number | null;
+}
+
+/** One-tap repeat of a cash operation the user enters often (`GET /transactions/frequent`). */
+export interface FrequentTx {
+  merchant: string;
+  category_id: number | null;
+  currency_code: number;
+  n: number;
+  /** Median of the recent amounts, POSITIVE minor units. */
+  amount: number;
+}
+
+/** `set` — the user stored their OWN key. `available` — a usable key exists at all (the owner's
+ *  comes from deployment secrets, so `set` is false while AI works fine). Gate UI on `available`. */
+export interface CredentialStatus {
+  name: "mono_token" | "anthropic_api_key";
+  set: boolean;
+  available: boolean;
+  updated_at: number | null;
+  last_ok_at: number | null;
 }
 
 export interface SetupStatus {
@@ -437,7 +469,7 @@ export type NotifPrefs = Record<NotifKind, boolean>
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -546,7 +578,7 @@ export const api = createApi({
     getAiUsage: b.query<AiUsageStats, void>({ query: () => "/ai-usage", providesTags: ["Tx"] }),
     // §PLATFORM P0.4 — свої ключі (mono / Anthropic). Значення НІКОЛИ не приходить назад,
     // лише статус: сервер не має способу віддати секрет клієнту, і це навмисно.
-    getCredentials: b.query<{ secrets: { name: string; set: boolean; updated_at: number | null; last_ok_at: number | null }[] }, void>({
+    getCredentials: b.query<{ secrets: CredentialStatus[] }, void>({
       query: () => "/credentials",
       providesTags: ["Credentials"],
     }),
@@ -576,7 +608,7 @@ export const api = createApi({
     // §Хвіст: факт vs план по підписках.
     getPlannedActuals: b.query<PlannedActual[], void>({ query: () => "/planned/actuals", providesTags: ["Planned", "Tx"] }),
     // §Аналітика 2.0 — AI-репорти.
-    getReports: b.query<ReportListItem[], { type?: "week" | "month" } | void>({
+    getReports: b.query<ReportListItem[], { type?: ReportPeriodType } | void>({
       query: (arg) => `/reports${arg && arg.type ? `?type=${arg.type}` : ""}`,
       providesTags: ["Report"],
     }),
@@ -584,7 +616,11 @@ export const api = createApi({
       query: (id) => `/reports/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Report", id }],
     }),
-    generateReport: b.mutation<{ ok: boolean; id: number; created: boolean }, { type: "week" | "month"; force?: boolean; scope?: "current" | "last" }>({
+    // `custom` carries explicit unix bounds; `week`/`month` carry a scope instead.
+    generateReport: b.mutation<
+      { ok: boolean; id: number; created: boolean },
+      { type: ReportPeriodType; force?: boolean; scope?: "current" | "last"; from?: number; to?: number }
+    >({
       query: (body) => ({ url: "/reports/generate", method: "POST", body }),
       invalidatesTags: ["Report"],
     }),
@@ -694,7 +730,19 @@ export const api = createApi({
     }),
     addTransaction: b.mutation<{ ok: boolean; id: string }, Record<string, unknown>>({
       query: (body) => ({ url: "/transactions", method: "POST", body }),
-      invalidatesTags: ["Tx", "Summary"],
+      invalidatesTags: ["Tx", "Summary", "Frequent"],
+    }),
+    // Paired transfer between own accounts (shared `transfer_pair_id`) — see the route comment.
+    addTransfer: b.mutation<
+      { ok: boolean; pair_id: string; ids: string[] },
+      { from_account_id: string; to_account_id: string; amount: number; to_amount?: number; time?: number; user_note?: string }
+    >({
+      query: (body) => ({ url: "/transactions/transfer", method: "POST", body }),
+      invalidatesTags: ["Tx", "Summary", "Account"],
+    }),
+    getFrequentTx: b.query<FrequentTx[], void>({
+      query: () => "/transactions/frequent",
+      providesTags: ["Frequent"],
     }),
     editTransaction: b.mutation<unknown, { id: string; body: Record<string, unknown> }>({
       query: ({ id, body }) => ({ url: `/transactions/${id}`, method: "PATCH", body }),
@@ -742,9 +790,15 @@ export const api = createApi({
       query: (description) => ({ url: "/planned/ai-detect", method: "POST", body: { description } }),
     }),
     // owner-only user administration (D2)
-    getAdminUsers: b.query<{ users: AdminUser[] }, void>({
+    getAdminUsers: b.query<{ users: AdminUser[]; signup: "open" | "invite" }, void>({
       query: () => "/admin/users",
       providesTags: ["AdminUsers"],
+    }),
+    // Counters normally land once a day from the cron; this is for the moment right after
+    // telling somebody "sign up and try it", when a day-old number is the useless one.
+    refreshAdminStats: b.mutation<{ ok: boolean; updated: number; failed: string[] }, void>({
+      query: () => ({ url: "/admin/users/refresh-stats", method: "POST" }),
+      invalidatesTags: ["AdminUsers"],
     }),
     inviteUser: b.mutation<{ ok: boolean }, string>({
       query: (email) => ({ url: "/admin/users/invite", method: "POST", body: { email } }),
@@ -1059,6 +1113,8 @@ export const {
   useUpdateGoalMutation,
   useDeleteGoalMutation,
   useAddTransactionMutation,
+  useAddTransferMutation,
+  useGetFrequentTxQuery,
   useEditTransactionMutation,
   useBulkEditTransactionsMutation,
   useSetBudgetMutation,
@@ -1070,6 +1126,7 @@ export const {
   useAiDetectPlannedMutation,
   useGetSetupStatusQuery,
   useGetAdminUsersQuery,
+  useRefreshAdminStatsMutation,
   useInviteUserMutation,
   useSetUserStatusMutation,
   useGetTranslitFixesQuery,

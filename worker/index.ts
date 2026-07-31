@@ -239,6 +239,15 @@ const guard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isO
     // A valid signature for a disabled or deleted account is not an authenticated request.
     if (!access.ok) return c.json({ error: "unauthorized" }, 401);
     isOwner = access.isOwner;
+    // "Last seen", for the owner's admin screen. `last_login_at` cannot answer it: a 30-day
+    // session means someone can use the app every day for a month without logging in again.
+    // `touchSeen` no-ops unless an hour has passed, and it runs AFTER the response is sent —
+    // an activity counter must never add latency to, or fail, a real request.
+    c.executionCtx.waitUntil(
+      import("./lib/platform/directory.ts")
+        .then((m) => m.touchSeen(c.env.DIRECTORY, resolved.userId))
+        .catch(() => { /* best-effort: the directory may not carry 0004 yet */ }),
+    );
   }
   c.set("userId", resolved.userId);
   c.set("isOwner", isOwner);
@@ -378,6 +387,18 @@ export default {
             const stub = env.USER_DO.get(env.USER_DO.idFromName(u.id));
             const res = await stub.runCron(kind, ratesJson, u.is_owner === 1);
             if (res.failed.length) console.error(`[cron] ${kind} ${u.id}:`, res.failed.join(" | "));
+            // Piggyback on the pass that already woke this object: the admin screen needs to know
+            // whether an account is actually in use, and asking every object on page load would
+            // get slower exactly as the number being measured grows. Best-effort — a directory
+            // that will not take counters must never fail somebody's scheduled report.
+            if (kind === "daily") {
+              try {
+                const { saveUserStats } = await import("./lib/platform/directory.ts");
+                await saveUserStats(env.DIRECTORY, u.id, await stub.selfStats());
+              } catch (e) {
+                console.error(`[cron] stats ${u.id}:`, e instanceof Error ? e.message : e);
+              }
+            }
           } catch (e) {
             console.error(`[cron] ${kind} ${u.id} unreachable:`, e instanceof Error ? e.message : e);
           }

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { dateFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { Link, useSearchParams } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -24,6 +24,7 @@ import { CashflowCalendar } from "../components/stats/CashflowCalendar.tsx";
 import { NetworthCard } from "../components/stats/NetworthCard.tsx";
 import { UsageCost } from "../components/settings/UsageCost.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
+import { RunwaySkeleton, AdviceSkeleton } from "../components/ui/Skeleton.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { renderRich } from "../lib/citations.tsx";
@@ -39,7 +40,7 @@ type AdvTab = keyof typeof TABS;
 
 export function Advisor() {
   const t = useT();
-  const { data: stored } = useGetAdviceQuery();
+  const { data: stored, isLoading: loadingAdvice } = useGetAdviceQuery();
   const [generate, { isLoading: generating }] = useGenerateAdviceMutation();
   const [genError, setGenError] = useState<string | null>(null);
   // Детермінований fallback свідомо НЕ зберігається на сервері (щоб не затер останню
@@ -110,6 +111,10 @@ export function Advisor() {
 
       {tab === "advice" && (
       <div className="stack" style={{ gap: 18 }}>
+        {/* Порада вже згенерована й лежить на сервері — сторінка просто чекає на неї. Без
+            скелета перший кадр показував «ще немає поради», і той, у кого вона Є, встигав
+            прочитати запрошення її створити. */}
+        {loadingAdvice && <RunwaySkeleton />}
         {advice && (
           <div className="card runway-card">
             <Gauge
@@ -177,11 +182,13 @@ export function Advisor() {
                 ))}
                 <div className="row" style={{ justifyContent: "space-between", marginTop: 2 }}>
                   <span className="label">
-                    {t("adv.asOf", { when: new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format((advice?.generated_at ?? 0) * 1000) })}
+                    {t("adv.asOf", { when: dateFmt({ day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format((advice?.generated_at ?? 0) * 1000) })}
                   </span>
                   <UsageCost usage={advice?.usage} />
                 </div>
               </div>
+            ) : loadingAdvice || generating ? (
+              <AdviceSkeleton />
             ) : genError ? (
               <div className="card empty">{genError} <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={runAdvice} disabled={generating}>{t("adv.retry")}</button></div>
             ) : (
@@ -224,7 +231,7 @@ function SinceLastTime({ advice }: { advice: Advice }) {
   const { data: hist } = useGetAdviceHistoryQuery();
   const prev = (hist ?? []).find((h) => h.generated_at < advice.generated_at);
   if (!prev) return null;
-  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
+  const dfmt = dateFmt({ day: "2-digit", month: "short" });
   return (
     <div className="card since-last" style={{ padding: "10px 14px" }}>
       <span className="label">{t("adv.sinceLastFrom", { date: dfmt.format(prev.generated_at * 1000) })}</span>
@@ -241,7 +248,7 @@ function AdviceHistory() {
   const { data: hist } = useGetAdviceHistoryQuery();
   const [clear, { isLoading: clearing }] = useClearAdviceHistoryMutation();
   if (!hist || hist.length < 2) return null;
-  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
+  const dfmt = dateFmt({ day: "2-digit", month: "short" });
 
   // Хронологічний ряд для тренду runway (від старих до нових; лише зі значенням).
   const chrono = [...hist].reverse();

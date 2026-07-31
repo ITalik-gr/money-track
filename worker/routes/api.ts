@@ -172,6 +172,74 @@ api.get("/transactions", async (c) => {
   return c.json(rows.results);
 });
 
+// L10 — повний дамп власних даних одним файлом.
+//
+// Причина існування: дані живуть в ОДНОМУ Durable Object і бекапів немає (усвідомлена межа,
+// записана в §Де і як лежать дані). CSV-експорт віддає лише операції — без категорій, рахунків,
+// планів, бюджетів, цілей, чеків і сповіщень. Тобто найгірший сценарій («обʼєкт зник») не був
+// закритий узагалі. Кнопка «вивантажити все» коштує майже нічого і закриває його.
+//
+// **Таблиці читаються з `sqlite_master`, а не зі списку в коді.** Бекап, який мовчки не бере
+// таблицю з наступної міграції, гірший за відсутність бекапу: він виглядає як бекап. Тому
+// сюди автоматично потрапляє все, що не в денилисті нижче.
+const EXPORT_SKIP = new Set([
+  // Шифротекст ключів. Майстер-ключ — Worker-секрет, тож у файлі це мертвий вантаж, який усе
+  // одно не розшифрувати; класти його у файл, що йде на диск користувача, — зайва поверхня.
+  "user_secrets",
+]);
+
+api.get("/export/all.json", async (c) => {
+  // Усе службове починається з `_`: `_mt_migrations` (журнал міграцій — версія йде в `meta`),
+  // `_cf_*` у проді й `__miniflare_do_name` у локальному дев. Жодна прикладна таблиця так не
+  // зветься, тож один префікс закриває всі три, і наступний внутрішній артефакт рантайму не
+  // просочиться у файл користувача.
+  const tables = await c.env.DB.prepare(
+    `SELECT name FROM sqlite_master WHERE type = 'table'
+       AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_%' ESCAPE '\\'
+     ORDER BY name`,
+  ).all<{ name: string }>();
+
+  // Порожній список означає, що схему не вдалося прочитати — а не що даних нема. Віддати за
+  // цієї умови «успішний» файл на кілька байт було б найгіршим із можливих результатів: людина
+  // вважала б, що бекап у неї є.
+  if (!tables.results?.length) return c.json({ error: "export_schema_unreadable" }, 500);
+
+  const data: Record<string, unknown[]> = {};
+  const counts: Record<string, number> = {};
+  for (const { name } of tables.results) {
+    if (EXPORT_SKIP.has(name)) continue;
+    // Імена таблиць приходять із самої схеми, не від користувача, але лапки лишаємо: інтерполяція
+    // в SQL без них — звичка, яка одного разу зустріне таблицю з дефісом.
+    const rows = await c.env.DB.prepare(`SELECT * FROM "${name.replace(/"/g, '""')}"`).all();
+    data[name] = rows.results ?? [];
+    counts[name] = data[name].length;
+  }
+
+  const version = await c.env.DB.prepare("SELECT MAX(name) AS v FROM _mt_migrations")
+    .first<{ v: string | null }>().catch(() => null);
+
+  const body = JSON.stringify({
+    meta: {
+      app: "money-track",
+      format: 1,
+      exported_at: Math.floor(Date.now() / 1000),
+      schema_version: version?.v ?? null,
+      // Кількості поруч із даними — щоб урізаний або побитий файл було видно без парсингу всього.
+      rows: counts,
+      note: "Full dump of this account's Durable Object. Encrypted API keys (user_secrets) are excluded.",
+    },
+    data,
+  });
+  const day = new Date().toISOString().slice(0, 10);
+  return new Response(body, {
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "content-disposition": `attachment; filename="money-track-${day}.json"`,
+      "cache-control": "no-store",
+    },
+  });
+});
+
 // §J: CSV-експорт транзакцій (для бухгалтера/податкової). Опційні from/to (unix). BOM для
 // коректної кирилиці в Excel; сума — у валюті рахунку. Пара-переказ — один рядок (як у списку).
 const CUR_ALPHA: Record<number, string> = { 980: "UAH", 840: "USD", 978: "EUR", 985: "PLN", 826: "GBP", 756: "CHF" };
@@ -321,6 +389,45 @@ api.post("/transactions/bulk", async (c) => {
 });
 
 // Single transaction with joined names + attached receipt (for the detail page).
+// ⚠️ MUST stay above `GET /transactions/:id` — Hono matches in registration order, so a
+// literal path declared after the parameterised one is simply never reached ("frequent"
+// gets read as an id and answers 404).
+/**
+ * Cash operations the user repeats, for one-tap re-entry.
+ *
+ * Only manually entered rows (`source IN ('cash','manual')`) — the point is to save typing the
+ * same "кава 45" again, and a bank-imported merchant is not something you re-enter by hand.
+ * The suggested amount is the MEDIAN of the last few, not the mean: one atypical 900 ₴ refill
+ * would otherwise drag every suggestion off the value the user actually repeats.
+ */
+api.get("/transactions/frequent", async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT t.merchant AS merchant, t.category_id AS category_id, t.currency_code AS currency_code,
+            COUNT(*) AS n, GROUP_CONCAT(t.amount) AS amounts
+       FROM transactions t
+      WHERE t.source IN ('cash', 'manual') AND t.amount < 0 AND t.merchant IS NOT NULL AND t.merchant <> ''
+        AND t.time >= ?
+      GROUP BY LOWER(t.merchant), t.currency_code
+     HAVING n >= 2
+      ORDER BY n DESC, MAX(t.time) DESC
+      LIMIT 8`,
+  ).bind(Math.floor(Date.now() / 1000) - 180 * 86400)
+    .all<{ merchant: string; category_id: number | null; currency_code: number; n: number; amounts: string }>();
+
+  const median = (xs: number[]): number => {
+    const s = [...xs].sort((a, b) => a - b);
+    const m = Math.floor(s.length / 2);
+    return s.length % 2 ? s[m]! : Math.round((s[m - 1]! + s[m]!) / 2);
+  };
+  return c.json((rows.results ?? []).map((r) => ({
+    merchant: r.merchant,
+    category_id: r.category_id,
+    currency_code: r.currency_code,
+    n: r.n,
+    amount: Math.abs(median(r.amounts.split(",").map(Number).filter(Number.isFinite))),
+  })));
+});
+
 api.get("/transactions/:id", async (c) => {
   const id = c.req.param("id");
   const tx = await c.env.DB.prepare(
@@ -371,6 +478,64 @@ api.post("/transactions", async (c) => {
   } catch (e) {
     return c.json({ error: String(e instanceof Error ? e.message : e) }, 400);
   }
+});
+
+/**
+ * Manual transfer between two of the user's own accounts.
+ *
+ * Written as a PAIR with a shared `transfer_pair_id`, because that is the canonical definition of
+ * "one movement between my accounts" (§Інваріанти) — it is the single thing `SPEND_WHERE` looks
+ * at to keep the money out of spending, and the only marker the list uses to collapse the two
+ * legs into one row. Setting `is_transfer = 1` alone would NOT do it: five separate code paths
+ * set that flag and none of them produces a pair, so the movement would show up as an expense
+ * plus an unexplained income.
+ *
+ * Cross-currency is explicit, never guessed: `transactions.currency_code` is the ACCOUNT's
+ * currency, so moving ₴ into a $ account needs both numbers. Converting one into the other at
+ * today's rate would silently invent an exchange rate the user never got.
+ */
+api.post("/transactions/transfer", async (c) => {
+  type TransferBody = {
+    from_account_id?: string; to_account_id?: string;
+    amount?: number; to_amount?: number; time?: number; user_note?: string;
+  };
+  const b = await c.req.json<TransferBody>().catch((): TransferBody => ({}));
+  const locale = c.get("locale");
+  const from = b.from_account_id, to = b.to_account_id;
+  const amount = Math.round(Number(b.amount));
+  if (!from || !to || from === to) return c.json({ error: st(locale, "errTransferAccounts") }, 400);
+  if (!Number.isFinite(amount) || amount <= 0) return c.json({ error: st(locale, "errTransferAmount") }, 400);
+
+  const accs = await c.env.DB.prepare(
+    "SELECT id, currency_code FROM accounts WHERE id IN (?, ?)",
+  ).bind(from, to).all<{ id: string; currency_code: number }>();
+  const byId = new Map((accs.results ?? []).map((a) => [a.id, a]));
+  const src = byId.get(from), dst = byId.get(to);
+  if (!src || !dst) return c.json({ error: st(locale, "errTransferAccounts") }, 400);
+
+  const toAmount = dst.currency_code === src.currency_code
+    ? amount
+    : Math.round(Number(b.to_amount));
+  if (!Number.isFinite(toAmount) || toAmount <= 0) {
+    return c.json({ error: st(locale, "errTransferToAmount") }, 400);
+  }
+
+  const pair = crypto.randomUUID();
+  const now = Math.floor(Date.now() / 1000);
+  const time = b.time ?? now;
+  const note = b.user_note?.trim() || null;
+  const ids = [crypto.randomUUID(), crypto.randomUUID()];
+  await c.env.DB.batch([
+    c.env.DB.prepare(
+      `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, is_transfer, transfer_pair_id, user_note, created_at)
+       VALUES (?, ?, 'manual', ?, ?, ?, 1, ?, ?, ?)`,
+    ).bind(ids[0], from, time, -amount, src.currency_code, pair, note, now),
+    c.env.DB.prepare(
+      `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, is_transfer, transfer_pair_id, user_note, created_at)
+       VALUES (?, ?, 'manual', ?, ?, ?, 1, ?, ?, ?)`,
+    ).bind(ids[1], to, time, toAmount, dst.currency_code, pair, note, now),
+  ]);
+  return c.json({ ok: true, pair_id: pair, ids });
 });
 
 // Edit + optional "apply to all like this" learning (§6.3). When learn=true and the
@@ -581,7 +746,7 @@ api.get("/reports", async (c) => {
   const url = new URL(c.req.url);
   const type = url.searchParams.get("type");
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 24), 60);
-  const where = type === "week" || type === "month" ? "WHERE period_type = ?" : "";
+  const where = type === "week" || type === "month" || type === "custom" ? "WHERE period_type = ?" : "";
   const binds = where ? [type, limit] : [limit];
   const rows = await c.env.DB.prepare(
     `SELECT id, period_type, period_from, period_to, created_at, model, cost_usd, summary
@@ -605,18 +770,49 @@ api.delete("/reports/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-// Згенерувати репорт на вимогу (кнопка). type=week|month; scope=current(дефолт, для тесту —
-// поточний період до сьогодні) | last (завершений, як у крона); force перегенеровує наявний.
+// Згенерувати репорт на вимогу (кнопка).
+//   type=week|month + scope=last (завершений період, як у крона) | current (поточний до сьогодні);
+//   type=custom + from/to (unix, секунди) — довільний діапазон, обраний користувачем.
+// force перегенеровує наявний репорт того самого періоду.
+//
+// ⚠️ `scope` за замовчуванням був `current`, і це й був баг: кнопка «за тиждень» завжди рахувала
+// ПОТОЧНИЙ тиждень до сьогодні, тож у понеділок вранці вона давала майже порожній звіт, а
+// завершений тиждень вручну не генерувався взагалі. Тепер дефолт — `last`, як у крона.
 api.post("/reports/generate", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
-  const { type, force, scope } = await c.req.json<{ type?: "week" | "month"; force?: boolean; scope?: "current" | "last" }>().catch(() => ({ type: undefined, force: undefined, scope: undefined }));
-  const t = type === "month" ? "month" : "week";
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
+  const body = await c.req.json<{ type?: string; force?: boolean; scope?: string; from?: number; to?: number }>()
+    .catch(() => ({} as { type?: string; force?: boolean; scope?: string; from?: number; to?: number }));
+  const locale = c.get("locale");
+
+  const { generateAndStoreReport, CUSTOM_MIN_DAYS, CUSTOM_MAX_DAYS } = await import("../lib/ai/report.ts");
+
+  // Кастомний діапазон розпізнаємо і за явним type, і за самою присутністю меж — клієнт, що
+  // прислав from/to, точно не хоче пресетний тиждень.
+  const wantsCustom = body.type === "custom" || (Number.isFinite(body.from) && Number.isFinite(body.to));
+  let range: { from: number; to: number } | undefined;
+  if (wantsCustom) {
+    const from = Math.floor(Number(body.from));
+    const to = Math.floor(Number(body.to));
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+      return c.json({ error: st(locale, "reportBadRange") }, 400);
+    }
+    const days = (to - from) / 86400;
+    if (days < CUSTOM_MIN_DAYS || days > CUSTOM_MAX_DAYS) {
+      return c.json({ error: st(locale, "reportRangeLimits", { min: CUSTOM_MIN_DAYS, max: CUSTOM_MAX_DAYS }) }, 400);
+    }
+    range = { from, to };
+  }
+
+  const t = wantsCustom ? "custom" as const : body.type === "month" ? "month" as const : "week" as const;
   try {
-    const { generateAndStoreReport } = await import("../lib/ai/report.ts");
-    const res = await generateAndStoreReport(c.env, t, { force: force ?? true, scope: scope === "last" ? "last" : "current" });
+    const res = await generateAndStoreReport(c.env, t, {
+      force: body.force ?? true,
+      scope: body.scope === "current" ? "current" : "last",
+      range,
+    });
     return c.json({ ok: true, ...res });
   } catch (e) {
-    return c.json({ error: String(e) }, 502);
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
   }
 });
 
@@ -653,7 +849,7 @@ api.post("/planned", async (c) => {
 // AI-детект підписки за описом (§F4): користувач описує словами → AI дістає пошуковий
 // запит; шукаємо схожі транзакції, рахуємо середню суму/валюту/каденцію → кандидат.
 api.post("/planned/ai-detect", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { description } = await c.req.json<{ description?: string }>();
   if (!description?.trim()) return c.json({ error: "description required" }, 400);
 
@@ -2074,7 +2270,7 @@ api.get("/analytics/by-category", async (c) => {
 
 // Enrich one transaction on demand (manual "AI: що це?").
 api.post("/transactions/:id/enrich", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { enrichOne } = await import("../lib/ai/enrich.ts");
   try {
     const ok = await enrichOne(c.env, c.req.param("id"), { force: true });
@@ -2086,7 +2282,7 @@ api.post("/transactions/:id/enrich", async (c) => {
 
 // Bulk-enrich uncategorised transactions, a small batch per call (client loops).
 api.post("/enrich/pending", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { enrichPending } = await import("../lib/ai/enrich.ts");
   try {
     return c.json(await enrichPending(c.env));
@@ -2112,7 +2308,7 @@ api.post("/transfers/detect", async (c) => {
 // §F2 крок 2: AI-розмітка реальної категорії для операцій у бакеті «Перекази і зняття».
 // Малий батч за виклик, клієнт повторює поки remaining > 0. Навчене застосовується без AI.
 api.post("/transfers/categorize", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { categorizeTransfers } = await import("../lib/ai/enrich.ts");
   try {
     return c.json(await categorizeTransfers(c.env));
@@ -2130,7 +2326,7 @@ api.get("/transfers/status", async (c) => {
 // §R2-ST4: рев'ю. Проганяє AI по батчу нерозмічених переказів і повертає пропозиції
 // (зі збереженням у БД) для перегляду/правки. needs_attention = AI не впевнений/не визначив.
 api.post("/transfers/review", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { reviewTransfers } = await import("../lib/ai/enrich.ts");
   const limit = Number(new URL(c.req.url).searchParams.get("limit") ?? 12);
   try {
@@ -2142,7 +2338,7 @@ api.post("/transfers/review", async (c) => {
 
 // §C2: перепрогнати ОДИН переказ через AI з підказкою користувача («описати для AI»).
 api.post("/transfers/review/one", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const b = await c.req.json<{ id?: string; hint?: string }>();
   if (!b.id || !b.hint?.trim()) return c.json({ error: "id and hint required" }, 400);
   const { reviewTransferWithHint } = await import("../lib/ai/enrich.ts");
@@ -2196,7 +2392,7 @@ api.get("/insight", async (c) => {
 
 // Manual trigger (cron also runs it). ?days= sets and persists the coverage window.
 api.post("/insight/generate", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const days = Number(new URL(c.req.url).searchParams.get("days")) || undefined;
   const { buildAndStoreInsight } = await import("../lib/ai/insight.ts");
   try {
@@ -2259,7 +2455,7 @@ api.post("/advisor/generate", async (c) => {
 
 // Чат-порадник: діалог по фінансах (клієнт тримає історію, шлемо останні ходи).
 api.post("/advisor/chat", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const body = await c.req.json<{ messages?: { role: string; content: string }[]; attachedTxIds?: string[] }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
@@ -2818,7 +3014,7 @@ api.delete("/facts/:id", async (c) => {
 
 // §GR2: AI-оцінка групи (структуровані факти) + чат по конкретній групі.
 api.post("/events/:id/ai", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { evaluateGroupAdvice } = await import("../lib/ai/advisor.ts");
   try {
     const r = await evaluateGroupAdvice(c.env, Number(c.req.param("id")));
@@ -2829,7 +3025,7 @@ api.post("/events/:id/ai", async (c) => {
 });
 
 api.post("/events/:id/chat", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
@@ -2844,7 +3040,7 @@ api.post("/events/:id/chat", async (c) => {
 // Інлайн-чат по конкретній операції: обговорити/уточнити з AI; він може оновити
 // категорію чи прапорець переказу, коли з розмови стало ясно, що це.
 api.post("/transactions/:id/chat", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
@@ -2858,7 +3054,7 @@ api.post("/transactions/:id/chat", async (c) => {
 
 // AI-план бюджету: пропозиції місячних лімітів-конвертів (приймаються на /plan).
 api.post("/budgets/propose", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { proposeBudgets } = await import("../lib/ai/advisor.ts");
   try {
     return c.json(await proposeBudgets(c.env));
@@ -2869,7 +3065,7 @@ api.post("/budgets/propose", async (c) => {
 
 // §3 діалоговий бюджет: чат, у якому AI пропонує/коригує ліміти й пояснює чому.
 api.post("/budgets/chat", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: "ANTHROPIC_API_KEY not set" }, 400);
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { messages } = await c.req.json<{ messages: { role: "user" | "assistant"; content: string }[] }>();
   const { budgetChatReply } = await import("../lib/ai/advisor.ts");
   try {

@@ -17,6 +17,23 @@ export interface DirectoryUser {
   invited_by: string | null;
   created_at: number;
   last_login_at: number | null;
+  // Activity counters (migration 0004). All nullable: a user who has not been active since the
+  // migration has never reported, and "unknown" must not render as "zero" — those are different
+  // facts, and the second one would read as "this person never used it".
+  last_seen_at: number | null;
+  tx_count: number | null;
+  accounts_count: number | null;
+  has_mono_key: number | null;
+  has_ai_key: number | null;
+  stats_at: number | null;
+}
+
+/** What a user's Durable Object reports about itself. Volume only — never amounts. */
+export interface UserStats {
+  tx_count: number;
+  accounts_count: number;
+  has_mono_key: boolean;
+  has_ai_key: boolean;
 }
 
 /**
@@ -68,22 +85,44 @@ export async function inviteUser(db: D1Database, input: InviteInput): Promise<Di
   return (await findUserById(db, id))!;
 }
 
+/** Why a sign-in was refused, so the caller can say something true instead of "not invited". */
+export type LoginRefusal = "not_invited" | "disabled";
+
 /**
- * Binds a Google identity to a whitelisted row and marks the session.
+ * Binds a Google identity to a directory row and marks the session.
  *
- * Returns `null` when the email is not whitelisted or the account is disabled — the caller
- * turns that into a refusal at the door. Invite-only is enforced HERE and nowhere else, so
- * there is a single place to audit (PLATFORM.md §0.2: the demo must be its own circuit
- * rather than an exception threaded through every check).
+ * `allowSignup` decides what happens for an address nobody has invited:
+ *   • omitted — invite-only, the original behaviour, kept as a kill switch (`SIGNUP=invite`).
+ *   • a predicate (the default deployment mode since 2026-07-31) — consulted ONLY when a row is
+ *     about to be created, and a `true` answer opens the door. Passing a predicate rather than a
+ *     boolean is what keeps the daily signup ceiling honest: it is charged for new accounts, not
+ *     for every returning user's sign-in.
+ *
+ * The Durable Object is made lazily on the first request, so an account nobody ever uses costs
+ * nothing beyond one directory row.
+ *
+ * Either way this is the ONE place the door is guarded, so there is a single spot to audit
+ * (PLATFORM.md §0.2: the demo is its own circuit rather than an exception threaded through
+ * every check). `disabled` is always refused — that is the ban, and open signup must not
+ * quietly re-admit someone who was shown out.
  */
 export async function loginWithGoogle(
   db: D1Database,
   profile: { sub: string; email: string; name?: string; picture?: string },
-): Promise<DirectoryUser | null> {
+  opts: { allowSignup?: () => Promise<boolean> } = {},
+): Promise<DirectoryUser | LoginRefusal> {
   const email = normalizeEmail(profile.email);
   const bySub = await findUserByGoogleSub(db, profile.sub);
-  const user = bySub ?? (await findUserByEmail(db, email));
-  if (!user || user.status === "disabled") return null;
+  let user = bySub ?? (await findUserByEmail(db, email));
+
+  if (user?.status === "disabled") return "disabled";
+  if (!user) {
+    if (!opts.allowSignup || !(await opts.allowSignup())) return "not_invited";
+    // `inviteUser` creates the row as `invited`; the UPDATE below flips it to `active`, so a
+    // self-registered account and an invited-then-signed-in one are indistinguishable
+    // afterwards. Deliberate: nothing downstream should branch on how someone got here.
+    user = await inviteUser(db, { email });
+  }
 
   const now = Math.floor(Date.now() / 1000);
   await db
@@ -96,6 +135,11 @@ export async function loginWithGoogle(
     .bind(profile.sub, profile.name ?? null, profile.picture ?? null, email, now, user.id)
     .run();
   return (await findUserById(db, user.id))!;
+}
+
+/** Narrowing helper — `loginWithGoogle` returns either the user or a reason it said no. */
+export function isRefusal(r: DirectoryUser | LoginRefusal): r is LoginRefusal {
+  return typeof r === "string";
 }
 
 /**
@@ -134,6 +178,34 @@ export async function touchLogin(db: D1Database, id: string): Promise<void> {
 
 export async function listUsers(db: D1Database): Promise<DirectoryUser[]> {
   return (await db.prepare("SELECT * FROM users ORDER BY created_at").all<DirectoryUser>()).results;
+}
+
+/**
+ * "This user made a request just now."
+ *
+ * Written from the request guard, so it answers the only question the owner actually has about a
+ * stranger who signed up — is anyone using this? — which `last_login_at` cannot: a 30-day session
+ * means someone can use the app daily for a month without logging in again.
+ *
+ * Throttled to once an hour per user: it is a directory WRITE on a path that runs before every
+ * single API call, and minute-level precision buys nothing here.
+ */
+export async function touchSeen(db: D1Database, id: string, now = Math.floor(Date.now() / 1000)): Promise<void> {
+  await db
+    .prepare("UPDATE users SET last_seen_at = ? WHERE id = ? AND COALESCE(last_seen_at, 0) < ?")
+    .bind(now, id, now - 3600)
+    .run();
+}
+
+/** Store what a user's object reported about itself (see migration 0004). Best-effort. */
+export async function saveUserStats(db: D1Database, id: string, s: UserStats): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE users SET tx_count = ?, accounts_count = ?, has_mono_key = ?, has_ai_key = ?, stats_at = ?
+        WHERE id = ?`,
+    )
+    .bind(s.tx_count, s.accounts_count, s.has_mono_key ? 1 : 0, s.has_ai_key ? 1 : 0, Math.floor(Date.now() / 1000), id)
+    .run();
 }
 
 export async function setUserStatus(db: D1Database, id: string, status: UserStatus): Promise<void> {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { getLocale, dateFmt } from "../i18n/locale.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { useGetReportsQuery, useGetReportQuery, useGenerateReportMutation, useDeleteReportMutation } from "../store/api.ts";
@@ -15,13 +15,28 @@ import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 
-const rDate = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
-const rDateTime = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const rDate = dateFmt({ day: "numeric", month: "short" });
+const rDateTime = dateFmt({ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+// `period_to` — це ПОЧАТОК наступного періоду (так їх рахує `lastCompletePeriod`), тож
+// показувати його як кінець означає обіцяти день, якого в репорті нема: тиждень 13–19 липня
+// підписувався «13 – 20 лип». Віднімаємо секунду й показуємо реальний останній день.
+function rangeLabel(from: number, to: number): string {
+  return `${rDate.format(from * 1000)} – ${rDate.format((to - 1) * 1000)}`;
+}
+
+const TYPE_KEY = { week: "report.week", month: "report.month", custom: "report.customBadge" } as const;
 
 function periodLabel(r: ReportListItem): string {
-  const loc = getLocale();
-  const label = translate(loc, r.period_type === "week" ? "report.week" : "report.month");
-  return `${label} · ${rDate.format(r.period_from * 1000)} – ${rDate.format(r.period_to * 1000)}`;
+  const label = translate(getLocale(), TYPE_KEY[r.period_type] ?? "report.customBadge");
+  return `${label} · ${rangeLabel(r.period_from, r.period_to)}`;
+}
+
+/** `YYYY-MM-DD` → unix опівночі ЛОКАЛЬНОГО дня. Користувач обирає дати у своєму поясі, і саме
+ *  так їх треба інтерпретувати — інакше вечірні операції останнього дня випадають зі звіту. */
+function dayStartUnix(iso: string): number {
+  const [y, m, d] = iso.split("-").map(Number);
+  return Math.floor(new Date(y, m - 1, d).getTime() / 1000);
 }
 
 // Дельта-чіп у стилі Статистики: зростання витрат — червоне, спад — зелене.
@@ -38,19 +53,41 @@ export function Reports() {
   const { data: reports } = useGetReportsQuery();
   const [generate, { isLoading }] = useGenerateReportMutation();
   const [deleteReport] = useDeleteReportMutation();
-  const [busy, setBusy] = useState<"week" | "month" | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const navigate = useNavigate();
+  // Локальна «сьогодні», не `toISOString()`: у Києві ввечері UTC-дата вже вчорашня, і `max`
+  // на інпуті мовчки забороняв би вибрати сьогоднішній день.
+  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
 
-  const run = async (type: "week" | "month") => {
-    setBusy(type);
+  const run = async (id: string, body: Parameters<typeof generate>[0]) => {
+    setBusy(id);
     try {
-      // scope='current' — поточний період до сьогодні (тест / «як іде тиждень/місяць»).
-      const r = await generate({ type, force: true, scope: "current" }).unwrap();
+      const r = await generate(body).unwrap();
       toast.success(t("report.ready"));
       navigate(`/reports/${r.id}`);
     } catch (e) { toast.error(errText(e)); }
     finally { setBusy(null); }
   };
+
+  // Пресети. `last` — завершений період (той самий, що рахує крон): саме його не було як
+  // згенерувати вручну, бо кнопка завжди слала `current`. `current` лишається окремо — це
+  // інше питання («як іде цей тиждень»), а не той самий звіт у процесі.
+  const PRESETS = [
+    { id: "week:last", label: t("report.forLastWeek"), primary: true, body: { type: "week", scope: "last" } },
+    { id: "week:current", label: t("report.forThisWeek"), body: { type: "week", scope: "current" } },
+    { id: "month:last", label: t("report.forLastMonth"), body: { type: "month", scope: "last" } },
+    { id: "month:current", label: t("report.forThisMonth"), body: { type: "month", scope: "current" } },
+  ] as const;
+
+  // Кінець — ексклюзивний (початок наступного дня), як у пресетних періодів: інакше операції
+  // останнього обраного дня не потрапили б у звіт.
+  const customValid = !!from && !!to && from <= to;
+  const runCustom = () => run("custom", {
+    type: "custom", force: true,
+    from: dayStartUnix(from), to: dayStartUnix(to) + 86400,
+  });
 
   // Видалення тестових репортів. Кнопка всередині картки-Link → гасимо навігацію.
   const remove = async (e: React.MouseEvent, id: number) => {
@@ -72,16 +109,29 @@ export function Reports() {
 
       <div className="card ai-block" style={{ marginBottom: 16 }}>
         <div className="ai-block-head"><span className="ai-block-title"><Icon name="spark" size={16} />{t("report.generate")}</span></div>
-        <p className="ai-block-hint">
-          {t("report.autoHintPre")}<b>{t("report.autoHintBold")}</b>.
-        </p>
-        <div className="row" style={{ gap: 8 }}>
-          <button className="btn primary" disabled={isLoading} onClick={() => run("week")}>
-            <Icon name="spark" size={15} />{busy === "week" ? t("report.generating") : t("report.forWeek")}
-          </button>
-          <button className="btn" disabled={isLoading} onClick={() => run("month")}>
-            {busy === "month" ? t("report.generating") : t("report.forMonth")}
-          </button>
+        <p className="ai-block-hint">{t("report.autoHint")}</p>
+        <div className="rep-presets">
+          {PRESETS.map((p) => (
+            <button key={p.id} className={`btn${"primary" in p && p.primary ? " primary" : ""}`} disabled={isLoading}
+              onClick={() => run(p.id, p.body)}>
+              {"primary" in p && p.primary && <Icon name="spark" size={15} />}
+              {busy === p.id ? t("report.generating") : p.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="rep-custom">
+          <div className="label">{t("report.customRange")}</div>
+          <div className="filt-range">
+            <input type="date" aria-label={t("report.customFrom")} value={from} max={to || today}
+              onChange={(e) => setFrom(e.target.value)} />
+            <span className="dash">–</span>
+            <input type="date" aria-label={t("report.customTo")} value={to} min={from || undefined} max={today}
+              onChange={(e) => setTo(e.target.value)} />
+            <button className="btn" disabled={isLoading || !customValid} onClick={runCustom}>
+              {busy === "custom" ? t("report.generating") : t("report.customGo")}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -91,8 +141,10 @@ export function Reports() {
         {(reports ?? []).map((r) => (
           <Link key={r.id} to={`/reports/${r.id}`} className="report-card">
             <div className="rc-top">
-              <span className={`rc-badge ${r.period_type}`}>{r.period_type === "week" ? t("report.weekBadge") : t("report.monthBadge")}</span>
-              <span className="rc-date">{rDate.format(r.period_from * 1000)} – {rDate.format(r.period_to * 1000)}</span>
+              <span className={`rc-badge ${r.period_type}`}>
+                {r.period_type === "week" ? t("report.weekBadge") : r.period_type === "month" ? t("report.monthBadge") : t("report.customBadge")}
+              </span>
+              <span className="rc-date">{rangeLabel(r.period_from, r.period_to)}</span>
             </div>
             {r.summary && <div className="rc-summary">{r.summary}</div>}
             <div className="rc-foot">
@@ -162,7 +214,11 @@ export function ReportDetail() {
           </section>
         )}
 
-        {r.category_breakdown?.length > 0 && (
+        {/* Гейт — на `catList` (детермінований `r.categories` із fallback на AI-версію), а НЕ на
+            `r.category_breakdown`. Категорії ми рахуємо САМІ й зберігаємо в репорті; коли модель
+            не повертала свій масив (напр. відповідь обірвало), зникала вся секція разом із
+            нашими власними надійними числами — звіт виглядав порожнім без причини. */}
+        {catList.length > 0 && (
           <section>
             <div className="section-head"><h2>{t("report.categories")}</h2><InfoTip>{t("report.categoriesTip")}</InfoTip><span className="label">{t("report.vsPrevPeriod")}</span></div>
             <div className="card" style={{ padding: 16 }}>

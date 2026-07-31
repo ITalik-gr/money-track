@@ -33,7 +33,27 @@ async function verifyAnthropic(key: string): Promise<boolean> {
   return res.ok;
 }
 
-credentials.get("/", async (c) => c.json({ secrets: await secretStatuses(c.env.DB) }));
+/**
+ * Status of the user's own keys — plus, per key, whether a usable value EXISTS at all.
+ *
+ * The two are not the same and conflating them produced a visible bug: the owner's keys come
+ * from deployment secrets (`userCredentials` falls back to them for `IS_OWNER`), so no row is
+ * ever written to `user_secrets` — and the UI, which gated on `set`, told the owner to "add your
+ * Anthropic key" on every screen while AI was working perfectly.
+ *
+ * `set`       — the user stored their OWN key here (that is what the card manages).
+ * `available` — a key is present in the effective env, whatever its source. Gate features on this.
+ */
+credentials.get("/", async (c) => {
+  const statuses = await secretStatuses(c.env.DB);
+  const envValue: Record<string, string | undefined> = {
+    mono_token: c.env.MONO_TOKEN,
+    anthropic_api_key: c.env.ANTHROPIC_API_KEY,
+  };
+  return c.json({
+    secrets: statuses.map((s) => ({ ...s, available: s.set || !!envValue[s.name] })),
+  });
+});
 
 credentials.put("/:name", async (c) => {
   const name = c.req.param("name");

@@ -2,7 +2,7 @@
 // Мета — дістатись будь-куди без навігації мишею. Сторінки й дії статичні (фільтруються
 // на клієнті), дані з бази — через `/search` (дебаунс, бо панель смикає його на кожен ввід).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { dateFmt } from "../../i18n/locale.ts";
 import { useT, type TranslationKey } from "../../i18n/index.ts";
 import { useNavigate } from "react-router-dom";
 import { useLazySearchQuery } from "../../store/api.ts";
@@ -54,7 +54,7 @@ export const CMDK_EVENT = "mt:cmdk";
 export const openCommandPalette = () => document.dispatchEvent(new CustomEvent(CMDK_EVENT));
 
 const norm = (s: string) => s.toLowerCase().trim();
-const dtf = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
+const dtf = dateFmt({ day: "numeric", month: "short" });
 
 function resultsToItems(r: SearchResults | undefined, t: (key: TranslationKey, params?: Record<string, string | number>) => string): Item[] {
   if (!r) return [];

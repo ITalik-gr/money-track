@@ -3,7 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- iOS never reads manifest icons; without this line "Add to Home Screen" saves a
+         screenshot of the page as the tile. PNG only — Safari ignores SVG here. -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- Matches the light theme's --bg; theme.js rewrites it when the dark theme is active. -->
     <meta name="theme-color" content="#f3f5f8" />
     <title>Money Track</title>
     <!-- Світла тема — основна; темна лишається опцією через тумблер (DESIGN.md §8 Q1).

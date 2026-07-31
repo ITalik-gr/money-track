@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { dateFmt } from "../i18n/locale.ts";
 import { BalanceCard } from "../components/dashboard/BalanceCard.tsx";
 import { KpiRow } from "../components/dashboard/KpiRow.tsx";
 import { CashflowCard } from "../components/dashboard/CashflowCard.tsx";
@@ -28,7 +28,7 @@ export function Dashboard() {
   const firstName = me?.demo ? null : (me?.user?.name ?? "").trim().split(/\s+/)[0] || null;
   // Computed per render so it follows a live language switch (a module-level const would lock
   // the locale at import time).
-  const todayLabel = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "long", year: "numeric" }).format(new Date());
+  const todayLabel = dateFmt({ day: "numeric", month: "long", year: "numeric" }).format(new Date());
 
   return (
     <>

@@ -1,10 +1,12 @@
 import { useT, type TranslationKey } from "../i18n/index.ts";
 
 // Причини відмови від сервера (`/auth/google/callback` редіректить із `?error=`). Показуємо
-// людський текст: «not_invited» — не помилка застосунку, а нормальний стан для invite-only,
-// і мовчазний редірект на форму входу читався б як «щось зламалось».
+// людський текст: мовчазний редірект на форму входу читався б як «щось зламалось».
+// `disabled` відділено від `not_invited` навмисно: реєстрація відкрита, тож «ми тебе не знаємо»
+// більше не буває просто так — або вимкнули акаунт, або на сьогодні вичерпано ліміт нових.
 const OAUTH_ERRORS: Record<string, TranslationKey> = {
   not_invited: "login.oauthNotInvited",
+  disabled: "login.oauthDisabled",
   email_not_verified: "login.oauthEmailNotVerified",
   google_oauth_not_configured: "login.oauthNotConfigured",
   bad_state: "login.oauthSessionExpired",

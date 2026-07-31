@@ -4,7 +4,7 @@
 // не росте» — часто активи ростуть, а борг росте швидше.
 import { ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { numFmt } from "../../i18n/locale.ts";
 import { useT } from "../../i18n/index.ts";
 import { useGetNetworthQuery } from "../../store/api.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
@@ -12,7 +12,7 @@ import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { monthShort } from "../../lib/format.ts";
 
-const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
+const fmt0 = numFmt({ maximumFractionDigits: 0 });
 const minor = (v: number) => fmt0.format(Math.round(v / 100));
 
 // Підпис місяця рахуємо з `ym` (`YYYY-MM`), а не з `t`. Форматування `t` через Intl у київському

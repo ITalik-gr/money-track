@@ -15,9 +15,36 @@ import { plannedActuals } from "../finance/subscriptions.ts";
 import { getState } from "../finance/repo.ts";
 import { generateFinancialReport, logUsage, getTaskModel, callCostUsd } from "./ai.ts";
 
-export type ReportType = "week" | "month";
+// `custom` — довільний діапазон, заданий користувачем (кнопка «за свої дати»). Він НЕ має
+// пресетних меж, тож `scope` для нього не має сенсу — межі приходять явно в `range`.
+export type ReportType = "week" | "month" | "custom";
 // last = завершений період (крон); current = поточний до сьогодні (ручна генерація/тест).
 export type ReportScope = "last" | "current";
+/** Явні межі періоду (unix, включно з `from`, виключно з `to` — як у `lastCompletePeriod`). */
+export interface ReportRange { from: number; to: number }
+
+/** Мінімальна/максимальна довжина кастомного періоду. Нижня межа — доба (менше нічого не покаже),
+ *  верхня — рік (далі контекст перестає влазити в модель, а «репорт» стає архівом). */
+export const CUSTOM_MIN_DAYS = 1;
+export const CUSTOM_MAX_DAYS = 366;
+
+/**
+ * Межі періоду для генерації.
+ *
+ * Для `custom` попередній період — той самий проміжок ЗРАЗУ перед `from`. Це єдиний варіант,
+ * який тримає «vs минулий період» чесним: порівнювати довільні 17 днів із календарним місяцем
+ * означало б, що delta_pct у звіті — це різниця довжин, а не різниця витрат.
+ */
+function resolveBounds(
+  type: ReportType, scope: ReportScope, range?: ReportRange,
+): { from: number; to: number; prevFrom: number; prevTo: number } {
+  if (type === "custom") {
+    if (!range) throw new Error("custom report requires an explicit range");
+    const len = range.to - range.from;
+    return { from: range.from, to: range.to, prevFrom: range.from - len, prevTo: range.from };
+  }
+  return scope === "current" ? currentPeriodToDate(type) : lastCompletePeriod(type);
+}
 
 interface CatRow { id: number | null; name: string | null; spent: number }
 
@@ -61,7 +88,9 @@ export interface ImportancePoint { level: string; amount_uah: number; pct: numbe
 // зберігаємо в data_json і рендеримо саме її (AI-нотатку приклеюємо за назвою). prev_uah=0 → «новий».
 export interface CategoryDetail { name: string; amount_uah: number; prev_uah: number; delta_pct: number | null; note?: string | null }
 
-export async function buildReportContext(env: Env, type: ReportType, scope: ReportScope = "last"): Promise<{
+export async function buildReportContext(
+  env: Env, type: ReportType, scope: ReportScope = "last", range?: ReportRange,
+): Promise<{
   period: { type: ReportType; scope: ReportScope; from: number; to: number };
   context: unknown;
   trend: TrendPoint[];
@@ -70,7 +99,7 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
 }> {
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
-  const { from, to, prevFrom, prevTo } = scope === "current" ? currentPeriodToDate(type) : lastCompletePeriod(type);
+  const { from, to, prevFrom, prevTo } = resolveBounds(type, scope, range);
   const periodDays = Math.max(1, Math.round((to - from) / 86400));
 
   const [cur, prev, curCats, prevCats, merchants, notable, big, funds, actuals, imp, split, profile] = await Promise.all([
@@ -158,7 +187,16 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
   }
 
   const context = {
-    period: { type, scope, from, to, days: periodDays, note: scope === "current" ? "поточний період ДО СЬОГОДНІ (ще не завершений — не екстраполюй як повний)" : "завершений період" },
+    period: {
+      type, scope, from, to, days: periodDays,
+      // Модель мусить знати, чи період завершений: інакше вона екстраполює півтижня як тиждень.
+      // Для custom довжина довільна, тож і «previous» — рівно такий самий проміжок перед ним.
+      note: type === "custom"
+        ? `довільний діапазон на ${periodDays} дн., обраний користувачем; previous — такий самий за довжиною проміжок безпосередньо перед ним`
+        : scope === "current"
+          ? "поточний період ДО СЬОГОДНІ (ще не завершений — не екстраполюй як повний)"
+          : "завершений період",
+    },
     // §B реальна ситуація користувача — поважай її, не радь «по книжці» (напр. нема роботи → фокус на runway, а не «наростити дохід»).
     user_profile: profile || "(не вказано)",
     current: {
@@ -197,18 +235,24 @@ export async function buildReportContext(env: Env, type: ReportType, scope: Repo
 export async function generateAndStoreReport(
   env: Env,
   type: ReportType,
-  opts: { force?: boolean; scope?: ReportScope } = {},
+  opts: { force?: boolean; scope?: ReportScope; range?: ReportRange } = {},
 ): Promise<{ id: number; created: boolean }> {
-  const { period, context, trend, importance, categories } = await buildReportContext(env, type, opts.scope ?? "last");
+  const { period, context, trend, importance, categories } = await buildReportContext(env, type, opts.scope ?? "last", opts.range);
   const existing = await env.DB.prepare(
     "SELECT id FROM ai_reports WHERE period_type = ? AND period_from = ? AND period_to = ?",
   ).bind(type, period.from, period.to).first<{ id: number }>();
   if (existing && !opts.force) return { id: existing.id, created: false };
 
-  // Контекст із кількох попередніх репортів того ж типу — щоб AI бачив траєкторію.
-  const prior = await env.DB.prepare(
-    "SELECT summary FROM ai_reports WHERE period_type = ? ORDER BY period_to DESC LIMIT 3",
-  ).bind(type).all<{ summary: string | null }>();
+  // Контекст із кількох попередніх репортів — щоб AI бачив траєкторію. Для `custom` фільтр за
+  // типом зняли: перший же кастомний репорт мав би порожню траєкторію, хоча тижневі/місячні
+  // підсумки за той самий час уже лежать поруч і саме вони й описують «звідки ми йдемо».
+  const prior = type === "custom"
+    ? await env.DB.prepare(
+        "SELECT summary FROM ai_reports WHERE period_type <> 'custom' ORDER BY period_to DESC LIMIT 3",
+      ).all<{ summary: string | null }>()
+    : await env.DB.prepare(
+        "SELECT summary FROM ai_reports WHERE period_type = ? ORDER BY period_to DESC LIMIT 3",
+      ).bind(type).all<{ summary: string | null }>();
   const priorSummaries = (prior.results ?? []).map((r) => r.summary).filter(Boolean);
 
   const model = await getTaskModel(env, "report");

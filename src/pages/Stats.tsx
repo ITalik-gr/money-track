@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { getLocale, dateFmt } from "../i18n/locale.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { useSearchParams, Link } from "react-router-dom";
 import { useGetCurrenciesQuery, useGetOverviewQuery, useGetCategoryDrillQuery, useGetSliceDrillQuery, useGetTransfersStatusQuery, useGetCompareQuery, useGetPatternsQuery, useGetPeriodModeQuery, useSetPeriodModeMutation, useGetSparkQuery } from "../store/api.ts";
@@ -47,10 +47,10 @@ type TabKey = keyof typeof TABS;
 // Localized short weekday names (0=Sun..6=Sat). Used both as tooltips and inline labels
 // in deeper-analytics charts; keeps the live locale in sync.
 function weekdayShort(idx: number): string {
-  return new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short" }).format(new Date(2021, 0, 3 + idx));
+  return dateFmt({ weekday: "short" }).format(new Date(2021, 0, 3 + idx));
 }
 function weekdayLong(idx: number): string {
-  return new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "long" }).format(new Date(2021, 0, 3 + idx));
+  return dateFmt({ weekday: "long" }).format(new Date(2021, 0, 3 + idx));
 }
 
 const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e", "#127c86", "#6b7a74"];
@@ -81,7 +81,7 @@ function labelFor(bucket: string): string {
 
 // Localized full month name (0=Jan..11=Dec) for month-comparison labels.
 function monthLong(monthIndex0: number): string {
-  return new Intl.DateTimeFormat(localeTag(getLocale()), { month: "long" }).format(new Date(2021, monthIndex0, 1));
+  return dateFmt({ month: "long" }).format(new Date(2021, monthIndex0, 1));
 }
 
 // §1: накопичена чиста різниця (надходження − витрати) по бакетах — для running-balance лінії.
@@ -105,7 +105,7 @@ function toCumulative(series: Overview["series"], opts?: { mode: string; to: num
   const slope = nets.length % 2 ? nets[mid] : (nets[mid - 1] + nets[mid]) / 2;
   rows[rows.length - 1].proj = lastCum; // місток від фактичної точки до пунктиру
   const d = new Date(opts.to * 1000);
-  const dm = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "numeric" });
+  const dm = dateFmt({ day: "numeric", month: "numeric" });
   for (let i = 1; i <= remaining; i++) {
     d.setDate(d.getDate() + 1);
     rows.push({ label: dm.format(d).replace(/\s/g, ""), cum: null, proj: Math.round(lastCum + slope * i) });
@@ -1120,7 +1120,7 @@ function SpendingPatterns() {
   const reg = recurring.recurring.spent;
   const one = recurring.oneoff.spent;
   const tot = reg + one;
-  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "2-digit", month: "short" });
+  const dfmt = dateFmt({ day: "2-digit", month: "short" });
   const hasAny = tot > 0 || anomalies.length > 0 || pace.length > 0;
   if (!hasAny) return null;
 
@@ -1257,7 +1257,7 @@ function TopSpendDays({ series, sign, from, to, currency }: {
   if (daily.length < 3) return null;
   const top = [...daily].sort((a, b) => b.spend - a.spend).slice(0, 5);
   const max = top[0]?.spend || 1;
-  const dfmt = new Intl.DateTimeFormat(localeTag(getLocale()), { weekday: "short", day: "numeric", month: "short" });
+  const dfmt = dateFmt({ weekday: "short", day: "numeric", month: "short" });
   return (
     <section>
       <div className="section-head"><h2>{t("stats.topDays.title")}</h2><span className="label">{t("stats.topDays.sub")}</span></div>

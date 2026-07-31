@@ -612,20 +612,39 @@ export async function callHaikuJson<T>(
   model: string = MODEL_FAST,
 ): Promise<{ result: T; usage: AnthropicUsage }> {
   const first = await callHaiku(env, system, userContent, maxTokens, model);
+  const truncated = first.stop === "max_tokens";
+
+  // ⚠️ Обрив по ліміту — ПОМИЛКА, навіть коли відповідь усе одно розпарсилась.
+  //
+  // Спіймано на реальному звіті: Sonnet упирався в 3000 токенів приблизно на `summary`,
+  // `repairTruncatedJson` акуратно дозакривав дужки, `JSON.parse` проходив — і в базу лягав
+  // огризок: заголовок є, а розбору, категорій, аномалій і порад немає. Ретраю не було саме
+  // тому, що парсинг «удався». Користувач бачив короткий звіт без жодної ознаки збою.
+  //
+  // Ремонт існує для МАЛФОРМОВАНОГО виводу (зайвий текст, обрізаний хвіст масиву), а не для
+  // того, щоб мовчки прийняти піввідповіді. Тож коли модель сказала «мені забракло місця» —
+  // перепитуємо з більшим лімітом, і лише якщо й другий раз обірвало, беремо що є.
+  if (!truncated) {
+    try {
+      return { result: parseJson<T>(first.text), usage: first.usage };
+    } catch {
+      const second = await callHaiku(
+        env, system,
+        [...userContent, { type: "text", text: "Твоя попередня відповідь була невалідним JSON. Поверни ЛИШЕ валідний JSON-обʼєкт, без жодного тексту, пояснень чи markdown до або після." }],
+        maxTokens, model,
+      );
+      return { result: parseJson<T>(second.text), usage: second.usage };
+    }
+  }
+
+  const retryTokens = Math.min(Math.round(maxTokens * 1.8), 16000);
+  console.warn(`ai/json: відповідь обірвано на ${maxTokens} токенах, повторюю з ${retryTokens}`);
+  const second = await callHaiku(env, system, userContent, retryTokens, model);
   try {
-    return { result: parseJson<T>(first.text), usage: first.usage };
-  } catch {
-    // Обірвано по ліміту → більше токенів; інакше — суворо просимо чистий JSON.
-    const truncated = first.stop === "max_tokens";
-    const retryTokens = truncated ? Math.min(Math.round(maxTokens * 1.8), 8000) : maxTokens;
-    const retryContent = truncated
-      ? userContent
-      : [
-          ...userContent,
-          { type: "text", text: "Твоя попередня відповідь була невалідним JSON. Поверни ЛИШЕ валідний JSON-обʼєкт, без жодного тексту, пояснень чи markdown до або після." },
-        ];
-    const second = await callHaiku(env, system, retryContent, retryTokens, model);
     return { result: parseJson<T>(second.text), usage: second.usage };
+  } catch {
+    // Другий обрив — віддаємо відремонтований перший, щоб користувач отримав бодай щось.
+    return { result: parseJson<T>(first.text), usage: first.usage };
   }
 }
 
@@ -1001,6 +1020,13 @@ export async function generateNotifyObservations(
         "наслідок ситуації користувача (situation). " +
         "Якщо нічого справді вартого уваги немає — поверни порожній масив. Це нормальна й правильна відповідь: " +
         "мовчання краще за шум. " +
+        // Спостереження генеруються ЩОДНЯ на майже незмінному знімку, тож без цього блоку модель
+        // щоранку переказує ту саму думку іншими словами («на скільки вистачить запасу»), і
+        // Telegram перетворюється на щоденну розсилку однієї фрази. Дедуп за змістом стоїть і в
+        // коді (`notify.ts`), але він ловить лише однакове формулювання — тему ловити тут.
+        "🚫 НЕ ПОВТОРЮЙСЯ: у payload є recent_observation_titles — теми, про які ти вже писав " +
+        "останні два тижні. Не переказуй їх іншими словами (навіть якщо число трохи змінилось) — " +
+        "шукай НОВЕ. Якщо нового нема, порожній масив краще за перефразування. " +
         "МОВА: природна українська. title — іменникова фраза, як заголовок новини " +
         "(«Кредитний борг зʼїдає подушку», а НЕ «Мініатюрний дохід vs квартира не робить»). " +
         "Жодних англійських слів і внутрішніх термінів у тексті: не «optional/discretionary», а " +
@@ -1171,7 +1197,10 @@ export async function generateFinancialReport(
         (await replyLangDirective(env)),
     },
   ];
-  return callHaikuJson<FinancialReport>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 3000, await getTaskModel(env, "report"));
+  // 8000, а не 3000: повний звіт українською — це 2-4 секції, 8 категорій, аномалії та 3-5 порад,
+  // і кирилиця коштує ~2-3 токени на слово. На 3000 модель стабільно обривалась приблизно на
+  // `summary`, а ремонт JSON робив цей обрив невидимим (див. `callHaikuJson`).
+  return callHaikuJson<FinancialReport>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 8000, await getTaskModel(env, "report"));
 }
 
 // Структурований інсайт для стилізованого рендеру (headline + факти + порада).

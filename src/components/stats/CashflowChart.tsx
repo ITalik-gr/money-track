@@ -1,6 +1,6 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { getLocale, numFmt } from "../../i18n/locale.ts";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { translate } from "../../i18n/index.ts";
 import { useT } from "../../i18n/index.ts";
@@ -8,7 +8,7 @@ import { useT } from "../../i18n/index.ts";
 // Спільний dual-line графік: витрати + надходження (DESIGN.md §7 F1).
 export interface CfRow { label: string; spend: number; income: number }
 
-const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
+const fmt0 = numFmt({ maximumFractionDigits: 0 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CfTooltip(props: any) {

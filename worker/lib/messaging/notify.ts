@@ -15,7 +15,7 @@ import { st } from "../platform/i18n.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
-  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom,
+  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom, budgetStatus,
 } from "../finance/stats.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams, type NotifLocale } from "../../../shared/notif-i18n.ts";
@@ -345,41 +345,20 @@ function draftWins(pace: MonthPace): Draft[] {
   return out.slice(0, 2);
 }
 
-/** Бюджети-конверти: вичерпані (≥100%) або на межі (≥90%). Канон витрати — SPEND_WHERE. */
+/** Бюджети-конверти: вичерпані (≥100%) або на межі (≥90%). Розрахунок — `budgetStatus` (канон). */
 async function draftBudgets(env: Env, now: number): Promise<Draft[]> {
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
-  const d = new Date(now * 1000);
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
   const monthKey = new Date(now * 1000).toISOString().slice(0, 7);
 
-  const [budgets, spend] = await Promise.all([
-    env.DB.prepare(
-      `SELECT b.category_id AS id, b.amount AS amount, c.name AS name
-       FROM budgets b JOIN categories c ON c.id = b.category_id
-       WHERE b.period = 'month' AND b.amount > 0`,
-    ).all<{ id: number; amount: number; name: string }>(),
-    env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
-       GROUP BY ${EFF_CAT_ID}`,
-    ).bind(monthStart, now).all<{ id: number | null; spent: number }>(),
-  ]);
-
-  const spentByCat = new Map<number, number>();
-  for (const r of spend.results ?? []) if (r.id != null) spentByCat.set(r.id, r.spent);
-
   const out: Draft[] = [];
-  for (const b of budgets.results ?? []) {
-    const spent = spentByCat.get(b.id) ?? 0;
-    const ratio = spent / b.amount;
-    if (ratio < 0.9) continue;
-    const over = ratio >= 1;
+  for (const b of await budgetStatus(env, mult, now)) {
+    if (b.ratio < 0.9) continue;
+    const over = b.ratio >= 1;
     out.push({
       kind: "budget",
       tkey: "budget",
-      tparams: { name: b.name, over, spent, amount: b.amount, pct: Math.round(ratio * 100) },
+      tparams: { name: b.name, over, spent: b.spent, amount: b.amount, pct: Math.round(b.ratio * 100) },
       severity: over ? "urgent" : "warn",
       entity_type: "category", entity_id: String(b.id),
       // Різні ключі для 90% і 100% — щоб «майже» не глушило подальше «вичерпано».
@@ -716,46 +695,93 @@ export function numbersAreGrounded(text: string, known: Set<number>): boolean {
   return true;
 }
 
+/** Скільки днів одна тема AI-спостереження вважається «вже сказаною». */
+const AI_TOPIC_COOLDOWN_DAYS = 14;
+/** Ключ у `app_state`: доба, в яку AI-прохід уже відбувся. */
+const AI_LAST_DAY_KEY = "notify_ai_day";
+
+/**
+ * Стабільний ключ ТЕМИ спостереження з його заголовка.
+ *
+ * Числа й пунктуацію викидаємо навмисно: та сама думка щодня приходить із трохи іншою сумою
+ * («запасу на 7,5 місяця» → «запасу на 7,3 місяця»), і саме через це вона щоранку виглядала
+ * як нова подія й летіла в Telegram. Лишається сама фраза — вона і є темою.
+ */
+function aiTopicKey(title: string): string {
+  const norm = title.toLowerCase().replace(/[\d]+/g, " ").replace(/[^\p{L}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  // FNV-1a: короткий детермінований ключ, який влазить у `entity_id` і однаковий між рестартами.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < norm.length; i++) {
+    h ^= norm.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
 async function draftAiObservations(env: Env, now: number): Promise<Draft[]> {
   if (!env.ANTHROPIC_API_KEY) return [];
   const day = isoDay(now);
   // 💸 Запобіжник вартості: `dedup_key` захищає лише від дублів У БАЗІ, а виклик моделі
   // стався б однаково. Без цієї перевірки кнопка «Перевірити зараз» палила б токени на
   // кожен клік. За добу — рівно один прохід.
-  const already = await env.DB.prepare(
-    "SELECT 1 AS x FROM notifications WHERE kind = 'ai' AND dedup_key LIKE ? LIMIT 1",
-  ).bind(`ai:${day}:%`).first<{ x: number }>();
-  if (already) return [];
+  //
+  // Маркер лежить в `app_state`, а не виводиться з наявних рядків `ai:<день>:%`: прохід, з якого
+  // не вийшло жодного рядка (усі спостереження відсіяв дедуп тем або `numbersAreGrounded`), теж
+  // коштував грошей, а за старою перевіркою виглядав як «сьогодні ще не рахували» — і наступний
+  // виклик у той самий день платив удруге.
+  if (await getState(env.DB, AI_LAST_DAY_KEY) === day) return [];
 
   const { collectFinanceSnapshot } = await import("../ai/advisor.ts");
   const { generateNotifyObservations } = await import("../ai/ai.ts");
 
+  // Теми останніх двох тижнів — і як підказка моделі («не переказуй це знову»), і як фільтр
+  // нижче. Промт сам по собі не гарантія (§Правила: інструкція ≠ перевірка), тож обидва шари.
+  const recent = await env.DB.prepare(
+    `SELECT title, entity_id FROM notifications
+     WHERE kind = 'ai' AND created_at >= ? ORDER BY created_at DESC LIMIT 30`,
+  ).bind(now - AI_TOPIC_COOLDOWN_DAYS * 86400).all<{ title: string; entity_id: string | null }>();
+  const recentRows = recent.results ?? [];
+  const seenTopics = new Set(recentRows.map((r) => r.entity_id ?? aiTopicKey(r.title)));
+
   // ЄДИНЕ джерело контексту — той самий знімок, що бачать Порадник і Чат (§Інваріанти).
   // Не будувати збіднений контекст вручну: саме це колись дало «домислену подушку $780».
   const snap = await collectFinanceSnapshot(env);
-  const { result } = await generateNotifyObservations(env, snap.context);
+  const payload = { ...(snap.context as object), recent_observation_titles: recentRows.map((r) => r.title) };
+  const { result } = await generateNotifyObservations(env, payload);
+  await setState(env.DB, AI_LAST_DAY_KEY, day);
 
   // Числа з payload — еталон для перевірки нижче.
   const known = new Set<number>();
   collectNumbers(snap.context, known);
 
-  return (result.observations ?? [])
-    .filter((o) => o.title?.trim())
+  const out: Draft[] = [];
+  for (const o of result.observations ?? []) {
+    if (out.length >= 2) break;                    // ліміт на добу — стрічка не має тонути в балачках моделі
+    const title = o.title?.trim();
+    if (!title) continue;
     // 🔒 Відкидаємо спостереження з сумою, якої в знімку нема (див. `numbersAreGrounded`).
-    .filter((o) => {
-      const ok = numbersAreGrounded(`${o.title ?? ""} ${o.body ?? ""}`, known);
-      if (!ok) console.warn("notify/ai: відкинуто спостереження з непідтвердженим числом:", o.title);
-      return ok;
-    })
-    .slice(0, 2)   // ліміт на добу — стрічка не має тонути в балачках моделі
-    .map((o, i) => ({
-      kind: "ai" as const,
-      title: o.title!.trim().slice(0, 120),
+    if (!numbersAreGrounded(`${title} ${o.body ?? ""}`, known)) {
+      console.warn("notify/ai: відкинуто спостереження з непідтвердженим числом:", title);
+      continue;
+    }
+    const topic = aiTopicKey(title);
+    if (seenTopics.has(topic)) {
+      console.warn("notify/ai: тема вже була за останні 14 днів, пропускаю:", title);
+      continue;
+    }
+    seenTopics.add(topic);                         // і в межах однієї відповіді теж
+    out.push({
+      kind: "ai",
+      title: title.slice(0, 120),
       body: (o.body ?? "").trim().slice(0, 400) || null,
-      severity: o.severity === "warn" ? ("warn" as const) : ("info" as const),
-      entity_type: null, entity_id: null,
-      dedup_key: `ai:${day}:${i}`,
-    }));
+      severity: o.severity === "warn" ? "warn" : "info",
+      // Тема живе в `entity_id`: без неї дедуп довелося б рахувати із заголовка при кожному
+      // читанні, а заголовок ще й обрізається до 120 символів.
+      entity_type: "ai_topic", entity_id: topic,
+      dedup_key: `ai:${day}:${out.length}`,
+    });
+  }
+  return out;
 }
 
 // ---- TG-пуш + ретеншн --------------------------------------------------------

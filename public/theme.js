@@ -7,6 +7,11 @@
 try {
   var t = localStorage.getItem("mt-theme") || "light";
   document.documentElement.setAttribute("data-theme", t);
+  // Keep the browser/PWA chrome in step with the page. Without this a dark-theme user gets a
+  // light status bar sitting on top of a dark app — most visible in the installed PWA, where
+  // that strip is part of the window rather than part of the browser.
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", t === "dark" ? "#0b0f14" : "#f3f5f8");
 } catch (e) {
   /* private mode / storage disabled — the CSS default (light) already covers this */
 }

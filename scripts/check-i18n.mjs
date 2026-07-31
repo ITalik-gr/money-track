@@ -9,12 +9,18 @@
 //   2. The en/uk dictionaries drift out of parity. tsc catches a key missing from `en`
 //      (keys are `keyof typeof en`), but NOT a key present in en and missing from uk — that
 //      would silently fall back to English for that string only. Parity check covers it.
+//   3. A raw `new Intl.DateTimeFormat(...)` / `new Intl.NumberFormat(...)`. These were built at
+//      MODULE level in 20 files, which snapshots the locale at import time: switching the
+//      language re-rendered every `t()` label but left the dates Ukrainian ("next 19 серп." on
+//      an English screen — reported from the live app). `dateFmt`/`numFmt` in locale.ts resolve
+//      the locale per call and cache per (locale + options), so this is a ban, not a preference.
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const SRC = "src";
 const ALLOWED_TAG_FILE = join("src", "i18n", "locale.ts"); // the single place tags may appear
 const TAG = /\b(?:uk|en)-(?:UA|US)\b/;
+const RAW_INTL = /new Intl\.(?:DateTimeFormat|NumberFormat)\s*\(/;
 
 function walk(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -34,6 +40,9 @@ for (const file of walk(SRC)) {
   lines.forEach((line, i) => {
     if (TAG.test(line)) {
       problems.push(`${file}:${i + 1}  hardcoded locale tag — use localeTag(getLocale()) instead:\n    ${line.trim()}`);
+    }
+    if (RAW_INTL.test(line)) {
+      problems.push(`${file}:${i + 1}  raw Intl formatter — use dateFmt()/numFmt() from i18n/locale.ts (they follow a language switch):\n    ${line.trim()}`);
     }
   });
 }

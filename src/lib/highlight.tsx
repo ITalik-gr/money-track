@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { numFmt } from "../i18n/locale.ts";
 
 // AI пише суми "сирими" цифрами без розділювачів (18763₴) — перегруповуємо за тим самим
 // правилом, що й formatMinor, інакше цифри в репортах/пораднику виглядають інакше, ніж скрізь.
@@ -10,7 +10,7 @@ function reformatNumber(raw: string): string {
   const frac = m[2];
   const n = Number(intDigits) + (frac ? Number(frac) / 10 ** frac.length : 0);
   if (!Number.isFinite(n)) return raw;
-  return new Intl.NumberFormat(localeTag(getLocale()), { minimumFractionDigits: frac ? 2 : 0, maximumFractionDigits: frac ? 2 : 0 }).format(n);
+  return numFmt({ minimumFractionDigits: frac ? 2 : 0, maximumFractionDigits: frac ? 2 : 0 }).format(n);
 }
 
 // Виділяє суми та відсотки (123 ₴, 45%, $12) у тексті AI (DESIGN.md §7 F6).

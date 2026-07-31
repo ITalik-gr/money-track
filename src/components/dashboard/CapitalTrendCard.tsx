@@ -1,6 +1,6 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { dateFmt, numFmt } from "../../i18n/locale.ts";
 import { useGetCapitalTrendQuery } from "../../store/api.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { CHART_ANIM } from "../../lib/motion.ts";
@@ -8,8 +8,8 @@ import { useT, translate } from "../../i18n/index.ts";
 import { getLocale as loc } from "../../i18n/locale.ts";
 
 // §4 Тренд капіталу: динаміка власних коштів (₴) за 6 місяців (реконструкція від поточного тоталу).
-const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
-const dLabel = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
+const fmt0 = numFmt({ maximumFractionDigits: 0 });
+const dLabel = dateFmt({ day: "numeric", month: "short" });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CapTooltip(props: any) {

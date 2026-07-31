@@ -109,6 +109,23 @@ export class UserDO extends DurableObject<Env> {
    * `ratesJson` comes from the shared cache: rates are a fact about the world, so the Worker
    * fetches them once and every object copies the value into its own `app_state`.
    */
+  /**
+   * What this object can say about itself for the owner's admin screen (directory migration 0004).
+   *
+   * Volume only, never value. The owner administers accounts; they do not get to read other
+   * people's money, and an RPC that returned balances would make that a one-line change away.
+   * Cheap enough (three COUNTs) to run from the daily cron fan-out that already wakes the object.
+   */
+  async selfStats(): Promise<{ tx_count: number; accounts_count: number; has_mono_key: boolean; has_ai_key: boolean }> {
+    const one = async (sql: string) => (await this.db.prepare(sql).first<{ n: number }>())?.n ?? 0;
+    return {
+      tx_count: await one("SELECT COUNT(*) AS n FROM transactions"),
+      accounts_count: await one("SELECT COUNT(*) AS n FROM accounts"),
+      has_mono_key: (await one("SELECT COUNT(*) AS n FROM user_secrets WHERE name = 'MONO_TOKEN'")) > 0,
+      has_ai_key: (await one("SELECT COUNT(*) AS n FROM user_secrets WHERE name = 'ANTHROPIC_API_KEY'")) > 0,
+    };
+  }
+
   async runCron(kind: "daily" | "weekly" | "monthly", ratesJson: string | null, isOwner = false): Promise<{ ran: string[]; failed: string[] }> {
     // `isOwner` comes from the directory row the fan-out already read — the deployment-wide
     // API keys are the owner's, so only the owner's cron may use them (see `userCredentials`).
@@ -142,6 +159,14 @@ export class UserDO extends DurableObject<Env> {
       });
     }
 
+    // A report generated in THIS run must be announced in THIS run. The report crons fire at
+    // 09:00 while the notification pass is the 06:00 daily one, so a freshly generated report
+    // was only announced the NEXT morning — by which time the feed says "weekly report ready"
+    // about a period that ended a day and a half ago, and the newest one looks missing.
+    // `generateNotifications` is idempotent (UNIQUE dedup_key) and its AI branch has its own
+    // once-a-day guard, so calling it a second time costs nothing.
+    let reported = false;
+
     if (kind === "weekly") {
       if (env.ANTHROPIC_API_KEY) {
         await step("insight", async () => {
@@ -151,6 +176,7 @@ export class UserDO extends DurableObject<Env> {
         await step("weekly_report", async () => {
           const { generateAndStoreReport } = await import("../lib/ai/report.ts");
           await generateAndStoreReport(env, "week");
+          reported = true;
         });
       }
       await step("tg_proactive", async () => {
@@ -163,6 +189,14 @@ export class UserDO extends DurableObject<Env> {
       await step("monthly_report", async () => {
         const { generateAndStoreReport } = await import("../lib/ai/report.ts");
         await generateAndStoreReport(env, "month"); // idempotent per period
+        reported = true;
+      });
+    }
+
+    if (reported) {
+      await step("notifications", async () => {
+        const { generateNotifications } = await import("../lib/messaging/notify.ts");
+        await generateNotifications(env);
       });
     }
 

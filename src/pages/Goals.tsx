@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { getLocale, localeTag } from "../i18n/locale.ts";
+import { dateFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { useGetGoalsQuery, useDeleteGoalMutation, useGetAccountsQuery } from "../store/api.ts";
 import { Money } from "../components/ui/Money.tsx";
@@ -7,7 +7,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { GoalModal } from "../components/planning/GoalModal.tsx";
 import type { SavingsGoal } from "../store/api.ts";
 
-const fmtDate = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short", year: "numeric" });
+const fmtDate = dateFmt({ day: "numeric", month: "short", year: "numeric" });
 
 function daysLeft(deadline: number | null): number | null {
   if (!deadline) return null;

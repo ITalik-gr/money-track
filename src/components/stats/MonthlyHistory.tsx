@@ -1,6 +1,6 @@
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { numFmt } from "../../i18n/locale.ts";
 import { useT } from "../../i18n/index.ts";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { useGetMonthlyHistoryQuery } from "../../store/api.ts";
@@ -9,7 +9,7 @@ import { InfoTip } from "../ui/InfoTip.tsx";
 import { monthShort } from "../../lib/format.ts";
 
 const monLbl = (m: string) => monthShort(Number(m.split("-")[1]) - 1) ?? m;
-const fmt0 = new Intl.NumberFormat(localeTag(getLocale()), { maximumFractionDigits: 0 });
+const fmt0 = numFmt({ maximumFractionDigits: 0 });
 
 type Row = { label: string; spend: number; income: number; net: number; rate: number | null; current: boolean };
 

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { getLocale, localeTag } from "../../i18n/locale.ts";
+import { dateFmt } from "../../i18n/locale.ts";
 import { useGetUpcomingSubsQuery } from "../../store/api.ts";
 import { MerchantLogo } from "../ui/MerchantLogo.tsx";
 import { Money } from "../ui/Money.tsx";
@@ -10,7 +10,7 @@ import type { TranslationKey } from "../../i18n/index.ts";
 
 // §4 «Скоро спишеться»: планові платежі/підписки у горизонті 30 днів — лого бренду,
 // дата, «через N дн». Перетинає межу місяця (на відміну від прогнозу місяця).
-const fmtDay = new Intl.DateTimeFormat(localeTag(getLocale()), { day: "numeric", month: "short" });
+const fmtDay = dateFmt({ day: "numeric", month: "short" });
 
 // Returns a translation key (+ params) rather than text, so rendering stays reactive to the
 // active locale — resolving the string here would freeze it to whatever locale was active.
