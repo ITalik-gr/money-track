@@ -1234,7 +1234,7 @@
   "wif.resetBtn": "Reset",
   "wif.sliderAriaLabel": "{category}: cut or add spend, %",
   "wif.deltaSuffix": " mo of runway",
-  "wif.slideHint": "slide the control ↑",
+  "wif.slideHint": "move any slider",
   "wif.extraSpending": "Extra spending",
   "wif.savings": "Savings",
   "wif.newBurnLabel": "New burn",

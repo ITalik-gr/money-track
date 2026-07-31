@@ -405,6 +405,19 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 /* Дія в заголовку секції — праворуч і компактна (не переважає 15px h2) */
 .section-head > .btn { margin-left: auto; }
 
+/* ---- ПРАВИЛО: заголовок + правий підпис переносяться В КОЛОНКУ на вузькому ----------------
+   Смуга «назва ліворуч, мета праворуч» на телефоні стискала назву до ширини найдовшого слова,
+   і заголовок ламався на 2-3 рядки поруч із однорядковою легендою («грошовий потік · 6 міс»
+   проти «Надходження / Витрати»). Текст має переноситись у стовпчик, а не тулитись у колонку
+   на два слова. Правило спільне для всіх таких смуг — щоб не лікувати кожну окремо. */
+@media (max-width: 620px) {
+  .section-head { flex-wrap: wrap; }
+  /* `margin-left: auto` притискав підпис праворуч; на новому рядку це виглядає як помилка. */
+  .section-head .label, .section-head > .btn { margin-left: 0; }
+  .cashflow-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .cashflow-head .legend { flex-wrap: wrap; gap: 6px 14px; }
+}
+
 /* ---- summary hero -------------------------------------------------------- */
 
 .summary { padding: 24px 22px; margin-bottom: 14px; }
@@ -1679,7 +1692,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .avatar-chip .who2 { line-height: 1.25; }
 .avatar-chip .who2 b { font-size: 13px; font-weight: 600; }
 .avatar-chip .who2 small { display: block; font-size: 11px; color: var(--muted); }
-@media (max-width: 560px) { .avatar-chip .who2 { display: none; } }
+/* Коли підпис ховається, чіп мусить стати КОЛОМ, а не пігулкою: падінг лишався
+   несиметричним (5px 13px 5px 5px), тож навколо круглого аватара висів овал. */
+@media (max-width: 560px) {
+  .avatar-chip .who2 { display: none; }
+  .avatar-chip { padding: 4px; gap: 0; }
+}
 
 /* ---- page head ----------------------------------------------------------- */
 .page-head {
@@ -1723,14 +1741,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 /* Main split: wide analysis column + narrow "quick glance" rail */
 .dash { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); align-items: start; }
-@media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr) 340px; } }
+@media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr); } }
 .dash-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 .dash-rail { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 .dash-col { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 
 /* Paired supporting cards within the main column (equal, side by side) */
 .dash-pair { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); }
-@media (min-width: 680px) { .dash-pair { grid-template-columns: 1fr 1fr; align-items: start; } }
+/* `end`, а не `start`: половини пари майже ніколи не однакової висоти (порожній стан коротший
+   за наповнену картку), і при вирівнюванні по верху нижні краї розходились на пів-екрана —
+   ряд читався як «щось не догрузилось». По низу порожнеча збирається ЗВЕРХУ, де її не видно,
+   а обидві картки стоять на спільній лінії, як і решта рядів сторінки. */
+@media (min-width: 680px) { .dash-pair { grid-template-columns: 1fr 1fr; align-items: end; } }
 .dash-pair > * { min-width: 0; }
 /* Safety net (ROADMAP L3): a pair whose second half rendered nothing must not leave half the
    page blank — the survivor takes the full width. Empty-state cards cover the cases we know
@@ -1854,7 +1876,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .us-amt-uah { font-size: var(--fs-xs); font-weight: 400; color: var(--muted); }
 
 /* §4 Пульс місяця — норма заощаджень + топ-категорії міні */
-.pulse { padding: 16px; }
+.pulse { padding: 16px; margin-top: auto; }
 .pulse-save { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
 .pulse-rate { font-size: 34px; line-height: 1; margin-top: 4px; }
 .pulse-rate.pos { color: var(--pos); }
@@ -2414,7 +2436,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 /* §P4: What-if симулятор */
 .whatif-body { display: grid; grid-template-columns: minmax(0, 1fr) 264px; gap: 22px; align-items: start; margin-top: 6px; }
-@media (max-width: 720px) { .whatif-body { grid-template-columns: 1fr; } }
+/* Одна колонка — і РЕЗУЛЬТАТ НАГОРІ. Інакше повзунки штовхають його під вісім рядків: рухаєш
+   і не бачиш, що змінилось, тобто симулятор перестає симулювати. Заразом зі стрічки підказки
+   прибрано стрілку «↑» — напрямок тепер залежить від ширини екрана, а текст один. */
+@media (max-width: 720px) {
+  .whatif-body { grid-template-columns: 1fr; }
+  .whatif-result { order: -1; }
+}
 /* Повзунки — auto-fit колонки, НЕ один стовпчик (трек тягнувся через увесь екран, а
    лейбл/сума/−N% розліталися по краях — та сама «порожнеча в центрі рядка», що й §11.3).
    Мінімум 320px, а не 240: на 240 виходило 3-4 колонки й довгі назви різались
@@ -2701,7 +2729,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .adv-hist-sum { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .adv-hist-nums { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .adv-hist-nums b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
-@media (max-width: 560px) { .adv-hist-row { grid-template-columns: 1fr; gap: 2px; } .adv-hist-sum { white-space: normal; } }
+/* `white-space: normal` без стелі розгортав КОЖНУ минулу пораду на повний абзац — сторінка
+   Порадника на телефоні перетворювалась на стіну старого тексту, у якій свіжу пораду не
+   знайти. Історія — це орієнтир, а не читання: три рядки + повний текст у `title`. */
+@media (max-width: 560px) {
+  .adv-hist-row { grid-template-columns: 1fr; gap: 2px; }
+  .adv-hist-sum {
+    white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+}
 .adv-hist-nums .cmp-delta { margin-left: 2px; }
 /* §+1: смуга «зміни від минулого разу» над порадами */
 .since-last { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
@@ -2767,6 +2804,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* «разове» — нейтральний інфо-тег; teal (як one-off у split-барах), theme-aware через токен */
 .pace-tag { flex-shrink: 0; font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-teal) 16%, transparent); color: var(--c-teal); }
 .pace-nums { white-space: nowrap; font-size: 12.5px; }
+/* Три колонки не вміщаються в телефон: назва обрізалась на «Дім і побут.», а бейдж «не щ…»
+   зрізало навпіл. Розкладаємо на два рядки — назва цілком, числа під нею. */
+@media (max-width: 620px) {
+  .pace-row { grid-template-columns: 1fr auto; gap: 4px 10px; }
+  .pace-name { grid-column: 1 / -1; white-space: normal; }
+  .pace-nums { justify-self: start; }
+}
 .num-mono { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
 /* §E4 — дрейф цін / персональна інфляція */
@@ -2909,6 +2953,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .sub-rem { font-size: 11.5px; color: var(--muted); }
 
 /* tx detail — 2 columns + compact tags */
+/* Шапка деталей операції: мерчант ліворуч, сума праворуч. */
+.txd-hero { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.txd-hero-who { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.txd-hero-amt { text-align: right; white-space: nowrap; flex-shrink: 0; }
+/* На телефоні — у стовпчик. Сума з `nowrap` тримала свою повну ширину, тож колонці з назвою
+   лишалось стільки, що «Хвиля здоров'я | Доставка води» ламалось на три рядки поруч із
+   однорядковою сумою. Ім'я мерчанта важливіше за економію висоти. */
+@media (max-width: 560px) {
+  .txd-hero { flex-direction: column; align-items: stretch; gap: 10px; }
+  .txd-hero-amt { text-align: left; }
+}
+
 .txd-grid { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
 @media (min-width: 900px) { .txd-grid { grid-template-columns: 1fr 1fr; } }
 .txd-grid > * { min-width: 0; }
@@ -2960,7 +3016,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 }
 /* Дохід — зелений просто тому, що знак операції видно ДО збереження, а не після. */
 .add-amount-input.pos { color: var(--pos); }
-.add-amount-row .sel { flex: 0 0 auto; min-width: 104px; }
+/* ⚠️ Селектор валюти — ФІКСОВАНОЇ ширини, поле суми забирає решту. `flex: 0 0 auto` тут не
+   працює: `.sel` має `width: 100%`, тож його flex-basis резолвився у всю ширину рядка й
+   виштовхував поле суми в нуль — герой-інпут перетворювався на смужку 30px (скріншот із проду). */
+.add-amount-row .sel { flex: 0 0 112px; width: 112px; min-width: 0; }
+.add-amount-row .add-amount-input { flex: 1 1 auto; min-width: 0; }
 
 /* Часті операції — чипи «назва + звична сума». Тап підставляє у форму, а не зберігає. */
 .add-chips { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
@@ -3606,12 +3666,21 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
    ШИРИНУ; довідники (валюти, історія капіталу, архів) — під ними, а не сайдбаром: рахунки
    тут головні, і рейл відрізав би від них 320px заради зведення на два рядки. */
 .acct-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 0 24px; align-items: start; }
-.acct-sec { min-width: 0; }
+/* Контейнер для запиту нижче: щільність карток має залежати від ширини САМОЇ секції, а не
+   від ширини вікна — секцій може бути одна на всю сторінку або дві поруч. */
+.acct-sec { min-width: 0; container-type: inline-size; }
 /* :first-child не спрацює для другої колонки — у сітці «перша» лише одна секція, а верхній
    ряд має вирівнятись увесь. Тому відступ заголовка задаємо явно. */
 .acct-sec .section-head { margin-top: 18px; }
 /* Усередині вужчої колонки картки мають бути щільнішими, інакше в колонку влазить одна. */
 .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 12px; margin-bottom: 6px; }
+/* Але коли секція займає всю сторінку (один банк — саме так у більшості), 185px давало 7-8
+   колонок: назва рахунку обрізалась до «madel…», а кнопка редагування тиснулась до неї
+   впритул. Ширина картки має залежати від ширини СЕКЦІЇ, тож це container-query, а не
+   media-query — інакше довелось би вибирати одне число на обидва випадки. */
+@container (min-width: 660px) {
+  .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 14px; }
+}
 .acct-tail { margin-top: 4px; }
 
 /* ===== Рахунки: огляд коштів + секції ==================================== */

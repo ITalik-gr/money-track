@@ -1234,7 +1234,7 @@
   "wif.resetBtn": "Скинути",
   "wif.sliderAriaLabel": "{category}: зрізати або додати витрат, %",
   "wif.deltaSuffix": " міс запасу",
-  "wif.slideHint": "посунь повзунок ↑",
+  "wif.slideHint": "посунь будь-який повзунок",
   "wif.extraSpending": "Додаткові витрати",
   "wif.savings": "Заощадження",
   "wif.newBurnLabel": "Новий burn",

@@ -184,8 +184,12 @@ export function TxDetail() {
 
       {/* Шапка: лого + сума героєм */}
       <div className="card" style={{ padding: 20, marginBottom: 14 }}>
-        <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 14 }}>
-          <div className="row" style={{ gap: 13, minWidth: 0 }}>
+        {/* `.txd-hero` замість інлайнового `.row`: на телефоні довга назва мерчанта
+            («Хвиля здоров'я | Доставка води») ламалась у три рядки, бо поруч стояла сума з
+            `white-space: nowrap` — колонка з назвою стискалась до ширини найдовшого слова.
+            Клас дає змогу перевести шапку в стовпчик на вузькому екрані. */}
+        <div className="txd-hero">
+          <div className="txd-hero-who">
             <MerchantLogo merchant={tx.merchant} catIcon={tx.category_icon} color={tx.category_color} transfer={!!tx.is_transfer} fallbackLabel={tx.category_name} />
             <div style={{ minWidth: 0 }}>
               <div className="who" style={{ fontSize: 18, fontWeight: 600 }}>
@@ -196,7 +200,7 @@ export function TxDetail() {
               <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>{when}</div>
             </div>
           </div>
-          <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+          <div className="txd-hero-amt">
             {/* §COMPENSATION: the hero shows the amount that is actually YOURS — the same figure
                 the statistics use (`EFF_AMOUNT`). Showing the bank's charge here made a recorded
                 compensation look like it had done nothing. The charge stays below, struck. */}

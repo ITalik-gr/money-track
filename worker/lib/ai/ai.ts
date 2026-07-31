@@ -237,9 +237,15 @@ async function callHaiku(
   userContent: unknown[],
   maxTokensIn = 1024,
   modelIn: string = MODEL_FAST,
-): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
+): Promise<{ text: string; usage: AnthropicUsage; stop: string | null; capped: boolean }> {
   await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
   const { model, maxTokens } = demoClamp(env, { model: modelIn, maxTokens: maxTokensIn });
+  // Did the ENVIRONMENT shrink the budget (the demo's 900-token ceiling), rather than the caller
+  // asking for little? A caller that retries on truncation must NOT retry in that case: a bigger
+  // ask is clamped to the same ceiling, so it buys an identical answer and a second charge
+  // against the demo's shared AI budget. Caught on a live demo run — one report burned three
+  // calls, each doomed to the same 900 tokens.
+  const capped = maxTokens < maxTokensIn;
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -263,7 +269,7 @@ async function callHaiku(
   };
   const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   await recordUsage(env, model, data.usage); // §Хвіст C: акумулюємо вартість усіх викликів
-  return { text, usage: data.usage, stop: data.stop_reason ?? null };
+  return { text, usage: data.usage, stop: data.stop_reason ?? null, capped };
 }
 
 // Витягнути перший збалансований {...} або [...] блок, толеруючи прозу до/після
@@ -277,9 +283,10 @@ async function callHaikuMessages(
   messages: ChatMsg[],
   maxTokensIn = 700,
   modelIn: string = MODEL_FAST,
-): Promise<{ text: string; usage: AnthropicUsage; stop: string | null }> {
+): Promise<{ text: string; usage: AnthropicUsage; stop: string | null; capped: boolean }> {
   await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
   const { model, maxTokens } = demoClamp(env, { model: modelIn, maxTokens: maxTokensIn });
+  const capped = maxTokens < maxTokensIn; // see `callHaiku` — a clamped budget must not be retried
   const res = await fetch(API, {
     method: "POST",
     headers: {
@@ -293,7 +300,7 @@ async function callHaikuMessages(
   const data = (await res.json()) as { content: { type: string; text?: string }[]; usage: AnthropicUsage; stop_reason?: string | null };
   const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   await recordUsage(env, model, data.usage); // §Хвіст C: акумулюємо вартість усіх викликів
-  return { text, usage: data.usage, stop: data.stop_reason ?? null };
+  return { text, usage: data.usage, stop: data.stop_reason ?? null, capped };
 }
 
 // §AGENT (2026-07-14): агентний tool-use для чату. Модель може викликати інструменти
@@ -472,7 +479,7 @@ async function callHaikuMessagesJson<T>(
     return { result: parseJson<T>(first.text), usage: first.usage };
   } catch {
     // Обірвано по ліміту → більше токенів (не сварка); інакше — суворо просимо чистий JSON.
-    const truncated = first.stop === "max_tokens";
+    const truncated = first.stop === "max_tokens" && !first.capped;
     const retryTokens = truncated ? Math.min(Math.round(maxTokens * 1.8), 8000) : maxTokens;
     const retry: ChatMsg[] = truncated
       ? messages
@@ -610,9 +617,40 @@ export async function callHaikuJson<T>(
   userContent: unknown[],
   maxTokens = 1024,
   model: string = MODEL_FAST,
+  /**
+   * Optional completeness check. Returns `null` when the object is acceptable, or a sentence
+   * describing what is missing — which is fed straight back to the model for ONE more attempt.
+   *
+   * Exists because the schema in a system prompt is a request, not a contract: a report that
+   * asked for `sections`, `predictions` and `advice` came back as a headline and one long
+   * paragraph, valid JSON and obviously incomplete on screen. Same principle as
+   * `numbersAreGrounded` — if correctness depends on the model obeying, check it in code.
+   */
+  validate?: (result: T) => string | null,
 ): Promise<{ result: T; usage: AnthropicUsage }> {
   const first = await callHaiku(env, system, userContent, maxTokens, model);
-  const truncated = first.stop === "max_tokens";
+  // A demo sandbox is clamped to a few hundred output tokens, so neither retry below can ever
+  // succeed there — they would only spend the shared budget twice more for the same stub.
+  const truncated = first.stop === "max_tokens" && !first.capped;
+
+  /** Run `validate`; on a complaint, ask once more and keep whichever answer is better. */
+  const settle = async (result: T, usage: AnthropicUsage): Promise<{ result: T; usage: AnthropicUsage }> => {
+    const complaint = first.capped ? null : validate?.(result);
+    if (!complaint) return { result, usage };
+    console.warn(`ai/json: неповна відповідь — ${complaint}; перепитую`);
+    try {
+      const again = await callHaiku(
+        env, system,
+        [...userContent, { type: "text", text: `Твоя попередня відповідь була НЕПОВНОЮ: ${complaint} Поверни ПОВНИЙ JSON з усіма полями схеми. Не скорочуй: довгий текст має жити в sections, а не в summary.` }],
+        Math.min(Math.round(maxTokens * 1.5), 16000), model,
+      );
+      const retried = parseJson<T>(again.text);
+      // Take the retry only if it actually fixed something — a second incomplete answer that is
+      // WORSE than the first would otherwise replace a usable report with a worse one.
+      if (!validate?.(retried)) return { result: retried, usage: again.usage };
+    } catch { /* keep the first answer */ }
+    return { result, usage };
+  };
 
   // ⚠️ Обрив по ліміту — ПОМИЛКА, навіть коли відповідь усе одно розпарсилась.
   //
@@ -626,14 +664,14 @@ export async function callHaikuJson<T>(
   // перепитуємо з більшим лімітом, і лише якщо й другий раз обірвало, беремо що є.
   if (!truncated) {
     try {
-      return { result: parseJson<T>(first.text), usage: first.usage };
+      return await settle(parseJson<T>(first.text), first.usage);
     } catch {
       const second = await callHaiku(
         env, system,
         [...userContent, { type: "text", text: "Твоя попередня відповідь була невалідним JSON. Поверни ЛИШЕ валідний JSON-обʼєкт, без жодного тексту, пояснень чи markdown до або після." }],
         maxTokens, model,
       );
-      return { result: parseJson<T>(second.text), usage: second.usage };
+      return await settle(parseJson<T>(second.text), second.usage);
     }
   }
 
@@ -641,7 +679,7 @@ export async function callHaikuJson<T>(
   console.warn(`ai/json: відповідь обірвано на ${maxTokens} токенах, повторюю з ${retryTokens}`);
   const second = await callHaiku(env, system, userContent, retryTokens, model);
   try {
-    return { result: parseJson<T>(second.text), usage: second.usage };
+    return await settle(parseJson<T>(second.text), second.usage);
   } catch {
     // Другий обрив — віддаємо відремонтований перший, щоб користувач отримав бодай щось.
     return { result: parseJson<T>(first.text), usage: first.usage };
@@ -1183,6 +1221,13 @@ export async function generateFinancialReport(
         "(forecast.cushion_uah — позитивні власні кошти), а НЕ на нетто з кредиткою; борг (forecast.debt_uah) згадуй окремо. " +
         "forecast.investment_reserve_uah (крипта/брокер) — НЕ ліквідна подушка й НЕ входить у runway; це окрема остання лінія, " +
         "не пропонуй продавати інвестиції без крайньої потреби. accounts — рахунки з роллю та ОПИСОМ (note): враховуй note як контекст. " +
+        // ⚠️ Явні мінімуми, бо без них модель вивалювала ВЕСЬ звіт в один абзац `summary`, а
+        // `sections`/`predictions`/`advice` лишала порожніми — валідний JSON і порожній екран.
+        // Перевірка в коді (`validate` нижче) ловить це й перепитує; тут — щоб не доводилось.
+        "🔴 ОБОВʼЯЗКОВО ЗАПОВНИ ВСІ ПОЛЯ. `summary` — це 2-4 речення огляду, НЕ місце для всього " +
+        "звіту: деталі йдуть у `sections` (2-4 секції), прогноз — у `predictions`, поради — у " +
+        "`advice` (3-5 штук), топ-категорії — у `category_breakdown`. Звіт із самим лише summary " +
+        "вважається помилковим і буде відхилений. " +
         "prior_reports — твої попередні звіти: звір траєкторію, відзнач що покращилось/погіршилось відтоді. " +
         "notable та biggest_expenses мають поле tx_id — коли згадуєш КОНКРЕТНУ операцію в тексті (summary/sections/" +
         "anomalies.detail/advice.detail), встав посилання на неї токеном [tx:ID] одразу після назви (напр. «Rozetka [tx:abc123]»), " +
@@ -1200,7 +1245,21 @@ export async function generateFinancialReport(
   // 8000, а не 3000: повний звіт українською — це 2-4 секції, 8 категорій, аномалії та 3-5 порад,
   // і кирилиця коштує ~2-3 токени на слово. На 3000 модель стабільно обривалась приблизно на
   // `summary`, а ремонт JSON робив цей обрив невидимим (див. `callHaikuJson`).
-  return callHaikuJson<FinancialReport>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 8000, await getTaskModel(env, "report"));
+  //
+  // Валідатор — бо ліміту токенів виявилось мало: маючи 8000, модель однаково повертала лише
+  // headline+summary, і на екрані зникали Прогноз, Розбір і Поради. Промт просить — код перевіряє.
+  return callHaikuJson<FinancialReport>(
+    env, system, [{ type: "text", text: JSON.stringify(payload) }], 8000, await getTaskModel(env, "report"),
+    (r) => {
+      const missing: string[] = [];
+      if (!(r.sections?.length >= 2)) missing.push("розбір (sections, 2-4 секції)");
+      if (!(r.advice?.length >= 3)) missing.push("поради (advice, 3-5 штук)");
+      if (!r.predictions) missing.push("прогноз (predictions)");
+      // `category_breakdown` — єдине з чотирьох, що має детермінований дублікат (ми рахуємо
+      // категорії самі), тож його відсутність екран не ламає й на ретрай не тягне.
+      return missing.length ? `бракує обовʼязкових полів: ${missing.join(", ")}.` : null;
+    },
+  );
 }
 
 // Структурований інсайт для стилізованого рендеру (headline + факти + порада).
