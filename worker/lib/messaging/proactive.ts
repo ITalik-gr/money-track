@@ -67,12 +67,12 @@ const CUR_SIGN: Record<number, string> = { 980: "₴", 840: "$", 978: "€" };
 const dayMonth = (t: number) => new Date(t * 1000).toLocaleDateString("uk-UA", { day: "2-digit", month: "short" });
 
 export async function runWeeklyProactive(env: Env): Promise<{ sent: boolean; reason?: string }> {
-  const token = env.TG_BOT_TOKEN;
-  const chatId = env.TG_CHAT_ID;
-  if (!token || !chatId) return { sent: false, reason: "TG not configured" };
-  // Owner-only: `TG_CHAT_ID` is a single global chat (the owner's), and this runs in EVERY
-  // user's object. See `notify.pushPendingToTelegram` for the leak this prevents.
-  if (!env.IS_OWNER) return { sent: false, reason: "TG push is owner-only (single global chat)" };
+  // §D1 — this user's own linked chat; the global secret is an owner-only fallback (`tgTarget`).
+  // See `notify.pushPendingToTelegram` for the cross-tenant leak the old owner-gate prevented.
+  const { tgTarget } = await import("./tg-target.ts");
+  const target = await tgTarget(env);
+  if (!target) return { sent: false, reason: "no Telegram chat linked" };
+  const { token, chatId } = target;
 
   // Інсайт: беремо збережений, або будуємо, якщо є AI-ключ.
   let ins = await getStoredInsight(env);

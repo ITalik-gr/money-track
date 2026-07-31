@@ -18,9 +18,6 @@ import {
   useGetMeQuery,
   useEraseMyDataMutation,
   useLogoutMutation,
-  useRegisterTelegramMutation,
-  useTgProactiveMutation,
-  useScanAlertsMutation,
 } from "../store/api.ts";
 import type { AiTask, AiModelToken } from "../store/api.ts";
 import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
@@ -29,6 +26,7 @@ import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
 import { ExportCard } from "../components/settings/ExportCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
+import { TelegramCard } from "../components/settings/TelegramCard.tsx";
 
 // Settings used to be one flat stack of ten cards — every screen's worth of configuration on one
 // page, so finding anything meant scrolling and recognising it by shape. Tabs group it the way
@@ -56,16 +54,13 @@ export function Setup() {
   const { data: status } = useGetSetupStatusQuery(undefined, { pollingInterval: 5000 });
   const [detectTransfers, transfersState] = useDetectTransfersMutation();
   const [applySubCats, subCatsState] = useApplySubscriptionCategoriesMutation();
-  const [registerTelegram, tgState] = useRegisterTelegramMutation();
-  const [tgProactive, tgPushState] = useTgProactiveMutation();
-  const [scanAlerts, scanState] = useScanAlertsMutation();
   const [logout] = useLogoutMutation();
   const { data: me } = useGetMeQuery();
   const isDemo = me?.demo === true; // a sandbox has no account to erase
-  // The Telegram bot is ONE global installation wired to the owner's chat id, so its controls
-  // are the owner's too (security review 2026-07-26: the push paths are gated on `IS_OWNER`
-  // server-side). Showing buttons that answer 403 — or worse, look like they configure YOUR
-  // bot — is a lie about what the product does for you. Per-user bots: ROADMAP §D1.
+  // Owner-only surfaces: the users tab, and inside the Telegram card the one button that
+  // reconfigures a GLOBAL resource (the bot's webhook). Everything else about Telegram is now
+  // per-user (§D1) — the push target is this user's own linked chat, so hiding the card from
+  // them would hide a feature that works for them.
   const isOwner = me?.user?.is_owner === true;
 
   return (
@@ -94,47 +89,9 @@ export function Setup() {
       {tab === "account" && (
         <div className="settings-grid">
           <ProfileCard />
-          {/* Owner-only: one global bot, one global chat id (see `isOwner` above). */}
-          {isOwner && (
-            <div className="card set-card set-full">
-              <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
-              <p className="set-card-sub">{t("setup.telegramSub")}</p>
-              <div className="stack">
-                <button
-                  className="btn"
-                  disabled={tgState.isLoading}
-                  onClick={async () => {
-                    const r = await registerTelegram().unwrap();
-                    if (r.error) toast.error(t("setup.tgError", { error: r.error })); else toast.success(t("setup.tgConnected"));
-                  }}
-                >
-                  {t("setup.connectTg")}
-                </button>
-                <button
-                  className="btn"
-                  disabled={tgPushState.isLoading}
-                  onClick={async () => {
-                    const r = await tgProactive().unwrap();
-                    if (r.sent) toast.success(t("setup.tgPushSent"));
-                    else toast.info(t("setup.tgPushNotSent", { reason: r.reason ?? t("setup.tgNotConfigured") }));
-                  }}
-                >
-                  {t("setup.tgTestSummary")}
-                </button>
-                <button
-                  className="btn"
-                  disabled={scanState.isLoading}
-                  onClick={async () => {
-                    const r = await scanAlerts().unwrap();
-                    if (r.sent > 0) toast.success(t("setup.alertsSent", { n: r.sent }));
-                    else toast.info(t("setup.noSignificantTx"));
-                  }}
-                >
-                  {t("setup.tgTestScan")}
-                </button>
-              </div>
-            </div>
-          )}
+          {/* §D1: адресат тепер персональний, тож картка — для всіх; owner-only лишилась
+              лише реєстрація глобального вебхука (всередині картки). */}
+          <TelegramCard isOwner={isOwner} />
           {!isDemo && <DangerZone />}
         </div>
       )}

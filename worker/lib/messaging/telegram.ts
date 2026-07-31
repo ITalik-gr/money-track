@@ -16,6 +16,12 @@ async function call<T = unknown>(token: string, method: string, body: unknown): 
   return data.result as T;
 }
 
+/** §D1 — bot username, needed to build the `t.me/<bot>?start=…` deep link. */
+export async function getBotUsername(token: string): Promise<string> {
+  const me = await call<{ username: string }>(token, "getMe", {});
+  return me.username;
+}
+
 export async function sendMessage(
   token: string, chatId: number | string, text: string, keyboard?: InlineKeyboard,
 ): Promise<{ message_id: number }> {

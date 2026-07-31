@@ -65,6 +65,61 @@ setup.post("/register-telegram", async (c) => {
   }
 });
 
+// ---- §D1: кожен юзер підключає СВІЙ Telegram-чат ----------------------------
+//
+// Бот лишається один (це deployment-ресурс власника), змінюється адресат. Привʼязка йде
+// deep-link'ом `t.me/<bot>?start=<підписаний токен>`, а не ручним введенням chat_id: свій
+// chat_id людина не знає, а якби ми просили його ввести — будь-хто міг би вписати ЧУЖИЙ і
+// перенаправити собі чужі сповіщення. У deep-link підтвердження робить сам Telegram: у
+// вебхук приходить той chat, з якого справді натиснули кнопку.
+
+setup.get("/telegram", async (c) => {
+  const { tgLinkedChat } = await import("../lib/messaging/tg-target.ts");
+  const chat = await tgLinkedChat(c.env);
+  return c.json({
+    configured: !!c.env.TG_BOT_TOKEN,
+    linked: !!chat,
+    // Сам chat_id назад НЕ віддаємо: показувати нема чого, а в логах/скріншотах це зайве.
+    // Власнику окремо кажемо, що в нього є глобальний фолбек — інакше «не привʼязано» виглядало б
+    // як «пуші не працюють», хоча вони працюють.
+    owner_fallback: !!c.env.IS_OWNER && !!c.env.TG_CHAT_ID,
+  });
+});
+
+setup.post("/telegram/link", async (c) => {
+  if (!c.env.TG_BOT_TOKEN) {
+    const { st } = await import("../lib/platform/i18n.ts");
+    const { ownerLocale } = await import("../lib/finance/categories-i18n.ts");
+    return c.json({ error: st(await ownerLocale(c.env.DB), "tgNotConfigured") }, 400);
+  }
+  const userId = c.env.USER_ID;
+  if (!userId) return c.json({ error: "no user" }, 400);
+  // Демо не привʼязується: пісочниця самознищується через 24 год, тож людина привʼязала б
+  // реальний Telegram до обʼєкта, якого завтра не буде, і мовчки перестала б отримувати пуші.
+  // (Технічно воно й так не спрацювало б — id пісочниці не hex, і токен не пройшов би звірку;
+  // але «кнопка нічого не робить» — гірша відповідь, ніж «у демо недоступно».)
+  const { isDemoEnv } = await import("../lib/platform/demo.ts");
+  if (isDemoEnv(c.env)) {
+    const { st } = await import("../lib/platform/i18n.ts");
+    const { ownerLocale } = await import("../lib/finance/categories-i18n.ts");
+    return c.json({ error: st(await ownerLocale(c.env.DB), "tgDemoUnavailable") }, 403);
+  }
+  const { telegramLinkToken } = await import("../lib/platform/auth.ts");
+  const { getBotUsername } = await import("../lib/messaging/telegram.ts");
+  try {
+    const [bot, token] = await Promise.all([getBotUsername(c.env.TG_BOT_TOKEN), telegramLinkToken(c.env, userId)]);
+    return c.json({ url: `https://t.me/${bot}?start=${token}` });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+  }
+});
+
+setup.post("/telegram/unlink", async (c) => {
+  const { unlinkTgChat } = await import("../lib/messaging/tg-target.ts");
+  await unlinkTgChat(c.env);
+  return c.json({ ok: true });
+});
+
 // Build the cursor over all mono accounts × monthly windows for ~90 days.
 // The minute-cron also advances it, so it finishes even if the tab is closed.
 setup.post("/backfill/start", async (c) => {

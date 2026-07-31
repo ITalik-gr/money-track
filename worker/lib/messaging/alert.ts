@@ -7,6 +7,7 @@
 // Гейт — налаштовані TG-секрети. Дедуп — прапорець transactions.alerted (міграція 0010).
 import type { Env } from "../../env.ts";
 import { sendMessage, type InlineKeyboard } from "./telegram.ts";
+import { tgTarget } from "./tg-target.ts";
 import { proposeTransferCategory, logUsage } from "../ai/ai.ts";
 import { TRANSFER_CAT } from "../ai/enrich.ts";
 
@@ -68,11 +69,12 @@ function link(origin: string | undefined, id: string): string {
 
 // Оцінити одну транзакцію й, за потреби, надіслати алерт. Ідемпотентно (alerted).
 export async function maybeAlertTransaction(env: Env, txId: string, origin?: string): Promise<boolean> {
-  const token = env.TG_BOT_TOKEN, chatId = env.TG_CHAT_ID;
-  if (!token || !chatId) return false;
-  // Owner-only: one global chat id, but this runs for every user's incoming transaction (the
-  // bank webhook path). See `notify.pushPendingToTelegram`.
-  if (!env.IS_OWNER) return false;
+  // §D1: the addressee is this user's OWN linked chat (`tgTarget`), not the global one. The
+  // owner-only gate this replaces existed because `TG_CHAT_ID` is a single chat — the owner's —
+  // while this code runs for every user's incoming transaction.
+  const target = await tgTarget(env);
+  if (!target) return false;
+  const { token, chatId } = target;
 
   const tx = await env.DB.prepare(
     `SELECT t.*, c.parent_id AS parent_id, c.name AS category_name
@@ -147,8 +149,7 @@ export async function maybeAlertTransaction(env: Env, txId: string, origin?: str
 // Скан останніх непроалерчених витрат (ручний тест із Налаштувань / крон-фолбек).
 // Обмежуємо кількістю, щоб не завалити чат.
 export async function scanAlerts(env: Env, origin?: string, max = 5): Promise<{ sent: number }> {
-  if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) return { sent: 0 };
-  if (!env.IS_OWNER) return { sent: 0 }; // same single-global-chat gate as maybeAlertTransaction
+  if (!(await tgTarget(env))) return { sent: 0 }; // §D1: same addressee rule as maybeAlertTransaction
   const since = Math.floor(Date.now() / 1000) - 14 * 86400;
   const rows = await env.DB.prepare(
     `SELECT id FROM transactions

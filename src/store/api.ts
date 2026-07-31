@@ -482,7 +482,7 @@ export type NotifPrefs = Record<NotifKind, boolean>
 export const api = createApi({
   reducerPath: "api",
   baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -840,6 +840,19 @@ export const api = createApi({
     }),
     registerTelegram: b.mutation<{ ok?: boolean; url?: string; error?: string }, void>({
       query: () => ({ url: "/setup/register-telegram", method: "POST" }),
+    }),
+    // §D1 — привʼязка ВЛАСНОГО чату. `owner_fallback` каже, що пуші і так ідуть у глобальний
+    // чат власника: без нього «не привʼязано» читалось би як «не працює».
+    getTelegramLink: b.query<{ configured: boolean; linked: boolean; owner_fallback: boolean }, void>({
+      query: () => "/setup/telegram",
+      providesTags: ["Telegram"],
+    }),
+    linkTelegram: b.mutation<{ url: string }, void>({
+      query: () => ({ url: "/setup/telegram/link", method: "POST" }),
+    }),
+    unlinkTelegram: b.mutation<{ ok: boolean }, void>({
+      query: () => ({ url: "/setup/telegram/unlink", method: "POST" }),
+      invalidatesTags: ["Telegram"],
     }),
     tgProactive: b.mutation<{ sent: boolean; reason?: string }, void>({
       query: () => ({ url: "/tg/proactive", method: "POST" }),
@@ -1223,6 +1236,9 @@ export const {
   useGetNotifPrefsQuery,
   useSetNotifPrefsMutation,
   useCreateJobMutation,
+  useGetTelegramLinkQuery,
+  useLinkTelegramMutation,
+  useUnlinkTelegramMutation,
   useGetJobsQuery,
   useMarkJobSeenMutation,
 } = api;

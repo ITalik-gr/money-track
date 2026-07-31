@@ -195,6 +195,14 @@ const S = {
   },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
   jobBadKind: { uk: "Невідомий тип задачі", en: "Unknown job kind" },
+  tgDemoUnavailable: {
+    uk: "У демо Telegram недоступний — пісочниця живе 24 години.",
+    en: "Telegram is unavailable in the demo — the sandbox only lives 24 hours.",
+  },
+  tgNotConfigured: {
+    uk: "Telegram-бот не налаштований на цьому середовищі.",
+    en: "The Telegram bot is not configured on this deployment.",
+  },
 
   errSplitOnlyExpense: { uk: "Ділити можна лише витрату", en: "Only an expense can be split" },
   errSplitHasReimbursement: {

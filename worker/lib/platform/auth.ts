@@ -146,6 +146,43 @@ export async function signShortLived(env: Env, value: string, ttlSeconds = 600):
   return `${payload}.${await hmacHex(key, payload)}`;
 }
 
+/**
+ * §D1 — one-shot token that ties a Telegram chat to a user account.
+ *
+ * A separate primitive from `signShortLived` because the carrier is hostile to its format:
+ * Telegram's `?start=` payload allows at most 64 characters from `[A-Za-z0-9_-]`, and a
+ * 32-char user id plus a full 64-char HMAC plus dot separators is nearly twice that. So:
+ * `_` separators, base36 expiry, and the signature truncated to 16 hex chars.
+ *
+ * 64 bits of tag is deliberate and sufficient here: the token dies in 15 minutes, it is
+ * single-purpose (bind a chat id), and an attacker who forged one would only manage to point
+ * their OWN telegram chat at a stranger's notifications — noisy for them, no read access.
+ * Same key and same timing-safe comparison as every other signed value in this file.
+ */
+const TG_LINK_TTL_SEC = 900;
+
+export async function telegramLinkToken(env: Env, userId: string): Promise<string> {
+  const key = signingKey(env);
+  if (!key) throw new Error("no signing key: set SESSION_SECRET (or APP_PASSWORD)");
+  const exp = (Math.floor(Date.now() / 1000) + TG_LINK_TTL_SEC).toString(36);
+  const payload = `${userId}_${exp}`;
+  return `${payload}_${(await hmacHex(key, `tglink:${payload}`)).slice(0, 16)}`;
+}
+
+/** Verifies a `telegramLinkToken` and returns the `userId` it belongs to, or `null`. */
+export async function verifyTelegramLinkToken(env: Env, token: string | undefined): Promise<string | null> {
+  const key = signingKey(env);
+  if (!token || !key) return null;
+  const parts = token.split("_");
+  if (parts.length !== 3) return null;
+  const [userId, exp, sig] = parts as [string, string, string];
+  // Same shape check as `verifyWebhookToken`: a user id is hex, and anything else is a probe.
+  if (!/^[0-9a-f]+$/.test(userId) || !/^[0-9a-z]+$/.test(exp)) return null;
+  if (parseInt(exp, 36) < Date.now() / 1000) return null;
+  const expected = (await hmacHex(key, `tglink:${userId}_${exp}`)).slice(0, 16);
+  return timingSafeEqual(sig, expected) ? userId : null;
+}
+
 /** Verifies a `signShortLived` token and returns the original value, or `null`. */
 export async function verifyShortLived(env: Env, token: string | undefined): Promise<string | null> {
   const key = signingKey(env);

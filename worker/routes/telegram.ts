@@ -362,9 +362,26 @@ telegram.post("/:secret", async (c) => {
 
   const fromId = update.message?.from?.id ?? update.callback_query?.from?.id;
   const chatId = update.message?.chat.id ?? update.callback_query?.message?.chat.id;
-  // Allowlist: лише свій chat_id. Будь-хто інший — тихо ігноруємо (ack 200).
-  const allowed = String(c.env.TG_CHAT_ID);
-  if (!chatId || String(chatId) !== allowed || (fromId != null && String(fromId) !== allowed)) {
+  if (!chatId) return c.text("ok", 200);
+
+  // §D1 — `/start <токен>`: привʼязка чату до акаунта. Воркер уже перевірив підпис і
+  // доставив апдейт САМЕ в цей обʼєкт (див. `/tg/*` в index.ts), тож тут лишається записати
+  // chat_id. Це ЄДИНИЙ шлях, що виконується для ще не привʼязаного чату.
+  const startPayload = update.message?.text?.match(/^\/start\s+(\S+)/)?.[1];
+  if (startPayload) {
+    const { linkTgChat } = await import("../lib/messaging/tg-target.ts");
+    await linkTgChat(c.env, chatId);
+    await sendMessage(c.env.TG_BOT_TOKEN, chatId, "✅ Чат підключено. Сюди приходитимуть важливі сповіщення.");
+    return c.text("ok", 200);
+  }
+
+  // Allowlist: лише ВЛАСНИЙ привʼязаний чат цього обʼєкта. Будь-хто інший — тихо ігноруємо
+  // (ack 200). Раніше звірка йшла з глобальним `TG_CHAT_ID`; тепер джерело те саме, що й для
+  // вихідних пушів, тож «кому шлемо» і «кого слухаємо» не можуть розійтись.
+  const { tgTarget } = await import("../lib/messaging/tg-target.ts");
+  const target = await tgTarget(c.env);
+  const allowed = target?.chatId;
+  if (!allowed || String(chatId) !== allowed || (fromId != null && String(fromId) !== allowed)) {
     return c.text("ok", 200);
   }
 

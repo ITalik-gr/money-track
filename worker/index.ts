@@ -292,17 +292,51 @@ app.post("/webhook/:token", async (c) => {
   return ns.get(ns.idFromName(userId)).fetch(withUserHeader(c.req.raw, userId, isOwner));
 });
 
-// Telegram webhook — open like the mono webhook; guarded by its own secret path
-// segment + secret-token header + chat_id allowlist (see routes/telegram.ts).
-//
-// Routed to the OWNER's object: the bot is configured with one global `TG_CHAT_ID`, so it can
-// only ever be the owner's. Per-user bots are a separate tail (PLATFORM.md §10) — but leaving
-// this on the old global D1 after P0.3 would mean the bot quietly writing into a database
-// nobody reads.
+/**
+ * Telegram webhook — open like the mono webhook; guarded by its own secret path segment +
+ * secret-token header + a chat_id allowlist inside the object (see routes/telegram.ts).
+ *
+ * WHICH object it goes to is decided here, because only the Worker can address one:
+ *
+ *   • `/start <token>` — the §D1 linking deep link. The token is a signed user id, so the
+ *     update goes to THAT user's object, which records the chat as its own. This is the only
+ *     branch that runs for a chat nobody has claimed yet, and its whole security rests on the
+ *     signature: no signature, no routing, and the update falls through to the owner below.
+ *   • everything else — the owner's object, as before. Inbound bot COMMANDS still assume one
+ *     chat, because routing them needs a chat_id → user index in the directory, and that is a
+ *     separate feature. Outbound pushes are already per-user (`tgTarget`).
+ *
+ * The body is read here and re-sent: a Request body can only be consumed once, and the parsed
+ * copy is the only way to see the token before choosing a destination.
+ */
 app.all("/tg/*", async (c) => {
-  const owner = await ensureOwner(c.env.DIRECTORY, c.env.OWNER_EMAIL || "owner@localhost");
   const ns = c.env.USER_DO;
-  return ns.get(ns.idFromName(owner.id)).fetch(withUserHeader(c.req.raw, owner.id, true));
+  let raw = c.req.raw;
+  let target: { id: string; isOwner: boolean } | null = null;
+
+  if (c.req.method === "POST") {
+    const body = await c.req.raw.clone().text();
+    // Re-issue the request with the body we already consumed, so the object sees it untouched.
+    raw = new Request(c.req.raw.url, { method: "POST", headers: c.req.raw.headers, body });
+    try {
+      const update = JSON.parse(body) as { message?: { text?: string } };
+      const payload = update.message?.text?.match(/^\/start\s+(\S+)/)?.[1];
+      if (payload) {
+        const { verifyTelegramLinkToken } = await import("./lib/platform/auth.ts");
+        const userId = await verifyTelegramLinkToken(c.env, payload);
+        if (userId) {
+          const { isOwner } = await userAccess(c.env, userId);
+          target = { id: userId, isOwner };
+        }
+      }
+    } catch { /* not JSON, or no token — fall through to the owner */ }
+  }
+
+  if (!target) {
+    const owner = await ensureOwner(c.env.DIRECTORY, c.env.OWNER_EMAIL || "owner@localhost");
+    target = { id: owner.id, isOwner: true };
+  }
+  return ns.get(ns.idFromName(target.id)).fetch(withUserHeader(raw, target.id, target.isOwner));
 });
 // Owner-only whitelist management; behind the guard above, so `c.var.userId` is set.
 app.route("/api/admin", admin);

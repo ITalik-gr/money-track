@@ -866,13 +866,16 @@ const tgEsc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").repl
  * `pushed_tg_at` захищає від повторів (крон ганяється щодня по тій самій таблиці).
  */
 export async function pushPendingToTelegram(env: Env): Promise<{ sent: number; reason?: string }> {
-  const token = env.TG_BOT_TOKEN, chatId = env.TG_CHAT_ID;
-  if (!token || !chatId) return { sent: 0, reason: "TG not configured" };
-  // ⚠️ `TG_CHAT_ID` is ONE global chat — the owner's. Every user's Durable Object runs this same
-  // cron branch, so without this gate an invited friend's notifications ("ти витратив 3 400 ₴ на
-  // Продукти") were delivered to the OWNER's Telegram: their data, someone else's phone.
-  // Per-user bots are a separate feature (PLATFORM.md §10); until then, owner only.
-  if (!env.IS_OWNER) return { sent: 0, reason: "TG push is owner-only (single global chat)" };
+  // §D1 — the addressee is this user's OWN linked chat. What this replaces: `TG_CHAT_ID` is ONE
+  // global chat (the owner's), and every user's Durable Object runs this same cron branch, so an
+  // invited friend's notifications ("ти витратив 3 400 ₴ на Продукти") were delivered to the
+  // OWNER's Telegram — their data, someone else's phone. The stop-gap was an owner-only gate,
+  // i.e. the feature off for everyone else; now each user binds their own chat and the global
+  // secret stays a fallback for the owner alone (`tgTarget`).
+  const { tgTarget } = await import("./tg-target.ts");
+  const target = await tgTarget(env);
+  if (!target) return { sent: 0, reason: "no Telegram chat linked" };
+  const { token, chatId } = target;
 
   const rows = await env.DB.prepare(
     `SELECT id, kind, title, body, notif_key, notif_params, severity FROM notifications
