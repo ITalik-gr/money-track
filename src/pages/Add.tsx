@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useDispatch } from "react-redux";
 import {
@@ -320,9 +320,18 @@ function AiPanel({ hasAiKey, accounts, cats, onWrote }: {
 }) {
   const t = useT();
   const [addTx, { isLoading: saving }] = useAddTransactionMutation();
-  const [text, setText] = useState("");
+  // Share-target (PWA): «поділитись» текстом у Money Track відкриває цю сторінку з `?shared=…`.
+  // Прибираємо параметр з URL одразу — інакше перезавантаження сторінки знову підставило б той
+  // самий текст поверх того, що людина вже встигла набрати.
+  const [text, setText] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return [p.get("title"), p.get("text"), p.get("shared")].filter(Boolean).join(" ").trim();
+  });
   const [parsing, setParsing] = useState(false);
   const [parsed, setParsed] = useState<ParsedText | null>(null);
+  useEffect(() => {
+    if (window.location.search) window.history.replaceState(null, "", window.location.pathname);
+  }, []);
   const [account, setAccount] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);

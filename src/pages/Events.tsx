@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useDeleteEventMutation, useGetEventsQuery } from "../store/api.ts";
+import { GroupGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { GroupModal, GROUP_KINDS } from "../components/planning/GroupModal.tsx";
@@ -17,7 +18,8 @@ const kindLabel = (k: string | null) => {
 // дати AI контекст. Видно в статистиці й у AI-порадах.
 export function Events() {
   const t = useT();
-  const { data: groups = [] } = useGetEventsQuery();
+  // Скелет, а не порожній стан, поки запит летить (див. Goals — та сама пастка `= []`).
+  const { data: groups = [], isLoading } = useGetEventsQuery();
   const [deleteEvent] = useDeleteEventMutation();
   const [showModal, setShowModal] = useState(false);
 
@@ -33,7 +35,7 @@ export function Events() {
         </div>
       </div>
 
-      {groups.length ? (
+      {isLoading ? <GroupGridSkeleton /> : groups.length ? (
         <div className="group-grid">
           {groups.map((g) => (
             <Link key={g.id} to={`/events/${g.id}`} className="group-card tappable" style={{ "--group-color": g.color ?? "var(--accent)" } as React.CSSProperties}>

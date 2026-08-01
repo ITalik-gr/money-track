@@ -47,6 +47,27 @@ export default defineConfig({
           { src: "icons/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
           { src: "favicon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
         ],
+        // Long-press the installed icon (Android) / right-click the dock icon (desktop). The
+        // three things worth reaching without going through the dashboard first — writing an
+        // expense above all, since that is the one action with a time cost if it is awkward.
+        shortcuts: [
+          { name: "Add expense", short_name: "Add", url: "/add", icons: [{ src: "icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+          { name: "Statistics", short_name: "Stats", url: "/stats", icons: [{ src: "icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+          { name: "Ask the advisor", short_name: "Advisor", url: "/chat", icons: [{ src: "icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
+        ],
+        // Share text INTO the app — it lands in the AI parse box on /add ("кава 85").
+        //
+        // ⚠️ GET on purpose. A share target that accepts FILES (a receipt photo — the obvious
+        // next want) must be `method: "POST"`, and a POST share target is delivered to the
+        // service worker's fetch handler, which means leaving `generateSW` for `injectManifest`
+        // and hand-writing the SW. That is the same trade already deferred for Web-Push, and
+        // this SW is deliberately minimal after `navigateFallback` broke /demo and /auth twice.
+        // A GET target is a plain navigation and needs none of it.
+        share_target: {
+          action: "/add",
+          method: "GET",
+          params: { title: "title", text: "text", url: "url" },
+        },
       },
       workbox: {
         // ⚠️ NO navigation fallback. The service worker precaches static assets and nothing else;

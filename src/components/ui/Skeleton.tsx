@@ -114,6 +114,74 @@ export function SubGridSkeleton({ n = 6 }: { n?: number }) {
   );
 }
 
+/**
+ * Цілі: картка з назвою, парою сум і смугою прогресу.
+ *
+ * Ця сторінка (як і Групи/Категорії) читала дані з дефолтом `= []`, тож поки запит летів,
+ * користувач бачив «Цілей ще немає» — тобто порожній акаунт і незавершене завантаження
+ * виглядали однаково (правило §Клієнт і розкладка).
+ */
+export function GoalGridSkeleton({ n = 4 }: { n?: number }) {
+  return (
+    <div className="goal-grid" aria-hidden="true">
+      {Array.from({ length: n }).map((_, i) => (
+        <div key={i} className="goal-card">
+          <div className="goal-top"><Skeleton w={`${45 + (i % 3) * 14}%`} h={15} /></div>
+          <div className="goal-amounts" style={{ gap: 8 }}>
+            <Skeleton w={104} h={22} />
+            <Skeleton w={72} h={12} />
+          </div>
+          <Skeleton w="100%" h={8} r={999} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Групи/події: картка з іконкою, назвою, підписом і сумою в підвалі. */
+export function GroupGridSkeleton({ n = 4 }: { n?: number }) {
+  return (
+    <div className="group-grid" aria-hidden="true">
+      {Array.from({ length: n }).map((_, i) => (
+        <div key={i} className="group-card">
+          <div className="group-top"><Skeleton w={34} h={34} r={10} /></div>
+          <Skeleton w={`${48 + (i % 3) * 12}%`} h={15} />
+          <Skeleton w="38%" h={11} style={{ marginTop: 7 }} />
+          <div className="group-foot">
+            <div style={{ flex: 1 }}>
+              <Skeleton w={64} h={10} />
+              <Skeleton w={92} h={20} style={{ marginTop: 6 }} />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Категорії: картка батька з іконкою, назвою та чипами підкатегорій. */
+export function CategoryGridSkeleton({ n = 6 }: { n?: number }) {
+  return (
+    <div className="cat-grid" aria-hidden="true">
+      {Array.from({ length: n }).map((_, i) => (
+        <div key={i} className="cat-card">
+          <div className="cat-card-head">
+            <Skeleton w={38} h={38} r={11} />
+            <div className="cat-card-title" style={{ flex: 1 }}>
+              <Skeleton w={`${45 + (i % 3) * 15}%`} h={15} />
+            </div>
+          </div>
+          <div className="cat-subs">
+            {Array.from({ length: 2 + (i % 3) }).map((__, j) => (
+              <Skeleton key={j} w={64 + ((i + j) % 3) * 22} h={26} r={999} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Бюджети: конверти (назва + сума + смуга витраченого). */
 export function BudgetCardsSkeleton({ n = 6 }: { n?: number }) {
   return (

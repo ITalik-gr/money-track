@@ -3,6 +3,7 @@ import { useGetCategoriesQuery, useDeleteCategoryMutation, useLazyGetCategoryUsa
 import { CategoryIcon } from "../components/ui/CategoryIcon.tsx";
 import { CategoryModal } from "../components/planning/CategoryModal.tsx";
 import { Select, type SelectOption } from "../components/ui/Select.tsx";
+import { CategoryGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
@@ -15,7 +16,9 @@ const TRANSFER_CAT = 13; // «Перекази і зняття» — захищ�
 // і додавати нові. Ролап підкатегорій у батька зберігаємо (аналітика по COALESCE(parent_id,id)).
 export function Categories() {
   const t = useT();
-  const { data: cats = [] } = useGetCategoriesQuery();
+  // Скелет, а не порожнеча: `CatSection` віддає `null` для порожнього списку, тож поки запит
+  // летів, сторінка була просто біла — гірше за будь-який плейсхолдер.
+  const { data: cats = [], isLoading } = useGetCategoriesQuery();
   const [deleteCategory] = useDeleteCategoryMutation();
   const [fetchUsage] = useLazyGetCategoryUsageQuery();
   const [modal, setModal] = useState<{ open: boolean; cat: Category | null; parentId?: number | null; income?: boolean }>({ open: false, cat: null });
@@ -48,6 +51,7 @@ export function Categories() {
         </div>
       </div>
 
+      {isLoading ? <CategoryGridSkeleton /> : (
       <div className="stack" style={{ gap: 22 }}>
         <CatSection title={t("common.expenses")} groups={expense}
           onEdit={(c) => setModal({ open: true, cat: c })}
@@ -58,6 +62,7 @@ export function Categories() {
           onAddSub={(p) => setModal({ open: true, cat: null, parentId: p.id, income: !!p.is_income })}
           onDelete={askDelete} />
       </div>
+      )}
 
       {modal.open && (
         <CategoryModal category={modal.cat} defaultParentId={modal.parentId} defaultIncome={modal.income}

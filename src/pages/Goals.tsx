@@ -2,6 +2,7 @@ import { useState } from "react";
 import { dateFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { useGetGoalsQuery, useDeleteGoalMutation, useGetAccountsQuery } from "../store/api.ts";
+import { GoalGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { GoalModal } from "../components/planning/GoalModal.tsx";
@@ -20,8 +21,11 @@ type ModalState = { open: boolean; goal: SavingsGoal | null; accountId?: string 
 // Банки (jars) авто-показуються як цілі — задай їм суму одним кліком (§F3).
 export function Goals() {
   const t = useT();
-  const { data: goals = [] } = useGetGoalsQuery();
-  const { data: accounts = [] } = useGetAccountsQuery();
+  // `isLoading` окремо від даних: із дефолтом `= []` порожній акаунт і незавершений запит
+  // малювали ОДИН екран («Цілей ще немає»), тож перше відкриття читалось як «нічого нема».
+  const { data: goals = [], isLoading: loadingGoals } = useGetGoalsQuery();
+  const { data: accounts = [], isLoading: loadingAccounts } = useGetAccountsQuery();
+  const loading = loadingGoals || loadingAccounts;
   const [deleteGoal] = useDeleteGoalMutation();
   const [modal, setModal] = useState<ModalState>({ open: false, goal: null });
 
@@ -42,7 +46,7 @@ export function Goals() {
         </div>
       </div>
 
-      {hasAny ? (
+      {loading ? <GoalGridSkeleton /> : hasAny ? (
         <div className="goal-grid">
           {jarGoals.map((a) => (
             <div key={a.id} className="goal-card goal-jar" style={{ "--goal-color": "var(--c-teal)" } as React.CSSProperties}>
