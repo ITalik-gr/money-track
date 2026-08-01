@@ -3402,6 +3402,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .toast-info .toast-ico { color: var(--accent); }
 .toast-msg { font-size: 13.5px; line-height: 1.35; color: var(--ink); }
 .toast-x { border: none; background: none; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 0 2px; }
+/* Клікабельний тост (§A6 «готово → перейти»): стрілка — єдине, що відрізняє його від
+   інформаційного, бо сітка вже має три колонки, а четверта ламала б вирівнювання решти. */
+.toast-link { grid-template-columns: auto 1fr auto auto; }
+.toast-link .toast-go { color: var(--accent); font-size: 14px; }
+.toast-link:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
 .toast-x:hover { color: var(--ink); }
 @keyframes toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: none; } }
 

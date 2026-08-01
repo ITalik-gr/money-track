@@ -27,6 +27,7 @@ import { DatabaseSync } from "node:sqlite";
 import {
   STATS_JOINS, SPEND_WHERE, INCOME_WHERE, EFF_AMOUNT, EFF_CAT_ID, EFF_IMPORTANCE,
   SPEND_COUNT, SPEND_TX_COUNT, spendSum, incomeSum, amountSum, uahMult,
+  localYm, localMonthStart, localWeekStart, periodBounds,
 } from "./stats.ts";
 
 // Rates matching the demo dataset, so the numbers below are checkable by hand.
@@ -119,6 +120,27 @@ test("§SPLIT: a split expense is counted once, not once per part", () => {
      FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID} ORDER BY cat`,
   ).all() as { cat: number; spent: number }[];
   assert.deepEqual(plainAll(byCat), [{ cat: 1, spent: 20000 }, { cat: 2, spent: 10000 }]);
+});
+
+test("§APP_TZ: calendar boundaries follow Kyiv, not the runtime's UTC", () => {
+  // The reported bug: at 02:46 on 1 August the Statistics page showed JULY for every period
+  // type. The Worker runtime is UTC, where that instant is still 31 July 23:46, so "this month"
+  // was honestly computed as July. Every night between 00:00 and 03:00 the app was a day behind.
+  const night = Math.floor(Date.parse("2026-07-31T23:46:00Z") / 1000); // 1 Aug 02:46 in Kyiv
+
+  assert.equal(localYm(night), "2026-08", "the local month has already turned over");
+  assert.equal(
+    new Date(localMonthStart(night) * 1000).toISOString(), "2026-07-31T21:00:00.000Z",
+    "month starts at local midnight (21:00Z in summer), not at 00:00Z",
+  );
+  assert.equal(new Date(periodBounds("calendar", "month", night).from * 1000).toISOString(), "2026-07-31T21:00:00.000Z");
+
+  // 1 Aug 2026 is a Saturday, so the ISO week began Monday 27 July, local midnight.
+  assert.equal(new Date(localWeekStart(night) * 1000).toISOString(), "2026-07-26T21:00:00.000Z");
+
+  // DST: Kyiv is +3 in summer and +2 in winter. A fixed offset would put January an hour out.
+  const winter = Math.floor(Date.parse("2026-01-15T12:00:00Z") / 1000);
+  assert.equal(new Date(localMonthStart(winter) * 1000).toISOString(), "2025-12-31T22:00:00.000Z");
 });
 
 test("§CADENCE: SPEND_TX_COUNT counts charges, not joined rows", () => {

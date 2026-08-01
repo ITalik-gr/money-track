@@ -6,7 +6,7 @@ import { computeSummary, createCashTx, getRates, toUAHMinor, ratesForDays, type 
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_WHERE,
   SPEND_COUNT, valueMode, uahMult, spendSum, incomeSum, amountSum, periodBounds,
-  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels,
+  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmSql, localParts,
   type PeriodMode, type Preset,
 } from "../lib/finance/stats.ts";
 import type { AppDb } from "../lib/platform/db-shim.ts";
@@ -94,11 +94,11 @@ api.get("/accounts/history", async (c) => {
   } catch { return c.json({ history: {} }); } // таблиця може ще не бути на remote (0026)
   const byAcc = new Map<string, { at: number; balance: number }[]>();
   for (const r of rows) (byAcc.get(r.acc) ?? byAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
-  const now = new Date();
+  const now = Math.floor(Date.now() / 1000);
   const ends: number[] = [];
   for (let i = months - 1; i >= 0; i--) {
     // кінець i-го місяця назад; для поточного (i=0) — «зараз», бо кінець місяця ще попереду.
-    ends.push(i === 0 ? Math.floor(Date.now() / 1000) : Math.floor(new Date(now.getFullYear(), now.getMonth() - i + 1, 1).getTime() / 1000) - 1);
+    ends.push(i === 0 ? now : localMonthStart(now, -i + 1) - 1);
   }
   const out: Record<string, number[]> = {};
   for (const [acc, hist] of byAcc) {
@@ -1388,10 +1388,10 @@ api.get("/analytics/monthly-history", async (c) => {
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
   const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
-  const now = new Date();
-  const from = Math.floor(new Date(now.getFullYear(), now.getMonth() - (months - 1), 1).getTime() / 1000);
+  const now = Math.floor(Date.now() / 1000);
+  const from = localMonthStart(now, -(months - 1));
   const rows = await c.env.DB.prepare(
-    `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS month,
+    `SELECT ${localYmSql(now)} AS month,
             ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ?
@@ -1401,8 +1401,7 @@ api.get("/analytics/monthly-history", async (c) => {
   const map = new Map((rows.results ?? []).map((r) => [r.month, r]));
   const out: { month: string; spend: number; income: number }[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const key = localYm(localMonthStart(now, -i));
     const r = map.get(key);
     out.push({ month: key, spend: r?.spend ?? 0, income: r?.income ?? 0 });
   }
@@ -1414,9 +1413,8 @@ api.get("/analytics/monthly-history", async (c) => {
 api.get("/analytics/safe-to-spend", async (c) => {
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
-  const d = new Date();
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
   const now = Math.floor(Date.now() / 1000);
+  const monthStart = localMonthStart(now);
 
   const tot = await c.env.DB.prepare(
     `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income,
@@ -1456,9 +1454,7 @@ api.get("/analytics/capital-trend", async (c) => {
   const summary = await computeSummary(c.env);
 
   const now = Math.floor(Date.now() / 1000);
-  const d = new Date();
-  const fromDate = new Date(d.getFullYear(), d.getMonth() - months + 1, 1);
-  const from = Math.floor(fromDate.getTime() / 1000);
+  const from = localMonthStart(now, -months + 1);
 
   // Денна чиста зміна капіталу (₴-копійки, знак збережено) від початку періоду.
   const daily = await c.env.DB.prepare(
@@ -1503,9 +1499,7 @@ api.get("/analytics/networth", async (c) => {
   const months = Math.min(Math.max(Number(url.searchParams.get("months") ?? 12), 2), 24);
   const rates = await getRates(c.env.DB);
   const now = Math.floor(Date.now() / 1000);
-  const d = new Date(now * 1000);
-  const fromDate = new Date(d.getFullYear(), d.getMonth() - months + 1, 1);
-  const from = Math.floor(fromDate.getTime() / 1000);
+  const from = localMonthStart(now, -months + 1);
 
   const accounts = await c.env.DB.prepare(
     `SELECT id, title, type, role, balance, credit_limit, currency_code, is_manual
@@ -1677,8 +1671,7 @@ api.get("/analytics/merchant", async (c) => {
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
   const now = Math.floor(Date.now() / 1000);
-  const d = new Date(now * 1000);
-  const from6 = Math.floor(new Date(d.getFullYear(), d.getMonth() - 5, 1).getTime() / 1000);
+  const from6 = localMonthStart(now, -5);
 
   const [agg, byMonth, topCat, txs] = await Promise.all([
     c.env.DB.prepare(
@@ -1686,7 +1679,7 @@ api.get("/analytics/merchant", async (c) => {
        FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?`,
     ).bind(name).first<{ total: number; n: number; first_at: number | null; last_at: number | null }>(),
     c.env.DB.prepare(
-      `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+      `SELECT ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ? AND t.time >= ?
        GROUP BY m ORDER BY m`,
     ).bind(name, from6).all<{ m: string; spent: number }>(),
@@ -1767,17 +1760,16 @@ api.get("/analytics/compare", async (c) => {
 // plus known upcoming planned payments. UAH only, transfers excluded. No migration.
 api.get("/analytics/forecast", async (c) => {
   const now = Math.floor(Date.now() / 1000);
-  const d = new Date(now * 1000);
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
-  const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  const dayOfMonth = d.getDate(); // 1..daysInMonth
+  const monthStart = localMonthStart(now);
+  const daysInMonth = Math.round((localMonthStart(now, 1) - monthStart) / 86400);
+  const dayOfMonth = localParts(now).d; // 1..daysInMonth, у локальній зоні
   const daysElapsed = dayOfMonth;
   const daysRemaining = daysInMonth - dayOfMonth;
 
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null); // forecast завжди зведено в ₴
   // Трейлінг: до 3 ПОВНИХ місяців перед поточним — для історичного якоря прогнозу.
-  const trailStart = Math.floor(new Date(d.getFullYear(), d.getMonth() - 3, 1).getTime() / 1000);
+  const trailStart = localMonthStart(now, -3);
   const [totals, trail] = await Promise.all([
     c.env.DB.prepare(
       `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
@@ -1785,7 +1777,7 @@ api.get("/analytics/forecast", async (c) => {
        WHERE t.time >= ? AND t.time <= ?`,
     ).bind(monthStart, now).first<{ spend: number; income: number }>(),
     c.env.DB.prepare(
-      `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${spendSum(mult)} AS spend
+      `SELECT ${localYmSql(now)} AS m, ${spendSum(mult)} AS spend
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time < ? GROUP BY m`,
     ).bind(trailStart, monthStart).all<{ m: string; spend: number }>(),
@@ -1823,7 +1815,7 @@ api.get("/analytics/forecast", async (c) => {
   ).all<{ id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null }>();
 
   // §CUR-PLAN: суми зводимо в ₴ — вони йдуть в один ряд із витратами місяця (теж ₴).
-  const monthEnd = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() / 1000);
+  const monthEnd = localMonthStart(now, 1);
   const upcomingItems = (planned.results ?? [])
     .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
     .map((p) => ({
@@ -1875,11 +1867,10 @@ api.get("/analytics/income", async (c) => {
     ).bind(prevFrom, prevTo).first<{ income: number }>(),
     // 6 календарних місяців для оцінки стабільності (по місяцях).
     (async () => {
-      const now = new Date();
-      const mFrom = Math.floor(new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime() / 1000);
       const nowS = Math.floor(Date.now() / 1000);
+      const mFrom = localMonthStart(nowS, -5);
       return c.env.DB.prepare(
-        `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${incomeSum(mult)} AS income
+        `SELECT ${localYmSql(nowS)} AS m, ${incomeSum(mult)} AS income
          FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?${curFilter} GROUP BY m ORDER BY m`,
       ).bind(mFrom, nowS).all<{ m: string; income: number }>();
     })(),
@@ -1956,9 +1947,8 @@ api.get("/planned/upcoming", async (c) => {
 api.get("/analytics/cashflow-calendar", async (c) => {
   const url = new URL(c.req.url);
   const now = Math.floor(Date.now() / 1000);
-  const nd = new Date(now * 1000);
-  const defFrom = Math.floor(new Date(nd.getFullYear(), nd.getMonth(), 1).getTime() / 1000);
-  const defTo = Math.floor(new Date(nd.getFullYear(), nd.getMonth() + 2, 0, 23, 59, 59).getTime() / 1000);
+  const defFrom = localMonthStart(now);
+  const defTo = localMonthStart(now, 2) - 1;
   const from = Number(url.searchParams.get("from") ?? defFrom);
   const to = Number(url.searchParams.get("to") ?? defTo);
 
@@ -2080,22 +2070,21 @@ api.get("/analytics/patterns", async (c) => {
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
   const now = Math.floor(Date.now() / 1000);
-  const d = new Date(now * 1000);
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
-  const nextMonthStart = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() / 1000);
+  const monthStart = localMonthStart(now);
+  const nextMonthStart = localMonthStart(now, 1);
   const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
   const curKey = new Date(now * 1000).toISOString().slice(0, 7);
   // Трейлінг-вікно: 6 повних місяців перед поточним.
-  const refStart = Math.floor(new Date(d.getFullYear(), d.getMonth() - 6, 1).getTime() / 1000);
+  const refStart = localMonthStart(now, -6);
   const trailingKeys: string[] = [];
-  for (let i = 6; i >= 1; i--) trailingKeys.push(new Date(d.getFullYear(), d.getMonth() - i, 1).toISOString().slice(0, 7));
+  for (let i = 6; i >= 1; i--) trailingKeys.push(localYm(localMonthStart(now, -i)));
 
   const recurExpr = isRecurringExpr(defaultRefFrom(now), now);
   const levels = await categoryMonthlyLevels(c.env, mult, { now }); // канонічний «місячний рівень»
   const [matrix, split, curSplit] = await Promise.all([
     c.env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
-              strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+              ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
        GROUP BY ${EFF_CAT_ID}, m`,
@@ -2972,23 +2961,20 @@ api.delete("/knowledge/:id", async (c) => {
 // Мапа {ключ: [6 значень копійок]} + буксети-місяці. Клієнт малює міні-тренд у рядках списків.
 api.get("/analytics/spark", async (c) => {
   const N = 6;
-  const nd = new Date();
-  const from = Math.floor(new Date(nd.getFullYear(), nd.getMonth() - (N - 1), 1).getTime() / 1000);
+  const now = Math.floor(Date.now() / 1000);
+  const from = localMonthStart(now, -(N - 1));
   const buckets: string[] = [];
-  for (let i = N - 1; i >= 0; i--) {
-    const dt = new Date(nd.getFullYear(), nd.getMonth() - i, 1);
-    buckets.push(`${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`);
-  }
+  for (let i = N - 1; i >= 0; i--) buckets.push(localYm(localMonthStart(now, -i)));
   const bIdx = new Map(buckets.map((b, i) => [b, i]));
   const { mult } = valueMode(await getRates(c.env.DB), null);
   const [cat, mer] = await Promise.all([
     c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+      `SELECT ${EFF_CAT_ID} AS id, ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}, m`,
     ).bind(from).all<{ id: number; m: string; spent: number }>(),
     c.env.DB.prepare(
-      `SELECT t.merchant AS name, strftime('%Y-%m', t.time, 'unixepoch') AS m, ${amountSum(mult)} AS spent
+      `SELECT t.merchant AS name, ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND ${SPEND_WHERE} AND t.merchant IS NOT NULL GROUP BY t.merchant, m`,
     ).bind(from).all<{ name: string; m: string; spent: number }>(),

@@ -5,7 +5,7 @@
 import { Hono } from "hono";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
-import { createSession, SESSION_COOKIE, signShortLived, verifyShortLived } from "../lib/platform/auth.ts";
+import { createSession, SESSION_COOKIE, SESSION_COOKIE_OPTS, signShortLived, verifyShortLived } from "../lib/platform/auth.ts";
 import { ensureOwner, loginWithGoogle, isRefusal } from "../lib/platform/directory.ts";
 import { signupAllowed } from "../lib/platform/demo.ts";
 
@@ -146,12 +146,9 @@ auth.get("/google/callback", async (c) => {
 
   // The cookie is minted with the user's CURRENT generation; a later bump makes it stop
   // verifying (migration 0005). `?? 0` covers a directory that has not taken 0005 yet.
-  setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id, user.token_version ?? 0), {
-    httpOnly: true,
-    secure: true,
-    sameSite: "Lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+  // Attributes come from `SESSION_COOKIE_OPTS`, never inlined: the `__Host-` prefix has to be
+  // satisfied by every Set-Cookie for this name, and a second hand-written list is how the
+  // sign-out path ended up rejected by the browser.
+  setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id, user.token_version ?? 0), SESSION_COOKIE_OPTS);
   return c.redirect("/", 302);
 });

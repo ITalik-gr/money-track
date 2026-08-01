@@ -67,11 +67,13 @@ export function AiJobChip() {
         // Інвалідуємо ТІЛЬКИ тег свого виду: результат уже в базі, лишилось попросити той
         // екран перечитати його. Глобальний ресет перетягнув би всю сторінку без причини.
         dispatch(api.util.invalidateTags([meta.tag]));
-        toast.success(t("jobs.done", { what: t(meta.label) }));
+        // З посиланням: тост, що каже «готово» і лишає шукати сторінку самому, — це half-fix
+        // тієї самої проблеми, заради якої робилась черга.
+        toast.success(t("jobs.done", { what: t(meta.label) }), meta.to);
       } else {
         // §Обробка помилок: показуємо справжню причину, а не «спробуй ще раз» — інакше
         // вичерпаний ліміт і збій моделі виглядають однаково.
-        toast.error(j.error || t("jobs.failed", { what: t(meta.label) }));
+        toast.error(j.error || t("jobs.failed", { what: t(meta.label) }), meta.to);
       }
       markSeen(j.id);
     }

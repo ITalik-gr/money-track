@@ -10,6 +10,7 @@ import { sendMessage, type InlineKeyboard } from "./telegram.ts";
 import { tgTarget } from "./tg-target.ts";
 import { proposeTransferCategory, logUsage } from "../ai/ai.ts";
 import { TRANSFER_CAT } from "../ai/enrich.ts";
+import { localMonthStart } from "../finance/stats.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const uah = (minor: number) => (minor / 100).toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -49,8 +50,7 @@ async function budgetBreach(env: Env, rolledCat: number, outflow: number): Promi
     "SELECT b.amount AS amount, c.name AS name FROM budgets b JOIN categories c ON c.id = b.category_id WHERE b.category_id = ? AND b.period = 'month' AND b.amount > 0",
   ).bind(rolledCat).first<{ amount: number; name: string }>();
   if (!bud) return null;
-  const d = new Date();
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+  const monthStart = localMonthStart(Math.floor(Date.now() / 1000));
   const sp = await env.DB.prepare(
     `SELECT COALESCE(SUM(-t.amount), 0) AS spent FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
      WHERE t.time >= ? AND t.amount < 0 AND t.hold = 0 AND t.is_transfer = 0 AND t.currency_code = 980

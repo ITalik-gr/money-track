@@ -7,7 +7,7 @@ import { auth } from "./routes/auth.ts";
 import { admin } from "./routes/admin.ts";
 import { account } from "./routes/account.ts";
 import {
-  SESSION_COOKIE, verifySession, verifyWebhookToken,
+  SESSION_COOKIE, CLEAR_COOKIE_OPTS, verifySession, verifyWebhookToken,
   DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId, timingSafeEqual,
 } from "./lib/platform/auth.ts";
 import { withUserHeader } from "./lib/platform/forward.ts";
@@ -166,8 +166,8 @@ app.get("/api/me", async (c) => {
 });
 
 app.post("/api/logout", (c) => {
-  setCookie(c, SESSION_COOKIE, "", { path: "/", maxAge: 0 });
-  setCookie(c, DEMO_COOKIE, "", { path: "/", maxAge: 0 });
+  setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);
+  setCookie(c, DEMO_COOKIE, "", { ...CLEAR_COOKIE_OPTS, httpOnly: true });
   return c.json({ ok: true });
 });
 

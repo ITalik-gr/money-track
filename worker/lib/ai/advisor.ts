@@ -5,7 +5,7 @@ import { type AdviceResult, type AiFact, type AiUsageBrief, type BudgetChatResul
 import { getState, setState } from "../finance/repo.ts";
 import { getRates, toUAHMinor } from "../finance/finance.ts";
 import { nextChargeUnix, plannedUAH } from "../finance/subscriptions.ts";
-import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels } from "../finance/stats.ts";
+import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql } from "../finance/stats.ts";
 import { ownerLocale } from "../finance/categories-i18n.ts";
 import { st, num } from "../platform/i18n.ts";
 
@@ -84,16 +84,16 @@ export interface HealthComponent { key: string; label: string; value: string; sc
 export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[] }
 export async function financeHealth(env: Env): Promise<FinanceHealth> {
   const now = Math.floor(Date.now() / 1000);
-  const d = new Date(now * 1000);
-  const from6 = Math.floor(new Date(d.getFullYear(), d.getMonth() - 6, 1).getTime() / 1000);
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+
+  const from6 = localMonthStart(now, -6);
+  const monthStart = localMonthStart(now);
   const { mult } = valueMode(await getRates(env.DB), null);
   const [funds, levels, incomeRows] = await Promise.all([
     fundsBreakdown(env),
     categoryMonthlyLevels(env, mult, { now }),
     // Дохід по ПОВНИХ місяцях (поточний частковий виключено) — для норми/стабільності.
     env.DB.prepare(
-      `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${incomeSum(mult)} AS income
+      `SELECT ${localYmSql(now)} AS m, ${incomeSum(mult)} AS income
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time < ? GROUP BY m ORDER BY m`,
     ).bind(from6, monthStart).all<{ m: string; income: number }>(),
@@ -159,9 +159,9 @@ export interface FinanceSnapshot {
 export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot> {
   const now = Math.floor(Date.now() / 1000);
   const from90 = now - 90 * 86400;
-  const dNow = new Date(now * 1000);
-  const monthStart = Math.floor(new Date(dNow.getFullYear(), dNow.getMonth(), 1).getTime() / 1000);
-  const from6mo = Math.floor(new Date(dNow.getFullYear(), dNow.getMonth() - 5, 1).getTime() / 1000);
+
+  const monthStart = localMonthStart(now);
+  const from6mo = localMonthStart(now, -5);
 
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null); // канонічно, зведено в ₴
@@ -195,7 +195,7 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
     ).bind(from90).all<{ importance: string; spent: number }>(),
     // §2: тренд 6 місяців (spend+income по місяцях) — щоб AI бачив траєкторію, не лише 90д.
     env.DB.prepare(
-      `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
+      `SELECT ${localYmSql(now)} AS m, ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? GROUP BY m ORDER BY m`,
     ).bind(from6mo).all<{ m: string; spend: number; income: number }>(),

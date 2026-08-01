@@ -15,7 +15,7 @@ import { st } from "../platform/i18n.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
-  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom, budgetStatus,
+  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom, budgetStatus, localMonthStart,
 } from "../finance/stats.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams, type NotifLocale } from "../../../shared/notif-i18n.ts";
@@ -337,9 +337,8 @@ interface MonthPace {
 async function monthPace(env: Env, now: number): Promise<MonthPace> {
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
-  const d = new Date(now * 1000);
-  const monthStart = Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
-  const nextMonthStart = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime() / 1000);
+  const monthStart = localMonthStart(now);
+  const nextMonthStart = localMonthStart(now, 1);
   const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
 
   const levels = await categoryMonthlyLevels(env, mult, { now });

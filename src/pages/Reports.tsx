@@ -12,7 +12,7 @@ import { errText } from "../lib/errors.ts";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { formatMinor, monthShort } from "../lib/format.ts";
-import { renderRich } from "../lib/citations.tsx";
+import { renderRich, renderRichPlain } from "../lib/citations.tsx";
 import { CashflowChart } from "../components/stats/CashflowChart.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
@@ -154,7 +154,9 @@ export function Reports() {
               </span>
               <span className="rc-date">{rangeLabel(r.period_from, r.period_to)}</span>
             </div>
-            {r.summary && <div className="rc-summary">{r.summary}</div>}
+            {/* `renderRichPlain`, а не `renderRich`: картка вже є `<Link>`, тож чипи-посилання
+                всередині дали б вкладений `<a>`. Токени зникають, суми — підсвічені. */}
+            {r.summary && <div className="rc-summary">{renderRichPlain(r.summary)}</div>}
             <div className="rc-foot">
               <span>{rDateTime.format(r.created_at * 1000)}</span>
               <span className="rc-open">{t("report.open")} →</span>

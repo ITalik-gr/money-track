@@ -9,6 +9,21 @@ import { getLocale } from "../i18n/locale.ts";
 // репортів і порадника. Невідомий/битий токен просто зникає (не показуємо сирий [tx:…]).
 const TX_RE = /\[tx:([A-Za-z0-9_-]+)\]/g;
 
+/**
+ * Те саме, але БЕЗ посилань — для прев'ю всередині елемента, який сам є посиланням.
+ *
+ * Картка звіту в списку — це `<Link>`, а вкладений `<a>` у `<a>` невалідний: React його
+ * відрендерить, браузер розірве, і клік по картці стане непередбачуваним. Тому тут токен
+ * `[tx:ID]` просто зникає (як і битий токен у `renderRich`), а суми й відсотки далі
+ * підсвічуються — без цього в списку висіли сирі `[tx:2jiKO6RV5t51i-jMSA]` на пів-рядка,
+ * і прев'ю читалось як зламане.
+ */
+export function renderRichPlain(text: string | null | undefined): ReactNode[] {
+  if (!text) return [];
+  // Прибираємо токен разом із пробілом ПЕРЕД ним, інакше лишається «Rozetka  і далі» з дірою.
+  return highlightAmounts(text.replace(/\s*\[tx:[A-Za-z0-9_-]+\]/g, ""));
+}
+
 export function renderRich(text: string | null | undefined): ReactNode[] {
   if (!text) return [];
   const out: ReactNode[] = [];

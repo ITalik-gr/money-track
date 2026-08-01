@@ -9,7 +9,7 @@ import { ownerLocale } from "../finance/categories-i18n.ts";
 import { fundsBreakdown } from "./advisor.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_COUNT, SPEND_TX_COUNT, valueMode, spendSum, incomeSum, amountSum,
-  lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit, categoryMonthlyLevels,
+  lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit, categoryMonthlyLevels, localMonthStart, localYmSql, localYm,
 } from "../finance/stats.ts";
 import { plannedActuals } from "../finance/subscriptions.ts";
 import { getState } from "../finance/repo.ts";
@@ -154,10 +154,9 @@ export async function buildReportContext(
     .map((lv) => ({ level: lv, amount_uah: money(imp[lv]), pct: impTotal > 0 ? Math.round((imp[lv] / impTotal) * 100) : 0 }));
 
   // §5: тренд 6 місяців (spend/income по місяцях) — для лінії на сторінці репорту.
-  const dTo = new Date(to * 1000);
-  const trendFrom = Math.floor(new Date(dTo.getFullYear(), dTo.getMonth() - 5, 1).getTime() / 1000);
+  const trendFrom = localMonthStart(to, -5);
   const trendRows = await env.DB.prepare(
-    `SELECT strftime('%Y-%m', t.time, 'unixepoch') AS m, ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
+    `SELECT ${localYmSql(to)} AS m, ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
      FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ? GROUP BY m ORDER BY m`,
   ).bind(trendFrom, to).all<{ m: string; spend: number; income: number }>();
   const trend: TrendPoint[] = (trendRows.results ?? []).map((r) => ({ month: r.m, spend_uah: money(r.spend), income_uah: money(r.income) }));
@@ -199,7 +198,9 @@ export async function buildReportContext(
 
   // §B прогноз не «burn×30»: беремо середнє за 3 ЗАВЕРШЕНІ місяці з тренду (стабільніше й
   // враховує сезонність), fallback — витрати періоду, масштабовані до 30 днів.
-  const curMonthKey = `${dTo.getUTCFullYear()}-${String(dTo.getUTCMonth() + 1).padStart(2, "0")}`;
+  // Той самий ключ, у якому згруповано `trend` (локальна зона) — інакше «поточний неповний
+  // місяць» не збігся б із жодним рядком і потрапив би в середнє як завершений.
+  const curMonthKey = localYm(to);
   const completeMonths = trend.filter((t) => t.month !== curMonthKey);
   const last3 = completeMonths.slice(-3);
   const periodScaledBurn = money(Math.round((cur.spend / periodDays) * 30));

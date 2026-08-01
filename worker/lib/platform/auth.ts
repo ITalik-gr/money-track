@@ -14,6 +14,26 @@ import type { Env } from "../../env.ts";
  * `token_version` (that bump invalidates the old cookies anyway).
  */
 export const SESSION_COOKIE = "__Host-mt_session";
+
+/**
+ * Cookie attributes for the session, in ONE place.
+ *
+ * ⚠️ The `__Host-` prefix is enforced on EVERY `Set-Cookie`, including the one that DELETES the
+ * cookie. That is what broke logout the day the prefix shipped: the sign-out path cleared the
+ * cookie with `{ path, maxAge: 0 }` and no `secure`, the browser rejected the header outright
+ * ("__Host- Cookie must have Secure attributes"), and the session survived its own sign-out.
+ * Exported as constants so a fourth call site cannot invent its own attribute list.
+ */
+export const SESSION_COOKIE_OPTS = {
+  httpOnly: true,
+  secure: true,
+  sameSite: "Lax",
+  path: "/",
+  maxAge: 60 * 60 * 24 * 30,
+} as const;
+
+/** Same attributes, zero lifetime — deletion still has to satisfy the prefix. */
+export const CLEAR_COOKIE_OPTS = { ...SESSION_COOKIE_OPTS, maxAge: 0 } as const;
 const TTL = 60 * 60 * 24 * 30; // 30 days
 // v1 = the single-password era; v2 = pre-revocation tokens with no `token_version` field.
 // Neither shape verifies any more — the payload has a different number of segments.

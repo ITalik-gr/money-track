@@ -8,7 +8,7 @@
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
-import { DEMO_COOKIE, SESSION_COOKIE } from "../lib/platform/auth.ts";
+import { CLEAR_COOKIE_OPTS, DEMO_COOKIE, SESSION_COOKIE } from "../lib/platform/auth.ts";
 import { bumpTokenVersion, deleteUser, findUserById } from "../lib/platform/directory.ts";
 
 export const account = new Hono<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>();
@@ -30,8 +30,8 @@ account.post("/logout-all", async (c) => {
   // A sandbox has no directory row to bump; its cookie dies with the sandbox in 24h anyway.
   if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
   await bumpTokenVersion(c.env.DIRECTORY, userId);
-  setCookie(c, SESSION_COOKIE, "", { path: "/", maxAge: 0 });
-  setCookie(c, DEMO_COOKIE, "", { path: "/", maxAge: 0 });
+  setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);
+  setCookie(c, DEMO_COOKIE, "", { ...CLEAR_COOKIE_OPTS, httpOnly: true });
   return c.json({ ok: true });
 });
 
@@ -66,7 +66,7 @@ account.post("/delete", async (c) => {
   await ns.get(ns.idFromName(userId)).reset();
   await deleteUser(c.env.DIRECTORY, userId);
 
-  setCookie(c, SESSION_COOKIE, "", { path: "/", maxAge: 0 });
-  setCookie(c, DEMO_COOKIE, "", { path: "/", maxAge: 0 });
+  setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);
+  setCookie(c, DEMO_COOKIE, "", { ...CLEAR_COOKIE_OPTS, httpOnly: true });
   return c.json({ ok: true });
 });

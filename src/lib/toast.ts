@@ -2,7 +2,14 @@
 // будь-який файл кликав `toast.success(...)` без прокидання контексту. <Toaster/> у Layout
 // підписується й рендерить стек.
 export type ToastType = "success" | "error" | "info";
-export interface ToastItem { id: number; type: ToastType; msg: string }
+export interface ToastItem {
+  id: number;
+  type: ToastType;
+  msg: string;
+  /** Куди вести по кліку. Тост про завершену фонову задачу без цього був глухим кутом:
+   *  повідомляє «порада готова» і лишає шукати Порадник самотужки (§A6). */
+  href?: string;
+}
 
 type Listener = (items: ToastItem[]) => void;
 
@@ -23,17 +30,17 @@ export function dismiss(id: number) {
   emit();
 }
 
-function push(type: ToastType, msg: string) {
+function push(type: ToastType, msg: string, href?: string) {
   const id = ++seq;
-  items = [...items, { id, type, msg }];
+  items = [...items, { id, type, msg, href }];
   emit();
-  // Авто-зникнення (помилки тримаємо трохи довше).
-  setTimeout(() => dismiss(id), type === "error" ? 6000 : 4000);
+  // Авто-зникнення (помилки тримаємо трохи довше; клікабельні — теж, бо на них треба встигнути).
+  setTimeout(() => dismiss(id), type === "error" || href ? 6000 : 4000);
   return id;
 }
 
 export const toast = {
-  success: (msg: string) => push("success", msg),
-  error: (msg: string) => push("error", msg),
-  info: (msg: string) => push("info", msg),
+  success: (msg: string, href?: string) => push("success", msg, href),
+  error: (msg: string, href?: string) => push("error", msg, href),
+  info: (msg: string, href?: string) => push("info", msg, href),
 };
