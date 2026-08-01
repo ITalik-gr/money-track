@@ -185,6 +185,16 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
       )}
       <div className="goal-sub">
         {g.account_title ? <span className="goal-tag">🏦 {g.account_title}</span> : <span className="goal-tag">{t("goal.manualTag")}</span>}
+        {/* Тип показуємо, лише коли він НЕ дефолтний: підпис «накопичення» на кожній картці —
+            це шум, бо він і так є нормою. Виняток інформативний, норма — ні. */}
+        {g.kind && g.kind !== "save_up" && <span className="goal-tag">{t(`goal.kind.${g.kind}` as const)}</span>}
+        {/* Авто-поповнення — обіцянка, що гроші додаються без тебе; про неї треба бачити,
+            не відкриваючи форму. */}
+        {g.autofill_kind && (
+          <span className="goal-tag auto">↻ {g.autofill_kind === "income_pct"
+            ? t("goal.autofillPctTag", { pct: g.autofill_value ?? 0 })
+            : t("goal.autofillFixedTag", { amount: Math.round((g.autofill_value ?? 0) / 100) })}</span>
+        )}
         {g.deadline && (
           <span className={`goal-tag ${dl != null && dl < 0 ? "neg" : ""}`}>
             {t("goal.untilPrefix")} {fmtDate.format(g.deadline * 1000)}{dl != null && dl >= 0 ? t("goal.daysSuffix", { days: dl }) : dl != null ? t("goal.overdue") : ""}

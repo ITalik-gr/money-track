@@ -67,13 +67,35 @@ function dayLabel(unix: number): string {
   return dayFmt.format(d);
 }
 
-/** Куди веде подія. null = нікуди (ліквідність — це стан, не сутність). */
+/**
+ * Куди веде подія.
+ *
+ * Сповіщення без переходу — це тупик: воно каже «бюджет вичерпано», а далі користувач шукає
+ * потрібний екран руками. Тому маршрут дає СПОЧАТКУ сутність (`entity_type` + `entity_id`), а
+ * коли її немає — сам ВИД події: у ліквідності чи просідання здоровʼя немає рядка в базі, але
+ * екран, де про це написано детально, цілком є.
+ *
+ * `null` лишається тільки для того, чого ми справді не вміємо показати — такий рядок
+ * лишається кнопкою «позначити прочитаним».
+ */
 function linkFor(n: Notification): string | null {
   if (n.entity_type === "report" && n.entity_id) return `/reports/${n.entity_id}`;
   if (n.entity_type === "tx" && n.entity_id) return `/tx/${n.entity_id}`;
   if (n.entity_type === "planned") return "/subs";
-  if (n.entity_type === "category") return "/stats";
+  if (n.entity_type === "account") return "/accounts";
   if (n.entity_type === "goal") return "/goals";
+  if (n.entity_type === "advice") return "/advisor";
+  if (n.entity_type === "budget_plan") return "/plan";
+  if (n.entity_type === "category" && n.entity_id) {
+    // Бюджет — це ліміт, і живе він у Плані; темп/перемога — це витрати, тож ведемо у список
+    // операцій цієї категорії. `catp`, а не `cat`: `entity_id` — вже рол-ап у батька (§Канон),
+    // тож фільтр має брати категорію РАЗОМ із підкатегоріями.
+    return n.kind === "budget" ? "/plan" : `/tx?catp=${n.entity_id}`;
+  }
+  // Події без власної сутності. Порадник — єдиний екран, де подушка, runway й індекс здоровʼя
+  // розібрані числами; спостереження моделі теж родом звідти (той самий знімок фінансів).
+  if (n.kind === "liquidity" || n.kind === "health_drop" || n.kind === "ai") return "/advisor";
+  if (n.kind === "todo") return "/tx";   // «багато без категорії» → саме там їх і розбирають
   return null;
 }
 
@@ -90,10 +112,15 @@ function Row({ n, onRead }: { n: Notification; onRead: (id: number) => void }) {
         {text.body && <span className="nt-text">{text.body}</span>}
       </span>
       <span className="nt-time">{timeFmt.format(n.created_at * 1000)}</span>
+      {/* Стрілка — єдина ознака, що рядок кудись веде. Без неї «перейти» й «просто позначити»
+          виглядають однаково, і про перехід дізнається лише той, хто навмання клікне. */}
+      {to && <span className="nt-go" aria-hidden="true">→</span>}
     </>
   );
-  const cls = `nt-row ${n.read_at ? "read" : "unread"}`;
-  // Клік = «прочитано» + перехід. Подія без сутності лишається кнопкою (лише позначити).
+  const cls = `nt-row ${n.read_at ? "read" : "unread"}${to ? " nt-link" : ""}`;
+  // Клік = «прочитано» + перехід. Позначаємо ЗАВЖДИ, і у випадку з переходом теж: подію,
+  // яку вже відкрили, лічильник непрочитаних більше рахувати не має.
+  // Подія без сутності лишається кнопкою — вона вміє рівно одне, позначити прочитаним.
   return to
     ? <Link to={to} className={cls} onClick={() => onRead(n.id)}>{body}</Link>
     : <button type="button" className={cls} onClick={() => onRead(n.id)}>{body}</button>;

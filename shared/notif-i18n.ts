@@ -84,11 +84,24 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
     case "job_done": {
       // Заголовок складаємо цілком, а не з «що» + «готово»: українською рід підмета міняє
       // закінчення («План готовий», але «Порада готова»), і склейка дала б аграматичний рядок.
-      const title = s(p, "job") === "budget"
-        ? (uk ? "План бюджетів готовий" : "Budget plan is ready")
-        : (uk ? "Порада готова" : "Advice is ready");
+      const budget = s(p, "job") === "budget";
+      // `auto` = задачу поставив розклад, а не людина (місячне оновлення поради 1-го числа).
+      // Той самий текст на обидва випадки перетворював заплановану роботу на подію без причини:
+      // «Порада готова» о 12:00 читалось як «щось само згенерувалось» (скарга 2026-08-01).
+      if (bool(p, "auto")) {
+        return {
+          title: budget
+            ? (uk ? "План бюджетів оновлено" : "Budget plan refreshed")
+            : (uk ? "Пораду оновлено на новий місяць" : "Advice refreshed for the new month"),
+          body: uk
+            ? "Плановий щомісячний перерахунок — ти цього не запускав."
+            : "Scheduled monthly refresh — you did not start this one.",
+        };
+      }
       return {
-        title,
+        title: budget
+          ? (uk ? "План бюджетів готовий" : "Budget plan is ready")
+          : (uk ? "Порада готова" : "Advice is ready"),
         body: uk
           ? "Згенерували у фоні — можна дивитись."
           : "Generated in the background — ready to view.",

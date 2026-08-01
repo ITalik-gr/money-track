@@ -503,6 +503,19 @@ export function localYm(unix: number): string {
   return `${p.y}-${String(p.m).padStart(2, "0")}`;
 }
 
+/**
+ * `YYYY-MM-DD` ЛОКАЛЬНОЇ доби.
+ *
+ * Той самий §APP_TZ, що й для меж періоду, але для ключів-рядків: `toISOString().slice(0,10)`
+ * віддає добу в UTC, тож щоночі з 00:00 до 03:00 за Києвом ключ показував учорашню дату. Для
+ * `dedup_key` сповіщень це означало, що подія, згенерована вночі, підписувалась учорашнім днем
+ * і зливалась із учорашньою.
+ */
+export function localYmd(unix: number): string {
+  const p = localParts(unix);
+  return `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}`;
+}
+
 /** Наскільки зона попереду UTC у цей момент, у секундах (+7200 узимку, +10800 влітку). */
 export function tzOffsetSec(unix: number): number {
   const p = localParts(unix);

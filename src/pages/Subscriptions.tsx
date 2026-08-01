@@ -69,11 +69,15 @@ function cadenceLabel(p: PlannedPayment): string {
   return n === 1 ? `/${unit}` : translate(loc, "sub.everyN", { n, unit });
 }
 
-// Місячний еквівалент (тижневі × 4.33; ділимо на period_count). Завершені не тягнуть.
+// Місячний еквівалент (ділимо на period_count; тижневі × середню кількість тижнів у місяці).
+// Завершені не тягнуть. Множник — той самий, що в канонічному `monthlyPlannedUAH` на сервері
+// (§SUB-MONTH): ця сторінка й Порадник мають називати ОДНЕ число, інакше «підписок на 3 100 ₴»
+// тут і «на 3 090 ₴» у пораді читається як помилка одного з двох.
+const WEEKS_PER_MONTH = 365.25 / 12 / 7;
 function monthly(p: PlannedPayment): number {
   if (isFinished(p)) return 0;
   const per = (p.period_amount ?? 0) / pcount(p);
-  return p.period === "week" ? per * 4.33 : per;
+  return p.period === "week" ? per * WEEKS_PER_MONTH : per;
 }
 
 // §G1: з середнього інтервалу днів між списаннями виводимо period + «кожні N».

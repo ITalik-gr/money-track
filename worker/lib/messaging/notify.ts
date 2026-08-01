@@ -12,10 +12,11 @@
 import type { Env } from "../../env.ts";
 import { getRates } from "../finance/finance.ts";
 import { st } from "../platform/i18n.ts";
-import { nextChargeUnix, plannedUAH, plannedActuals } from "../finance/subscriptions.ts";
+import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
-  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom, budgetStatus, localMonthStart,
+  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom, budgetStatus,
+  localMonthStart, localYm, localYmd,
 } from "../finance/stats.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams, type NotifLocale } from "../../../shared/notif-i18n.ts";
@@ -137,7 +138,12 @@ export async function clearNotifications(env: Env): Promise<void> {
 
 // ---- генерація ---------------------------------------------------------------
 
-const isoDay = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+// §APP_TZ: доба ключа — КИЇВСЬКА, не UTC. Воркер живе в UTC, тож `toISOString()` до 03:00 за
+// Києвом віддавав учорашню дату: подія, згенерована вночі (напр. кнопкою «Перевірити зараз»),
+// підписувалась учорашнім днем і зливалась дедупом із учорашньою — а «сьогодні» в місячних
+// гілках нижче рахується від `localMonthStart`, тобто вже по-київськи. Дві різні доби в одному
+// файлі — це і є те, як подія тихо зникає.
+const isoDay = (unix: number) => localYmd(unix);
 
 // Owner locale, read once per run — used to compose the stored fallback title/body and the
 // TG push. The feed itself re-renders client-side, so this only affects the fallback path.
@@ -205,8 +211,13 @@ async function insertDrafts(env: Env, drafts: Draft[], now: number, max = MAX_PE
  */
 export async function pushJobNotification(
   env: Env, kind: "advisor" | "report" | "budget", jobId: number, error: string | null,
+  auto = false,
 ): Promise<void> {
   if (error) return;
+  // Що поставив РОЗКЛАД — це та сама «ініціатива системи», що й AI-спостереження, тож і
+  // вимикається тим самим перемикачем. Що запустила людина — оголошуємо завжди: сховати
+  // результат дії, яку вона щойно замовила, було б не тишею, а зникненням роботи.
+  if (auto && !(await getPrefs(env))[kind === "report" ? "report" : "ai"]) return;
   const now = Math.floor(Date.now() / 1000);
   if (kind === "report") {
     await insertDrafts(env, await draftReports(env, now), now);
@@ -215,8 +226,16 @@ export async function pushJobNotification(
   await insertDrafts(env, [{
     kind: "ai",
     tkey: "job_done",
-    tparams: { job: kind },
+    // `auto` — задачу поставив КРОН, а не користувач (місячне оновлення поради 1-го числа).
+    // Без цієї позначки рядок читався як «твоя генерація готова» на щось, чого людина не
+    // запускала: 1 серпня о 12:00 порада «згенерувалась сама», і це виглядало як збій, а не
+    // як фіча (скарга 2026-08-01). Текст мусить казати, ЧОМУ подія зʼявилась.
+    tparams: { job: kind, auto },
     severity: "info",
+    // Перехід: порада живе на Пораднику, план бюджетів — у Плані. Без сутності рядок був
+    // тупиком — повідомляв, що щось готове, і не вів туди, де це подивитись.
+    entity_type: kind === "budget" ? "budget_plan" : "advice",
+    entity_id: null,
     // Ключ по id задачі: кожен ЗАПУСК — окрема подія, яку користувач сам замовив. Ключ із
     // датою («job:advisor:2026-08-01») зробив би два запуски за день одним рядком.
     dedup_key: `job:${kind}:${jobId}`,
@@ -354,7 +373,8 @@ async function monthPace(env: Env, now: number): Promise<MonthPace> {
   const rows = (cur.results ?? [])
     .filter((r): r is { id: number; name: string | null; spent: number; n: number } => r.id != null)
     .map((r) => ({ id: r.id, name: r.name ?? st(loc, "uncategorized"), spent: r.spent, n: r.n, usual: levels.get(r.id)?.level ?? 0 }));
-  return { monthKey: new Date(now * 1000).toISOString().slice(0, 7), elapsedFrac, rows };
+  // Ключ місяця — той самий локальний місяць, що й `monthStart` вище (§APP_TZ).
+  return { monthKey: localYm(now), elapsedFrac, rows };
 }
 
 /** Аномалія темпу категорії — той самий канон, що й «Радар аномалій» (/analytics/patterns). */
@@ -419,7 +439,7 @@ function draftWins(pace: MonthPace): Draft[] {
 async function draftBudgets(env: Env, now: number): Promise<Draft[]> {
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
-  const monthKey = new Date(now * 1000).toISOString().slice(0, 7);
+  const monthKey = localYm(now);   // §APP_TZ — `budgetStatus` рахує місяць від локальної півночі
 
   const out: Draft[] = [];
   for (const b of await budgetStatus(env, mult, now)) {
@@ -485,20 +505,8 @@ async function draftLiquidity(env: Env, now: number): Promise<Draft[]> {
     }>(),
   ]);
 
-  const horizon = now + 45 * 86400;
-  const charges: { at: number; amount: number }[] = [];
-  for (const p of plans.results ?? []) {
-    const amt = p.period_amount ?? 0;
-    if (amt <= 0) continue;
-    const uahAmt = plannedUAH(amt, p.currency_code, rates);
-    let t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now);
-    for (let guard = 0; guard < 200 && t <= horizon; guard++) {
-      if (p.end_date != null && t > p.end_date) break;
-      charges.push({ at: t, amount: uahAmt });
-      t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, t);
-    }
-  }
-  charges.sort((a, b) => a.at - b.at);
+  // §SUB-MONTH: розклад — канонічний `chargesBetween` (той самий, що в календарі й прогнозі).
+  const charges = chargesBetween(plans.results ?? [], rates, now + 1, now + 45 * 86400);
 
   // Один прохід: перше падіння проєкції нижче нуля і є провалом.
   let balance = funds.cushion;
@@ -609,7 +617,7 @@ async function draftHealthDrop(env: Env, now: number): Promise<Draft[]> {
 
   const latest = hist[0];
   // Порівнюємо з найсвіжішим записом, старшим за 5 днів — щоб не ловити добовий шум.
-  const cutoff = new Date((now - 5 * 86400) * 1000).toISOString().slice(0, 10);
+  const cutoff = isoDay(now - 5 * 86400);
   const past = hist.find((h) => h.day <= cutoff);
   if (!past) return [];
   const drop = past.score - latest.score;

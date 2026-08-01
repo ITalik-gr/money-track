@@ -200,6 +200,10 @@ const S = {
     uk: "Ця ціль привʼязана до банки — її прогрес веде баланс рахунку, вносити вручну не треба.",
     en: "This goal tracks a jar account — its progress follows the account balance, no manual entries needed.",
   },
+  goalKind: { uk: "Невідомий тип цілі", en: "Unknown goal type" },
+  goalAutofillKind: { uk: "Невідоме правило авто-поповнення", en: "Unknown auto-contribution rule" },
+  goalAutofillValue: { uk: "Правило авто-поповнення потребує додатного значення", en: "An auto-contribution rule needs a positive value" },
+  goalAutofillPct: { uk: "Відсоток від доходу має бути від 1 до 100", en: "The income share must be between 1 and 100" },
   jobBadKind: { uk: "Невідомий тип задачі", en: "Unknown job kind" },
   tgDemoUnavailable: {
     uk: "У демо Telegram недоступний — пісочниця живе 24 години.",

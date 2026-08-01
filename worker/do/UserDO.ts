@@ -161,6 +161,14 @@ export class UserDO extends DurableObject<Env> {
     }
 
     if (kind === "daily") {
+      // §P2.1 — авто-внески в цілі. У ДОБОВОМУ проході, хоч правило й місячне: місячний крон
+      // ходить лише 1-го числа, і правило «% від доходу» при нульовому минулому місяці
+      // пропустило б місяць цілком. Ідемпотентність тримає `autofill_last_ym`, тож зайві
+      // прогони нічого не додають.
+      await step("goal_autofill", async () => {
+        const { runGoalAutofill } = await import("../lib/finance/goals.ts");
+        await runGoalAutofill(env);
+      });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
         await generateNotifications(env);
@@ -211,7 +219,9 @@ export class UserDO extends DurableObject<Env> {
       // довше за будь-який розумний бюджет, а alarm рознесе їх сам.
       await step("monthly_advice", async () => {
         const { enqueueJob } = await import("../lib/ai/jobs.ts");
-        await enqueueJob(env, "advisor");
+        // `auto` доїжджає до сповіщення (`isAuto`) і міняє його текст: людина цю генерацію не
+        // запускала, тож рядок мусить назвати причину, а не рапортувати «готово».
+        await enqueueJob(env, "advisor", { auto: true, reason: "monthly" });
         await this.armAlarm();
       });
     }

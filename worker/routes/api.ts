@@ -6,11 +6,12 @@ import { computeSummary, createCashTx, getRates, toUAHMinor, ratesForDays, type 
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_WHERE,
   SPEND_COUNT, valueMode, uahMult, spendSum, incomeSum, amountSum, periodBounds,
-  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmSql, localParts,
+  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localYmSql, localParts,
   type PeriodMode, type Preset,
 } from "../lib/finance/stats.ts";
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import { catNameSql, localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
+import { recalcGoal, isGoalKind, isAutofillKind } from "../lib/finance/goals.ts";
 import { st, stLit } from "../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 
@@ -1158,21 +1159,44 @@ api.get("/goals", async (c) => {
   return c.json(goals);
 });
 
+/**
+ * §P2.1 — правило авто-поповнення з тіла запиту (міграція 0037).
+ *
+ * Валідуємо ОБИДВА поля разом: `autofill_kind` без осмисленого значення = мовчазне «нічого
+ * не нараховується», а це найгірший стан для фічі, суть якої «воно саме». `null` (вимкнути)
+ * лишається легальним, тож `undefined` (не чіпати) і `null` тут різні речі.
+ */
+function parseAutofill(kind: unknown, value: unknown, locale: NotifLocale): { kind: string | null; value: number | null } | { error: string } {
+  if (kind == null) return { kind: null, value: null };
+  if (!isAutofillKind(kind)) return { error: st(locale, "goalAutofillKind") };
+  const v = Math.round(Number(value));
+  if (!Number.isFinite(v) || v <= 0) return { error: st(locale, "goalAutofillValue") };
+  // Відсоток — саме відсоток: 150% доходу не «агресивна ціль», а помилка вводу.
+  if (kind === "income_pct" && v > 100) return { error: st(locale, "goalAutofillPct") };
+  return { kind, value: v };
+}
+
 api.post("/goals", async (c) => {
-  const b = await c.req.json<{ name: string; target_amount: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string }>();
+  const b = await c.req.json<{ name: string; target_amount: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string; kind?: string; autofill_kind?: string | null; autofill_value?: number | null }>();
+  const locale = c.get("locale");
   if (!b.name?.trim()) return c.json({ error: "name required" }, 400);
   if (!(b.target_amount > 0)) return c.json({ error: "target required" }, 400);
+  if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
+  const auto = parseAutofill(b.autofill_kind ?? null, b.autofill_value, locale);
+  if ("error" in auto) return c.json({ error: auto.error }, 400);
   const r = await c.env.DB.prepare(
-    `INSERT INTO savings_goals (name, target_amount, current_amount, account_id, deadline, color, note, is_active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    `INSERT INTO savings_goals (name, target_amount, current_amount, account_id, deadline, color, note, kind, autofill_kind, autofill_value, is_active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
   ).bind(b.name.trim(), b.target_amount, b.current_amount ?? 0, b.account_id ?? null, b.deadline ?? null,
-         b.color ?? "#2e6be6", b.note ?? null, Math.floor(Date.now() / 1000)).run();
+         b.color ?? "#2e6be6", b.note ?? null, b.kind ?? "save_up", auto.kind, auto.value,
+         Math.floor(Date.now() / 1000)).run();
   return c.json({ ok: true, id: r.meta.last_row_id });
 });
 
 api.patch("/goals/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const b = await c.req.json<{ name?: string; target_amount?: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string }>();
+  const locale = c.get("locale");
+  const b = await c.req.json<{ name?: string; target_amount?: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string; kind?: string; autofill_kind?: string | null; autofill_value?: number | null }>();
   const sets: string[] = [];
   const binds: unknown[] = [];
   if (b.name !== undefined) { if (!b.name.trim()) return c.json({ error: "name required" }, 400); sets.push("name = ?"); binds.push(b.name.trim()); }
@@ -1182,6 +1206,18 @@ api.patch("/goals/:id", async (c) => {
   if (b.deadline !== undefined) { sets.push("deadline = ?"); binds.push(b.deadline); }
   if (b.color !== undefined) { sets.push("color = ?"); binds.push(b.color); }
   if (b.note !== undefined) { sets.push("note = ?"); binds.push(b.note); }
+  if (b.kind !== undefined) {
+    if (!isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
+    sets.push("kind = ?"); binds.push(b.kind);
+  }
+  if (b.autofill_kind !== undefined) {
+    const auto = parseAutofill(b.autofill_kind, b.autofill_value, locale);
+    if ("error" in auto) return c.json({ error: auto.error }, 400);
+    // Вимикання правила скидає й штамп місяця: інакше після повторного вмикання того ж
+    // місяця нарахування б не сталось — правило виглядало б увімкненим і мертвим.
+    sets.push("autofill_kind = ?", "autofill_value = ?", "autofill_last_ym = NULL");
+    binds.push(auto.kind, auto.value);
+  }
   if (!sets.length) return c.json({ ok: true });
   await c.env.DB.prepare(`UPDATE savings_goals SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
   return c.json({ ok: true });
@@ -1194,20 +1230,13 @@ api.delete("/goals/:id", async (c) => {
 
 // ---- §P2.1: внески в ціль ---------------------------------------------------
 //
-// `current_amount` тепер — денормалізований SUM внесків, і ЄДИНИЙ його писар — ці два
-// ендпоінти (`recalcGoal`). Те саме правило, що для §COMPENSATION: денормалізовану суму
-// має рухати рівно одне місце, інакше вона розійдеться з джерелом і ніхто не помітить.
+// `current_amount` — денормалізований SUM внесків; його ЄДИНИЙ писар — `recalcGoal`
+// (`lib/finance/goals.ts`). Переїхав у lib, щойно зʼявився другий охочий писати цю суму —
+// крон авто-поповнення. Те саме правило, що для §COMPENSATION.
 //
 // ⚠️ Ціль, привʼязану до БАНКИ (`account_id`), внески не чіпають: там джерело правди —
 // баланс рахунку, який веде банк. Дозволити ще й ручні внески означало б рахувати ті самі
 // гроші двічі.
-async function recalcGoal(db: AppDb, goalId: number): Promise<number> {
-  const r = await db.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM goal_contributions WHERE goal_id = ?")
-    .bind(goalId).first<{ s: number }>();
-  const total = r?.s ?? 0;
-  await db.prepare("UPDATE savings_goals SET current_amount = ? WHERE id = ?").bind(total, goalId).run();
-  return total;
-}
 
 api.get("/goals/:id/contributions", async (c) => {
   const rows = await c.env.DB.prepare(
@@ -1470,23 +1499,30 @@ api.get("/analytics/safe-to-spend", async (c) => {
 
   const tot = await c.env.DB.prepare(
     `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND ${EFF_IMPORTANCE} = 'essential' THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS essential,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND t.planned_id IS NOT NULL THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS subs_paid
+            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND ${EFF_IMPORTANCE} = 'essential' THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS essential
      FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?`,
-  ).bind(monthStart, now).first<{ spend: number; income: number; essential: number; subs_paid: number }>();
+  ).bind(monthStart, now).first<{ spend: number; income: number; essential: number }>();
 
-  // §CUR-PLAN: зводимо в ₴ по currency_code плану — інакше підписка $5 важить 5 ₴
-  // і safe-to-spend завищується.
-  const subs = await c.env.DB.prepare(
-    `SELECT CAST(ROUND(COALESCE(SUM(period_amount * ${uahMult(rates, "currency_code")}), 0)) AS INTEGER) AS planned
-     FROM planned_payments WHERE is_active = 1`,
-  ).first<{ planned: number }>();
+  // §SUB-MONTH: «залишок підписок» = РОЗКЛАД списань до кінця місяця, а не «місячна сума
+  // мінус уже сплачене». Стара формула сумувала `period_amount` усіх активних планів як
+  // місячні (квартальний платіж важив повну суму щомісяця, тижневий — лише один тиждень),
+  // і різницю з фактом зменшувала на все, що вже списалось, — тобто помилка розкладу
+  // просочувалась просто в safe-to-spend. Розклад відповідає на питання буквально: що ще
+  // спишеться між зараз і 1-м числом наступного місяця.
+  // §CUR-PLAN: суми в ₴ (`chargesBetween` зводить сам) — вони в одному ряду з витратами місяця.
+  const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
+  const monthEnd = localMonthStart(now, 1);
+  const plans = await c.env.DB.prepare(
+    "SELECT period_amount, currency_code, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
+  ).all<{ period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null }>();
+  const sum = (from: number, to: number) =>
+    chargesBetween(plans.results ?? [], rates, from, to).reduce((s, ch) => s + ch.amount, 0);
 
   const income = tot?.income ?? 0;
   const spend = tot?.spend ?? 0;
   const essential = tot?.essential ?? 0;
-  const subsMonthly = subs?.planned ?? 0;
-  const subsRemaining = Math.max(0, subsMonthly - (tot?.subs_paid ?? 0));
+  const subsMonthly = sum(monthStart, monthEnd - 1);
+  const subsRemaining = sum(now + 1, monthEnd - 1);
   const safe = income - spend - subsRemaining;
   return c.json({
     safe, income, spend, essential, discretionary: Math.max(0, spend - essential),
@@ -1860,7 +1896,9 @@ api.get("/analytics/forecast", async (c) => {
   const projectedHigh = projectedSpend + band;
 
   // Майбутні планові платежі, що спишуться до кінця місяця (інформативно).
-  const { nextChargeUnix, plannedUAH } = await import("../lib/finance/subscriptions.ts");
+  // §SUB-MONTH: розклад дає канонічний `chargesBetween` — тижневий план у залишку місяця
+  // спишеться кілька разів, а власний однопрохідний цикл рахував рівно одне списання на план.
+  const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
   const fxRates = await getRates(c.env.DB);
   const planned = await c.env.DB.prepare(
     "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
@@ -1868,15 +1906,8 @@ api.get("/analytics/forecast", async (c) => {
 
   // §CUR-PLAN: суми зводимо в ₴ — вони йдуть в один ряд із витратами місяця (теж ₴).
   const monthEnd = localMonthStart(now, 1);
-  const upcomingItems = (planned.results ?? [])
-    .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
-    .map((p) => ({
-      title: p.title,
-      amount: plannedUAH(p.period_amount, p.currency_code, fxRates),
-      at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now),
-    }))
-    .filter((p) => p.amount > 0 && p.at < monthEnd)
-    .sort((a, b) => a.at - b.at);
+  const upcomingItems = chargesBetween(planned.results ?? [], fxRates, now + 1, monthEnd - 1)
+    .map((ch) => ({ title: ch.plan.title, amount: ch.amount, at: ch.at }));
   const upcomingPlanned = upcomingItems.reduce((s, p) => s + p.amount, 0);
 
   return c.json({
@@ -2004,7 +2035,7 @@ api.get("/analytics/cashflow-calendar", async (c) => {
   const from = Number(url.searchParams.get("from") ?? defFrom);
   const to = Number(url.searchParams.get("to") ?? defTo);
 
-  const { nextChargeUnix, plannedUAH } = await import("../lib/finance/subscriptions.ts");
+  const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
   const { fundsBreakdown } = await import("../lib/ai/advisor.ts");
   const [planned, funds, rates] = await Promise.all([
     c.env.DB.prepare(
@@ -2014,22 +2045,14 @@ api.get("/analytics/cashflow-calendar", async (c) => {
     getRates(c.env.DB),
   ]);
 
-  const iso = (u: number) => new Date(u * 1000).toISOString().slice(0, 10);
   // §CUR-PLAN: `amount` — у ₴, бо його сумують по днях і віднімають від подушки (теж ₴).
   // Оригінал лишаємо в `amount_orig`/`currency_code`, щоб UI показав «$5» поряд.
-  const items: { at: number; date: string; title: string; amount: number; amount_orig: number; currency_code: number; category_id: number | null; kind: string }[] = [];
-  for (const p of planned.results ?? []) {
-    const amt = p.period_amount ?? 0;
-    if (amt <= 0) continue;
-    const uah = plannedUAH(amt, p.currency_code, rates);
-    let t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, from - 1);
-    for (let guard = 0; guard < 400 && t <= to; guard++) {
-      if (p.end_date != null && t > p.end_date) break; // розстрочка добігла кінця
-      items.push({ at: t, date: iso(t), title: p.title, amount: uah, amount_orig: amt, currency_code: p.currency_code ?? 980, category_id: p.category_id, kind: p.kind });
-      t = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, t);
-    }
-  }
-  items.sort((a, b) => a.at - b.at);
+  // Розгортання плану в дати — канонічний `chargesBetween` (§SUB-MONTH), а не власний цикл.
+  const items = chargesBetween(planned.results ?? [], rates, from, to).map((ch) => ({
+    at: ch.at, date: localYmd(ch.at), title: ch.plan.title, amount: ch.amount,
+    amount_orig: ch.plan.period_amount ?? 0, currency_code: ch.plan.currency_code ?? 980,
+    category_id: ch.plan.category_id, kind: ch.plan.kind,
+  }));
   return c.json({ from, to, now, cushion: funds.cushion, items });
 });
 
@@ -3050,12 +3073,15 @@ api.get("/analytics/health", async (c) => {
   const { financeHealth } = await import("../lib/ai/advisor.ts");
   const h = await financeHealth(c.env);
   const now = Math.floor(Date.now() / 1000);
-  const day = new Date(now * 1000).toISOString().slice(0, 10);
+  // §APP_TZ: доба — київська. Скор пишеться при кожному відкритті сторінки, тож із UTC-ключем
+  // вечірній перегляд і нічний писали В ОДИН рядок, а `draftHealthDrop` (стрічка сповіщень)
+  // порівнює саме ці рядки — просідання «за 5 днів» рахувалось по зсунутій сітці днів.
+  const day = localYmd(now);
   try {
     await c.env.DB.prepare(
       "INSERT INTO health_history (day, score, ts) VALUES (?, ?, ?) ON CONFLICT(day) DO UPDATE SET score = excluded.score, ts = excluded.ts",
     ).bind(day, h.score, now).run();
-    const since = new Date((now - 45 * 86400) * 1000).toISOString().slice(0, 10);
+    const since = localYmd(now - 45 * 86400);
     const rows = await c.env.DB.prepare(
       "SELECT day, score FROM health_history WHERE day >= ? ORDER BY day",
     ).bind(since).all<{ day: string; score: number }>();

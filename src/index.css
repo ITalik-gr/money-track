@@ -784,6 +784,9 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .goal-sub { display: flex; flex-wrap: wrap; gap: 6px; }
 .goal-tag { font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 6px; padding: 3px 8px; }
 .goal-tag.neg { color: var(--neg); }
+/* §P2.1 — авто-поповнення. Акцент, бо це єдиний тег, який означає ДІЮ, що станеться сама:
+   решта тегів описують те, що вже є (джерело прогресу, дедлайн, тип). */
+.goal-tag.auto { color: var(--accent); background: var(--accent-soft); }
 .goal-note { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 
 /* icon picker (category editor) */
@@ -1724,6 +1727,19 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   .avatar-chip { padding: 4px; gap: 0; }
 }
 
+/* Перемикач календарний ⇄ ковзний період у топбарі (`.pill-toggle` + цей модифікатор).
+   Сусіди тут — пігулки (пошук, чіп фонової задачі, чіп акаунта), тож і він пігулка: у ряду
+   закруглених контролів прямокутник із `--radius-sm` читався як чужий елемент, що заїхав у
+   топбар. На вузькому лишається сама іконка (підпис у рівномірній стрічці топбару інакше
+   розіпхав би її ширше за viewport, §Клієнт і розкладка) — і тоді контрол мусить стати КОЛОМ:
+   той самий падінг навколо самої іконки дав би овал (та сама помилка, що вже була на `.avatar-chip`). */
+.topbar-period { border-radius: 999px; padding: 0 14px; gap: 7px; }
+.topbar-period:hover { background: var(--surface-2); }
+@media (max-width: 900px) {
+  .topbar-period .tp-label { display: none; }
+  .topbar-period { width: 40px; padding: 0; gap: 0; justify-content: center; }
+}
+
 /* ---- page head ----------------------------------------------------------- */
 .page-head {
   display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
@@ -1734,13 +1750,17 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .page-head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 /* §1: вирівнюємо фільтри Статистики в одну лінію однакової висоти (період | режим | валюта) */
 .page-head-actions .seg { height: 40px; box-sizing: border-box; align-items: center; }
-.page-head-actions .pill-toggle {
+/* ⚠️ Селектор БЕЗ `.page-head-actions` (2026-08-01). Клас називається `pill-toggle`, тож коли
+   перемикач періоду переїхав у топбар, він приїхав туди голим: браузерна кнопка з дефолтною
+   рамкою, без падінгів і без проміжку між іконкою й підписом. Вигляд контрола не має залежати
+   від того, у якому контейнері він опинився — базові стилі живуть на самому класі. */
+.pill-toggle {
   height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px;
   padding: 0 13px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
   background: var(--surface); color: var(--ink-2); font-size: 13px; font-weight: 500; cursor: pointer;
   font-family: inherit; line-height: 1;
 }
-.page-head-actions .pill-toggle:hover { border-color: var(--muted); color: var(--ink); }
+.pill-toggle:hover { border-color: var(--muted); color: var(--ink); }
 /* §1: валюта — проєктний Select (не native <select>), компактний, вирівняний з .seg/.pill-toggle */
 .page-head-actions .ph-cur-sel { width: auto; }
 .page-head-actions .ph-cur-sel .sel-trigger {
@@ -1764,9 +1784,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .dash-hero .kpi-row { height: 100%; }
 .dash-hero .kpi-tile { height: 100%; justify-content: space-between; }
 
-/* Main split: wide analysis column + narrow "quick glance" rail */
+/* Main split: wide analysis column + narrow "quick glance" rail.
+   ⚠️ Рейл повернуто (2026-08-01). Його мовчки прибрали разом із §A6, лишивши `minmax(0,1fr)`:
+   коментар обіцяв дві колонки, код давав одну, і головна перетворювалась на довгу стрічку
+   на всю ширину — індекс здоровʼя, кредитка й останні операції їхали ПІД аналітику, тобто
+   «швидкий погляд» переставав бути швидким. Ширші за 1440px екрани обмежує `.content`. */
 .dash { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); align-items: start; }
-@media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr); } }
+@media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr) 340px; } }
 .dash-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 .dash-rail { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 .dash-col { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
@@ -1901,7 +1925,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .us-amt-uah { font-size: var(--fs-xs); font-weight: 400; color: var(--muted); }
 
 /* §4 Пульс місяця — норма заощаджень + топ-категорії міні */
-.pulse { padding: 16px; margin-top: auto; }
+/* 16 → 18/20, як у сусідів по ряду (`.sts-card`, `.forecast-card`): картки однієї пари з
+   різним падінгом дають різний ритм тексту в двох сусідніх колонках. `margin-top: auto`
+   більше не потрібен — заголовок виїхав із картки, і вона живе в `<section>`, а не у flex-колонці. */
+.pulse { padding: 18px 20px; }
 .pulse-save { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
 .pulse-rate { font-size: 34px; line-height: 1; margin-top: 4px; }
 .pulse-rate.pos { color: var(--pos); }
@@ -3405,10 +3432,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* Клікабельний тост (§A6 «готово → перейти»): стрілка — єдине, що відрізняє його від
    інформаційного, бо сітка вже має три колонки, а четверта ламала б вирівнювання решти. */
 .toast-link { grid-template-columns: auto 1fr auto auto; }
-/* Перемикач періоду в топбарі: та сама пігулка, що в Статистиці, лише вирівняна під висоту
-   сусідів (40px). На вузькому — сама іконка: підпис у рівномірній стрічці топбару інакше
-   розіпхав би її ширше за viewport (§Клієнт і розкладка). */
-.topbar-period { height: 40px; }
 /* §P2.1 — внески в ціль. Відділені лінією: це ДІЯ всередині картки-показника, і без межі
    поле вводу читалось як частина самої цілі. */
 .goal-contrib { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
@@ -3421,7 +3444,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .gc-del { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; }
 .gc-del:hover { color: var(--neg); }
 .gc-empty { margin-top: 9px; font-size: 12.5px; color: var(--muted); }
-@media (max-width: 900px) { .topbar-period .tp-label { display: none; } }
 .toast-link .toast-go { color: var(--accent); font-size: 14px; }
 .toast-link:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
 .toast-x:hover { color: var(--ink); }
@@ -3623,6 +3645,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   background: none; color: inherit; font: inherit; cursor: pointer;
   transition: background var(--dur-1) var(--ease-out);
 }
+/* Рядок, що веде на екран події (той самий прийом, що в `.toast-link`): четверта колонка під
+   стрілку. Стрілка приглушена й прокидається на hover — вона підказка, а не акцент. */
+.nt-row.nt-link { grid-template-columns: auto 1fr auto auto; }
+.nt-go { color: var(--muted); font-size: 14px; line-height: 1.5; transition: color var(--dur-1) var(--ease-out); }
+.nt-row.nt-link:hover .nt-go { color: var(--accent); }
 .nt-row:first-child { border-top: none; }
 .nt-row:hover { background: var(--surface-2); }
 .nt-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }

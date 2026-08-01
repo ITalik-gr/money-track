@@ -140,7 +140,7 @@ export async function runNextJob(env: Env): Promise<boolean> {
     await env.DB.prepare(
       "UPDATE ai_jobs SET status = 'done', result_json = ?, finished_at = ? WHERE id = ?",
     ).bind(result === undefined ? null : JSON.stringify(result), Math.floor(Date.now() / 1000), job.id).run();
-    await announce(env, job.kind, job.id, null);
+    await announce(env, job.kind, job.id, null, isAuto(job.params_json));
   } catch (e) {
     // §Обробка помилок: справжня причина доходить до користувача. «Спробуй ще раз» замість
     // «ліміт токенів» / «нема ключа» робить збій моделі недіагностованим.
@@ -148,9 +148,22 @@ export async function runNextJob(env: Env): Promise<boolean> {
     await env.DB.prepare(
       "UPDATE ai_jobs SET status = 'failed', error = ?, finished_at = ? WHERE id = ?",
     ).bind(msg, Math.floor(Date.now() / 1000), job.id).run();
-    await announce(env, job.kind, job.id, msg);
+    await announce(env, job.kind, job.id, msg, isAuto(job.params_json));
   }
   return true;
+}
+
+/**
+ * Чи поставив задачу розклад, а не людина (`params.auto`).
+ *
+ * Різниця видима: те, що людина натиснула сама, вона й так чекає; те, що прийшло з крону,
+ * мусить сказати про себе, ЧОМУ воно тут — інакше «Порада готова» о 12:00 виглядає як подія
+ * без причини. Битий JSON тут не подія — тихо вважаємо задачу ручною.
+ */
+function isAuto(paramsJson: string | null): boolean {
+  if (!paramsJson) return false;
+  try { return (JSON.parse(paramsJson) as { auto?: unknown }).auto === true; }
+  catch { return false; }
 }
 
 /**
@@ -185,10 +198,10 @@ async function executeJob(env: Env, kind: JobKind, params: unknown): Promise<unk
  * стрічка лишається слідом для всіх інших випадків. Best-effort — не даємо їй завалити
  * задачу, яка насправді відпрацювала.
  */
-async function announce(env: Env, kind: JobKind, jobId: number, error: string | null): Promise<void> {
+async function announce(env: Env, kind: JobKind, jobId: number, error: string | null, auto = false): Promise<void> {
   try {
     const { pushJobNotification } = await import("../messaging/notify.ts");
-    await pushJobNotification(env, kind, jobId, error);
+    await pushJobNotification(env, kind, jobId, error, auto);
   } catch {
     /* стрічка не критична для самої генерації */
   }

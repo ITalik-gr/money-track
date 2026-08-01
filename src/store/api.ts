@@ -267,6 +267,16 @@ export interface TransferReviewRow {
   real_category_id: number | null; note: string | null; needs_attention: boolean;
 }
 
+export type GoalKind = "save_up" | "debt_payoff" | "sinking_fund";
+export type AutofillKind = "fixed" | "income_pct";
+
+/** Тіло створення/редагування цілі. Одна форма на обидві мутації — вони приймають те саме. */
+export interface GoalBody {
+  name: string; target_amount: number; current_amount?: number;
+  account_id?: string | null; deadline?: number | null; color?: string; note?: string;
+  kind?: GoalKind; autofill_kind?: AutofillKind | null; autofill_value?: number | null;
+}
+
 export interface SavingsGoal {
   id: number;
   name: string;
@@ -278,6 +288,13 @@ export interface SavingsGoal {
   deadline: number | null;
   color: string | null;
   note: string | null;
+  // §P2.1 (міграція 0037). `kind` міняє суть прогресу: save_up накопичує, debt_payoff гасить
+  // борг, sinking_fund не «закінчується» на досягненні суми. `autofill_*` — правило
+  // щомісячного авто-внеску (NULL = вимкнено); `autofill_last_ym` — за який місяць уже нараховано.
+  kind?: GoalKind;
+  autofill_kind?: AutofillKind | null;
+  autofill_value?: number | null;
+  autofill_last_ym?: string | null;
   current: number; // ефективний прогрес (баланс банки або ручний)
 }
 
@@ -736,11 +753,11 @@ export const api = createApi({
       providesTags: ["Tx"],
     }),
     getGoals: b.query<SavingsGoal[], void>({ query: () => "/goals", providesTags: ["Goal"] }),
-    createGoal: b.mutation<{ ok: boolean; id: number }, { name: string; target_amount: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string }>({
+    createGoal: b.mutation<{ ok: boolean; id: number }, GoalBody>({
       query: (body) => ({ url: "/goals", method: "POST", body }),
       invalidatesTags: ["Goal"],
     }),
-    updateGoal: b.mutation<{ ok: boolean }, { id: number; name?: string; target_amount?: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string }>({
+    updateGoal: b.mutation<{ ok: boolean }, { id: number } & Partial<GoalBody>>({
       query: ({ id, ...body }) => ({ url: `/goals/${id}`, method: "PATCH", body }),
       invalidatesTags: ["Goal"],
     }),

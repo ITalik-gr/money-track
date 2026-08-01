@@ -4,8 +4,8 @@ import type { Env } from "../../env.ts";
 import { type AdviceResult, type AiFact, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type ChatTool, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { getRates, toUAHMinor } from "../finance/finance.ts";
-import { nextChargeUnix, plannedUAH } from "../finance/subscriptions.ts";
-import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm } from "../finance/stats.ts";
+import { nextChargeUnix, plannedUAH, monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
+import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm } from "../finance/stats.ts";
 import { ownerLocale } from "../finance/categories-i18n.ts";
 import { st, num } from "../platform/i18n.ts";
 
@@ -218,12 +218,22 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}`,
     ).bind(prevMonthStart, prevMonthStart + (now - monthStart)).all<{ id: number; name: string | null; spent: number }>(),
-    // §2: фіксовані зобовʼязання — сума активних підписок на місяць.
-    // §CUR-PLAN: зведено в ₴ по валюті плану — інакше $5-підписка йшла в AI-контекст як 5 ₴.
+    // §2: фіксовані зобовʼязання — активні плани самі, а не одна SUM.
+    // §SUB-MONTH: місячний тягар рахує `monthlyPlannedUAH` у JS (квартальний план = третина
+    // суми на місяць, тижневий ≈ 4.3 суми). SQL-сума `period_amount` цього не вміла.
+    // Категорія їде разом із планом: користувач тримає підписки не лише в «Підписках»
+    // (Anthropic — «Софт», інтернет — «Комуналка»), і без цього списку модель бачила лише
+    // категорію «Підписки» й називала підписками саме її вміст (скарга користувача).
     env.DB.prepare(
-      `SELECT CAST(ROUND(COALESCE(SUM(period_amount * ${uahMult(rates, "currency_code")}), 0)) AS INTEGER) AS planned,
-              COUNT(*) AS n FROM planned_payments WHERE is_active = 1`,
-    ).first<{ planned: number; n: number }>(),
+      `SELECT p.title, p.kind, p.period_amount, p.currency_code, p.period, p.period_count,
+              p.start_date, p.end_date, c.name AS category
+       FROM planned_payments p LEFT JOIN categories c ON c.id = p.category_id
+       WHERE p.is_active = 1`,
+    ).all<{
+      title: string; kind: string; period_amount: number | null; currency_code: number | null;
+      period: string; period_count: number | null; start_date: number; end_date: number | null;
+      category: string | null;
+    }>(),
     // §E1/C: разові vs регулярні за поточний місяць — щоб AI не проектував разове як норму.
     recurringOneoffSplit(env, monthStart, now, mult),
     // §CTX: найближчі планові списання (для «коли платити») — рахуємо nextChargeUnix у JS.
@@ -246,7 +256,20 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
     const spent = monthSpent.get(b.id) ?? 0;
     return { category: b.name, limit_uah: Math.round(b.lim / 100), spent_uah: Math.round(spent / 100), used_pct: b.lim > 0 ? Math.round((spent / b.lim) * 100) : null };
   });
-  const subsMonthly = Math.round((subsAgg?.planned ?? 0) / 100);
+  // §SUB-MONTH: усереднений місячний тягар планів (канон). Список — щоб модель могла назвати
+  // конкретні підписки, а не переказувати категорію.
+  const subsPlans = (subsAgg.results ?? []).filter((p) => monthlyPlannedUAH(p, rates, now) > 0);
+  const subsMonthly = Math.round(sumMonthlyPlannedUAH(subsPlans, rates, now) / 100);
+  const subsItems = subsPlans
+    .map((p) => ({
+      title: p.title,
+      monthly_uah: Math.round(monthlyPlannedUAH(p, rates, now) / 100),
+      category: p.category,
+      kind: p.kind,
+      period: (p.period_count ?? 1) > 1 ? `${p.period}×${p.period_count}` : p.period,
+    }))
+    .sort((a, b) => b.monthly_uah - a.monthly_uah)
+    .slice(0, 20);
   // `levels` (канонічний місячний рівень) уже завантажено вище в Promise.all — джерело avg_month і burn.
   const catAvgMonth = (id: number, spent90: number) => Math.round((levels.get(id)?.level ?? spent90 / 3) / 100);
   // §2/§5: найбільші операції з id — щоб AI цитував конкретику токеном [tx:ID].
@@ -328,7 +351,9 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
     },
     this_month_note: "this_month — поточний місяць ДО СЬОГОДНІ, порівняний із ТАКИМ САМИМ відрізком минулого місяця (стільки ж днів від 1-го числа), тож vs_prev_month_uah і drivers чесні, а не «місяць проти неповного місяця». savings_rate_pct=null означає нульовий дохід цього місяця — так і скажи, не пиши −100%. drivers — куди пішла РІЗНИЦЯ (+ = стало більше): назви 1-2 головні поіменно, це найкорисніша фраза у всій пораді.",
     subscriptions_monthly_uah: subsMonthly,
-    subscriptions_count: subsAgg?.n ?? 0,
+    subscriptions_count: subsPlans.length,
+    subscriptions: subsItems,
+    subscriptions_note: "subscriptions — ОГОЛОШЕНІ регулярні платежі користувача (planned_payments) з їхньою категорією; monthly_uah уже усереднено на місяць (квартальний план = третина суми, тижневий ≈ 4.3). ⚠️ Підписка НЕ дорівнює категорії «Підписки»: інтернет може лежати в «Комуналці», хмара — в «Софті», страховка — в «Здоровʼї». Коли говориш про регулярні платежі, спирайся на цей список і на subscriptions_monthly_uah, а НЕ на суму категорії «Підписки» з top_categories — вона менша й описує інше.",
     upcoming_charges: upcoming,
     top_categories: (cats.results ?? []).map((c) => ({ id: c.id, name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: catAvgMonth(c.id, c.spent) })),
     top_merchants: (merchants.results ?? []).map((m) => ({ merchant: m.merchant, spent_90d_uah: Math.round(m.spent / 100), avg_month_uah: Math.round(m.spent / 3 / 100) })),
