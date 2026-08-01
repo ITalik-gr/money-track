@@ -236,6 +236,45 @@ app.get("/demo", async (c) => {
 //
 // The guard also publishes `userId` on the context: from here on, "authenticated" and
 // "whose database" are the same fact, and P0.3 resolves the Durable Object from it.
+
+/**
+ * Per-user rate limit for authenticated traffic (security review tail, 2026-08-01).
+ *
+ * Demo sandboxes already had spend caps; real users had nothing, so one runaway `useEffect` or
+ * a copied cookie in a loop could hammer the API — and on the AI paths that is a bill, not just
+ * load. Two buckets, because the two costs differ by three orders of magnitude:
+ *   • general `/api/*` — generous, only a brake on obvious loops;
+ *   • AI endpoints — tight, because every call is money at Anthropic.
+ *
+ * ⚠️ Honest limits, so nobody reads this as more than it is:
+ *   • the window lives in ISOLATE MEMORY, like `accessCache`. Cloudflare runs many isolates, so
+ *     the effective ceiling is per-isolate, not global. That is fine for the threat this exists
+ *     for (a loop, a script, an accident); a genuinely distributed flood is the WAF's job, and
+ *     a WAF rule on `/api/*` is still the right ops-side complement.
+ *   • counting in D1 instead would put a write in front of every request — the exact cost this
+ *     whole guard is built to avoid.
+ */
+const RL_WINDOW_MS = 60_000;
+const RL_GENERAL = 240;   // ~4 req/s sustained — far above any real screen
+const RL_AI = 20;         // an AI call takes 30-60s; 20/min is already unreachable by hand
+/** Paths whose cost is a model call rather than a query. */
+const AI_PATHS = /^\/api\/(jobs|advisor\/(generate|chat)|reports\/generate|budgets\/(propose|chat)|transactions\/[^/]+\/chat|events\/[^/]+\/ai|ingest|enrich|receipt)/;
+
+const rlBuckets = new Map<string, { until: number; n: number }>();
+function rateLimited(key: string, cap: number): number | null {
+  const now = Date.now();
+  const b = rlBuckets.get(key);
+  if (!b || now >= b.until) {
+    rlBuckets.set(key, { until: now + RL_WINDOW_MS, n: 1 });
+    // Cheap eviction: the map only grows while a window is open, and one pass on rollover keeps
+    // it from accumulating entries for users who left hours ago.
+    if (rlBuckets.size > 5000) for (const [k, v] of rlBuckets) if (now >= v.until) rlBuckets.delete(k);
+    return null;
+  }
+  b.n++;
+  return b.n > cap ? Math.ceil((b.until - now) / 1000) : null;
+}
+
 const guard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>(async (c, next) => {
   const resolved = await resolveRequestUser(c.env, { session: getCookie(c, SESSION_COOKIE), demo: getCookie(c, DEMO_COOKIE) });
   if (!resolved) return c.json({ error: "unauthorized" }, 401);
@@ -262,6 +301,19 @@ const guard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isO
         .catch(() => { /* best-effort: the directory may not carry 0004 yet */ }),
     );
   }
+  // Rate limit AFTER identity is settled, so the bucket is per USER rather than per IP — two
+  // people behind one NAT must not throttle each other, and a signed-out request never gets here.
+  const path = new URL(c.req.url).pathname;
+  // Лише не-GET: `GET /api/jobs` — це поллінг чіпа (раз на 4с, поки задача йде), він нічого не
+  // коштує й не має ділити стелю з самими викликами моделі.
+  const ai = c.req.method !== "GET" && AI_PATHS.test(path);
+  const retry = rateLimited(`${ai ? "ai" : "gen"}:${resolved.userId}`, ai ? RL_AI : RL_GENERAL);
+  if (retry != null) {
+    return c.json({ error: "rate_limited", detail: `too many requests, retry in ${retry}s` }, 429, {
+      "retry-after": String(retry),
+    });
+  }
+
   c.set("userId", resolved.userId);
   c.set("isOwner", isOwner);
   await next();

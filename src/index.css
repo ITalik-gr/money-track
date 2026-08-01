@@ -1773,11 +1773,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 /* Paired supporting cards within the main column (equal, side by side) */
 .dash-pair { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); }
-/* `end`, а не `start`: половини пари майже ніколи не однакової висоти (порожній стан коротший
-   за наповнену картку), і при вирівнюванні по верху нижні краї розходились на пів-екрана —
-   ряд читався як «щось не догрузилось». По низу порожнеча збирається ЗВЕРХУ, де її не видно,
-   а обидві картки стоять на спільній лінії, як і решта рядів сторінки. */
-@media (min-width: 680px) { .dash-pair { grid-template-columns: 1fr 1fr; align-items: end; } }
+/* `start`, а не `end` (повернуто 2026-08-01 за фідбеком). Вирівнювання по НИЗУ мало сенс, поки
+   половина пари = сама картка; але кожна половина несе ще й ЗАГОЛОВОК секції над карткою, і по
+   низу ці заголовки роз'їжджались по вертикалі — око читає розсинхрон заголовків як зламану
+   верстку швидше, ніж різну довжину карток. Заголовки в одному рядку важливіші за рівний низ. */
+@media (min-width: 680px) { .dash-pair { grid-template-columns: 1fr 1fr; align-items: start; } }
 .dash-pair > * { min-width: 0; }
 /* Safety net (ROADMAP L3): a pair whose second half rendered nothing must not leave half the
    page blank — the survivor takes the full width. Empty-state cards cover the cases we know
@@ -3405,6 +3405,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* Клікабельний тост (§A6 «готово → перейти»): стрілка — єдине, що відрізняє його від
    інформаційного, бо сітка вже має три колонки, а четверта ламала б вирівнювання решти. */
 .toast-link { grid-template-columns: auto 1fr auto auto; }
+/* Перемикач періоду в топбарі: та сама пігулка, що в Статистиці, лише вирівняна під висоту
+   сусідів (40px). На вузькому — сама іконка: підпис у рівномірній стрічці топбару інакше
+   розіпхав би її ширше за viewport (§Клієнт і розкладка). */
+.topbar-period { height: 40px; }
+@media (max-width: 900px) { .topbar-period .tp-label { display: none; } }
 .toast-link .toast-go { color: var(--accent); font-size: 14px; }
 .toast-link:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
 .toast-x:hover { color: var(--ink); }
@@ -3703,13 +3708,16 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
    ряд має вирівнятись увесь. Тому відступ заголовка задаємо явно. */
 .acct-sec .section-head { margin-top: 18px; }
 /* Усередині вужчої колонки картки мають бути щільнішими, інакше в колонку влазить одна. */
-.acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(185px, 1fr)); gap: 12px; margin-bottom: 6px; }
+.acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 6px; }
 /* Але коли секція займає всю сторінку (один банк — саме так у більшості), 185px давало 7-8
    колонок: назва рахунку обрізалась до «madel…», а кнопка редагування тиснулась до неї
    впритул. Ширина картки має залежати від ширини СЕКЦІЇ, тож це container-query, а не
    media-query — інакше довелось би вибирати одне число на обидва випадки. */
 @container (min-width: 660px) {
-  .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 14px; }
+  /* 232 → 270 (фідбек 2026-08-01): у широкій секції картки все одно виходили тіснуватими —
+     форма редагування всередині картки (селект ролі + textarea) диктує більший мінімум, ніж
+     статичний вигляд. Ширину задає найширший СТАН картки, а не найвужчий. */
+  .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
 }
 .acct-tail { margin-top: 4px; }
 

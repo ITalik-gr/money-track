@@ -4,7 +4,7 @@ import { Icon } from "../ui/Icon.tsx";
 import { Toaster } from "../ui/Toaster.tsx";
 import { CommandPalette, openCommandPalette } from "./CommandPalette.tsx";
 import { AiJobChip } from "./AiJobs.tsx";
-import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation } from "../../store/api.ts";
+import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation, useGetPeriodModeQuery, useSetPeriodModeMutation } from "../../store/api.ts";
 import { useLocale, useT } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
 import type { TranslationKey } from "../../i18n/index.ts";
@@ -105,6 +105,30 @@ function NotifBell() {
   );
 }
 
+/**
+ * Перемикач календарний ⇄ ковзний період.
+ *
+ * Живе в топбарі, бо `app_state.period_mode` — ГЛОБАЛЬНИЙ: він міняє межі періоду і на Головній,
+ * і в Статистиці, і в аналітиці. Керування ним лише на одній сторінці означало, що з решти
+ * екранів цифри мовчки міняються від дії, якої тут не видно (скарга 2026-08-01).
+ */
+function PeriodModeToggle() {
+  const t = useT();
+  const { data } = useGetPeriodModeQuery();
+  const [setMode] = useSetPeriodModeMutation();
+  const mode = data?.mode ?? "calendar";
+  return (
+    <button
+      className="pill-toggle topbar-period"
+      title={t("stats.modeTip")}
+      onClick={() => setMode(mode === "calendar" ? "rolling" : "calendar")}
+    >
+      <Icon name={mode === "calendar" ? "calendar" : "repeat"} size={14} />
+      <span className="tp-label">{mode === "calendar" ? t("stats.mode.calendar") : t("stats.mode.rolling")}</span>
+    </button>
+  );
+}
+
 // Demo banner (P4.4). Shown on EVERY screen of a demo sandbox, non-dismissable: it must be
 // obvious the numbers are fictional, that the sandbox resets, and that AI is limited.
 function DemoBanner({ expiresAt }: { expiresAt?: number | null }) {
@@ -187,6 +211,7 @@ export function Layout() {
           </Link>
           <div className="topbar-right">
             <TopSearch />
+            <PeriodModeToggle />
             {/* §A6: поки фонова генерація йде, вона видима з БУДЬ-ЯКОЇ сторінки — інакше
                 «пішов і забув» нічим не відрізняється від «нічого не запустилось». */}
             <AiJobChip />
