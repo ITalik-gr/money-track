@@ -205,6 +205,15 @@ export class UserDO extends DurableObject<Env> {
         await generateAndStoreReport(env, "month"); // idempotent per period
         reported = true;
       });
+      // Місячний авто-огляд: разом зі звітом оновлюємо ПОРАДУ, щоб 1-го числа Порадник говорив
+      // про новий місяць, а не показував знімок, зроблений колись у середині минулого. Через
+      // чергу (§A6), а не напряму: два Sonnet-виклики поспіль в одному прогоні крону — це
+      // довше за будь-який розумний бюджет, а alarm рознесе їх сам.
+      await step("monthly_advice", async () => {
+        const { enqueueJob } = await import("../lib/ai/jobs.ts");
+        await enqueueJob(env, "advisor");
+        await this.armAlarm();
+      });
     }
 
     if (reported) {

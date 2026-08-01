@@ -5,7 +5,7 @@ import { type AdviceResult, type AiFact, type AiUsageBrief, type BudgetChatResul
 import { getState, setState } from "../finance/repo.ts";
 import { getRates, toUAHMinor } from "../finance/finance.ts";
 import { nextChargeUnix, plannedUAH } from "../finance/subscriptions.ts";
-import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql } from "../finance/stats.ts";
+import { STATS_JOINS, EFF_AMOUNT, uahMult, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm } from "../finance/stats.ts";
 import { ownerLocale } from "../finance/categories-i18n.ts";
 import { st, num } from "../platform/i18n.ts";
 
@@ -162,10 +162,11 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
 
   const monthStart = localMonthStart(now);
   const from6mo = localMonthStart(now, -5);
+  const prevMonthStart = localMonthStart(now, -1);
 
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null); // канонічно, зведено в ₴
-  const [funds, levels, cats, merchants, events, importance, trend, budgetRows, monthByCat, subsAgg, split, upcomingRows] = await Promise.all([
+  const [funds, levels, cats, merchants, events, importance, trend, budgetRows, monthByCat, prevMonthByCat, subsAgg, split, upcomingRows] = await Promise.all([
     fundsBreakdown(env),
     // P1: канонічний місячний рівень категорій — джерело і для avg_month, і для burn (sumLevels).
     categoryMonthlyLevels(env, mult, { now }),
@@ -209,6 +210,14 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}`,
     ).bind(monthStart).all<{ id: number; spent: number }>(),
+    // Той самий зріз за ПОВНИЙ попередній місяць — щоб «на що пішла різниця» була рахунком,
+    // а не здогадом моделі. Той самий канон, інші межі; порівнюємо ПОРІВНЯННИЙ відрізок
+    // (стільки ж днів від початку місяця), інакше 1 серпня різниця = «місяць ще не почався».
+    env.DB.prepare(
+      `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent
+       FROM transactions t ${STATS_JOINS}
+       WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}`,
+    ).bind(prevMonthStart, prevMonthStart + (now - monthStart)).all<{ id: number; name: string | null; spent: number }>(),
     // §2: фіксовані зобовʼязання — сума активних підписок на місяць.
     // §CUR-PLAN: зведено в ₴ по валюті плану — інакше $5-підписка йшла в AI-контекст як 5 ₴.
     env.DB.prepare(
@@ -260,6 +269,31 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
   // «пояснив» із «порахував».
   const facts = await activeFacts(env, now);
 
+  // §ADV-METRICS (2026-08-01) — три числа, яких у пораді бракувало, і які модель інакше або
+  // не називала, або вигадувала. Усі рахуються ТУТ, детерміновано, з тих самих канонічних сум.
+  const advLoc = await ownerLocale(env.DB);
+  const monthKey = localYm(now);
+  const thisMonth = (trend.results ?? []).find((r) => r.m === monthKey);
+  const mIncome = thisMonth?.income ?? 0, mSpend = thisMonth?.spend ?? 0;
+  // Норма заощаджень МІСЯЦЯ-ДО-ДАТИ. null при нульовому доході — «−∞%» не число, а шум.
+  const savingsRatePct = mIncome > 0 ? Math.round(((mIncome - mSpend) / mIncome) * 100) : null;
+
+  // Куди пішла різниця vs той самий відрізок минулого місяця. Сортуємо за |дельтою|, бо
+  // цікаве і зростання, і падіння: категорія, що впала на 5к, пояснює місяць так само добре.
+  const prevByCat = new Map((prevMonthByCat.results ?? []).map((r) => [r.id, { spent: Math.abs(r.spent), name: r.name }]));
+  const nameById = new Map<number, string>();
+  for (const r of cats.results ?? []) if (r.id != null) nameById.set(r.id, r.name ?? "");
+  for (const [id, v] of prevByCat) if (v.name) nameById.set(id, v.name);
+  const drivers = [...new Set([...monthSpent.keys(), ...prevByCat.keys()])]
+    .map((id) => {
+      const cur = monthSpent.get(id) ?? 0;
+      const prev = prevByCat.get(id)?.spent ?? 0;
+      return { category: nameById.get(id) ?? st(advLoc, "uncategorized"), delta_uah: Math.round((cur - prev) / 100), now_uah: Math.round(cur / 100), prev_uah: Math.round(prev / 100) };
+    })
+    .filter((d) => d.delta_uah !== 0)
+    .sort((a, b) => Math.abs(b.delta_uah) - Math.abs(a.delta_uah))
+    .slice(0, 5);
+
   const context: Record<string, unknown> = {
     period_note: "top_categories/top_merchants/by_event — суми за ОСТАННІ 90 ДНІВ (3 місяці); avg_month_uah — усереднене на місяць. monthly_burn_uah — середні витрати/міс. НЕ плутай 90д із місячною; спирайся на avg_month_uah. by_importance: essential=обов'язкові (не ріж), discretionary=бажані, optional=необов'язкові (найбезпечніше скорочувати). monthly_trend: spend/income по місяцях (6 міс) — дивись динаміку/сезонність, а не лише середнє. budgets: ліміт vs факт цього місяця (used_pct>100 = перевитрата — підсвіти). subscriptions_monthly_uah: фіксовані підписки/міс (майже незмінні). upcoming_charges: найближчі списання (in_days) — використовуй для порад про тайминг/пріоритет платежів. recent_oneoff — РАЗОВІ витрати цього місяця (податки, лікар, велика покупка): НЕ проектуй їх як регулярні. Цитуй конкретику: категорії, підписки, бюджети.",
     period_days: 90,
@@ -283,6 +317,16 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
       total_uah: Math.round(split.oneoff.spent / 100),
       items: split.oneoff_items.map((o) => ({ merchant: o.merchant, category: o.category, amount_uah: Math.round(o.amount / 100) })),
     },
+    // §ADV-METRICS: показники САМЕ цього місяця (не 90д) — модель раніше або мовчала про них,
+    // або називала на око.
+    this_month: {
+      income_uah: Math.round(mIncome / 100),
+      spend_uah: Math.round(mSpend / 100),
+      savings_rate_pct: savingsRatePct,
+      vs_prev_month_uah: Math.round((mSpend - [...prevByCat.values()].reduce((s2, v) => s2 + v.spent, 0)) / 100),
+      drivers,
+    },
+    this_month_note: "this_month — поточний місяць ДО СЬОГОДНІ, порівняний із ТАКИМ САМИМ відрізком минулого місяця (стільки ж днів від 1-го числа), тож vs_prev_month_uah і drivers чесні, а не «місяць проти неповного місяця». savings_rate_pct=null означає нульовий дохід цього місяця — так і скажи, не пиши −100%. drivers — куди пішла РІЗНИЦЯ (+ = стало більше): назви 1-2 головні поіменно, це найкорисніша фраза у всій пораді.",
     subscriptions_monthly_uah: subsMonthly,
     subscriptions_count: subsAgg?.n ?? 0,
     upcoming_charges: upcoming,
