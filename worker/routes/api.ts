@@ -1192,6 +1192,58 @@ api.delete("/goals/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---- §P2.1: внески в ціль ---------------------------------------------------
+//
+// `current_amount` тепер — денормалізований SUM внесків, і ЄДИНИЙ його писар — ці два
+// ендпоінти (`recalcGoal`). Те саме правило, що для §COMPENSATION: денормалізовану суму
+// має рухати рівно одне місце, інакше вона розійдеться з джерелом і ніхто не помітить.
+//
+// ⚠️ Ціль, привʼязану до БАНКИ (`account_id`), внески не чіпають: там джерело правди —
+// баланс рахунку, який веде банк. Дозволити ще й ручні внески означало б рахувати ті самі
+// гроші двічі.
+async function recalcGoal(db: AppDb, goalId: number): Promise<number> {
+  const r = await db.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM goal_contributions WHERE goal_id = ?")
+    .bind(goalId).first<{ s: number }>();
+  const total = r?.s ?? 0;
+  await db.prepare("UPDATE savings_goals SET current_amount = ? WHERE id = ?").bind(total, goalId).run();
+  return total;
+}
+
+api.get("/goals/:id/contributions", async (c) => {
+  const rows = await c.env.DB.prepare(
+    "SELECT id, amount, at, note, source FROM goal_contributions WHERE goal_id = ? ORDER BY at DESC, id DESC LIMIT 100",
+  ).bind(Number(c.req.param("id"))).all();
+  return c.json(rows.results ?? []);
+});
+
+api.post("/goals/:id/contributions", async (c) => {
+  const id = Number(c.req.param("id"));
+  const locale = c.get("locale");
+  const b = await c.req.json<{ amount?: number; at?: number; note?: string | null }>()
+    .catch(() => ({} as { amount?: number; at?: number; note?: string | null }));
+  const amount = Math.round(Number(b.amount));
+  // Нуль забороняємо окремо від NaN: «0» проходить `Number.isFinite`, але внесок на нуль —
+  // це рядок в історії, який нічого не означає.
+  if (!Number.isFinite(amount) || amount === 0) return c.json({ error: st(locale, "goalContribAmount") }, 400);
+
+  const goal = await c.env.DB.prepare("SELECT id, account_id FROM savings_goals WHERE id = ? AND is_active = 1")
+    .bind(id).first<{ id: number; account_id: string | null }>();
+  if (!goal) return c.json({ error: st(locale, "goalNotFound") }, 404);
+  if (goal.account_id) return c.json({ error: st(locale, "goalJarNoContrib") }, 400);
+
+  await c.env.DB.prepare(
+    "INSERT INTO goal_contributions (goal_id, amount, at, note, source) VALUES (?, ?, ?, ?, 'manual')",
+  ).bind(id, amount, Math.floor(b.at ?? Date.now() / 1000), b.note?.trim() || null).run();
+  return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
+});
+
+api.delete("/goals/:id/contributions/:cid", async (c) => {
+  const id = Number(c.req.param("id"));
+  await c.env.DB.prepare("DELETE FROM goal_contributions WHERE id = ? AND goal_id = ?")
+    .bind(Number(c.req.param("cid")), id).run();
+  return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
+});
+
 // ---- custom categories ------------------------------------------------------
 
 api.post("/categories", async (c) => {

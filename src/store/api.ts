@@ -3,6 +3,8 @@ import type { Account, Budget, Category, EventGroup, PlannedPayment, AiUsageStat
 import type { NotifTemplateKey } from "../../shared/notif-i18n.ts";
 
 // §A6 — фонова AI-генерація. Дзеркалить рядок `ai_jobs` у БД юзера.
+export interface GoalContribution { id: number; amount: number; at: number; note: string | null; source: string }
+
 export type AiJobKind = "advisor" | "report" | "budget";
 export interface AiJob {
   id: number;
@@ -1074,6 +1076,21 @@ export const api = createApi({
       invalidatesTags: ["Notification"],
     }),
 
+    // §P2.1 — внески в ціль. `current` тепер SUM цих рядків, тож будь-яка мутація тут
+    // інвалідує і сам список цілей.
+    getGoalContributions: b.query<GoalContribution[], number>({
+      query: (id) => `/goals/${id}/contributions`,
+      providesTags: (_r, _e, id) => [{ type: "Goal", id }],
+    }),
+    addGoalContribution: b.mutation<{ ok: boolean; current: number }, { id: number; amount: number; note?: string }>({
+      query: ({ id, ...body }) => ({ url: `/goals/${id}/contributions`, method: "POST", body }),
+      invalidatesTags: (_r, _e, { id }) => ["Goal", { type: "Goal", id }],
+    }),
+    deleteGoalContribution: b.mutation<{ ok: boolean; current: number }, { id: number; cid: number }>({
+      query: ({ id, cid }) => ({ url: `/goals/${id}/contributions/${cid}`, method: "DELETE" }),
+      invalidatesTags: (_r, _e, { id }) => ["Goal", { type: "Goal", id }],
+    }),
+
     // §A6 — довгі AI-генерації у фоні. Ставимо задачу й одразу відпускаємо користувача;
     // `JobsProvider` сам довідається про «готово» і оновить потрібний екран.
     createJob: b.mutation<{ job_id: number; created: boolean }, { kind: AiJobKind; params?: unknown }>({
@@ -1241,6 +1258,9 @@ export const {
   useGenerateNotificationsMutation,
   useGetNotifPrefsQuery,
   useSetNotifPrefsMutation,
+  useGetGoalContributionsQuery,
+  useAddGoalContributionMutation,
+  useDeleteGoalContributionMutation,
   useCreateJobMutation,
   useGetTelegramLinkQuery,
   useLinkTelegramMutation,

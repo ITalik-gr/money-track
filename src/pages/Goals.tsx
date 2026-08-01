@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { dateFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
-import { useGetGoalsQuery, useDeleteGoalMutation, useGetAccountsQuery } from "../store/api.ts";
+import { toast } from "../lib/toast.ts";
+import { errText } from "../lib/errors.ts";
+import {
+  useGetGoalsQuery, useDeleteGoalMutation, useGetAccountsQuery,
+  useGetGoalContributionsQuery, useAddGoalContributionMutation, useDeleteGoalContributionMutation,
+} from "../store/api.ts";
 import { GoalGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
@@ -80,6 +85,64 @@ export function Goals() {
   );
 }
 
+/**
+ * §P2.1 — внески в ціль: додати рух і побачити історію.
+ *
+ * Історія згорнута за замовчуванням: на екрані з шістьма цілями шість розгорнутих списків —
+ * це стіна, у якій самі цілі губляться. Кнопка «+» завжди видима, бо саме вона тут дія.
+ */
+function GoalContribs({ goalId }: { goalId: number }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  // `skip`, поки згорнуто: історія потрібна рівно тому, хто її відкрив.
+  const { data: items = [] } = useGetGoalContributionsQuery(goalId, { skip: !open });
+  const [add, { isLoading }] = useAddGoalContributionMutation();
+  const [del] = useDeleteGoalContributionMutation();
+
+  async function submit() {
+    // Кома як десятковий роздільник — на українській розкладці її вводять частіше за крапку.
+    const major = Number(amount.replace(",", "."));
+    if (!Number.isFinite(major) || major === 0) return;
+    try {
+      await add({ id: goalId, amount: Math.round(major * 100) }).unwrap();
+      setAmount("");
+    } catch (e) { toast.error(errText(e)); }
+  }
+
+  return (
+    <div className="goal-contrib">
+      <div className="row" style={{ gap: 6 }}>
+        <input
+          className="gc-input"
+          inputMode="decimal"
+          placeholder={t("goal.contribPlaceholder")}
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+        />
+        <button className="btn sm" disabled={!amount || isLoading} onClick={submit}>{t("goal.contribAdd")}</button>
+        <button className="btn sm ghost" onClick={() => setOpen(!open)}>{open ? t("goal.contribHide") : t("goal.contribHistory")}</button>
+      </div>
+      {open && (
+        items.length ? (
+          <ul className="gc-list">
+            {items.map((c) => (
+              <li key={c.id}>
+                <span className={c.amount < 0 ? "neg" : "pos"}>
+                  {c.amount > 0 ? "+" : ""}<Money minor={c.amount} decimals={false} />
+                </span>
+                <span className="gc-date">{fmtDate.format(c.at * 1000)}</span>
+                <button className="gc-del" aria-label={t("common.delete")} onClick={() => del({ id: goalId, cid: c.id })}>×</button>
+              </li>
+            ))}
+          </ul>
+        ) : <div className="gc-empty">{t("goal.contribEmpty")}</div>
+      )}
+    </div>
+  );
+}
+
 function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void; onDelete: () => void }) {
   const t = useT();
   const ratio = g.target_amount > 0 ? Math.min(g.current / g.target_amount, 1) : 0;
@@ -129,6 +192,9 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
         )}
       </div>
       {g.note && <div className="goal-note">{g.note}</div>}
+      {/* Внески — лише для РУЧНОЇ цілі: прогрес цілі-банки веде баланс рахунку, і ручний
+          внесок поверх нього рахував би ті самі гроші двічі (сервер це теж відхиляє). */}
+      {!g.account_id && <GoalContribs goalId={g.id} />}
     </div>
   );
 }

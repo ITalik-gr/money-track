@@ -3409,6 +3409,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
    сусідів (40px). На вузькому — сама іконка: підпис у рівномірній стрічці топбару інакше
    розіпхав би її ширше за viewport (§Клієнт і розкладка). */
 .topbar-period { height: 40px; }
+/* §P2.1 — внески в ціль. Відділені лінією: це ДІЯ всередині картки-показника, і без межі
+   поле вводу читалось як частина самої цілі. */
+.goal-contrib { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.gc-input { flex: 1; min-width: 0; font-size: 13px; padding: 6px 9px; }
+.gc-list { list-style: none; margin: 9px 0 0; padding: 0; display: grid; gap: 5px; }
+.gc-list li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; font-size: 12.5px; }
+.gc-list .pos { color: var(--pos); font-weight: 600; }
+.gc-list .neg { color: var(--neg); font-weight: 600; }
+.gc-date { color: var(--muted); }
+.gc-del { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; }
+.gc-del:hover { color: var(--neg); }
+.gc-empty { margin-top: 9px; font-size: 12.5px; color: var(--muted); }
 @media (max-width: 900px) { .topbar-period .tp-label { display: none; } }
 .toast-link .toast-go { color: var(--accent); font-size: 14px; }
 .toast-link:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
