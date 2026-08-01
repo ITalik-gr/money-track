@@ -1891,6 +1891,8 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §1 Аналітика доходу — джерела + стабільність */
 .inc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .inc-sources { display: flex; flex-direction: column; gap: 8px; }
+/* «Надходжень ще не було» — стан, а не порожнеча: панель без нього читалась як недовантажена. */
+.inc-empty { font-size: 13px; color: var(--muted); }
 /* §1: значення — ФІКСОВАНА ширина (не auto): кожен рядок — окремий grid-контекст, тож
    auto-колонка рахується per-row і зсуває трек бару відносно сусідніх рядків. */
 .inc-src { display: grid; grid-template-columns: 1fr 60px 112px; align-items: center; gap: 10px; }
@@ -2275,7 +2277,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .catbar .cb-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
 .catbar .cb-track { display: block; flex: 1; height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; min-width: 40px; }
 .catbar .cb-fill { display: block; height: 100%; border-radius: 999px; min-width: 4px; }
-.catbar .cb-val { width: 92px; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; }
+/* `flex-shrink: 0` — сума НІКОЛИ не переносить розряди на другий рядок: без нього у вузькому
+   контейнері колонка стискалась нижче своїх 92px і «2 295 ₴» ламалось надвоє. Зрізана або
+   переламана сума виглядає як інше число — те саме правило, що для ширини осі Y на графіках. */
+.catbar .cb-val { width: 92px; flex-shrink: 0; white-space: nowrap; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; }
 /* Спарклайн у рядках списків — фіксована ширина, ховаємо на вузьких (щоб не тіснити суму). */
 .spark { flex-shrink: 0; display: block; }
 @media (max-width: 640px) { .spark { display: none; } }
@@ -2484,6 +2489,30 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   .cf-items { display: none; }
   .cf-damt { font-size: 10px; }
   .cf-pop { min-width: 180px; }
+}
+/* Шапка календаря на телефоні — У ДВА РЯДКИ.
+   Було: `.ai-head` — один flex-рядок, де `.cf-nav` забирає ~190px (дві кнопки + назва місяця з
+   `min-width: 116px`), а текстовий блок стискається до того, що лишилось. На 390px екрані це
+   ~120px: заголовок ламався на «Cashflow-» / «календар», підзаголовок — на чотири рядки, і
+   шапка ставала вищою за перший тиждень сітки. Тому: заголовок бере весь рядок, навігація
+   спускається під нього окремою смугою (там їй місця вистачає з запасом).
+   ⚠️ Скоуп саме `.cf-card`: `.ai-head` — спільний патерн AI-карток, і в них шапка не має нав-групи. */
+@media (max-width: 620px) {
+  .cf-card { padding: 14px; }
+  .cf-card .ai-head { flex-wrap: wrap; row-gap: 10px; }
+  /* `:not(.cf-nav)` — саме текстовий блок: навігація теж `div`, і без винятку вона б теж
+     поїхала в другий рядок на всю ширину. */
+  .cf-card .ai-head > div:not(.cf-nav) { flex: 1 1 100%; order: 2; }
+  .cf-card .ai-badge { order: 1; }
+  .cf-card .cf-nav { order: 1; }
+  /* Число дня й сума в один рядок не влазять на вузьких клітинках (390px ÷ 7 ≈ 47px): сума
+     переносилась під число й розпирала клітинку. Стовпчик — свідомо, а не як побічний ефект. */
+  .cf-dhead { flex-direction: column; align-items: flex-start; gap: 1px; }
+  .cf-damt { text-align: left; }
+  .cf-wd, .cf-grid { gap: 4px; }
+  .cf-day { padding: 3px 4px; }
+  /* Підсумок теж у стовпчик: два числа поруч на 390px тиснуться до нечитабельного. */
+  .cf-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
 }
 
 /* §P4: What-if симулятор */
@@ -2913,13 +2942,21 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .rep-presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
 .rep-custom { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
 .rep-custom .label { margin-bottom: var(--sp-2); }
-/* Дати НЕ розтягуються на всю ширину. `.filt-range` створювався для вузької панелі фільтрів,
-   де `flex: 1` доречний; тут та сама смуга живе на всю ширину картки, і два поля роз'їжджались
-   у різні кінці з величезною прогалиною між ними — читалось як зламана верстка, а не як
-   діапазон. Поле дати має природну ширину свого формату, тож фіксуємо її й тримаємо пару разом. */
-.rep-custom .filt-range { flex-wrap: wrap; justify-content: flex-start; }
-.rep-custom .filt-range input { flex: 0 0 auto; width: 168px; min-width: 0; }
-.rep-custom .filt-range .btn { flex-shrink: 0; margin-left: var(--sp-2); }
+/* Діапазон дат у Репортах — ВЛАСНА смуга, а не переозначений `.filt-range` (той належить
+   вузькій панелі фільтрів і має `flex: 1` на полях). Тут смуга на всю ширину картки, тож поля
+   беруть природну ширину свого формату й тримаються купкою: інакше вони роз'їжджаються в різні
+   кінці, а тире висить посеред порожнечі — око читає це як зламану верстку, а не як діапазон.
+   Група не розтягується (`justify-content: flex-start`), переноситься на вузькому. */
+.rep-range { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-start; gap: var(--sp-2); }
+.rep-range input { flex: 0 0 auto; width: 168px; min-width: 0; padding: 8px 10px; font-size: 13px; }
+.rep-range .dash { flex: none; color: var(--muted); }
+.rep-range .btn { flex: none; margin-left: var(--sp-2); }
+/* На телефоні 168+168+тире+кнопка не влазять у рядок: поля стають половинками, кнопка — окремим
+   рядком на всю ширину (кнопка-обрізок збоку — найгірший варіант із трьох). */
+@media (max-width: 560px) {
+  .rep-range input { flex: 1 1 40%; width: auto; }
+  .rep-range .btn { flex: 1 0 100%; margin-left: 0; }
+}
 .rc-date { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); }
 .rc-summary { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .rc-foot { display: flex; align-items: baseline; justify-content: space-between; margin-top: auto; font-size: 11.5px; color: var(--muted); }
@@ -3726,6 +3763,12 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 /* ===== Донат витрат по категоріях + легенда ============================= */
 .cat-with-donut { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
+/* Та сама сітка безпеки, що в `.dash-pair`/`.stats-2col` — і тут вона була потрібна найбільше.
+   `SpendDonut` повертає null, коли категорія одна (донат із одного сектора нічого не показує),
+   і тоді розподіл лишався ЄДИНОЮ дитиною — тобто сідав у колонку 300px, розраховану на донат:
+   бар стискався до смужки, сума ламалась на два рядки, а решта 80% ширини лишалась порожньою
+   (скарга 2026-08-01, місяць з однією категорією). Дитина, що лишилась сама, бере всю ширину. */
+.cat-with-donut > :only-child { grid-column: 1 / -1; }
 .spend-donut-card { display: flex; flex-direction: column; gap: 12px; }
 .donut-legend { display: flex; flex-direction: column; gap: 7px; }
 .dl-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }

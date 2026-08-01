@@ -1158,6 +1158,7 @@
   "login.signInBtn": "Увійти",
   "inc.title": "Надходження",
   "inc.subtitle": "джерела · стабільність",
+  "inc.noneThisPeriod": "Цього періоду надходжень ще не було",
   "inc.periodIncomeLabel": "Дохід за період",
   "inc.vsLastPeriodTitle": "проти минулого періоду",
   "inc.stabilityTitle": "Стабільність доходу",

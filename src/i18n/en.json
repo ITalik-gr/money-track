@@ -1158,6 +1158,7 @@
   "login.signInBtn": "Sign in",
   "inc.title": "Income",
   "inc.subtitle": "sources · stability",
+  "inc.noneThisPeriod": "No income in this period yet",
   "inc.periodIncomeLabel": "Income for the period",
   "inc.vsLastPeriodTitle": "vs previous period",
   "inc.stabilityTitle": "Income stability",

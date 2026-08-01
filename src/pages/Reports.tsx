@@ -130,7 +130,13 @@ export function Reports() {
 
         <div className="rep-custom">
           <div className="label">{t("report.customRange")}</div>
-          <div className="filt-range">
+          {/* ⚠️ Власний клас, а НЕ `.filt-range`. Той створювався для вузької панелі фільтрів,
+              де полям дати доречний `flex: 1`; тут смуга живе на всю ширину картки, і поля
+              роз'їжджались у різні кінці з прогалиною на пів-екрана між ними та тире — читалось
+              як зламана верстка, а не як діапазон. Правило-надбудова `.rep-custom .filt-range`
+              це вже лікувало, але лікувати чужий клас переозначенням — рівно те, що ламається
+              наступного разу; поле дати має природну ширину свого формату, тож вона тут своя. */}
+          <div className="rep-range">
             <input type="date" aria-label={t("report.customFrom")} value={from} max={to || today}
               onChange={(e) => setFrom(e.target.value)} />
             <span className="dash">–</span>

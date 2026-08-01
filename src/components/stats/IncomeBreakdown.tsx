@@ -14,7 +14,14 @@ const stabLabelKey: Record<string, TranslationKey> = { стабільний: "in
 export function IncomeBreakdown({ preset, currency, sign }: { preset: string; currency: number | null; sign: string }) {
   const t = useT();
   const { data } = useGetIncomeAnalyticsQuery({ preset, currency });
-  if (!data || data.total === 0) return null;
+  if (!data) return null;
+  // ⚠️ НЕ `data.total === 0` (як було). Стабільність рахується за 6 ПОВНИХ місяців і лишається
+  // осмисленою, навіть коли в поточному періоді надходжень ще не було — а блок зникав цілком:
+  // 1-го числа місяця вся аналітика доходу просто щезала зі сторінки, і це читалось як «фічу
+  // видалили» (скарга 2026-08-01). Ховаємо лише тоді, коли історії НЕМА ЗОВСІМ — тобто коли
+  // показувати справді нічого.
+  const hasHistory = data.monthly.some((m) => m.income > 0);
+  if (data.total === 0 && !hasHistory) return null;
 
   const srcMax = Math.max(...data.sources.map((s) => s.amount), 1);
   const monMax = Math.max(...data.monthly.map((m) => m.income), 1);
@@ -39,6 +46,9 @@ export function IncomeBreakdown({ preset, currency, sign }: { preset: string; cu
             )}
           </div>
           <div className="inc-sources">
+            {/* Порожній період — це стан, а не порожнє місце: без явного рядка панель джерел
+                виглядала б як така, що не догрузилась. */}
+            {data.sources.length === 0 && <div className="inc-empty">{t("inc.noneThisPeriod")}</div>}
             {data.sources.slice(0, 6).map((s, i) => (
               <div key={s.category_id ?? i} className="inc-src">
                 <span className="is-name"><span className="d" style={{ background: s.color ?? FALLBACK[i % FALLBACK.length] }} />{s.name}</span>
