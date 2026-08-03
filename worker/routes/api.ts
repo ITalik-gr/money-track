@@ -10,6 +10,10 @@ import {
   type PeriodMode, type Preset,
 } from "../lib/finance/stats.ts";
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import * as accountsRepo from "../repo/accounts.ts";
+import * as categoriesRepo from "../repo/categories.ts";
+import * as txRepo from "../repo/transactions.ts";
+import * as goalsRepo from "../repo/goals.ts";
 import { catNameSql, localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
 import { recalcGoal, isGoalKind, isAutofillKind } from "../lib/finance/goals.ts";
 import { st, stLit } from "../lib/platform/i18n.ts";
@@ -52,18 +56,14 @@ function normChatMessages(raw: unknown): ChatTurn[] {
 // ---- reference data ---------------------------------------------------------
 
 api.get("/categories", async (c) => {
-  const rows = await c.env.DB.prepare("SELECT * FROM categories ORDER BY is_income, id").all<{ name: string }>();
+  const rows = await categoriesRepo.listAll(c.env.DB);
   const loc = c.get("locale");
   // Localize seed names in JS (the row already carries `name`); user categories pass through.
-  const out = (rows.results ?? []).map((r) => ({ ...r, name: localizeCatName(loc, r.name) }));
-  return c.json(out);
+  return c.json(rows.map((r) => ({ ...r, name: localizeCatName(loc, r.name) })));
 });
 
 api.get("/accounts", async (c) => {
-  const rows = await c.env.DB.prepare(
-    "SELECT * FROM accounts WHERE is_active = 1 ORDER BY is_manual, type",
-  ).all();
-  return c.json(rows.results);
+  return c.json(await accountsRepo.listActive(c.env.DB));
 });
 
 // Канонічна розбивка коштів (§R3) — ТА САМА, що бачить Порадник. Огляд на сторінці Рахунків
@@ -75,10 +75,7 @@ api.get("/accounts/funds", async (c) => {
 
 // Архівовані рахунки (is_active=0) — для секції «Архів». Історія операцій лишається.
 api.get("/accounts/archived", async (c) => {
-  const rows = await c.env.DB.prepare(
-    "SELECT * FROM accounts WHERE is_active = 0 ORDER BY is_manual, type",
-  ).all();
-  return c.json(rows.results);
+  return c.json(await accountsRepo.listArchived(c.env.DB));
 });
 
 // Історія балансу ручних рахунків по місяцях — для міні-спарклайнів на картках. Значення у
@@ -86,13 +83,8 @@ api.get("/accounts/archived", async (c) => {
 api.get("/accounts/history", async (c) => {
   const url = new URL(c.req.url);
   const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
-  let rows: { acc: string; balance: number; at: number }[] = [];
-  try {
-    const r = await c.env.DB.prepare(
-      "SELECT account_id AS acc, balance, recorded_at AS at FROM account_balance_history ORDER BY account_id, recorded_at",
-    ).all<{ acc: string; balance: number; at: number }>();
-    rows = r.results ?? [];
-  } catch { return c.json({ history: {} }); } // таблиця може ще не бути на remote (0026)
+  const rows = await accountsRepo.balanceHistory(c.env.DB);
+  if (rows === null) return c.json({ history: {} }); // таблиця може ще не бути на remote (0026)
   const byAcc = new Map<string, { at: number; balance: number }[]>();
   for (const r of rows) (byAcc.get(r.acc) ?? byAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
   const now = Math.floor(Date.now() / 1000);
@@ -135,42 +127,19 @@ api.get("/transactions", async (c) => {
   const amin = url.searchParams.get("amin"); // мін. сума (₴, порівняння по модулю)
   const amax = url.searchParams.get("amax"); // макс. сума (₴)
 
-  const where: string[] = [];
-  const binds: unknown[] = [];
-  // §R5: пара-переказ показується ОДНИМ рядком — ховаємо вхідну (+) сторону пари.
-  where.push("NOT (t.transfer_pair_id IS NOT NULL AND t.amount > 0)");
-  if (category) { where.push("t.category_id = ?"); binds.push(Number(category)); }
-  if (catparent) { where.push("COALESCE(c.parent_id, t.category_id) = ?"); binds.push(Number(catparent)); }
-  if (type === "expense") where.push("t.amount < 0");
-  if (type === "income") where.push("t.amount > 0");
-  if (account) { where.push("t.account_id = ?"); binds.push(account); }
-  if (from) { where.push("t.time >= ?"); binds.push(Number(from)); }
-  if (to) { where.push("t.time <= ?"); binds.push(Number(to)); }
-  // Сума порівнюється по модулю (₴→копійки). Мультивалюта не зводиться — фільтр по номіналу рахунку.
-  if (amin) { where.push("ABS(t.amount) >= ?"); binds.push(Math.round(Number(amin) * 100)); }
-  if (amax) { where.push("ABS(t.amount) <= ?"); binds.push(Math.round(Number(amax) * 100)); }
-  if (q) { where.push("(t.merchant LIKE ? OR t.comment LIKE ? OR t.user_note LIKE ? OR e.name LIKE ?)"); binds.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
-  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-
-  // Друга сторона пари-переказу → маршрут «звідки → куди» в рядку. `tp.transfer_pair_id =
-  // t.transfer_pair_id` не з'єднує нічого, коли pair_id NULL (NULL = NULL хибне), тож
-  // звичайні операції join не чіпає.
-  const rows = await c.env.DB.prepare(
-    `SELECT t.*, ${catNameSql(c.get("locale"), "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
-            a.title AS account_title, e.name AS event_name, e.color AS event_color,
-            ap.title AS pair_account_title
-     FROM transactions t
-     LEFT JOIN categories c ON c.id = t.category_id
-     LEFT JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN event_groups e ON e.id = t.event_id
-     LEFT JOIN transactions tp ON tp.transfer_pair_id = t.transfer_pair_id AND tp.id <> t.id
-     LEFT JOIN accounts ap ON ap.id = tp.account_id
-     ${clause}
-     ORDER BY t.time DESC LIMIT ? OFFSET ?`,
-  )
-    .bind(...binds, limit, offset)
-    .all();
-  return c.json(rows.results);
+  return c.json(await txRepo.listFeed(c.env.DB, c.get("locale"), {
+    limit, offset,
+    category: category ? Number(category) : undefined,
+    catparent: catparent ? Number(catparent) : undefined,
+    account: account ?? undefined,
+    type: type === "expense" || type === "income" ? type : undefined,
+    from: from ? Number(from) : undefined,
+    to: to ? Number(to) : undefined,
+    q: q ?? undefined,
+    // ₴ → копійки тут, бо це розбір ВВОДУ; порівняння по модулю — у репозиторії.
+    aminMinor: amin ? Math.round(Number(amin) * 100) : undefined,
+    amaxMinor: amax ? Math.round(Number(amax) * 100) : undefined,
+  }));
 });
 
 // L10 — повний дамп власних даних одним файлом.
@@ -1146,13 +1115,7 @@ api.delete("/events/:id/planned/:pid", async (c) => {
 // Список цілей із прогресом. Якщо привʼязано банку (account_id) — прогрес = її баланс,
 // інакше — ручний current_amount.
 api.get("/goals", async (c) => {
-  const rows = await c.env.DB.prepare(
-    `SELECT g.*, a.balance AS account_balance, a.title AS account_title
-     FROM savings_goals g
-     LEFT JOIN accounts a ON a.id = g.account_id
-     WHERE g.is_active = 1 ORDER BY g.created_at DESC`,
-  ).all<{ account_id: string | null; account_balance: number | null; current_amount: number }>();
-  const goals = (rows.results ?? []).map((g) => ({
+  const goals = (await goalsRepo.listActive(c.env.DB)).map((g) => ({
     ...g,
     current: g.account_id != null && g.account_balance != null ? g.account_balance : g.current_amount,
   }));
@@ -1184,47 +1147,46 @@ api.post("/goals", async (c) => {
   if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
   const auto = parseAutofill(b.autofill_kind ?? null, b.autofill_value, locale);
   if ("error" in auto) return c.json({ error: auto.error }, 400);
-  const r = await c.env.DB.prepare(
-    `INSERT INTO savings_goals (name, target_amount, current_amount, account_id, deadline, color, note, kind, autofill_kind, autofill_value, is_active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-  ).bind(b.name.trim(), b.target_amount, b.current_amount ?? 0, b.account_id ?? null, b.deadline ?? null,
-         b.color ?? "#2e6be6", b.note ?? null, b.kind ?? "save_up", auto.kind, auto.value,
-         Math.floor(Date.now() / 1000)).run();
-  return c.json({ ok: true, id: r.meta.last_row_id });
+  const id = await goalsRepo.create(c.env.DB, {
+    name: b.name.trim(),
+    target_amount: b.target_amount,
+    current_amount: b.current_amount ?? 0,
+    account_id: b.account_id ?? null,
+    deadline: b.deadline ?? null,
+    color: b.color ?? "#2e6be6",
+    note: b.note ?? null,
+    kind: b.kind ?? "save_up",
+    autofill_kind: auto.kind,
+    autofill_value: auto.value,
+    created_at: Math.floor(Date.now() / 1000),
+  });
+  return c.json({ ok: true, id });
 });
 
 api.patch("/goals/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const locale = c.get("locale");
   const b = await c.req.json<{ name?: string; target_amount?: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string; kind?: string; autofill_kind?: string | null; autofill_value?: number | null }>();
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  if (b.name !== undefined) { if (!b.name.trim()) return c.json({ error: "name required" }, 400); sets.push("name = ?"); binds.push(b.name.trim()); }
-  if (b.target_amount !== undefined) { sets.push("target_amount = ?"); binds.push(b.target_amount); }
-  if (b.current_amount !== undefined) { sets.push("current_amount = ?"); binds.push(b.current_amount); }
-  if (b.account_id !== undefined) { sets.push("account_id = ?"); binds.push(b.account_id); }
-  if (b.deadline !== undefined) { sets.push("deadline = ?"); binds.push(b.deadline); }
-  if (b.color !== undefined) { sets.push("color = ?"); binds.push(b.color); }
-  if (b.note !== undefined) { sets.push("note = ?"); binds.push(b.note); }
-  if (b.kind !== undefined) {
-    if (!isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
-    sets.push("kind = ?"); binds.push(b.kind);
-  }
+  if (b.name !== undefined && !b.name.trim()) return c.json({ error: "name required" }, 400);
+  if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
+
+  const patch: goalsRepo.GoalPatch = {
+    name: b.name !== undefined ? b.name.trim() : undefined,
+    target_amount: b.target_amount, current_amount: b.current_amount,
+    account_id: b.account_id, deadline: b.deadline,
+    color: b.color, note: b.note, kind: b.kind,
+  };
   if (b.autofill_kind !== undefined) {
     const auto = parseAutofill(b.autofill_kind, b.autofill_value, locale);
     if ("error" in auto) return c.json({ error: auto.error }, 400);
-    // Вимикання правила скидає й штамп місяця: інакше після повторного вмикання того ж
-    // місяця нарахування б не сталось — правило виглядало б увімкненим і мертвим.
-    sets.push("autofill_kind = ?", "autofill_value = ?", "autofill_last_ym = NULL");
-    binds.push(auto.kind, auto.value);
+    patch.autofill = auto;
   }
-  if (!sets.length) return c.json({ ok: true });
-  await c.env.DB.prepare(`UPDATE savings_goals SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
+  await goalsRepo.update(c.env.DB, id, patch);
   return c.json({ ok: true });
 });
 
 api.delete("/goals/:id", async (c) => {
-  await c.env.DB.prepare("UPDATE savings_goals SET is_active = 0 WHERE id = ?").bind(Number(c.req.param("id"))).run();
+  await goalsRepo.archive(c.env.DB, Number(c.req.param("id")));
   return c.json({ ok: true });
 });
 
@@ -1239,10 +1201,7 @@ api.delete("/goals/:id", async (c) => {
 // гроші двічі.
 
 api.get("/goals/:id/contributions", async (c) => {
-  const rows = await c.env.DB.prepare(
-    "SELECT id, amount, at, note, source FROM goal_contributions WHERE goal_id = ? ORDER BY at DESC, id DESC LIMIT 100",
-  ).bind(Number(c.req.param("id"))).all();
-  return c.json(rows.results ?? []);
+  return c.json(await goalsRepo.listContributions(c.env.DB, Number(c.req.param("id"))));
 });
 
 api.post("/goals/:id/contributions", async (c) => {
@@ -1255,21 +1214,18 @@ api.post("/goals/:id/contributions", async (c) => {
   // це рядок в історії, який нічого не означає.
   if (!Number.isFinite(amount) || amount === 0) return c.json({ error: st(locale, "goalContribAmount") }, 400);
 
-  const goal = await c.env.DB.prepare("SELECT id, account_id FROM savings_goals WHERE id = ? AND is_active = 1")
-    .bind(id).first<{ id: number; account_id: string | null }>();
+  const goal = await goalsRepo.findActive(c.env.DB, id);
   if (!goal) return c.json({ error: st(locale, "goalNotFound") }, 404);
   if (goal.account_id) return c.json({ error: st(locale, "goalJarNoContrib") }, 400);
 
-  await c.env.DB.prepare(
-    "INSERT INTO goal_contributions (goal_id, amount, at, note, source) VALUES (?, ?, ?, ?, 'manual')",
-  ).bind(id, amount, Math.floor(b.at ?? Date.now() / 1000), b.note?.trim() || null).run();
+  await goalsRepo.addContribution(c.env.DB, id, amount,
+    Math.floor(b.at ?? Date.now() / 1000), b.note?.trim() || null);
   return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
 });
 
 api.delete("/goals/:id/contributions/:cid", async (c) => {
   const id = Number(c.req.param("id"));
-  await c.env.DB.prepare("DELETE FROM goal_contributions WHERE id = ? AND goal_id = ?")
-    .bind(Number(c.req.param("cid")), id).run();
+  await goalsRepo.deleteContribution(c.env.DB, id, Number(c.req.param("cid")));
   return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
 });
 

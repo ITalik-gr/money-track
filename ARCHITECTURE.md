@@ -1,356 +1,309 @@
-# ARCHITECTURE.md — інвентаризація структури й план рефактора
+# Architecture — structural refactor, in progress
 
-> **Призначення.** Це робочий документ ОДНІЄЇ задачі: привести структуру коду до стану, у якому
-> «одна цифра = одне місце в коді», і підготувати проєкт до опен-сорсу.
-> Він **не замінює** `CLAUDE.md` (там інваріанти й «як усе працює зараз»).
-> Коли рефактор закрито — durable-правила звідси переїжджають у `CLAUDE.md`, план — у `HISTORY.md`,
-> а цей файл видаляється. Черга задач лишається в `ROADMAP.md`.
+> **Scope.** This is the working document for ONE job: get the codebase to a state where one
+> number has one home in the code, and make the project fit to be read by strangers.
+> It does not replace `CLAUDE.md` (invariants and "how things work today"). When the refactor
+> closes, the durable rules move into `CLAUDE.md`, the journal into `HISTORY.md`, and this file
+> is deleted. The task queue stays in `ROADMAP.md`.
 >
-> Створено 2026-08-03. Заміри зроблено на коміті `ff9816f`.
->
-> **Рішення, зафіксовані на старті (2026-08-03):**
-> 1. **Спершу характеризаційні тести, потім рух коду.** Жодного переносу SQL без golden-фікстури.
-> 2. **Строго поведінко-зберігаюче.** Числа й форма відповідей не змінюються. Знайдені баги —
->    окремими картками в `ROADMAP.md`, чиняться ПІСЛЯ.
-> 3. **Провайдери — тільки шви.** Другого банку / другого AI-провайдера в цьому проході не пишемо.
+> Created 2026-08-03. Measurements taken at commit `ff9816f`.
+
+## Decisions taken at the start
+
+1. **Characterization tests first, code movement second.** No query moves without a golden fixture
+   behind it.
+2. **Strictly behaviour-preserving.** Numbers and response shapes do not change. Bugs found along
+   the way become separate cards in `ROADMAP.md` and are fixed *afterwards*, visibly.
+3. **Providers: seams only.** No second bank and no second AI provider in this pass.
+4. **A `services/` layer will be introduced** (phase 3). Transactional scenarios — reimbursements,
+   splits — currently live in route handlers, and they are what the layer is for.
+5. **Shared types are hand-written, not generated.** Generation adds a build step and an opaque
+   artifact to a public repo, and it is not where the safety comes from: the guarantee is that
+   the worker *types its return values* with the shared types, so `tsc` catches drift by itself.
+6. **Credit-card own funds stay negative** when the card is in debt (owner's call, 2026-08-03).
+7. **Git history is not rewritten**; the D1 `database_id` stays in `wrangler.jsonc` (owner's call).
 
 ---
 
-## 1. Виміряний стан
+## 1. Measured state
 
-| Метрика | Значення |
+| Metric | Value |
 |---|---|
-| Усього коду | **32 252 рядки** (16 019 воркер · 15 811 клієнт · 422 shared) |
-| `worker/routes/api.ts` | **3 331 рядок · 179 `.prepare()` · 129 роутів · 26 доменів** |
-| `src/store/api.ts` | 1 287 рядків · **86 руками написаних типів відповідей** |
-| `shared/types.ts` | 142 рядки · 13 типів · **0 імпортів із воркера** |
-| `src/pages/Stats.tsx` | 1 375 рядків |
-| `worker/lib/ai/ai.ts` | 1 335 рядків · **6 різних відповідальностей** |
-| `worker/lib/ai/advisor.ts` | 1 088 рядків · 38 `.prepare()` · 7 викликів `getRates()` |
-| `worker/lib/messaging/notify.ts` | 988 рядків · 22 `.prepare()` |
-| Тести | **376 рядків** (`stats.test.ts` 308 + `subscriptions.test.ts` 68) |
-| `FROM transactions` у коді | 147 місць |
-| `FROM accounts` у коді | 18 місць |
-| Затінення роутів (літерал після параметра) | **чисто** ✅ |
+| Total code | **32 252 lines** (16 019 worker · 15 811 client · 422 shared) |
+| `worker/routes/api.ts` | **3 331 lines · 179 `.prepare()` · 129 routes · 26 domains** |
+| `src/store/api.ts` | 1 287 lines · **86 hand-written response types** |
+| `shared/types.ts` | 142 lines · 13 types · **0 imports from the worker** |
+| `src/pages/Stats.tsx` | 1 375 lines |
+| `worker/lib/ai/ai.ts` | 1 335 lines · **6 distinct responsibilities** |
+| `worker/lib/ai/advisor.ts` | 1 088 lines · 38 `.prepare()` · 7 `getRates()` calls |
+| Tests at start | **376 lines** against 32 252 lines of code |
+| Route shadowing (literal after param) | **clean** ✅ |
 
-### Фрагментація `api.ts` — домени перемішані
+### `api.ts` fragmentation
 
-Файл ріс дописуванням у кінець, тож роути одного домену розкидані «островами»:
+The file grew by appending, so routes of one domain sit in scattered islands:
 
-| Домен | Роутів | Островів |
+| Domain | Routes | Islands |
 |---|---|---|
 | `transactions` | 14 | **5** |
 | `analytics` | 19 | **4** |
 | `planned` | 10 | **3** |
 | `accounts` | 10 | **3** |
-| `settings`, `facts`, `events`, `categories`, `budgets`, `rates` | 2–9 | 2 |
 
-`/accounts` оголошено на L62, а `/accounts/manual` — на **L3188**. `/facts` GET на L2580, `/facts`
-POST на **L3094**. Це не естетична проблема: щоб змінити поведінку домену, треба знайти всі його
-острови, і саме на цьому кроці народжується «а напишу свій запит».
+`/accounts` is declared at L62, `/accounts/manual` at **L3188**. That is not an aesthetic problem:
+to change a domain's behaviour you must first find all of its islands, and it is precisely at that
+step that someone writes a second query instead.
 
 ---
 
-## 2. Діагноз: у чому справжня хвороба
+## 2. Diagnosis
 
-Заявлений симптом — «файли великі й громіздкі». Але розріз 3 331 рядка на 26 доменних файлів
-без інших змін **нічого не лікує**: 179 SQL-запитів просто переїдуть разом із роутами.
+The reported symptom was "the files are large and unwieldy". Splitting 3 331 lines into 26 domain
+files would fix nothing on its own — the 179 queries would simply move along with the routes.
 
-**Кореневий дефект:** `CLAUDE.md` декларує «`routes/*` — транспорт і валідація; `lib/*` — логіка»,
-а `api.ts` тримає **179 сирих SQL-запитів**. Проєкт порушує власне записане правило, і звідси росте
-весь клас багів «різні функції бачать різні дані»:
+**The root defect:** `CLAUDE.md` states "`routes/*` is transport and validation; `lib/*` is
+logic", while `api.ts` holds **179 raw SQL queries**. The project violates its own written rule,
+and that is where the whole bug class grows from:
 
 ```
-запит живе інлайном у роуті
-   → його неможливо імпортувати
-      → наступна фіча пише свій
-         → тепер «витрата» має два визначення
-            → вони розходяться мовчки (tsc SQL-рядків не бачить)
+a query lives inline in a handler
+   → nothing can import it
+      → the next feature writes its own
+         → "spending" now has two definitions
+            → they drift silently (SQL is a string; tsc cannot see inside it)
 ```
 
-Це не гіпотеза. Механізм уже спрацював **чотири рази** й задокументований у `CLAUDE.md`:
+This is not a hypothesis. The mechanism has fired **four times**, all documented in `CLAUDE.md`:
 
-| Інцидент | Що сталося | Ціна |
-|---|---|---|
-| **§CUR-PLAN** | 5 місць сумували `period_amount` сирим, без конверсії валюти | підписка $5 важила 5 ₴ |
-| **§SUB-MONTH** | сумувальники не приводили період до місяця | **дві різні цифри про одні й ті самі підписки на екрані** |
-| **§REFUND** | `INCOME_WHERE` був просто `amount > 0` | дохід завищено на **10 776 ₴**, витрати на 2 533 ₴ |
-| **§SPLIT** | запит із канонічним хелпером без `STATS_JOINS` | рантайм-падіння, породило SQL-лінт |
-
-Кожен з них — той самий сюжет: **розрахунок не мав єдиного дому, тож його переписали заново.**
-
----
-
-## 3. Реєстр дублювання (знайдене, з файлами й рядками)
-
-Це ядро документа: **хто що рахує, звідки бере, і де воно повторюється.**
-
-### 🔴 D1. Інваріант «власні кошти = balance − credit_limit» — **5 реалізацій, і вони розходяться**
-
-`CLAUDE.md §Інваріанти` каже: *«Кредитний ліміт НІКОЛИ не зливати з власними»*, і оголошує
-`fundsBreakdown()` (advisor.ts) «ЄДИНИМ джерелом коштів». Насправді:
-
-| # | Місце | Формула |
-|---|---|---|
-| 1 | `worker/lib/ai/advisor.ts:64` (`fundsBreakdown` — заявлений канон) | `(balance ?? 0) - (credit_limit ?? 0)` |
-| 2 | `worker/lib/finance/finance.ts:155` (`computeSummary`) | `(balance ?? 0) - creditLimit` |
-| 3 | `worker/routes/api.ts:1612` (нетворт) | `(balance ?? 0) - (credit_limit ?? 0)` |
-| 4 | `worker/routes/api.ts:1657` (нетворт, історична точка) | `hb - (credit_limit ?? 0)` |
-| 5 | `worker/lib/messaging/notify.ts:316` | `(credit_limit ?? 0) - (balance ?? 0)` — **обернена** |
-| 6 | `src/pages/Accounts.tsx:31-33` (**клієнт!**) | `own = balance - limit; shown = limit > 0 ? Math.max(own, 0) : balance` |
-
-**Розходження реальне, не теоретичне:** клієнт затискає від'ємне в нуль (`Math.max(own, 0)`),
-сервер — ні. Тобто кредитка в боргу показує **0 на сторінці Рахунків** і **від'ємне число** в
-розрахунку подушки/нетворту. Це рівно той баг-клас, який замовлено полагодити.
-
-→ **Ціль:** одна функція `ownFundsMinor(account)` у `lib/finance/`, усі шестеро беруть звідти.
-Клієнтське `Math.max` — або переїжджає на сервер, або визнається окремим поняттям «показане» з
-власним іменем. **Рішення про те, яка з двох поведінок правильна, — бага, не рефактор** (див. §7).
-
-### 🟠 D2. Контракт клієнт↔воркер не існує
-
-`shared/types.ts` **не імпортує жоден файл воркера** (перевірено: `grep -rl "shared/types" worker`
-→ порожньо). Тобто «спільні» типи спільні лише на словах:
-
-- клієнт руками описує **86 типів** того, що віддає сервер (`src/store/api.ts`);
-- воркер описує свої інлайн-дженеріками в `.all<{...}>()`;
-- `tsc` бачить **дві незалежні правди** й не може їх звірити.
-
-Розходження ловиться **тільки в проді**. Це друга за важливістю проблема після SQL у роутах.
-
-### 🟠 D3. `ai.ts` — 6 відповідальностей в одному файлі
-
-| Шар | Що саме | Провайдер-залежне? |
-|---|---|---|
-| L1 транспорт | `callHaiku`, `callHaikuMessages`, `callMessagesRaw`, `runToolConversation`, `demoClamp`, `thinkingOff`, `webSearchTool` | **так** |
-| L2 облік вартості | `PRICES`, `priceFor`, `callCostUsd`, `recordUsage`, `readUsageStats` | **так** |
-| L3 маршрутизація моделей | `MODEL_*`, `AI_TASK_DEFAULTS`, `getTaskModel` | **так** |
-| L4 загартовування JSON | `extractBalanced`, `repairTruncatedJson`, `parseJson`, `callHaikuJson` | ні |
-| L5 промти/персона | `FEW_SHOT`, `CACHE_GUIDE`, `buildSystemPrefix`, `replyLangDirective` | ні |
-| L6 **логіка фіч** | `enrichTransaction`, `readReceipt`, `parseText`, `generateAdvice`, `generateFinancialReport`, `generateInsight`, `budgetChat`, `evaluateGroup`, `proposeBudgetLimits`, `proposeTransferCategory`, `generateNotifyObservations`, `txChat`, `chatAdvice` | ні |
-
-**Аномалія L6:** `generateFinancialReport` живе в `ai.ts`, хоча `report.ts` існує окремим файлом
-(332 рядки). Те саме з `generateInsight` ↔ `insight.ts`, `enrichTransaction` ↔ `enrich.ts`.
-Правила, що визначає «це в ai.ts чи у файлі фічі», не існує — тому фічі розмазані по двох файлах.
-
-**Шов для мультипровайдерності проходить рівно між L3 і L4.** Усе від L4 вгору вже
-провайдер-агностичне — його не треба чіпати взагалі.
-
-### 🟡 D4. Дефолт `period_mode` продубльовано тричі
-
-`api.ts:1376`, `api.ts:1707`, `api.ts:1927` — усі три роблять
-`((await getState(...)) as PeriodMode) || "calendar"`. Дефолт «calendar» записаний у трьох місцях;
-зміна вимагає знайти всі три. Дрібно, але показово: це `getPeriodMode(env)` розміром у два рядки.
-
-### 🟡 D5. `getRates()` викликається 7 разів у межах `advisor.ts`
-
-Рядки 60, 90, 167, 591, 654, 802, 980. Кожен — окреме читання `app_state`. Крім зайвих читань це
-означає, що різні частини **однієї відповіді** формально можуть спиратися на різні знімки курсів.
-→ Один знімок на запит, прокинутий через контекст (див. §4, `RequestContext`).
-
-### 🟢 D6. Що вже добре — не чіпати
-
-Щоб рефактор не з'їв те, що працює:
-
-- **`stats.ts` — справжній канон.** `SPEND_WHERE`/`EFF_*`/`STATS_JOINS`/`amountSum` — саме той
-  патерн, який треба поширити на решту. Він же єдиний прикритий тестами.
-- **SQL-лінт `check-stats-sql.mjs`** — робочий приклад «перевірка > інструкція».
-- **`getRates()`** як точка доступу до курсів — централізована (проблема лише в частоті викликів).
-- **Реєстр банків** `BankProvider` + `providers/` — шов уже прорізаний правильно.
-- **Порядок роутів чистий** — літеральні оголошені вище параметризованих, затінення немає.
-- **Клієнтські `ui/`-примітиви не знають про дані** — жодного `useGet*Query` у `src/components/ui/`
-  (перевірено: 0 з 38 файлів із запитами). Правило `CLAUDE.md` тут дотримане.
-
----
-
-## 4. Цільова архітектура
-
-### Воркер — чотири шари, залежності тільки вниз
-
-```
-routes/          транспорт: розбір запиту, валідація, коди статусу, серіалізація
-   ↓             (роут = 5–15 рядків; ЖОДНОГО .prepare())
-services/        сценарії: оркестрація, транзакційність, права
-   ↓
-lib/finance|ai|… доменна логіка: канон розрахунків (stats.ts тут)
-   ↓
-repo/            ЄДИНЕ місце з .prepare(); повертає типізовані рядки, не D1Result
-```
-
-**Головне правило, що робить усе решта можливим:**
-
-> `.prepare()` дозволений **виключно** у `repo/`. Порушення = червоний `npm run check`.
-
-Це не стилістика. Саме воно фізично унеможливлює сценарій «напишу свій запит поруч із роутом»,
-який дав §CUR-PLAN, §SUB-MONTH і §REFUND.
-
-**`RequestContext`** — один об'єкт на запит із уже завантаженими `rates`, `locale`, `period_mode`,
-`isOwner`. Знімає D4 і D5 разом: усі частини однієї відповіді гарантовано на одних курсах.
-
-### Розріз `api.ts`
-
-129 роутів → ~12 файлів за доменами (`transactions`, `analytics`, `accounts`, `planning`,
-`goals`, `events`, `categories`, `budgets`, `notifications`, `ai`, `settings`, `knowledge`).
-Це **наслідок** виносу SQL, а не окремий крок: коли роут стає 10 рядками, розріз тривіальний.
-
-### Контракт типів
-
-`shared/` стає справжнім джерелом: тип відповіді оголошується один раз, воркер типізує ним
-повернення, клієнт імпортує його в RTK Query. 86 руками написаних типів зникають.
-
-### Шви провайдерів (тільки шви — реалізацій не додаємо)
-
-- **AI:** інтерфейс з одноходовим `complete()` + прапорці можливостей
-  (`toolUse` / `promptCache` / `webSearch` / `pdf`). `demoClamp` стає провайдер-обізнаним —
-  зараз він знає лише моделі Anthropic, і чужий провайдер у демо проліз би повз стелю.
-- **Банки:** нормалізація лишається виключно всередині провайдера; специфіка mono
-  (`upsertMonoTx`, `descriptionIsTransfer`) перестає стирчати в загальних шляхах.
-
----
-
-## 5. Перевірки, без яких архітектура здеградує назад
-
-Проєкт це вже вивів сам: **«Перевірка > інструкція»** — SQL-лінт і `numbersAreGrounded` окупились.
-Тому кожне правило з §4 отримує детермінований страж у `npm run check`:
-
-| # | Перевірка | Що ловить |
-|---|---|---|
-| C1 | `.prepare()` лише в `repo/**` | повернення SQL у роути |
-| C2 | тип відповіді роуту імпортовано з `shared/` | розходження контракту клієнт↔сервер |
-| C3 | стеля рядків на файл роутів | повторне заростання `api.ts` |
-| C4 | клієнт не оголошує власних типів відповідей API | обхід C2 |
-| C5 | golden-тести `/analytics` збігаються до копійки | тиха регресія в грошах |
-
-C5 — найважливіша й пишеться **першою** (§6, Фаза 0).
-
----
-
-## 6. План — фазами, кожна із зеленим баром
-
-### Фаза 0 — страхова сітка ✅ ЗРОБЛЕНО 2026-08-03
-
-**Що вийшло:** `worker/test/` — harness + фікстура + 36 golden-знімків. Тестів стало **59**
-(було 23). Жодного рядка продакшн-коду не змінено.
-
-- **`harness.ts`** — третя реалізація наявного `AppDb` (після D1 і DO-SQLite), тепер над
-  `node:sqlite`. Саме тому golden-тести ганяють **той самий SQL**, що й прод, а не його копію.
-  Схема будується з реальних `migrations/*.sql` (усі 37 проходять під `node:sqlite`, 29 таблиць) —
-  фікстурна схема, що розходиться з бойовою, зеленіє рівно тоді, коли міграція щось зламала.
-- **Час заморожено підміною `Date.now`** — `stats.ts` уже приймає `now` дефолтним параметром,
-  тож детермінізм не потребував ЖОДНОЇ зміни продакшн-коду. Це принципово: тести існують, щоб
-  довести, що рефактор нічого не змінив, тож вони не мають вимагати рефактора, щоб запуститись.
-  Момент — 14.05.2026, 12:00 за Києвом: середина тижня, місяця й доби, щоб жодна межа не ховала
-  off-by-one.
-- **Фікстура** накриває рівно ті кейси, що вже ламались: §SPLIT, §REFUND (обидві сторони —
-  і рефанд, і P2P, який рефандом НЕ є), §COMPENSATION (повна й часткова), пара-переказ,
-  бакет 13, `real_category_id`, рол-ап підкатегорії, holds, USD/EUR, §CUR-PLAN, §SUB-MONTH
-  (місячний/квартальний/тижневий плани), §6 override, кредитка в боргу. Історія — 8 повних
-  місяців, бо `categoryMonthlyLevels` дивиться лише на завершені.
-- **35 ендпоінтів** знято, включно з `overview` на всіх чотирьох пресетах.
-
-**Доведено, що тести НЕ вакуумні** (тест, який завжди зелений, гірший за відсутній) —
-дві навмисні мутації канону:
-
-| Мутація | Впало |
+| Incident | What happened |
 |---|---|
-| `EFF_AMOUNT` перестав враховувати `reimbursed` | **12 / 36** |
-| `SPEND_WHERE` перестав виключати бакет 13 | **11 / 36** |
-
-**Перезапис базових знімків:** `UPDATE_GOLDEN=1 npm test` — і лише при свідомій, поясненій
-зміні поведінки. Червоний тест ніколи не «лікується» перезаписом.
-
-> Причина, чому це було першим: 376 рядків тестів на 32 252 рядки коду. Без цього перенос
-> грошової математики — це спосіб отримати ще один тихий §REFUND, який ніхто не помітить місяць.
-
-### Фаза 1 — repo-шар + C1
-Виніс 179 запитів у `repo/` **без зміни їхнього тексту** (копія, не переписування — переписування
-міняє поведінку). Вмикається лінт C1.
-
-### Фаза 2 — контракт типів + C2/C4
-`shared/` стає джерелом, воркер типізується ним, клієнтські 86 типів заміняються імпортами.
-
-### Фаза 3 — розріз `api.ts` + C3
-129 роутів → ~12 доменних файлів. На цьому етапі це механічна операція.
-
-### Фаза 4 — консолідація дублів
-D1 (власні кошти), D4 (`period_mode`), D5 (`RequestContext`). **Поведінка зберігається**; там, де
-реалізації розходяться (D1 — клієнтський `Math.max`), обидві варіанти фіксуються, і в ROADMAP
-йде картка «вирішити, який правильний».
-
-### Фаза 5 — шар `ai.ts`
-Розділення L1–L6, шов провайдера між L3 і L4, провайдер-обізнаний `demoClamp`.
-
-### Фаза 6 — опен-сорс
-Див. §8.
+| **§CUR-PLAN** | five places summed `period_amount` raw — a $5 subscription weighed 5 ₴ |
+| **§SUB-MONTH** | sums never normalised the period — **two different totals for the same subscriptions on screen** |
+| **§REFUND** | `INCOME_WHERE` was just `amount > 0` — income overstated on real data |
+| **§SPLIT** | a canonical helper used without `STATS_JOINS` — Statistics silently went blank |
 
 ---
 
-## 7. Що НЕ робимо в цьому проході (свідомо)
+## 3. Duplication register
 
-- **Не чинимо знайдені баги.** Рішення від 2026-08-03: строго поведінко-зберігаюче. Кожен
-  знайдений розбіг (як D1) → картка в `ROADMAP.md`, чиниться окремо й видимо. Інакше golden-тести
-  втрачають сенс: доведеться щоразу вручну вирішувати «це регресія чи задумана зміна».
-- **Не пишемо другого AI-провайдера й другого банку.** Абстракція з однією реалізацією — це
-  спекуляція; шов коштує дешево й окупається, реалізація — ні.
-- **Не чіпаємо форму API.** Перейменування полів, чистка мертвих — після.
-- **Не рефакторимо клієнт глибоко.** `Stats.tsx` (1 375 рядків) і `src/store/api.ts` розрізаються
-  лише настільки, наскільки цього вимагає Фаза 2.
+### 🔴 D1. "Own funds = balance − credit_limit" — **six implementations that disagree**
+
+`CLAUDE.md` calls this invariant unbreakable and names `fundsBreakdown()` the single source. In
+reality:
+
+| # | Location | Formula |
+|---|---|---|
+| 1 | `lib/ai/advisor.ts:64` (the claimed canon) | `balance − credit_limit` |
+| 2 | `lib/finance/finance.ts:155` | `balance − creditLimit` |
+| 3 | `routes/api.ts:1612` | `balance − credit_limit` |
+| 4 | `routes/api.ts:1657` | `hb − credit_limit` |
+| 5 | `lib/messaging/notify.ts:316` | `credit_limit − balance` — **inverted** |
+| 6 | `src/pages/Accounts.tsx:31` (**client!**) | clamped: `Math.max(own, 0)` |
+
+The disagreement was real, not theoretical: the client clamped negative values to zero while the
+server did not, so **the Accounts page total did not match the cushion on the dashboard**.
+
+→ ✅ **Client half fixed 2026-08-03** (clamp removed, logged in `DESIGN.md`). The remaining five
+server-side copies collapse into one `ownFundsMinor()` in phase 4.
+
+### 🟠 D2. There is no client↔worker contract
+
+`shared/types.ts` is imported by **zero** worker files. The "shared" types are shared in name
+only: the client hand-declares 86 types describing what the server returns, the worker declares
+its own inline via `.all<{...}>()`, and `tsc` sees two independent truths it cannot reconcile.
+Drift surfaces only in production. Second in importance after the SQL.
+
+### 🟠 D3. `ai.ts` carries six responsibilities
+
+| Layer | Contents | Provider-specific? |
+|---|---|---|
+| L1 transport | `callHaiku`, `callMessagesRaw`, `runToolConversation`, `demoClamp`, `webSearchTool` | **yes** |
+| L2 cost accounting | `PRICES`, `priceFor`, `callCostUsd`, `recordUsage`, `readUsageStats` | **yes** |
+| L3 model routing | `MODEL_*`, `AI_TASK_DEFAULTS`, `getTaskModel` | **yes** |
+| L4 JSON hardening | `extractBalanced`, `repairTruncatedJson`, `callHaikuJson` | no |
+| L5 prompts/persona | `FEW_SHOT`, `CACHE_GUIDE`, `buildSystemPrefix`, `replyLangDirective` | no |
+| L6 **feature logic** | `enrichTransaction`, `generateAdvice`, `generateFinancialReport`, `txChat`, … | no |
+
+L6 is the anomaly: `generateFinancialReport` lives in `ai.ts` even though `report.ts` exists as
+its own 332-line file — same for `generateInsight` ↔ `insight.ts`. No rule decides which goes
+where, so features are smeared across two files.
+
+**The provider seam runs exactly between L3 and L4.** Everything above L4 is already
+provider-agnostic and needs no changes at all.
+
+### 🟡 D4. The `period_mode` default is written three times
+
+`api.ts:1376`, `:1707`, `:1927` each do `getState(...) || "calendar"`. A two-line
+`getPeriodMode(env)` removes it.
+
+### 🟡 D5. `getRates()` is called 7 times inside `advisor.ts`
+
+Lines 60, 90, 167, 591, 654, 802, 980 — seven separate reads. Beyond the waste, different parts of
+one response could in principle rest on different rate snapshots.
+
+### 🟢 D6. What already works — leave alone
+
+- **`stats.ts` is a genuine canon.** `SPEND_WHERE` / `EFF_*` / `STATS_JOINS` / `amountSum` are
+  exactly the pattern to spread; it was also the only tested part of the codebase.
+- **`scripts/check-stats-sql.mjs`** — a working example of "a check beats an instruction".
+- **The bank registry** (`BankProvider` + `providers/`) — the seam is already cut correctly.
+- **`AppDb`** (`lib/platform/db-shim.ts`) — a narrow database facade with two implementations.
+  This turned out to be the single most valuable thing in the codebase for testability (see §6).
+- **Client `ui/` primitives know nothing about data** — 0 of 38 data-fetching files live there.
+- **Route ordering is clean** — literals are declared above parameterised routes.
 
 ---
 
-## 8. Опен-сорс — окремий чек-лист (Фаза 6)
+## 4. Target architecture
 
-> ⚠️ **Репозиторій уже публічний** — `github.com/ITalik-gr/money-track`, останній пуш 2026-08-01.
-> Тому гігієна даних виконана ПЕРШОЮ, до рефактора, а не в кінці.
+```
+routes/     transport: parse, validate, choose a status code, serialise
+   ↓        (a handler should read as 5–15 lines; NO .prepare())
+services/   scenarios: orchestration, transactionality, permissions
+   ↓
+lib/        domain logic — the canon (lib/finance/stats.ts) lives here
+   ↓
+repo/       the only layer that issues SQL
+```
 
-- [x] **`LICENSE`** — є (MIT, © Vitalii Hrytsenko, від 2026-07-27).
-- [x] **`SECURITY.md`** — створено 2026-08-03: канал приватного репорту, зона дії, і **свідомо
-      прийняті обмеження** (відкликання сесії ≤60 с, сирі тексти помилок, rate limit на ізолят,
-      відсутність бекапів) — щоб їх не репортували як знахідки.
-- [x] **`CONTRIBUTING.md`** — створено 2026-08-03: зелений бар, що саме ловить кожен лінт,
-      і 5 незламних правил із поясненням, якою ціною вони куплені.
-- [x] **Реальні суми з живого акаунта прибрано** з `CLAUDE.md`, `DESIGN.md`, `README.md`.
-      Урок скрізь збережено, зникло лише число. Прибрано також імʼя третьої особи з прикладу
-      P2P-переказу. Ілюстративні приклади (UI-копірайт, гіпотетичні фічі) лишені свідомо.
-- [x] **`HISTORY.md` перевірено — у `.gitignore`**, тобто 153 КБ внутрішньої історії ніколи не
-      публікувались. Питання «чи лишається він у публічному репо» знято.
-- [ ] **`.dev.vars.example`** — звірити, що перелік повний і без реальних значень.
-- [ ] **Повний скан історії git** на секрети (`gitleaks`/`trufflehog` по **всіх** гілках).
-      `git log -S 'sk-ant-'` дав лише згадку префікса в документації — але це **не доказ**,
-      бо шукає один патерн з багатьох.
-- [ ] **D1 `database_id`** (`c72e2571-…`) лежить у `wrangler.jsonc` **і** дублюється в `CLAUDE.md`.
-      Не секрет (доступ потребує авторизації в акаунті), але й не потрібен нікому, крім власника.
-      ⚠️ Прибирати з `wrangler.jsonc` = ламати власний деплой, тож **потрібне рішення власника**,
-      а не одностороння правка. Прибирати лише з документації сенсу не має — доки він у конфізі,
-      експозиція та сама.
-- [ ] **`git history` містить прибрані сьогодні суми.** Чистка файлів НЕ прибирає їх із минулих
-      комітів. Перезапис історії публічного репо (force-push) — рішення власника (див. §9).
-- [ ] **Повторний прогін `/security-review`** після рефактора — периметр зміниться (§Безпека,
-      аудит 2026-07-26 закривав діри саме в тих місцях, які тепер переїжджають).
+**The rule that makes the rest possible:**
+
+> `.prepare()` is allowed **only** in `repo/`. Violating it fails `npm run check`.
+
+This is not style. It is what physically prevents "I'll just write my own query next to the
+handler" — the move that produced §CUR-PLAN, §SUB-MONTH and §REFUND.
+
+`RequestContext` (phase 4) carries `rates`, `locale`, `period_mode` and `isOwner`, loaded once per
+request. It closes D4 and D5 together.
+
+### Provider seams (seams only — no new implementations)
+
+- **AI:** an interface with a single-shot `complete()` plus capability flags (`toolUse`,
+  `promptCache`, `webSearch`, `pdf`). `demoClamp` becomes provider-aware — today it only knows
+  Anthropic models, so a foreign provider in the demo would slip past the spend ceiling.
+- **Banks:** normalisation stays strictly inside the provider; monobank specifics
+  (`upsertMonoTx`, `descriptionIsTransfer`) stop protruding into shared paths.
 
 ---
 
-## 9. Рішення й відкриті питання
+## 5. Checks that keep it from decaying
 
-**Вирішено 2026-08-03:**
+The project already derived the principle — **"a check beats an instruction"** — and it has paid
+off twice (the SQL linter, `numbersAreGrounded`). Each rule in §4 gets a deterministic guard.
 
-1. **Кредитка в боргу показує МІНУС.** Правильна поведінка — серверна; клієнтський
-   `Math.max(own, 0)` (`src/pages/Accounts.tsx:33`) є багом і прибирається **окремим коммітом**,
-   не всередині рефактора.
-2. **Шар `services/` вводимо.** Транзакційні сценарії (компенсації, спліти) уже зараз живуть у
-   роутах — саме їм цей шар і потрібен.
-3. **Типи пишемо руками в `shared/`, без генерації.** Генерація додає крок збірки й непрозорий
-   артефакт у публічному репо, а надійність дає не вона: щойно **воркер типізує повернення тими
-   самими типами**, `tsc` починає ловити розходження сам. Тобто гарантію дає обовʼязковість
-   імпорту (лінт C2/C4), а не спосіб народження типу.
+| # | Check | Catches | Status |
+|---|---|---|---|
+| C1 | `.prepare()` only in `repo/` | SQL creeping back into routes | ✅ `scripts/check-repo-layer.mjs` |
+| C2 | route response types imported from `shared/` | client↔server contract drift | phase 2 |
+| C3 | line ceiling per route file | `api.ts` regrowing | phase 3 |
+| C4 | client declares no API response types of its own | working around C2 | phase 2 |
+| C5 | golden `/analytics` responses match to the kopeck | silent money regressions | ✅ `worker/test/` |
 
-**Лишається відкритим — потребує рішення власника:**
+---
 
-4. **Перезапис історії git.** Суми, прибрані сьогодні з файлів, лишаються в минулих коммітах
-   публічного репозиторію. Варіанти: (а) лишити як є — це суми без прямої привʼязки до
-   особи в тексті, хоч репо й іменне; (б) `git filter-repo` + force-push — прибирає їх, але
-   ламає всі наявні клони/форки й переписує 100% історії. **Рекомендація: (а)**, якщо серед
-   прибраного немає чогось, що ти вважаєш справді чутливим — ціна (б) висока, а виграш
-   частковий (GitHub кешує старі обʼєкти й у форках).
-5. **D1 `database_id` у `wrangler.jsonc`** — лишати чи виносити в нетрековану локальну копію
-   конфіга (див. §8).
+## 6. Plan, by phase
+
+### Phase 0 — safety net ✅ DONE 2026-08-03
+
+`worker/test/` — harness, fixture, and 36 golden snapshots. Tests went **23 → 59**. No production
+code was changed.
+
+- **`harness.ts`** is a third implementation of the existing `AppDb` (after real D1 and DO-SQLite),
+  this one over `node:sqlite`. That is why the golden tests exercise **the same SQL** production
+  does rather than a copy of it. The schema is built from the real `migrations/*.sql` — all 37 run
+  under `node:sqlite`, producing 29 tables. A fixture schema that drifts from the real one goes
+  green exactly when a migration has broken something.
+- **Time is frozen by overriding `Date.now`.** `stats.ts` already accepts `now` as a defaulted
+  parameter, so determinism required **no production change at all** — which matters, because
+  these tests exist to prove the refactor changed nothing and so must not depend on it. The
+  instant is 14 May 2026, 12:00 Kyiv: mid-week, mid-month, mid-day, so no boundary hides an
+  off-by-one.
+- **The fixture covers exactly what has broken before:** §SPLIT, §REFUND (both directions — a
+  refund, and a P2P that must *not* be treated as one), §COMPENSATION (full and partial), a paired
+  transfer, bucket 13, `real_category_id`, sub-category roll-up, holds, USD/EUR, §CUR-PLAN,
+  §SUB-MONTH (monthly/quarterly/weekly plans), a §6 importance override, a credit card in debt.
+  History runs eight complete months back, because `categoryMonthlyLevels` only looks at complete
+  months.
+
+**Proof the tests are not vacuous** (a test that is always green is worse than none) — two
+deliberate mutations of the canon:
+
+| Mutation | Failed |
+|---|---|
+| `EFF_AMOUNT` stops accounting for `reimbursed` | **12 / 36** |
+| `SPEND_WHERE` stops excluding bucket 13 | **11 / 36** |
+
+Re-recording: `UPDATE_GOLDEN=1 npm test` — only for a deliberate, explained behaviour change. A
+red test is never "fixed" by re-recording.
+
+### Phase 1 — repository layer + C1 🔄 IN PROGRESS
+
+Moving the 179 queries into `worker/repo/` **without changing the SQL text** (a copy, not a
+rewrite — rewriting changes behaviour).
+
+Done so far: `repo/accounts.ts`, `repo/categories.ts`, `repo/transactions.ts`, `repo/goals.ts`,
+plus `repo/README.md` documenting the conventions. `api.ts` is at **166 inline queries, down from
+179**; golden tests green throughout.
+
+**C1 ships as a ratchet, not a flat ban.** A flat ban would have to land as one enormous commit —
+precisely the shape of change that hides a regression. So `scripts/check-repo-layer.mjs` holds a
+per-file ceiling that may never rise, and *also* fails when the real count drops below the budget
+without the budget being lowered. That keeps a stale allowance from quietly permitting new debt.
+Verified to fail in both directions.
+
+### Phase 2 — the type contract + C2/C4
+`shared/` becomes the real source; the worker types its returns with it; the client's 86
+hand-written types become imports.
+
+### Phase 3 — split `api.ts` + introduce `services/` + C3
+129 routes → ~12 domain files. Mechanical once phase 1 is complete.
+
+### Phase 4 — consolidate the duplicates
+D1 (own funds), D4 (`period_mode`), D5 (`RequestContext`).
+
+### Phase 5 — layer `ai.ts`
+Separate L1–L6, cut the provider seam between L3 and L4, make `demoClamp` provider-aware.
+
+---
+
+## 7. Explicitly NOT in this pass
+
+- **Bugs are not fixed inline.** Every divergence found becomes a card in `ROADMAP.md`. Otherwise
+  the golden tests lose their meaning — every diff would need a manual verdict on whether it was
+  a regression or an intended change.
+- **No second AI provider, no second bank.** An abstraction with one implementation is
+  speculation; a seam is cheap and pays for itself.
+- **API shapes are not changed.** Renaming fields and removing dead ones comes later.
+- **The client is not refactored deeply.** `Stats.tsx` (1 375 lines) and `src/store/api.ts` are
+  touched only as far as phase 2 requires.
+
+---
+
+## 8. Open-source checklist
+
+> ⚠️ **The repository is already public** — `github.com/ITalik-gr/money-track`. Data hygiene was
+> therefore done *first*, before the refactor, rather than last.
+
+- [x] **`LICENSE`** — present (MIT, © Vitalii Hrytsenko, since 2026-07-27).
+- [x] **`SECURITY.md`** — created 2026-08-03: private reporting channel, scope, and the
+      **deliberately accepted limits** (session revocation ≤60 s, raw error causes, per-isolate
+      rate limiting, no backups) so they are not filed as findings.
+- [x] **`CONTRIBUTING.md`** — created 2026-08-03: the green bar, what each linter actually catches,
+      and five non-negotiable rules with the price each one was bought at.
+- [x] **Real figures from the live account removed** from `CLAUDE.md`, `DESIGN.md`, `README.md`,
+      and — found on a second pass — from **source too**: `stats.ts`, `stats.test.ts`, `notify.ts`,
+      `ai.ts`, `TxReimbursement.tsx`, migration 0030 and its generated embed. A third party's
+      first name, attached to a money transfer, was removed with them. The lesson is preserved
+      everywhere; only the number is gone.
+- [x] **`HISTORY.md` verified to be in `.gitignore`** — 153 KB of internal history was never
+      published.
+- [ ] **Full git-history secret scan** (`gitleaks`/`trufflehog`, all branches). `git log -S` is
+      not proof — it matches one pattern out of many.
+- [ ] **`.dev.vars.example`** — verify it is complete and holds no real values.
+- [ ] **Re-run `/security-review`** after the refactor: the perimeter moves with the code, and the
+      2026-07-26 audit closed holes in exactly the places now being relocated.
+
+**Closed as owner's decisions (2026-08-03):** git history is not rewritten (the removed figures
+stay in old commits; the cost of a force-push on a public repo outweighs a partial gain, as GitHub
+caches old objects anyway). The D1 `database_id` stays in `wrangler.jsonc` — removing it would
+break the owner's own deploy, and it is not a secret on its own.
