@@ -110,9 +110,10 @@ quietly making the numbers wrong.** The rule throughout: *a check beats an instr
   deciding what a number meant.
 
 - **`numbersAreGrounded()`** — the notification AI is told to only restate pre-computed figures. It
-  still, on real data, invented "8 subscriptions = 3354 ₴/mo … that's 3600+ ₴/mo." So a deterministic
-  filter now rejects any observation whose numbers can't be found in the snapshot payload. An
-  instruction to a model is not a guarantee; the guarantee is the check.
+  still, on real data, produced a single notification quoting *two different totals for the same
+  thing* — neither of which appeared in the payload it was given. So a deterministic filter now
+  rejects any observation whose numbers can't be found in the snapshot. An instruction to a model
+  is not a guarantee; the guarantee is the check.
 
 - **A SQL lint in CI.** SQL is just a string — `tsc` can't see into it. When a refactor left five
   queries referencing a join alias they no longer had, the whole Statistics page silently emptied.

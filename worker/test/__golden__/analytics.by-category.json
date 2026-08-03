@@ -1,0 +1,54 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "category_id": 8,
+      "category_name": "Дім і побут",
+      "color": "#1F6E4C",
+      "spent": 10860000,
+      "n": 10
+    },
+    {
+      "category_id": 1,
+      "category_name": "Продукти",
+      "color": "#1F6E4C",
+      "spent": 2025100,
+      "n": 37
+    },
+    {
+      "category_id": 12,
+      "category_name": "Підписки",
+      "color": "#D99414",
+      "spent": 200000,
+      "n": 1
+    },
+    {
+      "category_id": 11,
+      "category_name": "Подорожі",
+      "color": "#127C86",
+      "spent": 200000,
+      "n": 1
+    },
+    {
+      "category_id": 2,
+      "category_name": "Кафе і ресторани",
+      "color": "#D99414",
+      "spent": 185000,
+      "n": 3
+    },
+    {
+      "category_id": 3,
+      "category_name": "Транспорт",
+      "color": "#2450C8",
+      "spent": 156000,
+      "n": 10
+    },
+    {
+      "category_id": 6,
+      "category_name": "Розваги",
+      "color": "#127C86",
+      "spent": 135000,
+      "n": 1
+    }
+  ]
+}

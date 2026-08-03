@@ -1,0 +1,151 @@
+{
+  "status": 200,
+  "body": {
+    "period": {
+      "from": 1777582800,
+      "to": 1778749200,
+      "elapsed_frac": 0.44
+    },
+    "recurring": {
+      "ref_from": 1764540000,
+      "recurring": {
+        "spent": 1375400,
+        "n": 5
+      },
+      "oneoff": {
+        "spent": 875000,
+        "n": 8
+      },
+      "oneoff_items": [
+        {
+          "merchant": "Квитки",
+          "category": "Подорожі",
+          "amount": 200000,
+          "time": 1777885200
+        },
+        {
+          "merchant": "Хмара",
+          "category": "Підписки",
+          "amount": 200000,
+          "time": 1778317200
+        },
+        {
+          "merchant": "Ашан",
+          "category": "Продукти",
+          "amount": 140000,
+          "time": 1778403600
+        },
+        {
+          "merchant": "Концерт",
+          "category": "Розваги",
+          "amount": 135000,
+          "time": 1778058000
+        },
+        {
+          "merchant": "Зняття",
+          "category": "Кафе і ресторани",
+          "amount": 90000,
+          "time": 1777626000
+        },
+        {
+          "merchant": "Ашан",
+          "category": "Дім і побут",
+          "amount": 60000,
+          "time": 1778403600
+        }
+      ]
+    },
+    "anomalies": [
+      {
+        "category": "Продукти",
+        "color": "#1F6E4C",
+        "spent": 287600,
+        "oneoff": 140000,
+        "mostly_oneoff": false,
+        "lumpy": false,
+        "projected": 530899,
+        "usual": 254000,
+        "pct": 209
+      }
+    ],
+    "pace": [
+      {
+        "category": "Дім і побут",
+        "color": "#1F6E4C",
+        "spent": 1260000,
+        "oneoff": 60000,
+        "mostly_oneoff": false,
+        "lumpy": true,
+        "projected": 1260000,
+        "usual": 1200000,
+        "pct": 105
+      },
+      {
+        "category": "Продукти",
+        "color": "#1F6E4C",
+        "spent": 287600,
+        "oneoff": 140000,
+        "mostly_oneoff": false,
+        "lumpy": false,
+        "projected": 530899,
+        "usual": 254000,
+        "pct": 209
+      },
+      {
+        "category": "Подорожі",
+        "color": "#127C86",
+        "spent": 200000,
+        "oneoff": 200000,
+        "mostly_oneoff": true,
+        "lumpy": true,
+        "projected": 200000,
+        "usual": 0,
+        "pct": null
+      },
+      {
+        "category": "Підписки",
+        "color": "#D99414",
+        "spent": 200000,
+        "oneoff": 200000,
+        "mostly_oneoff": true,
+        "lumpy": true,
+        "projected": 200000,
+        "usual": 0,
+        "pct": null
+      },
+      {
+        "category": "Кафе і ресторани",
+        "color": "#D99414",
+        "spent": 185000,
+        "oneoff": 185000,
+        "mostly_oneoff": true,
+        "lumpy": false,
+        "projected": 185000,
+        "usual": 0,
+        "pct": null
+      },
+      {
+        "category": "Розваги",
+        "color": "#127C86",
+        "spent": 135000,
+        "oneoff": 135000,
+        "mostly_oneoff": true,
+        "lumpy": true,
+        "projected": 135000,
+        "usual": 0,
+        "pct": null
+      },
+      {
+        "category": "Транспорт",
+        "color": "#2450C8",
+        "spent": -17200,
+        "oneoff": -45000,
+        "mostly_oneoff": false,
+        "lumpy": false,
+        "projected": -19861,
+        "usual": 22117,
+        "pct": -90
+      }
+    ]
+  }
+}

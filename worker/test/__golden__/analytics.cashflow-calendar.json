@@ -1,0 +1,91 @@
+{
+  "status": 200,
+  "body": {
+    "from": 1777582800,
+    "to": 1782853199,
+    "now": 1778749200,
+    "cushion": 3950000,
+    "items": [
+      {
+        "at": 1778659200,
+        "date": "2026-05-13",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1778832000,
+        "date": "2026-05-15",
+        "title": "Хмара",
+        "amount": 40000,
+        "amount_orig": 1000,
+        "currency_code": 840,
+        "category_id": 43,
+        "kind": "subscription"
+      },
+      {
+        "at": 1779094800,
+        "date": "2026-05-18",
+        "title": "Страховка",
+        "amount": 360000,
+        "amount_orig": 360000,
+        "currency_code": 980,
+        "category_id": 14,
+        "kind": "subscription"
+      },
+      {
+        "at": 1779782400,
+        "date": "2026-05-26",
+        "title": "Стрімінг",
+        "amount": 19900,
+        "amount_orig": 19900,
+        "currency_code": 980,
+        "category_id": 42,
+        "kind": "subscription"
+      },
+      {
+        "at": 1781337600,
+        "date": "2026-06-13",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1781510400,
+        "date": "2026-06-15",
+        "title": "Хмара",
+        "amount": 40000,
+        "amount_orig": 1000,
+        "currency_code": 840,
+        "category_id": 43,
+        "kind": "subscription"
+      },
+      {
+        "at": 1781773200,
+        "date": "2026-06-18",
+        "title": "Страховка",
+        "amount": 360000,
+        "amount_orig": 360000,
+        "currency_code": 980,
+        "category_id": 14,
+        "kind": "subscription"
+      },
+      {
+        "at": 1782460800,
+        "date": "2026-06-26",
+        "title": "Стрімінг",
+        "amount": 19900,
+        "amount_orig": 19900,
+        "currency_code": 980,
+        "category_id": 42,
+        "kind": "subscription"
+      }
+    ]
+  }
+}

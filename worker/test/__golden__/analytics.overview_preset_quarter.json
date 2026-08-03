@@ -1,0 +1,193 @@
+{
+  "status": 200,
+  "body": {
+    "summary": {
+      "spend": 3726300,
+      "income": 9270000,
+      "n": 19
+    },
+    "prev": {
+      "spend": 4305900,
+      "income": 13500000,
+      "n": 18
+    },
+    "range": {
+      "from": 1774990800,
+      "to": 1778749200,
+      "prevFrom": 1767218400,
+      "prevTo": 1774990800,
+      "bucket": "week",
+      "mode": "calendar",
+      "preset": "quarter"
+    },
+    "series": [
+      {
+        "bucket": "2026-W13",
+        "spend": 43300,
+        "income": 4500000
+      },
+      {
+        "bucket": "2026-W14",
+        "spend": 1301000,
+        "income": 0
+      },
+      {
+        "bucket": "2026-W15",
+        "spend": 60000,
+        "income": 0
+      },
+      {
+        "bucket": "2026-W17",
+        "spend": 161600,
+        "income": 4500000
+      },
+      {
+        "bucket": "2026-W18",
+        "spend": 804800,
+        "income": 270000
+      },
+      {
+        "bucket": "2026-W19",
+        "spend": 1355600,
+        "income": 0
+      }
+    ],
+    "byCategory": [
+      {
+        "category_id": 8,
+        "category_name": "Дім і побут",
+        "color": "#1F6E4C",
+        "spent": 2460000,
+        "n": 3
+      },
+      {
+        "category_id": 1,
+        "category_name": "Продукти",
+        "color": "#1F6E4C",
+        "spent": 539600,
+        "n": 8
+      },
+      {
+        "category_id": 12,
+        "category_name": "Підписки",
+        "color": "#D99414",
+        "spent": 200000,
+        "n": 1
+      },
+      {
+        "category_id": 11,
+        "category_name": "Подорожі",
+        "color": "#127C86",
+        "spent": 200000,
+        "n": 1
+      },
+      {
+        "category_id": 2,
+        "category_name": "Кафе і ресторани",
+        "color": "#D99414",
+        "spent": 185000,
+        "n": 3
+      },
+      {
+        "category_id": 6,
+        "category_name": "Розваги",
+        "color": "#127C86",
+        "spent": 135000,
+        "n": 1
+      },
+      {
+        "category_id": 3,
+        "category_name": "Транспорт",
+        "color": "#2450C8",
+        "spent": 6700,
+        "n": 3
+      }
+    ],
+    "byMerchant": [
+      {
+        "merchant": "Оренда",
+        "spent": 2400000,
+        "n": 2
+      },
+      {
+        "merchant": "АТБ",
+        "spent": 222500,
+        "n": 3
+      },
+      {
+        "merchant": "Хмара",
+        "spent": 200000,
+        "n": 1
+      },
+      {
+        "merchant": "Квитки",
+        "spent": 200000,
+        "n": 1
+      },
+      {
+        "merchant": "Ашан",
+        "spent": 200000,
+        "n": 1
+      },
+      {
+        "merchant": "Сільпо",
+        "spent": 177100,
+        "n": 4
+      },
+      {
+        "merchant": "Концерт",
+        "spent": 135000,
+        "n": 1
+      },
+      {
+        "merchant": "Зняття",
+        "spent": 90000,
+        "n": 1
+      },
+      {
+        "merchant": "Обід",
+        "spent": 60000,
+        "n": 1
+      },
+      {
+        "merchant": "Таксі",
+        "spent": 51700,
+        "n": 2
+      }
+    ],
+    "byAccount": [
+      {
+        "account_id": "acc-uah",
+        "account_title": "Картка ₴",
+        "account_type": "black",
+        "spent": 3391300,
+        "n": 17
+      },
+      {
+        "account_id": "acc-usd",
+        "account_title": "Рахунок $",
+        "account_type": "fop",
+        "spent": 335000,
+        "n": 2
+      }
+    ],
+    "byEvent": [],
+    "byImportance": [
+      {
+        "importance": "discretionary",
+        "spent": 2600000,
+        "n": 3
+      },
+      {
+        "importance": "essential",
+        "spent": 666300,
+        "n": 12
+      },
+      {
+        "importance": "optional",
+        "spent": 460000,
+        "n": 4
+      }
+    ]
+  }
+}

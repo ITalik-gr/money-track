@@ -1,0 +1,73 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "id": 1,
+      "title": "Стрімінг",
+      "kind": "subscription",
+      "total_amount": null,
+      "period_amount": 19900,
+      "period": "monthly",
+      "start_date": 1761469200,
+      "end_date": null,
+      "occurrences": null,
+      "category_id": 42,
+      "account_id": null,
+      "is_active": 1,
+      "currency_code": 980,
+      "period_count": 1,
+      "note": null
+    },
+    {
+      "id": 2,
+      "title": "Хмара",
+      "kind": "subscription",
+      "total_amount": null,
+      "period_amount": 1000,
+      "period": "monthly",
+      "start_date": 1765789200,
+      "end_date": null,
+      "occurrences": null,
+      "category_id": 43,
+      "account_id": null,
+      "is_active": 1,
+      "currency_code": 840,
+      "period_count": 1,
+      "note": null
+    },
+    {
+      "id": 3,
+      "title": "Страховка",
+      "kind": "subscription",
+      "total_amount": null,
+      "period_amount": 360000,
+      "period": "quarterly",
+      "start_date": 1752829200,
+      "end_date": null,
+      "occurrences": null,
+      "category_id": 14,
+      "account_id": null,
+      "is_active": 1,
+      "currency_code": 980,
+      "period_count": 1,
+      "note": null
+    },
+    {
+      "id": 4,
+      "title": "Прибирання",
+      "kind": "subscription",
+      "total_amount": null,
+      "period_amount": 50000,
+      "period": "weekly",
+      "start_date": 1770973200,
+      "end_date": null,
+      "occurrences": null,
+      "category_id": 8,
+      "account_id": null,
+      "is_active": 1,
+      "currency_code": 980,
+      "period_count": 1,
+      "note": null
+    }
+  ]
+}

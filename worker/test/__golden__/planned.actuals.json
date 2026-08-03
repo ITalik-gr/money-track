@@ -1,0 +1,37 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "id": 1,
+      "count": 0,
+      "last_amount": null,
+      "last_time": null,
+      "currency_code": null,
+      "price_change_pct": null
+    },
+    {
+      "id": 2,
+      "count": 0,
+      "last_amount": null,
+      "last_time": null,
+      "currency_code": null,
+      "price_change_pct": null
+    },
+    {
+      "id": 3,
+      "count": 0,
+      "last_amount": null,
+      "last_time": null,
+      "currency_code": null,
+      "price_change_pct": null
+    },
+    {
+      "id": 4,
+      "count": 0,
+      "last_amount": null,
+      "last_time": null,
+      "currency_code": null,
+      "price_change_pct": null
+    }
+  ]
+}

@@ -27,10 +27,13 @@ import { currencySign } from "../lib/format.ts";
 import type { Account } from "../../shared/types.ts";
 
 // ₴-величина рахунку для сортування/підсумків — дзеркалить `shown` у картці (кредитка = власні).
+// Від'ємне НЕ затискаємо: кредитка в боргу має власних коштів менше нуля, і саме це число
+// беруть подушка/нетворт на сервері. Затиск `Math.max(own, 0)` тут давав розбіг між сумою на
+// цій сторінці й подушкою на Головній — те саме число в двох місцях означало різне.
 function uahValue(a: Account, rates: Record<string, number>): number {
   const limit = a.credit_limit ?? 0;
   const own = (a.balance ?? 0) - limit;
-  const shown = limit > 0 ? Math.max(own, 0) : (a.balance ?? 0);
+  const shown = limit > 0 ? own : (a.balance ?? 0);
   const code = a.currency_code ?? 980;
   return code !== 980 ? (toUAHMinor(shown, code, rates) ?? 0) : shown;
 }
@@ -279,7 +282,9 @@ function AccountCard({ a, rates, spark }: {
   const credit = (a.credit_limit ?? 0) > 0;
   const limit = a.credit_limit ?? 0;
   const own = (a.balance ?? 0) - limit;
-  const shown = credit ? Math.max(own, 0) : (a.balance ?? 0);
+  // Власні кошти кредитки можуть бути від'ємними — показуємо як є (див. `uahValue` вище).
+  // Блок «Використано / Ліміт» нижче лишається: він несе ліміт і метр, чого сама сума не каже.
+  const shown = credit ? own : (a.balance ?? 0);
   const usedCredit = credit && own < 0 ? -own : 0;
   const code = a.currency_code ?? 980;
   const color = TYPE_COLOR[kind] ?? "var(--muted)";

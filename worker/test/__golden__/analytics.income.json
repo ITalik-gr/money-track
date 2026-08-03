@@ -1,0 +1,61 @@
+{
+  "status": 200,
+  "body": {
+    "period": {
+      "from": 1777582800,
+      "to": 1778749200,
+      "preset": "month"
+    },
+    "total": 4770000,
+    "prev_total": 4500000,
+    "delta_pct": 6,
+    "sources": [
+      {
+        "category_id": 15,
+        "name": "Зарплата",
+        "color": "#1F6E4C",
+        "amount": 4500000,
+        "n": 1,
+        "pct": 94
+      },
+      {
+        "category_id": null,
+        "name": "Інше",
+        "color": null,
+        "amount": 370000,
+        "n": 2,
+        "pct": 8
+      }
+    ],
+    "monthly": [
+      {
+        "month": "2025-12",
+        "income": 4500000
+      },
+      {
+        "month": "2026-01",
+        "income": 4500000
+      },
+      {
+        "month": "2026-02",
+        "income": 4500000
+      },
+      {
+        "month": "2026-03",
+        "income": 4500000
+      },
+      {
+        "month": "2026-04",
+        "income": 4500000
+      },
+      {
+        "month": "2026-05",
+        "income": 4770000
+      }
+    ],
+    "stability": {
+      "cv_pct": 2,
+      "label": "стабільний"
+    }
+  }
+}

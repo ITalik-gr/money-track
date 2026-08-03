@@ -1,0 +1,21 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "id": 1,
+      "category_id": 1,
+      "period": "month",
+      "amount": 1500000,
+      "currency_code": 980,
+      "rollover": 0
+    },
+    {
+      "id": 2,
+      "category_id": 2,
+      "period": "month",
+      "amount": 100000,
+      "currency_code": 980,
+      "rollover": 0
+    }
+  ]
+}

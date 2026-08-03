@@ -1,0 +1,45 @@
+{
+  "status": 200,
+  "body": {
+    "days": 30,
+    "total": 469900,
+    "items": [
+      {
+        "id": 2,
+        "title": "Хмара",
+        "amount": 1000,
+        "currency_code": 840,
+        "amount_uah": 40000,
+        "at": 1778832000,
+        "days_until": 1
+      },
+      {
+        "id": 3,
+        "title": "Страховка",
+        "amount": 360000,
+        "currency_code": 980,
+        "amount_uah": 360000,
+        "at": 1779094800,
+        "days_until": 4
+      },
+      {
+        "id": 1,
+        "title": "Стрімінг",
+        "amount": 19900,
+        "currency_code": 980,
+        "amount_uah": 19900,
+        "at": 1779782400,
+        "days_until": 12
+      },
+      {
+        "id": 4,
+        "title": "Прибирання",
+        "amount": 50000,
+        "currency_code": 980,
+        "amount_uah": 50000,
+        "at": 1781337600,
+        "days_until": 30
+      }
+    ]
+  }
+}

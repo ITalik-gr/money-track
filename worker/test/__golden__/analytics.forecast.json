@@ -1,0 +1,35 @@
+{
+  "status": 200,
+  "body": {
+    "monthStart": 1777582800,
+    "now": 1778749200,
+    "daysInMonth": 31,
+    "daysElapsed": 14,
+    "daysRemaining": 17,
+    "spend": 2250400,
+    "income": 4770000,
+    "pace": 160743,
+    "projectedSpend": 3927704,
+    "projectedLow": 3918105,
+    "projectedHigh": 3937303,
+    "projectedNet": 842296,
+    "upcomingPlanned": 419900,
+    "upcomingItems": [
+      {
+        "title": "Хмара",
+        "amount": 40000,
+        "at": 1778832000
+      },
+      {
+        "title": "Страховка",
+        "amount": 360000,
+        "at": 1779094800
+      },
+      {
+        "title": "Стрімінг",
+        "amount": 19900,
+        "at": 1779782400
+      }
+    ]
+  }
+}

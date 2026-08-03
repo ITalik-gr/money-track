@@ -1,0 +1,22 @@
+{
+  "status": 200,
+  "body": {
+    "byCurrency": [
+      {
+        "currency_code": 980,
+        "own": 670000
+      },
+      {
+        "currency_code": 840,
+        "own": 200000
+      }
+    ],
+    "totalUAH": 8670000,
+    "credit": {
+      "accountId": "acc-cred",
+      "limit": 100000,
+      "own": -80000,
+      "debt": 80000
+    }
+  }
+}

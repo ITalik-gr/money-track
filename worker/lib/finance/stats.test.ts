@@ -6,11 +6,11 @@
  *
  *   §SPLIT       — `amountSum` started using `EFF_AMOUNT`, five queries kept their old shape, and
  *                  Statistics silently went blank (`no such column: sp.amount`).
- *   §REFUND      — "Скасування. BlaBlaCar +145 ₴" counted as INCOME. Income was overstated by
- *                  10 776 ₴ and spending by 2 533 ₴.
+ *   §REFUND      — a cancelled purchase ("Скасування. <merchant>") counted as INCOME while the
+ *                  purchase itself stayed a full expense, inflating BOTH sides of the report.
  *   §COMPENSATION— v1 excluded a whole incoming transfer from income and capped it at the
- *                  expense, so 530 ₴ of a 2400 ₴ transfer existed in neither spending nor income.
- *                  Money simply vanished from the statistics.
+ *                  expense, so when the transfer was larger than the expense the remainder
+ *                  existed in neither spending nor income. Money simply vanished.
  *
  * The point of a test here is that these are SQL strings: `tsc` cannot see inside them, and the
  * SQL linter only checks that a query mentioning the canon also carries `STATS_JOINS`. Nothing
@@ -183,8 +183,8 @@ test("§REFUND: an uncategorised incoming P2P is real income, not a refund", () 
 });
 
 test("§COMPENSATION v2: allocated part reduces the expense, remainder stays income", () => {
-  // The production bug, with its real numbers: +2400 ₴ received against a −1870 ₴ expense.
-  // v1 excluded the whole incoming transfer and capped it at the expense, so 530 ₴ appeared in
+  // The production bug: an incoming transfer LARGER than the expense it covers. v1 excluded the
+  // whole transfer from income and capped it at the expense, so the remainder appeared in
   // neither spending nor income.
   const d = db();
   tx(d, { id: "exp", time: 1, amount: -187000, category_id: 2, reimbursed: 187000 });
@@ -192,21 +192,21 @@ test("§COMPENSATION v2: allocated part reduces the expense, remainder stays inc
 
   const r = totals(d);
   assert.equal(r.spend, 0, "the expense was fully covered");
-  assert.equal(r.income, 53000, "the unallocated 530 ₴ is genuine income");
-  // Nothing is lost: expense + income must still account for the whole 2400 ₴ received.
+  assert.equal(r.income, 53000, "the unallocated remainder is genuine income");
+  // Nothing is lost: expense + income must still account for the whole incoming amount.
   assert.equal(r.income + 187000, 240000);
 });
 
-test("§COMPENSATION: reported case — 1375 ₴ expense, 1000 ₴ sent back", () => {
-  // Reported from the live demo as "statistics still show the full price". They do not: the
-  // canon subtracts the compensation, verified here with the exact figures. What was actually
+test("§COMPENSATION: a partly refunded expense nets out in totals and in its category", () => {
+  // Reported by a user as "statistics still show the full price". They do not: the canon
+  // subtracts the compensation, verified here end to end. What was actually
   // missing was any sign of it in the UI — the list and the detail header showed the amount the
   // BANK charged, so a user who had just recorded a compensation saw an unchanged number.
   const d = db();
   tx(d, { id: "exp", time: 1, amount: -137500, category_id: 1, reimbursed: 100000 });
   tx(d, { id: "src", time: 2, amount: 100000, merchant: "Від: друг", reimburses_total: 100000 });
   const r = totals(d);
-  assert.equal(r.spend, 37500, "375 ₴ is what is actually yours");
+  assert.equal(r.spend, 37500, "only the uncovered remainder is actually yours");
   assert.equal(r.income, 0, "the money sent back is not earnings");
   const byCat = d.prepare(
     `SELECT ${EFF_CAT_ID} AS cat, ${amountSum(MULT)} AS spent

@@ -1,0 +1,465 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "id": 1,
+      "name": "Продукти",
+      "icon": "cart",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 2,
+      "name": "Кафе і ресторани",
+      "icon": "coffee",
+      "color": "#D99414",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 3,
+      "name": "Транспорт",
+      "icon": "car",
+      "color": "#2450C8",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 4,
+      "name": "Здоровʼя",
+      "icon": "health",
+      "color": "#B23A2E",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 5,
+      "name": "Одяг і взуття",
+      "icon": "shirt",
+      "color": "#7A3E9D",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 6,
+      "name": "Розваги",
+      "icon": "ticket",
+      "color": "#127C86",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 7,
+      "name": "Комуналка і звʼязок",
+      "icon": "bolt",
+      "color": "#6B7A74",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 8,
+      "name": "Дім і побут",
+      "icon": "home",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 9,
+      "name": "Електроніка",
+      "icon": "chip",
+      "color": "#2450C8",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 10,
+      "name": "Краса і догляд",
+      "icon": "sparkle",
+      "color": "#7A3E9D",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 11,
+      "name": "Подорожі",
+      "icon": "plane",
+      "color": "#127C86",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 12,
+      "name": "Підписки",
+      "icon": "repeat",
+      "color": "#D99414",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 13,
+      "name": "Перекази і зняття",
+      "icon": "swap",
+      "color": "#6B7A74",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 14,
+      "name": "Інше",
+      "icon": "dots",
+      "color": "#6B7A74",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 19,
+      "name": "Освіта",
+      "icon": "book",
+      "color": "#2450C8",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 20,
+      "name": "Діти",
+      "icon": "baby",
+      "color": "#D99414",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 21,
+      "name": "Тварини",
+      "icon": "paw",
+      "color": "#7A3E9D",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 22,
+      "name": "Спорт і фітнес",
+      "icon": "dumbbell",
+      "color": "#127C86",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 23,
+      "name": "Подарунки",
+      "icon": "gift",
+      "color": "#B23A2E",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 24,
+      "name": "Податки",
+      "icon": "tax",
+      "color": "#6B7A74",
+      "parent_id": null,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 25,
+      "name": "Єдиний податок",
+      "icon": "tax",
+      "color": "#6B7A74",
+      "parent_id": 24,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 26,
+      "name": "ЄСВ",
+      "icon": "tax",
+      "color": "#6B7A74",
+      "parent_id": 24,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 27,
+      "name": "Військовий збір",
+      "icon": "tax",
+      "color": "#6B7A74",
+      "parent_id": 24,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 28,
+      "name": "ПДФО",
+      "icon": "tax",
+      "color": "#6B7A74",
+      "parent_id": 24,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 30,
+      "name": "Супермаркет",
+      "icon": "cart",
+      "color": "#1F6E4C",
+      "parent_id": 1,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 31,
+      "name": "Ринок",
+      "icon": "cart",
+      "color": "#1F6E4C",
+      "parent_id": 1,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 32,
+      "name": "Кава",
+      "icon": "coffee",
+      "color": "#D99414",
+      "parent_id": 2,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 33,
+      "name": "Ресторани",
+      "icon": "coffee",
+      "color": "#D99414",
+      "parent_id": 2,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 34,
+      "name": "Доставка їжі",
+      "icon": "coffee",
+      "color": "#D99414",
+      "parent_id": 2,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 35,
+      "name": "Таксі",
+      "icon": "car",
+      "color": "#2450C8",
+      "parent_id": 3,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 36,
+      "name": "Пальне",
+      "icon": "fuel",
+      "color": "#2450C8",
+      "parent_id": 3,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 37,
+      "name": "Громадський",
+      "icon": "bus",
+      "color": "#2450C8",
+      "parent_id": 3,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 38,
+      "name": "Кіно",
+      "icon": "ticket",
+      "color": "#127C86",
+      "parent_id": 6,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 39,
+      "name": "Ігри",
+      "icon": "gamepad",
+      "color": "#127C86",
+      "parent_id": 6,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "optional"
+    },
+    {
+      "id": 40,
+      "name": "Аптека",
+      "icon": "pill",
+      "color": "#B23A2E",
+      "parent_id": 4,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": "essential"
+    },
+    {
+      "id": 41,
+      "name": "Лікар",
+      "icon": "health",
+      "color": "#B23A2E",
+      "parent_id": 4,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 42,
+      "name": "Стрімінги",
+      "icon": "repeat",
+      "color": "#D99414",
+      "parent_id": 12,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 43,
+      "name": "Софт і хмара",
+      "icon": "laptop",
+      "color": "#D99414",
+      "parent_id": 12,
+      "is_income": 0,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 15,
+      "name": "Зарплата",
+      "icon": "wallet",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 16,
+      "name": "Фріланс",
+      "icon": "laptop",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 17,
+      "name": "Повернення",
+      "icon": "undo",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 18,
+      "name": "Інші надходження",
+      "icon": "plus",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 44,
+      "name": "Продаж",
+      "icon": "tag",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 45,
+      "name": "Кешбек",
+      "icon": "coins",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 46,
+      "name": "Проценти",
+      "icon": "coins",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    },
+    {
+      "id": 47,
+      "name": "Подарунок",
+      "icon": "gift",
+      "color": "#1F6E4C",
+      "parent_id": null,
+      "is_income": 1,
+      "is_custom": 0,
+      "importance": null
+    }
+  ]
+}

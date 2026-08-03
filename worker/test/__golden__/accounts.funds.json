@@ -1,0 +1,46 @@
+{
+  "status": 200,
+  "body": {
+    "cushion": 3950000,
+    "debt": 80000,
+    "investment": 4800000,
+    "net": 3870000,
+    "accounts": [
+      {
+        "title": "Картка ₴",
+        "type": "black",
+        "role": "liquid",
+        "own_uah": 4500,
+        "note": null
+      },
+      {
+        "title": "Рахунок $",
+        "type": "fop",
+        "role": "liquid",
+        "own_uah": 32000,
+        "note": null
+      },
+      {
+        "title": "Кредитка",
+        "type": "black",
+        "role": "liquid",
+        "own_uah": -800,
+        "note": null
+      },
+      {
+        "title": "Банка",
+        "type": "jar",
+        "role": "liquid",
+        "own_uah": 3000,
+        "note": null
+      },
+      {
+        "title": "Крипта",
+        "type": "crypto",
+        "role": "investment",
+        "own_uah": 48000,
+        "note": null
+      }
+    ]
+  }
+}

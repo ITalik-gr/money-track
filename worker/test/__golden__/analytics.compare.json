@@ -1,0 +1,81 @@
+{
+  "status": 200,
+  "body": {
+    "a": {
+      "from": 1776157200,
+      "to": 1778749200,
+      "spend": 2382000,
+      "income": 4770000,
+      "byCategory": [
+        {
+          "category_id": 8,
+          "category_name": "Дім і побут",
+          "color": "#1F6E4C",
+          "spent": 1260000
+        },
+        {
+          "category_id": 1,
+          "category_name": "Продукти",
+          "color": "#1F6E4C",
+          "spent": 419200
+        },
+        {
+          "category_id": 12,
+          "category_name": "Підписки",
+          "color": "#D99414",
+          "spent": 200000
+        },
+        {
+          "category_id": 11,
+          "category_name": "Подорожі",
+          "color": "#127C86",
+          "spent": 200000
+        },
+        {
+          "category_id": 2,
+          "category_name": "Кафе і ресторани",
+          "color": "#D99414",
+          "spent": 185000
+        },
+        {
+          "category_id": 6,
+          "category_name": "Розваги",
+          "color": "#127C86",
+          "spent": 135000
+        },
+        {
+          "category_id": 3,
+          "category_name": "Транспорт",
+          "color": "#2450C8",
+          "spent": -17200
+        }
+      ]
+    },
+    "b": {
+      "from": 1773565200,
+      "to": 1776157200,
+      "spend": 1534900,
+      "income": 4500000,
+      "byCategory": [
+        {
+          "category_id": 8,
+          "category_name": "Дім і побут",
+          "color": "#1F6E4C",
+          "spent": 1200000
+        },
+        {
+          "category_id": 1,
+          "category_name": "Продукти",
+          "color": "#1F6E4C",
+          "spent": 311000
+        },
+        {
+          "category_id": 3,
+          "category_name": "Транспорт",
+          "color": "#2450C8",
+          "spent": 23900
+        }
+      ]
+    }
+  }
+}
