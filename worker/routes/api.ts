@@ -5,7 +5,7 @@ import { setState, getState } from "../lib/finance/repo.ts";
 import { computeSummary, createCashTx, getRates, toUAHMinor, ratesForDays, type Rates } from "../lib/finance/finance.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_WHERE,
-  SPEND_COUNT, valueMode, uahMult, spendSum, incomeSum, amountSum, periodBounds,
+  valueMode, uahMult, amountSum, periodBounds,
   recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localYmSql, localParts,
   type PeriodMode, type Preset,
 } from "../lib/finance/stats.ts";
@@ -14,6 +14,9 @@ import * as accountsRepo from "../repo/accounts.ts";
 import * as categoriesRepo from "../repo/categories.ts";
 import * as txRepo from "../repo/transactions.ts";
 import * as goalsRepo from "../repo/goals.ts";
+import * as analyticsRepo from "../repo/analytics.ts";
+import * as planningRepo from "../repo/planning.ts";
+import * as receiptsRepo from "../repo/receipts.ts";
 import { catNameSql, localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
 import { recalcGoal, isGoalKind, isAutofillKind } from "../lib/finance/goals.ts";
 import { st, stLit } from "../lib/platform/i18n.ts";
@@ -1351,69 +1354,24 @@ api.get("/analytics/overview", async (c) => {
   const { mult, curFilter } = valueMode(rates, cur);
   const fmt = bucket === "month" ? "%Y-%m" : bucket === "week" ? "%Y-W%W" : "%Y-%m-%d";
 
-  const totals = (f: number, t: number) => c.env.DB.prepare(
-    `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income, ${SPEND_COUNT} AS n
-     FROM transactions t ${STATS_JOINS}
-     WHERE t.time >= ? AND t.time <= ?${curFilter}`,
-  ).bind(f, t).first<{ spend: number; income: number; n: number }>();
+  const db = c.env.DB, v = { mult, curFilter }, loc = c.get("locale");
+  const cur_ = { from, to }, prev_ = { from: prevFrom, to: prevTo };
 
   const [summary, prev, series, byCategory, byMerchant, byAccount, byEvent, byImportance] = await Promise.all([
-    totals(from, to),
-    totals(prevFrom, prevTo),
-    // Серія: spend/income по бакетах (канонічно + зведено).
-    c.env.DB.prepare(
-      `SELECT strftime('${fmt}', t.time, 'unixepoch') AS bucket,
-              ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ?${curFilter}
-       GROUP BY bucket ORDER BY bucket`,
-    ).bind(from, to).all(),
-    // Розбивка по ЕФЕКТИВНІЙ категорії (готівка/зняття за реальною суттю; рол-ап у батька).
-    c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name,
-              ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
-       GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
-    ).bind(from, to).all(),
-    c.env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter} AND t.merchant IS NOT NULL
-       GROUP BY t.merchant ORDER BY spent DESC LIMIT 10`,
-    ).bind(from, to).all(),
-    c.env.DB.prepare(
-      `SELECT t.account_id, a.title AS account_title, a.type AS account_type, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS} LEFT JOIN accounts a ON a.id = t.account_id
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
-       GROUP BY t.account_id ORDER BY spent DESC`,
-    ).bind(from, to).all(),
-    // Групи: спрощений фільтр (події можуть містити перекази); зведено в ₴.
-    c.env.DB.prepare(
-      `SELECT e.id AS event_id, e.name AS event_name, e.color AS event_color,
-              ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS} JOIN event_groups e ON e.id = t.event_id
-       WHERE t.time >= ? AND t.time <= ? AND ${EFF_AMOUNT} < 0 AND t.is_transfer = 0${curFilter}
-       GROUP BY t.event_id ORDER BY spent DESC`,
-    ).bind(from, to).all(),
-    // §6 Вагомість: частка обов'язкових/бажаних/необов'язкових витрат (канонічно, зведено).
-    c.env.DB.prepare(
-      `SELECT ${EFF_IMPORTANCE} AS importance, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
-       GROUP BY ${EFF_IMPORTANCE}`,
-    ).bind(from, to).all(),
+    analyticsRepo.periodTotals(db, v, cur_),
+    analyticsRepo.periodTotals(db, v, prev_),
+    analyticsRepo.series(db, v, cur_, fmt),
+    analyticsRepo.spendByCategory(db, loc, v, cur_),
+    analyticsRepo.spendByMerchant(db, v, cur_),
+    analyticsRepo.spendByAccount(db, v, cur_),
+    analyticsRepo.spendByEvent(db, v, cur_),
+    analyticsRepo.spendByImportance(db, v, cur_),
   ]);
 
   return c.json({
     summary, prev,
     range: { from, to, prevFrom, prevTo, bucket, mode, preset: presetParam ?? null },
-    series: series.results ?? [],
-    byCategory: byCategory.results ?? [],
-    byMerchant: byMerchant.results ?? [],
-    byAccount: byAccount.results ?? [],
-    byEvent: byEvent.results ?? [],
-    byImportance: byImportance.results ?? [],
+    series, byCategory, byMerchant, byAccount, byEvent, byImportance,
   });
 });
 
@@ -1427,15 +1385,9 @@ api.get("/analytics/monthly-history", async (c) => {
   const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
   const now = Math.floor(Date.now() / 1000);
   const from = localMonthStart(now, -(months - 1));
-  const rows = await c.env.DB.prepare(
-    `SELECT ${localYmSql(now)} AS month,
-            ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
-     FROM transactions t ${STATS_JOINS}
-     WHERE t.time >= ?
-     GROUP BY month ORDER BY month`,
-  ).bind(from).all<{ month: string; spend: number; income: number }>();
+  const rows = await analyticsRepo.monthlyHistory(c.env.DB, { mult }, now, from);
   // Пропущені місяці (без операцій) заповнюємо нулями — щоб вісь була рівна й безперервна.
-  const map = new Map((rows.results ?? []).map((r) => [r.month, r]));
+  const map = new Map(rows.map((r) => [r.month, r]));
   const out: { month: string; spend: number; income: number }[] = [];
   for (let i = months - 1; i >= 0; i--) {
     const key = localYm(localMonthStart(now, -i));
@@ -1453,11 +1405,7 @@ api.get("/analytics/safe-to-spend", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const monthStart = localMonthStart(now);
 
-  const tot = await c.env.DB.prepare(
-    `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN ${SPEND_WHERE} AND ${EFF_IMPORTANCE} = 'essential' THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS essential
-     FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?`,
-  ).bind(monthStart, now).first<{ spend: number; income: number; essential: number }>();
+  const tot = await analyticsRepo.monthToDate(c.env.DB, { mult }, { from: monthStart, to: now });
 
   // §SUB-MONTH: «залишок підписок» = РОЗКЛАД списань до кінця місяця, а не «місячна сума
   // мінус уже сплачене». Стара формула сумувала `period_amount` усіх активних планів як
@@ -1468,11 +1416,9 @@ api.get("/analytics/safe-to-spend", async (c) => {
   // §CUR-PLAN: суми в ₴ (`chargesBetween` зводить сам) — вони в одному ряду з витратами місяця.
   const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
   const monthEnd = localMonthStart(now, 1);
-  const plans = await c.env.DB.prepare(
-    "SELECT period_amount, currency_code, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
-  ).all<{ period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null }>();
+  const plans = await planningRepo.activeForSchedule(c.env.DB);
   const sum = (from: number, to: number) =>
-    chargesBetween(plans.results ?? [], rates, from, to).reduce((s, ch) => s + ch.amount, 0);
+    chargesBetween(plans, rates, from, to).reduce((s, ch) => s + ch.amount, 0);
 
   const income = tot?.income ?? 0;
   const spend = tot?.spend ?? 0;
@@ -1501,13 +1447,9 @@ api.get("/analytics/capital-trend", async (c) => {
   const from = localMonthStart(now, -months + 1);
 
   // Денна чиста зміна капіталу (₴-копійки, знак збережено) від початку періоду.
-  const daily = await c.env.DB.prepare(
-    `SELECT CAST(t.time / 86400 AS INTEGER) AS day,
-            CAST(ROUND(COALESCE(SUM(t.amount * ${mult}), 0)) AS INTEGER) AS net
-     FROM transactions t WHERE t.time >= ? GROUP BY day`,
-  ).bind(from).all<{ day: number; net: number }>();
+  const daily = await analyticsRepo.dailyNetChange(c.env.DB, mult, from);
   const netByDay = new Map<number, number>();
-  for (const r of daily.results ?? []) netByDay.set(r.day, r.net);
+  for (const r of daily) netByDay.set(r.day, r.net);
 
   // Йдемо від сьогодні назад: фіксуємо капітал у кінці кожного тижня.
   const todayDay = Math.floor(now / 86400);
@@ -1545,24 +1487,13 @@ api.get("/analytics/networth", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const from = localMonthStart(now, -months + 1);
 
-  const accounts = await c.env.DB.prepare(
-    `SELECT id, title, type, role, balance, credit_limit, currency_code, is_manual
-     FROM accounts WHERE is_active = 1`,
-  ).all<{
-    id: string; title: string | null; type: string | null; role: string | null;
-    balance: number; credit_limit: number; currency_code: number; is_manual: number;
-  }>();
-  const accs = accounts.results ?? [];
+  const accs = await accountsRepo.listForNetWorth(c.env.DB);
   if (!accs.length) return c.json({ months, points: [], caveats: [], now: null });
 
   // Денна зміна ПО РАХУНКУ, у валюті рахунку (конвертація — на етапі зведення).
-  const daily = await c.env.DB.prepare(
-    `SELECT t.account_id AS acc, CAST(t.time / 86400 AS INTEGER) AS day,
-            CAST(COALESCE(SUM(t.amount), 0) AS INTEGER) AS net
-     FROM transactions t WHERE t.time >= ? GROUP BY t.account_id, day`,
-  ).bind(from).all<{ acc: string; day: number; net: number }>();
+  const daily = await analyticsRepo.dailyNetChangeByAccount(c.env.DB, from);
   const netByAccDay = new Map<string, number>();
-  for (const r of daily.results ?? []) netByAccDay.set(`${r.acc}:${r.day}`, r.net);
+  for (const r of daily) netByAccDay.set(`${r.acc}:${r.day}`, r.net);
 
   // Поточний власний залишок кожного рахунку (баланс − кредитний ліміт, §Інваріанти).
   const own = new Map<string, number>(accs.map((a) => [a.id, (a.balance ?? 0) - (a.credit_limit ?? 0)]));
@@ -1572,12 +1503,10 @@ api.get("/analytics/networth", async (c) => {
   // Історія ручних балансів (§Історія ручних балансів): ручні/крипто-рахунки не мають tx-дельт,
   // тож без цього назад лишались би плоскими. Крокуємо по зафіксованих зрізах.
   const histByAcc = new Map<string, { at: number; balance: number }[]>();
-  try {
-    const hist = await c.env.DB.prepare(
-      "SELECT account_id AS acc, balance, recorded_at AS at FROM account_balance_history ORDER BY account_id, recorded_at",
-    ).all<{ acc: string; balance: number; at: number }>();
-    for (const r of hist.results ?? []) (histByAcc.get(r.acc) ?? histByAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
-  } catch { /* таблиця може ще не бути на remote (0026) — деградуємо до плоского */ }
+  // `null` = таблиці ще нема на remote (0026) → деградуємо до плоского, як і раніше.
+  for (const r of (await accountsRepo.balanceHistory(c.env.DB)) ?? []) {
+    (histByAcc.get(r.acc) ?? histByAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
+  }
   // Баланс ручного рахунку на момент t: останній зріз ≤ t; до першого зрізу — найраніший відомий
   // (не сьогоднішній, щоб не малювати рух там, де його не знали). null = історії взагалі нема.
   const manualBalanceAt = (accId: string, t: number): number | null => {
@@ -1717,34 +1646,18 @@ api.get("/analytics/merchant", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const from6 = localMonthStart(now, -5);
 
+  const db = c.env.DB, loc = c.get("locale");
   const [agg, byMonth, topCat, txs] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT ${amountSum(mult)} AS total, COUNT(DISTINCT t.id) AS n, MIN(t.time) AS first_at, MAX(t.time) AS last_at
-       FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?`,
-    ).bind(name).first<{ total: number; n: number; first_at: number | null; last_at: number | null }>(),
-    c.env.DB.prepare(
-      `SELECT ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ? AND t.time >= ?
-       GROUP BY m ORDER BY m`,
-    ).bind(name, from6).all<{ m: string; spent: number }>(),
-    c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?
-       GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 1`,
-    ).bind(name).first<{ id: number | null; name: string | null; color: string | null; spent: number }>(),
-    c.env.DB.prepare(
-      `SELECT t.*, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color,
-              COALESCE(rc.icon, c.icon) AS category_icon
-       FROM transactions t ${STATS_JOINS} WHERE t.merchant = ? ORDER BY t.time DESC LIMIT 40`,
-    ).bind(name).all(),
+    analyticsRepo.merchantAggregate(db, mult, name),
+    analyticsRepo.merchantByMonth(db, mult, now, name, from6),
+    analyticsRepo.merchantTopCategory(db, loc, mult, name),
+    analyticsRepo.merchantTransactions(db, loc, name),
   ]);
 
   // Частка в категорії: витрати мерчанта / витрати всієї категорії (уся історія).
   let categoryShare: number | null = null;
   if (topCat?.id != null && topCat.spent > 0) {
-    const catTot = await c.env.DB.prepare(
-      `SELECT ${amountSum(mult)} AS spent FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?`,
-    ).bind(topCat.id).first<{ spent: number }>();
+    const catTot = await analyticsRepo.categoryTotalAllTime(db, mult, topCat.id);
     if (catTot && catTot.spent > 0) categoryShare = Math.round((topCat.spent / catTot.spent) * 100);
   }
 
@@ -1756,10 +1669,10 @@ api.get("/analytics/merchant", async (c) => {
     avg: n > 0 ? Math.round(total / n) : 0,
     first_at: agg?.first_at ?? null,
     last_at: agg?.last_at ?? null,
-    by_month: (byMonth.results ?? []).map((r) => ({ month: r.m, spent: r.spent })),
+    by_month: byMonth.map((r) => ({ month: r.m, spent: r.spent })),
     top_category: topCat?.name ? { name: topCat.name, color: topCat.color, spent: topCat.spent } : null,
     category_share: categoryShare,
-    transactions: txs.results ?? [],
+    transactions: txs,
   });
 });
 
@@ -1779,24 +1692,14 @@ api.get("/analytics/compare", async (c) => {
   const bFrom = bpFrom != null ? Number(bpFrom) : from - span;
   const bTo = bpTo != null ? Number(bpTo) : from;
 
-  const totals = (f: number, t: number) => c.env.DB.prepare(
-    `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
-     FROM transactions t ${STATS_JOINS}
-     WHERE t.time >= ? AND t.time <= ?${curFilter}`,
-  ).bind(f, t).first<{ spend: number; income: number }>();
-
-  const cats = (f: number, t: number) => c.env.DB.prepare(
-    `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS color,
-            ${amountSum(mult)} AS spent
-     FROM transactions t ${STATS_JOINS}
-     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${curFilter}
-     GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
-  ).bind(f, t).all();
+  const db = c.env.DB, v = { mult, curFilter }, loc = c.get("locale");
+  const totals = (f: number, t: number) => analyticsRepo.spendIncomeTotals(db, v, { from: f, to: t });
+  const cats = (f: number, t: number) => analyticsRepo.compareByCategory(db, loc, v, { from: f, to: t });
 
   const [aTot, bTot, aCats, bCats] = await Promise.all([totals(from, to), totals(bFrom, bTo), cats(from, to), cats(bFrom, bTo)]);
   return c.json({
-    a: { from, to, spend: aTot?.spend ?? 0, income: aTot?.income ?? 0, byCategory: aCats.results ?? [] },
-    b: { from: bFrom, to: bTo, spend: bTot?.spend ?? 0, income: bTot?.income ?? 0, byCategory: bCats.results ?? [] },
+    a: { from, to, spend: aTot?.spend ?? 0, income: aTot?.income ?? 0, byCategory: aCats },
+    b: { from: bFrom, to: bTo, spend: bTot?.spend ?? 0, income: bTot?.income ?? 0, byCategory: bCats },
   });
 });
 
@@ -1815,16 +1718,8 @@ api.get("/analytics/forecast", async (c) => {
   // Трейлінг: до 3 ПОВНИХ місяців перед поточним — для історичного якоря прогнозу.
   const trailStart = localMonthStart(now, -3);
   const [totals, trail] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT ${spendSum(mult)} AS spend, ${incomeSum(mult)} AS income
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ?`,
-    ).bind(monthStart, now).first<{ spend: number; income: number }>(),
-    c.env.DB.prepare(
-      `SELECT ${localYmSql(now)} AS m, ${spendSum(mult)} AS spend
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time < ? GROUP BY m`,
-    ).bind(trailStart, monthStart).all<{ m: string; spend: number }>(),
+    analyticsRepo.spendIncomeTotals(c.env.DB, { mult, curFilter: "" }, { from: monthStart, to: now }),
+    analyticsRepo.monthlySpendBefore(c.env.DB, mult, now, trailStart, monthStart),
   ]);
 
   const spend = totals?.spend ?? 0;
@@ -1833,7 +1728,7 @@ api.get("/analytics/forecast", async (c) => {
   // Прогноз місяця = блендимо наївний темп (роздуває рано в місяці) з історичним якорем
   // (факт + середньомісячна історія на дні, що лишились). Рано довіряємо історії, під кінець —
   // фактичному темпу. Без історії — падаємо на чистий темп.
-  const trailMonths = (trail.results ?? []).map((r) => r.spend);
+  const trailMonths = trail.map((r) => r.spend);
   const avgMonth = trailMonths.length ? trailMonths.reduce((s, v) => s + v, 0) / trailMonths.length : 0;
   const elapsedFrac = Math.min(1, Math.max(0.05, daysElapsed / daysInMonth));
   const paceProj = pace * daysInMonth;
@@ -1856,13 +1751,11 @@ api.get("/analytics/forecast", async (c) => {
   // спишеться кілька разів, а власний однопрохідний цикл рахував рівно одне списання на план.
   const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
   const fxRates = await getRates(c.env.DB);
-  const planned = await c.env.DB.prepare(
-    "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
-  ).all<{ id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null }>();
+  const planned = await planningRepo.activeWithTitles(c.env.DB);
 
   // §CUR-PLAN: суми зводимо в ₴ — вони йдуть в один ряд із витратами місяця (теж ₴).
   const monthEnd = localMonthStart(now, 1);
-  const upcomingItems = chargesBetween(planned.results ?? [], fxRates, now + 1, monthEnd - 1)
+  const upcomingItems = chargesBetween(planned, fxRates, now + 1, monthEnd - 1)
     .map((ch) => ({ title: ch.plan.title, amount: ch.amount, at: ch.at }));
   const upcomingPlanned = upcomingItems.reduce((s, p) => s + p.amount, 0);
 
@@ -1887,46 +1780,29 @@ api.get("/analytics/income", async (c) => {
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
   const { mult, curFilter } = valueMode(rates, cur);
 
-  // Сума доходу по рядках (INCOME_WHERE уже у WHERE) — додатна, зведена.
-  const incSum = `CAST(ROUND(COALESCE(SUM(t.amount * ${mult}), 0)) AS INTEGER)`;
+  const db = c.env.DB, v = { mult, curFilter };
+  const nowS = Math.floor(Date.now() / 1000);
 
   const [sources, curTot, prevTot, monthly] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
-              ${incSum} AS amount, COUNT(*) AS n
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${INCOME_WHERE}${curFilter}
-       GROUP BY ${EFF_CAT_ID} ORDER BY amount DESC`,
-    ).bind(from, to).all<{ category_id: number | null; name: string | null; color: string | null; amount: number; n: number }>(),
-    c.env.DB.prepare(
-      `SELECT ${incomeSum(mult)} AS income FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?${curFilter}`,
-    ).bind(from, to).first<{ income: number }>(),
-    c.env.DB.prepare(
-      `SELECT ${incomeSum(mult)} AS income FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?${curFilter}`,
-    ).bind(prevFrom, prevTo).first<{ income: number }>(),
+    analyticsRepo.incomeBySource(db, c.get("locale"), v, { from, to }),
+    analyticsRepo.incomeTotal(db, v, { from, to }),
+    analyticsRepo.incomeTotal(db, v, { from: prevFrom, to: prevTo }),
     // 6 календарних місяців для оцінки стабільності (по місяцях).
-    (async () => {
-      const nowS = Math.floor(Date.now() / 1000);
-      const mFrom = localMonthStart(nowS, -5);
-      return c.env.DB.prepare(
-        `SELECT ${localYmSql(nowS)} AS m, ${incomeSum(mult)} AS income
-         FROM transactions t ${STATS_JOINS} WHERE t.time >= ? AND t.time <= ?${curFilter} GROUP BY m ORDER BY m`,
-      ).bind(mFrom, nowS).all<{ m: string; income: number }>();
-    })(),
+    analyticsRepo.monthlyIncome(db, v, nowS, { from: localMonthStart(nowS, -5), to: nowS }),
   ]);
 
   const total = curTot?.income ?? 0;
   const prevTotal = prevTot?.income ?? 0;
   const deltaPct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : (total > 0 ? null : 0);
 
-  const srcRows = (sources.results ?? []).map((s) => ({
+  const srcRows = sources.map((s) => ({
     category_id: s.category_id, name: s.name ?? st(c.get("locale"), "other"), color: s.color,
     amount: s.amount, n: s.n, pct: total > 0 ? Math.round((s.amount / total) * 100) : 0,
   }));
 
   // Стабільність: коеф. варіації (stddev/mean) по ПОВНИХ місяцях (без поточного часткового).
   const nowMonth = new Date().toISOString().slice(0, 7);
-  const complete = (monthly.results ?? []).filter((r) => r.m !== nowMonth).map((r) => r.income);
+  const complete = monthly.filter((r) => r.m !== nowMonth).map((r) => r.income);
   let cvPct: number | null = null, label = st(c.get("locale"), "stabilityUnknown");
   if (complete.length >= 2) {
     const mean = complete.reduce((a, b) => a + b, 0) / complete.length;
@@ -1941,7 +1817,7 @@ api.get("/analytics/income", async (c) => {
     period: { from, to, preset },
     total, prev_total: prevTotal, delta_pct: deltaPct,
     sources: srcRows,
-    monthly: (monthly.results ?? []).map((r) => ({ month: r.m, income: r.income })),
+    monthly: monthly.map((r) => ({ month: r.m, income: r.income })),
     stability: { cv_pct: cvPct, label },
   });
 });
@@ -1956,13 +1832,11 @@ api.get("/planned/upcoming", async (c) => {
 
   const { nextChargeUnix, plannedUAH } = await import("../lib/finance/subscriptions.ts");
   const rates = await getRates(c.env.DB);
-  const planned = await c.env.DB.prepare(
-    "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
-  ).all<{ id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>();
+  const planned = await planningRepo.activeWithCategory(c.env.DB);
 
   // §CUR-PLAN: `amount` лишається у ВАЛЮТІ ПЛАНУ (щоб показати «$5», а не «≈208 ₴»),
   // `amount_uah` — зведення для підсумків. Раніше валюта губилась і $5 ставало 5 ₴.
-  const items = (planned.results ?? [])
+  const items = planned
     .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
     .map((p) => ({
       id: p.id, title: p.title,
@@ -1994,9 +1868,7 @@ api.get("/analytics/cashflow-calendar", async (c) => {
   const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
   const { fundsBreakdown } = await import("../lib/ai/advisor.ts");
   const [planned, funds, rates] = await Promise.all([
-    c.env.DB.prepare(
-      "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
-    ).all<{ id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null; period: string; period_count: number | null; start_date: number; end_date: number | null; category_id: number | null }>(),
+    planningRepo.activeWithCategory(c.env.DB),
     fundsBreakdown(c.env),
     getRates(c.env.DB),
   ]);
@@ -2004,7 +1876,7 @@ api.get("/analytics/cashflow-calendar", async (c) => {
   // §CUR-PLAN: `amount` — у ₴, бо його сумують по днях і віднімають від подушки (теж ₴).
   // Оригінал лишаємо в `amount_orig`/`currency_code`, щоб UI показав «$5» поряд.
   // Розгортання плану в дати — канонічний `chargesBetween` (§SUB-MONTH), а не власний цикл.
-  const items = chargesBetween(planned.results ?? [], rates, from, to).map((ch) => ({
+  const items = chargesBetween(planned, rates, from, to).map((ch) => ({
     at: ch.at, date: localYmd(ch.at), title: ch.plan.title, amount: ch.amount,
     amount_orig: ch.plan.period_amount ?? 0, currency_code: ch.plan.currency_code ?? 980,
     category_id: ch.plan.category_id, kind: ch.plan.kind,
@@ -2021,24 +1893,12 @@ api.get("/analytics/receipt-items", async (c) => {
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 15), 1), 50);
 
   // Дата позиції = purchased_at чека (fallback created_at). Тільки чеки в періоді.
-  const rows = await c.env.DB.prepare(
-    `SELECT LOWER(TRIM(ri.name)) AS name, CAST(COALESCE(SUM(ri.price), 0) AS INTEGER) AS total,
-            ROUND(COALESCE(SUM(COALESCE(ri.qty, 1)), 0), 2) AS qty, COUNT(*) AS n
-     FROM receipt_items ri
-     JOIN receipts r ON r.id = ri.receipt_id
-     WHERE ri.name IS NOT NULL AND ri.name <> '' AND ri.price > 0
-       AND COALESCE(r.purchased_at, r.created_at) >= ? AND COALESCE(r.purchased_at, r.created_at) <= ?
-     GROUP BY LOWER(TRIM(ri.name)) ORDER BY total DESC LIMIT ?`,
-  ).bind(from, to, limit).all<{ name: string; total: number; qty: number; n: number }>();
+  const [rows, meta] = await Promise.all([
+    receiptsRepo.topItems(c.env.DB, from, to, limit),
+    receiptsRepo.windowMeta(c.env.DB, from, to),
+  ]);
 
-  const meta = await c.env.DB.prepare(
-    `SELECT COUNT(*) AS receipts, COALESCE(SUM(cnt), 0) AS items FROM (
-       SELECT r.id, COUNT(ri.id) AS cnt FROM receipts r JOIN receipt_items ri ON ri.receipt_id = r.id
-       WHERE COALESCE(r.purchased_at, r.created_at) >= ? AND COALESCE(r.purchased_at, r.created_at) <= ?
-       GROUP BY r.id)`,
-  ).bind(from, to).first<{ receipts: number; items: number }>();
-
-  return c.json({ items: rows.results ?? [], receipts: meta?.receipts ?? 0, total_items: meta?.items ?? 0 });
+  return c.json({ items: rows, receipts: meta?.receipts ?? 0, total_items: meta?.items ?? 0 });
 });
 
 // §E4: дрейф цін / персональна інфляція. Для кожної позиції чека (нормалізована назва)
@@ -2051,17 +1911,10 @@ api.get("/analytics/price-drift", async (c) => {
   const from = Number(url.searchParams.get("from") ?? to - 180 * 86400);
   const MIN_N = 3, MIN_SPAN = 21 * 86400, NOISE = 5;
 
-  const rows = await c.env.DB.prepare(
-    `SELECT LOWER(TRIM(ri.name)) AS name, COALESCE(r.purchased_at, r.created_at) AS at,
-            ri.price AS price, COALESCE(ri.qty, 1) AS qty
-     FROM receipt_items ri JOIN receipts r ON r.id = ri.receipt_id
-     WHERE ri.name IS NOT NULL AND ri.name <> '' AND ri.price > 0 AND COALESCE(ri.qty, 1) > 0
-       AND COALESCE(r.purchased_at, r.created_at) >= ? AND COALESCE(r.purchased_at, r.created_at) <= ?
-     ORDER BY at ASC`,
-  ).bind(from, to).all<{ name: string; at: number; price: number; qty: number }>();
+  const rows = await receiptsRepo.pricePoints(c.env.DB, from, to);
 
   const byName = new Map<string, { at: number; unit: number }[]>();
-  for (const r of rows.results ?? []) {
+  for (const r of rows) {
     const unit = r.price / r.qty;
     (byName.get(r.name) ?? byName.set(r.name, []).get(r.name)!).push({ at: r.at, unit });
   }
@@ -2306,10 +2159,7 @@ api.get("/analytics/slice", async (c) => {
 
 // Which currencies actually have transactions (for the stats currency switch).
 api.get("/analytics/currencies", async (c) => {
-  const rows = await c.env.DB.prepare(
-    "SELECT DISTINCT currency_code FROM transactions ORDER BY currency_code",
-  ).all<{ currency_code: number }>();
-  return c.json((rows.results ?? []).map((r) => r.currency_code));
+  return c.json(await analyticsRepo.distinctCurrencies(c.env.DB));
 });
 
 // Spend by effective category for a period, зведено в ₴ (канонічно).
@@ -2319,14 +2169,9 @@ api.get("/analytics/by-category", async (c) => {
   const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
-  const rows = await c.env.DB.prepare(
-    `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS color,
-            ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-     FROM transactions t ${STATS_JOINS}
-     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
-     GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
-  ).bind(from, to).all();
-  return c.json(rows.results);
+  // Той самий запит, що живить `byCategory` в /analytics/overview — без валютного фільтра.
+  return c.json(await analyticsRepo.spendByCategory(
+    c.env.DB, c.get("locale"), { mult, curFilter: "" }, { from, to }));
 });
 
 // ---- AI enrichment (hybrid) -------------------------------------------------
@@ -2999,25 +2844,17 @@ api.get("/analytics/spark", async (c) => {
   const bIdx = new Map(buckets.map((b, i) => [b, i]));
   const { mult } = valueMode(await getRates(c.env.DB), null);
   const [cat, mer] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}, m`,
-    ).bind(from).all<{ id: number; m: string; spent: number }>(),
-    c.env.DB.prepare(
-      `SELECT t.merchant AS name, ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND ${SPEND_WHERE} AND t.merchant IS NOT NULL GROUP BY t.merchant, m`,
-    ).bind(from).all<{ name: string; m: string; spent: number }>(),
+    analyticsRepo.categoryMonthSeries(c.env.DB, mult, now, from),
+    analyticsRepo.merchantMonthSeries(c.env.DB, mult, now, from),
   ]);
   const categories: Record<string, number[]> = {};
-  for (const r of cat.results ?? []) {
+  for (const r of cat) {
     if (r.id == null) continue;
     const arr = (categories[String(r.id)] ??= buckets.map(() => 0));
     const i = bIdx.get(r.m); if (i != null) arr[i] = Math.round(r.spent);
   }
   const merchants: Record<string, number[]> = {};
-  for (const r of mer.results ?? []) {
+  for (const r of mer) {
     const arr = (merchants[r.name] ??= buckets.map(() => 0));
     const i = bIdx.get(r.m); if (i != null) arr[i] = Math.round(r.spent);
   }

@@ -241,9 +241,108 @@ red test is never "fixed" by re-recording.
 Moving the 179 queries into `worker/repo/` **without changing the SQL text** (a copy, not a
 rewrite — rewriting changes behaviour).
 
-Done so far: `repo/accounts.ts`, `repo/categories.ts`, `repo/transactions.ts`, `repo/goals.ts`,
-plus `repo/README.md` documenting the conventions. `api.ts` is at **166 inline queries, down from
-179**; golden tests green throughout.
+Progress: **`api.ts` is at 129 inline queries and 3 124 lines, down from 179 / 3 331** — 28% of
+the queries migrated. Golden tests green after every batch. The whole `/analytics` surface is
+done except `patterns`, `category` and `slice`.
+
+| Module | Covers |
+|---|---|
+| `repo/accounts.ts` | active / archived lists, net-worth columns, balance history |
+| `repo/categories.ts` | the category tree |
+| `repo/transactions.ts` | the feed, with its 10-parameter filter builder |
+| `repo/goals.ts` | goals and contributions, including the partial-update builder |
+| `repo/planning.ts` | active plans in three shapes, as raw rows for the schedule helpers |
+| `repo/receipts.ts` | OCR line items: top items, window metadata, price points |
+| `repo/analytics.ts` | period totals, series, all five breakdowns, monthly history, month-to-date, capital and net-worth reconstruction, single-merchant, period comparison, income, sparklines |
+
+### Remaining work, batch by batch
+
+The 129 survivors sit in **54 handlers**. Line numbers are as of the current working tree and will
+drift as batches land — re-derive them with:
+
+```
+node -e 'const s=require("fs").readFileSync("worker/routes/api.ts","utf8").split("\n");let c="(top)",L=0,n=0,o=[];s.forEach((l,i)=>{if(/^\s*(\/\/|\*|\/\*)/.test(l))return;const m=l.match(/^\s*api\.(get|post|put|patch|delete)\(\s*"([^"]+)"/);if(m){if(n)o.push([L,c,n]);c=m[1].toUpperCase()+" "+m[2];L=i+1;n=0}n+=(l.match(/\.prepare\(/g)||[]).length});if(n)o.push([L,c,n]);console.log(o.map(([l,r,q])=>`${l}\t${q}\t${r}`).join("\n"))'
+```
+
+Batches are ordered by **falling risk, not by size**. `/analytics` goes first because it is the
+only region the golden snapshots cover end-to-end; the CRUD tail goes last because it is the
+region where a mistake is caught by types rather than by a fixture.
+
+| # | Batch | Handlers | Queries | Target module | Covered by golden? |
+|---|---|---|---|---|---|
+| **A** | **`/analytics` tail** — `patterns` 2, `category` 6, `slice` 2, `health` 2 | 4 | **12** | `repo/analytics.ts` | ✅ fully |
+| **B** | **transactions + splits + reimbursements** — feed detail, bulk, transfer, `PATCH :id` (9), splits 6, reimbursement 12, transfers review 5, search 3, enrich status | 13 | **47** | `repo/transactions.ts`, new `repo/splits.ts`, new `repo/reimbursements.ts` | partly (splits/§COMPENSATION are in the fixture; writes are not) |
+| **C** | **categories** — create, patch, usage, and `DELETE /categories/:id` alone at **15** | 4 | **21** | `repo/categories.ts` | rollup reads only |
+| **D** | **planning surface** — budgets 7, reports 3, planned 9, events 11 | 18 | **30** | `repo/planning.ts`, new `repo/budgets.ts`, new `repo/events.ts` | budgets via `budgetStatus` only |
+| **E** | **accounts CRUD + odds** — manual accounts 4, title/meta/active 3, delete 3, rates 2, export 4, knowledge 3 | 15 | **19** | `repo/accounts.ts`, new `repo/knowledge.ts` | ❌ writes, no fixture |
+
+**Order of operations inside every batch** (this is what has kept the snapshots green so far):
+
+1. Copy the SQL text **verbatim** into the repo module. Do not reformat, do not "improve" a join,
+   do not rename a column alias — the point of the batch is that behaviour cannot have changed.
+2. Give the function a name that says what it *returns*, not what the route does with it
+   (`spendByCategory`, not `getOverviewData`) — reuse across routes is the whole reason for the
+   layer, and a route-shaped name blocks it.
+3. Run `npm test`. A moved query that changes a snapshot has not been moved; it has been rewritten.
+4. Lower the `api.ts` budget in `scripts/check-repo-layer.mjs` to the new count in the **same**
+   commit. The ratchet fails the build if you forget, which is the intent.
+5. Note any duplicate or divergence found in §"What the layer has already surfaced" or as a card
+   in `ROADMAP.md` — **do not fix it in the batch** (decision 2 at the top of this file).
+
+**Per-batch cautions, known in advance:**
+
+- **A — `/analytics/category` (6 queries)** is the last handler still assembling its own canon
+  fragments; check each against `stats.ts` helpers before moving, and if one restates the canon
+  locally, move it *as is* and file a card. That is exactly how the `/analytics/income` bug
+  surfaced.
+- **B — `PATCH /transactions/:id` (9 queries)** is a scenario, not a query: it touches transfers,
+  `name_locked`, splits and reimbursements in sequence. Move the individual statements to `repo/`
+  now and leave the orchestration in the handler; it becomes the first candidate for `services/`
+  in phase 3. Splitting it twice is cheaper than getting the transaction boundary wrong once.
+- **C — `DELETE /categories/:id` (15 queries)** is the single densest handler left, and it is a
+  cascade: children, transactions, budgets, rules, aliases, splits. Same treatment as B — statements
+  down, orchestration stays. Write down the deletion *order* while moving it; the order is the
+  behaviour, and nothing in the type system records it.
+- **E** has no golden coverage at all. These are write paths on accounts. Keep the diffs small and
+  lean on `tsc` — or add characterization tests first if a handler looks non-obvious.
+
+**Expected end state of phase 1:** `BUDGET["api.ts"] === 0`, the line deleted from the budget map,
+and `check-repo-layer.mjs` reporting "no inline SQL in worker/routes". `api.ts` will still be ~2 000
+lines of handlers at that point — cutting it into domain files is phase 3, and it is deliberately
+*not* mixed into this one.
+
+### What the layer has already surfaced
+
+**Four real consolidations**, none of which was visible while the queries sat inline:
+
+| Duplicate | Found in |
+|---|---|
+| balance history — *verbatim* copy | `/accounts/history` + `/analytics/networth` |
+| spend/income totals — byte-identical at empty `curFilter` | `/analytics/compare` + `/analytics/forecast` |
+| spend by category — semantically identical | `/analytics/overview` + `/analytics/by-category` |
+| active plans with category | `/planned/upcoming` + `/analytics/cashflow-calendar` + forecast |
+
+The by-category case is the strongest evidence the method works: the two queries were merged and
+**the golden snapshot did not move**, which is what proves they were genuinely the same query
+rather than merely similar.
+
+**A real bug, found by the fixture rather than by eye** — see the card in `ROADMAP.md`.
+`/analytics/income` builds its own `SUM(t.amount)` for the per-source breakdown while the total
+uses canonical `incomeSum` (`EFF_INCOME`, which subtracts `reimburses_total`). A partly allocated
+reimbursement therefore lands in full in its category row but only as a remainder in the total.
+On the fixture: total 47 700 ₴ against 48 700 ₴ of sources, **percentages summing to 102%**. It is
+carried over unchanged — fixing it is a behaviour change and so its own card — with a comment at
+the query so nobody "tidies" it into a silent one. This is exactly the §CUR-PLAN mechanism: a
+local re-statement of the canon, drifting quietly.
+
+**`noUnusedLocals` became a progress meter.** `SPEND_COUNT`, then `spendSum`, then `incomeSum`
+each fell out of `api.ts`'s imports and `tsc` said so unprompted — the canon is genuinely leaving
+the route layer rather than being re-aliased there.
+
+**One near-duplicate is deliberately preserved.** `spendIncomeTotals`/`compareByCategory` differ
+from `periodTotals`/`spendByCategory` only by not selecting a count. Merging them would add a
+column to a response — a behaviour change, and therefore phase-4 work. They sit next to each
+other in the module precisely so the decision is visible when that phase arrives.
 
 **C1 ships as a ratchet, not a flat ban.** A flat ban would have to land as one enormous commit —
 precisely the shape of change that hides a regression. So `scripts/check-repo-layer.mjs` holds a
@@ -307,3 +406,41 @@ Separate L1–L6, cut the provider seam between L3 and L4, make `demoClamp` prov
 stay in old commits; the cost of a force-push on a public repo outweighs a partial gain, as GitHub
 caches old objects anyway). The D1 `database_id` stays in `wrangler.jsonc` — removing it would
 break the owner's own deploy, and it is not a secret on its own.
+
+---
+
+## 9. Working language: English
+
+**New code comments and new/edited Markdown docs are written in English.** The repository is
+public, so the audience is a stranger reading it cold. Existing Ukrainian comments are not
+rewritten wholesale — there are thousands of them and they carry the "why it is like this" that a
+mass translation would flatten — they migrate when the surrounding file is edited for another
+reason. Unchanged either way: UI strings (they go through `t()`), model prompts, and matching keys
+(`.includes("фоп")`, `/переказ|зняття/i`) — those are data, not prose.
+
+`CLAUDE.md §Робочий процес` states the same rule; this file follows it.
+
+---
+
+## 10. Session log
+
+One line per working session. This is the "where did I stop" record — the phase sections above
+describe the *target*, this describes the *position*.
+
+| Date | Phase | Moved | `api.ts` after | Tests | Notes |
+|---|---|---|---|---|---|
+| 2026-08-03 | 0 | — | 3 331 lines · 179 queries | 23 → **59** | Golden harness + fixture + 36 snapshots. No production code touched. |
+| 2026-08-03 | 1 | **50 queries** (28%) | 3 124 lines · **129 queries** | 59 ✅ | `repo/{accounts,categories,transactions,goals,planning,receipts,analytics}.ts`. All of `/analytics` except `patterns`, `category`, `slice`. Four duplicates consolidated; `/analytics/income` bug found and filed, not fixed. |
+| 2026-08-04 | 1 | — | unchanged | 59 ✅ | Re-verified the tree against this document (counts match exactly, `npm run check` green). Remaining 129 queries inventoried into batches **A–E** above. **Nothing committed yet** — phase-1 work to date is still a working tree. |
+
+### Next session starts here
+
+1. **Commit the working tree first.** Everything from the 2026-08-03 phase-1 session is still
+   uncommitted (`worker/repo/{analytics,planning,receipts}.ts` are untracked). A green bar plus 50
+   moved queries is a good commit boundary, and batching two sessions of movement into one commit
+   is exactly the shape that hides a regression.
+2. **Then take batch A** (`/analytics` tail — 12 queries, 4 handlers, fully covered by golden
+   snapshots). It is the last of the analytics surface, so finishing it means the money-facing
+   region is entirely behind the repo layer.
+3. Follow the five-step order under "Remaining work, batch by batch". Lower the budget in the same
+   commit as the batch.

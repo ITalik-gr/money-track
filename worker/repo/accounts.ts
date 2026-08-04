@@ -32,6 +32,26 @@ export async function listArchived(db: AppDb): Promise<AccountRow[]> {
   return r.results ?? [];
 }
 
+export interface NetWorthAccount {
+  id: string;
+  title: string | null;
+  type: string | null;
+  role: string | null;
+  balance: number;
+  credit_limit: number;
+  currency_code: number;
+  is_manual: number;
+}
+
+/** Active accounts with just the columns net-worth reconstruction needs. */
+export async function listForNetWorth(db: AppDb): Promise<NetWorthAccount[]> {
+  const r = await db.prepare(
+    `SELECT id, title, type, role, balance, credit_limit, currency_code, is_manual
+     FROM accounts WHERE is_active = 1`,
+  ).all<NetWorthAccount>();
+  return r.results ?? [];
+}
+
 export interface BalancePoint { acc: string; balance: number; at: number }
 
 /**
