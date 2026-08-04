@@ -25,3 +25,20 @@ export async function listAll(db: AppDb): Promise<CategoryRow[]> {
   ).all<CategoryRow>();
   return r.results ?? [];
 }
+
+/**
+ * Which of these ids actually exist (§FK-GUARD).
+ *
+ * There are gaps in the id sequence from deleted rows, so a plausible-looking id — whether it
+ * came from a model or from a stale client — lands on nothing and the write fails with
+ * `FOREIGN KEY constraint failed`. `INSERT OR IGNORE` does NOT cover this: it suppresses a
+ * uniqueness conflict, not a foreign-key violation, so one bad id takes the whole batch down.
+ * Filter first, write second.
+ */
+export async function existingIds(db: AppDb, ids: number[]): Promise<number[]> {
+  if (!ids.length) return [];
+  const r = await db.prepare(
+    `SELECT id FROM categories WHERE id IN (${ids.map(() => "?").join(",")})`,
+  ).bind(...ids).all<{ id: number }>();
+  return (r.results ?? []).map((x) => x.id);
+}

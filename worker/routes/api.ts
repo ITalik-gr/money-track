@@ -3,10 +3,13 @@ import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { setState, getState } from "../lib/finance/repo.ts";
 import { computeSummary, createCashTx, getRates, toUAHMinor, ratesForDays, type Rates } from "../lib/finance/finance.ts";
+// NOTE: no `STATS_JOINS` / `SPEND_WHERE` / `amountSum` here any more — the canonical SQL
+// fragments now live behind `worker/repo/`, and a route that needs one is a route that is about
+// to grow its own definition of "spending". What is left below is JS-side canon (period bounds,
+// levels, projections), which routes are allowed to call.
 import {
-  STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_WHERE,
-  valueMode, uahMult, amountSum, periodBounds,
-  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localYmSql, localParts,
+  valueMode, uahMult, periodBounds,
+  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localParts,
   type PeriodMode, type Preset,
 } from "../lib/finance/stats.ts";
 import type { AppDb } from "../lib/platform/db-shim.ts";
@@ -19,7 +22,7 @@ import * as planningRepo from "../repo/planning.ts";
 import * as receiptsRepo from "../repo/receipts.ts";
 import { catNameSql, localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
 import { recalcGoal, isGoalKind, isAutofillKind } from "../lib/finance/goals.ts";
-import { st, stLit } from "../lib/platform/i18n.ts";
+import { st } from "../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 
 export const api = new Hono<{ Bindings: Env; Variables: { locale: NotifLocale } }>();
@@ -308,57 +311,26 @@ api.post("/transactions/bulk", async (c) => {
   const ids = [...new Set(b.ids ?? [])].filter(Boolean);
   if (!ids.length) return c.json({ ok: true, updated: 0 });
 
-  const sets: string[] = [];
-  const vals: unknown[] = [];
-  if (b.event_id !== undefined) { sets.push("event_id = ?"); vals.push(b.event_id); }
-  if (b.category_id !== undefined) { sets.push("category_id = ?"); vals.push(b.category_id); }
-  if (b.is_transfer !== undefined) { sets.push("is_transfer = ?"); vals.push(b.is_transfer ? 1 : 0); }
+  const patch: txRepo.BulkPatch = {};
+  if (b.event_id !== undefined) patch.event_id = b.event_id;
+  if (b.category_id !== undefined) patch.category_id = b.category_id;
+  if (b.is_transfer !== undefined) patch.is_transfer = b.is_transfer;
   // §6 вагомість: null = зняти override операції (успадкує від категорії). Чужі значення
   // не пускаємо — вони мовчки випали б з `EFF_IMPORTANCE` і зіпсували всю аналітику вагомості.
   if (b.importance !== undefined) {
     if (b.importance !== null && !["essential", "discretionary", "optional"].includes(b.importance)) {
       return c.json({ error: "invalid importance" }, 400);
     }
-    sets.push("importance = ?"); vals.push(b.importance);
+    patch.importance = b.importance;
   }
 
-  // §FK-GUARD: `INSERT OR IGNORE` гасить лише конфлікт унікальності, а НЕ порушення FK —
-  // один неіснуючий id тега завалив би весь батч у `FOREIGN KEY constraint failed`
-  // (перевірено на D1). Тож фільтруємо теги по наявних категоріях перед записом.
-  let validTags: number[] = [];
-  if (b.tag_ids?.length) {
-    const want = [...new Set(b.tag_ids)].filter((t): t is number => Number.isFinite(t));
-    if (want.length) {
-      const rows = await c.env.DB.prepare(
-        `SELECT id FROM categories WHERE id IN (${want.map(() => "?").join(",")})`,
-      ).bind(...want).all<{ id: number }>();
-      validTags = (rows.results ?? []).map((r) => r.id);
-    }
-  }
-  if (!sets.length && !validTags.length) return c.json({ ok: true, updated: 0 });
+  // §FK-GUARD: фільтруємо теги по наявних категоріях перед записом — пояснення в
+  // `repo/categories.ts existingIds`.
+  const want = [...new Set(b.tag_ids ?? [])].filter((t): t is number => Number.isFinite(t));
+  const validTags = want.length ? await categoriesRepo.existingIds(c.env.DB, want) : [];
+  if (!Object.keys(patch).length && !validTags.length) return c.json({ ok: true, updated: 0 });
 
-  let updated = 0;
-  for (let i = 0; i < ids.length; i += 100) {
-    const chunk = ids.slice(i, i + 100);
-    const ph = chunk.map(() => "?").join(",");
-    if (sets.length) {
-      const r = await c.env.DB.prepare(`UPDATE transactions SET ${sets.join(", ")} WHERE id IN (${ph})`)
-        .bind(...vals, ...chunk).run();
-      updated += r.meta.changes ?? 0;
-    }
-    // Теги — окрема таблиця many-to-many. ДОДАЄМО, не заміщаємо: гуртова дія «повісити тег»
-    // не повинна тихо знести теги, розставлені поштучно. Зняття — з деталей операції.
-    if (validTags.length) {
-      const tags = validTags;
-      {
-        await c.env.DB.batch(chunk.flatMap((id) => tags.map((tag) =>
-          c.env.DB.prepare("INSERT OR IGNORE INTO transaction_tags (transaction_id, category_id) VALUES (?, ?)").bind(id, tag),
-        )));
-        if (!sets.length) updated += chunk.length;
-      }
-    }
-  }
-  return c.json({ ok: true, updated });
+  return c.json({ ok: true, updated: await txRepo.bulkApply(c.env.DB, ids, patch, validTags) });
 });
 
 // Single transaction with joined names + attached receipt (for the detail page).
@@ -374,25 +346,14 @@ api.post("/transactions/bulk", async (c) => {
  * would otherwise drag every suggestion off the value the user actually repeats.
  */
 api.get("/transactions/frequent", async (c) => {
-  const rows = await c.env.DB.prepare(
-    `SELECT t.merchant AS merchant, t.category_id AS category_id, t.currency_code AS currency_code,
-            COUNT(*) AS n, GROUP_CONCAT(t.amount) AS amounts
-       FROM transactions t
-      WHERE t.source IN ('cash', 'manual') AND t.amount < 0 AND t.merchant IS NOT NULL AND t.merchant <> ''
-        AND t.time >= ?
-      GROUP BY LOWER(t.merchant), t.currency_code
-     HAVING n >= 2
-      ORDER BY n DESC, MAX(t.time) DESC
-      LIMIT 8`,
-  ).bind(Math.floor(Date.now() / 1000) - 180 * 86400)
-    .all<{ merchant: string; category_id: number | null; currency_code: number; n: number; amounts: string }>();
+  const rows = await txRepo.frequentManual(c.env.DB, Math.floor(Date.now() / 1000) - 180 * 86400);
 
   const median = (xs: number[]): number => {
     const s = [...xs].sort((a, b) => a - b);
     const m = Math.floor(s.length / 2);
     return s.length % 2 ? s[m]! : Math.round((s[m - 1]! + s[m]!) / 2);
   };
-  return c.json((rows.results ?? []).map((r) => ({
+  return c.json(rows.map((r) => ({
     merchant: r.merchant,
     category_id: r.category_id,
     currency_code: r.currency_code,
@@ -403,40 +364,18 @@ api.get("/transactions/frequent", async (c) => {
 
 api.get("/transactions/:id", async (c) => {
   const id = c.req.param("id");
-  const tx = await c.env.DB.prepare(
-    `SELECT t.*, ${catNameSql(c.get("locale"), "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
-            ${catNameSql(c.get("locale"), "rc.name")} AS real_category_name, rc.color AS real_category_color,
-            a.title AS account_title, a.type AS account_type,
-            e.name AS event_name, e.color AS event_color,
-            p.title AS planned_title,
-            ap.title AS pair_account_title
-     FROM transactions t
-     LEFT JOIN categories c ON c.id = t.category_id
-     LEFT JOIN categories rc ON rc.id = t.real_category_id
-     LEFT JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN event_groups e ON e.id = t.event_id
-     LEFT JOIN planned_payments p ON p.id = t.planned_id
-     LEFT JOIN transactions tp ON tp.transfer_pair_id = t.transfer_pair_id AND tp.id <> t.id
-     LEFT JOIN accounts ap ON ap.id = tp.account_id
-     WHERE t.id = ?`,
-  ).bind(id).first();
+  const loc = c.get("locale");
+  const tx = await txRepo.byId(c.env.DB, loc, id);
   if (!tx) return c.json({ error: "not_found" }, 404);
 
   let receipt = null;
-  if ((tx as { receipt_id: number | null }).receipt_id) {
-    const r = await c.env.DB.prepare("SELECT * FROM receipts WHERE id = ?")
-      .bind((tx as { receipt_id: number }).receipt_id).first();
-    if (r) {
-      const items = await c.env.DB.prepare("SELECT * FROM receipt_items WHERE receipt_id = ?")
-        .bind((tx as { receipt_id: number }).receipt_id).all();
-      receipt = { ...r, items: items.results ?? [] };
-    }
+  const receiptId = (tx as { receipt_id: number | null }).receipt_id;
+  if (receiptId) {
+    const r = await txRepo.receiptById(c.env.DB, receiptId);
+    if (r) receipt = { ...r, items: await txRepo.receiptItems(c.env.DB, receiptId) };
   }
-  const tags = await c.env.DB.prepare(
-    `SELECT c.id, ${catNameSql(c.get("locale"), "c.name")} AS name, c.color FROM transaction_tags tt JOIN categories c ON c.id = tt.category_id
-     WHERE tt.transaction_id = ?`,
-  ).bind(id).all();
-  return c.json({ ...tx, receipt, tags: tags.results ?? [] });
+  const tags = await txRepo.tagsFor(c.env.DB, loc, id);
+  return c.json({ ...tx, receipt, tags });
 });
 
 // Manual / cash entry. For source='cash' we route to the cash account, not a card.
@@ -479,10 +418,8 @@ api.post("/transactions/transfer", async (c) => {
   if (!from || !to || from === to) return c.json({ error: st(locale, "errTransferAccounts") }, 400);
   if (!Number.isFinite(amount) || amount <= 0) return c.json({ error: st(locale, "errTransferAmount") }, 400);
 
-  const accs = await c.env.DB.prepare(
-    "SELECT id, currency_code FROM accounts WHERE id IN (?, ?)",
-  ).bind(from, to).all<{ id: string; currency_code: number }>();
-  const byId = new Map((accs.results ?? []).map((a) => [a.id, a]));
+  const accs = await accountsRepo.currenciesFor(c.env.DB, [from, to]);
+  const byId = new Map(accs.map((a) => [a.id, a]));
   const src = byId.get(from), dst = byId.get(to);
   if (!src || !dst) return c.json({ error: st(locale, "errTransferAccounts") }, 400);
 
@@ -498,16 +435,10 @@ api.post("/transactions/transfer", async (c) => {
   const time = b.time ?? now;
   const note = b.user_note?.trim() || null;
   const ids = [crypto.randomUUID(), crypto.randomUUID()];
-  await c.env.DB.batch([
-    c.env.DB.prepare(
-      `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, is_transfer, transfer_pair_id, user_note, created_at)
-       VALUES (?, ?, 'manual', ?, ?, ?, 1, ?, ?, ?)`,
-    ).bind(ids[0], from, time, -amount, src.currency_code, pair, note, now),
-    c.env.DB.prepare(
-      `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, is_transfer, transfer_pair_id, user_note, created_at)
-       VALUES (?, ?, 'manual', ?, ?, ?, 1, ?, ?, ?)`,
-    ).bind(ids[1], to, time, toAmount, dst.currency_code, pair, note, now),
-  ]);
+  await txRepo.insertTransferPair(c.env.DB, [
+    { id: ids[0]!, account_id: from, time, amount: -amount, currency_code: src.currency_code },
+    { id: ids[1]!, account_id: to, time, amount: toAmount, currency_code: dst.currency_code },
+  ], pair, note, now);
   return c.json({ ok: true, pair_id: pair, ids });
 });
 
@@ -521,9 +452,9 @@ api.patch("/transactions/:id", async (c) => {
     importance?: string | null; lock_name?: boolean;
   }>();
 
-  const tx = await c.env.DB.prepare("SELECT * FROM transactions WHERE id = ?").bind(id).first<{
+  const tx = await txRepo.rawById(c.env.DB, id) as {
     source: string; raw_json: string | null; comment: string | null; mcc: number | null; merchant: string | null;
-  }>();
+  } | null;
   if (!tx) return c.json({ error: "not_found" }, 404);
 
   // §R7: ручна назва авторитетна. Ставимо name_locked=1, коли користувач змінив назву на
@@ -532,38 +463,26 @@ api.patch("/transactions/:id", async (c) => {
 
   // Теги (вторинні категорії, до 3, без основної) — повна заміна набору.
   if (b.tags !== undefined) {
-    await c.env.DB.prepare("DELETE FROM transaction_tags WHERE transaction_id = ?").bind(id).run();
+    await txRepo.clearTags(c.env.DB, id);
     const tags = [...new Set(b.tags)].filter((t) => t !== b.category_id).slice(0, 3);
-    for (const t of tags) {
-      await c.env.DB.prepare("INSERT OR IGNORE INTO transaction_tags (transaction_id, category_id) VALUES (?, ?)").bind(id, t).run();
-    }
+    for (const t of tags) await txRepo.addTag(c.env.DB, id, t);
   }
 
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  if (b.category_id !== undefined) { sets.push("category_id = ?"); binds.push(b.category_id); }
-  if (b.merchant !== undefined) { sets.push("merchant = ?"); binds.push(b.merchant); }
-  if (b.user_note !== undefined) { sets.push("user_note = ?"); binds.push(b.user_note); }
-  if (b.is_transfer !== undefined) { sets.push("is_transfer = ?"); binds.push(b.is_transfer ? 1 : 0); }
-  if (b.real_category_id !== undefined) { sets.push("real_category_id = ?"); binds.push(b.real_category_id); }
-  if (b.event_id !== undefined) { sets.push("event_id = ?"); binds.push(b.event_id); }
-  if (b.importance !== undefined) { sets.push("importance = ?"); binds.push(normImportance(b.importance)); }
-  if (b.lock_name !== undefined) { sets.push("name_locked = ?"); binds.push(b.lock_name ? 1 : 0); }
-  else if (renamed) { sets.push("name_locked = ?"); binds.push(1); }
-  if (sets.length) {
-    await c.env.DB.prepare(`UPDATE transactions SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
-  }
+  const patch: txRepo.TxPatch = {};
+  if (b.category_id !== undefined) patch.category_id = b.category_id;
+  if (b.merchant !== undefined) patch.merchant = b.merchant;
+  if (b.user_note !== undefined) patch.user_note = b.user_note;
+  if (b.is_transfer !== undefined) patch.is_transfer = b.is_transfer;
+  if (b.real_category_id !== undefined) patch.real_category_id = b.real_category_id;
+  if (b.event_id !== undefined) patch.event_id = b.event_id;
+  if (b.importance !== undefined) patch.importance = normImportance(b.importance);
+  if (b.lock_name !== undefined) patch.name_locked = b.lock_name;
+  else if (renamed) patch.name_locked = true;
+  await txRepo.updateFields(c.env.DB, id, patch);
 
   // §R2-TX4: «реальна категорія» має сенс лише для бакета «Перекази і зняття».
   // Для звичайних операцій прибираємо її, щоб не дублювала основну й не плутала.
-  await c.env.DB.prepare(
-    `UPDATE transactions SET real_category_id = NULL
-     WHERE id = ? AND is_transfer = 0 AND real_category_id IS NOT NULL
-       AND COALESCE(
-             (SELECT COALESCE(cat.parent_id, cat.id) FROM categories cat WHERE cat.id = transactions.category_id),
-             -1
-           ) != 13`,
-  ).bind(id).run();
+  await txRepo.clearRealCategoryOutsideTransfers(c.env.DB, id);
 
   let learned = false;
   if (b.learn) {
@@ -573,27 +492,15 @@ api.patch("/transactions/:id", async (c) => {
       const transferFlag = b.is_transfer ? 1 : 0;
       // Реальну категорію переказу зберігаємо в alias; якщо цього разу її не передали —
       // не губимо раніше навчену (беремо з наявного alias).
-      const prior = await c.env.DB.prepare(
-        "SELECT real_category_id FROM merchant_aliases WHERE match_type = 'mono_desc' AND raw_key = ? ORDER BY created_at DESC LIMIT 1",
-      ).bind(rawKey).first<{ real_category_id: number | null }>();
+      const prior = await txRepo.aliasRealCategory(c.env.DB, rawKey);
       const realCat = b.real_category_id !== undefined ? b.real_category_id : (prior?.real_category_id ?? null);
       // Idempotent: one alias per raw description — a re-edit replaces the old rule.
       // §Хвіст: source='manual' — ця правка захищена, enrich/консенсус її не перетруть.
-      await c.env.DB.prepare("DELETE FROM merchant_aliases WHERE match_type = 'mono_desc' AND raw_key = ?").bind(rawKey).run();
-      await c.env.DB.prepare(
-        `INSERT INTO merchant_aliases (match_type, raw_key, display_name, category_id, is_transfer, real_category_id, source, created_at)
-         VALUES ('mono_desc', ?, ?, ?, ?, ?, 'manual', ?)`,
-      )
-        .bind(rawKey, b.merchant ?? null, b.category_id ?? null, transferFlag, realCat, Math.floor(Date.now() / 1000))
-        .run();
+      await txRepo.deleteAlias(c.env.DB, rawKey);
+      await txRepo.insertManualAlias(c.env.DB, rawKey, b.merchant ?? null, b.category_id ?? null,
+        transferFlag, realCat, Math.floor(Date.now() / 1000));
       // Back-apply to existing matching mono transactions (name, category, transfer flag, real category).
-      await c.env.DB.prepare(
-        `UPDATE transactions SET category_id = COALESCE(?, category_id), merchant = COALESCE(?, merchant),
-                                 is_transfer = ?, real_category_id = COALESCE(?, real_category_id)
-         WHERE source = 'mono' AND json_extract(raw_json, '$.description') = ?`,
-      )
-        .bind(b.category_id ?? null, b.merchant ?? null, transferFlag, realCat, rawKey)
-        .run();
+      await txRepo.backApplyAlias(c.env.DB, b.category_id ?? null, b.merchant ?? null, transferFlag, realCat, rawKey);
       learned = true;
     }
   }
@@ -1966,26 +1873,11 @@ api.get("/analytics/patterns", async (c) => {
   const recurExpr = isRecurringExpr(defaultRefFrom(now), now);
   const levels = await categoryMonthlyLevels(c.env, mult, { now }); // канонічний «місячний рівень»
   const [matrix, split, curSplit] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
-              ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
-       GROUP BY ${EFF_CAT_ID}, m`,
-    ).bind(refStart, now).all<{ id: number | null; name: string | null; color: string | null; m: string; spent: number }>(),
+    analyticsRepo.categoryMonthMatrix(c.env.DB, c.get("locale"), mult, now, { from: refStart, to: now }),
     recurringOneoffSplit(c.env, monthStart, now, mult, defaultRefFrom(now)),
     // Поточний місяць по категоріях, розділений на регулярне/разове + сигнали лумпності
     // (n — к-ть операцій, biggest — найбільша одна) для чесного прогнозу.
-    c.env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id,
-              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS recurring,
-              CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurExpr} THEN 0 ELSE (-${EFF_AMOUNT}) * ${mult} END), 0)) AS INTEGER) AS oneoff,
-              COUNT(DISTINCT t.id) AS n,
-              CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER) AS biggest
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
-       GROUP BY ${EFF_CAT_ID}`,
-    ).bind(monthStart, now).all<{ id: number | null; recurring: number; oneoff: number; n: number; biggest: number }>(),
+    analyticsRepo.currentMonthSplitByCategory(c.env.DB, mult, recurExpr, { from: monthStart, to: now }),
   ]);
   // `recurringOneoffSplit` builds category names in stats.ts (no locale there); localize the
   // displayed one-off items here instead of threading locale through the canon.
@@ -1993,11 +1885,11 @@ api.get("/analytics/patterns", async (c) => {
   split.oneoff_items = split.oneoff_items.map((it) => ({ ...it, category: localizeCatName(loc, it.category) ?? it.category }));
 
   const curSplitMap = new Map<string, { recurring: number; oneoff: number; n: number; biggest: number }>();
-  for (const r of curSplit.results ?? []) curSplitMap.set(String(r.id ?? "null"), { recurring: r.recurring, oneoff: r.oneoff, n: r.n, biggest: r.biggest });
+  for (const r of curSplit) curSplitMap.set(String(r.id ?? "null"), { recurring: r.recurring, oneoff: r.oneoff, n: r.n, biggest: r.biggest });
 
   interface Cat { id: number | null; name: string; color: string | null; months: Map<string, number> }
   const cats = new Map<string, Cat>();
-  for (const r of matrix.results ?? []) {
+  for (const r of matrix) {
     const key = String(r.id ?? "null");
     let cat = cats.get(key);
     if (!cat) { cat = { id: r.id, name: r.name ?? st(c.get("locale"), "uncategorized"), color: r.color, months: new Map() }; cats.set(key, cat); }
@@ -2053,58 +1945,30 @@ api.get("/analytics/category", async (c) => {
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
   const { mult, curFilter } = valueMode(rates, cur);
 
+  const v = { mult, curFilter };
+  const range = { from, to };
+  const loc = c.get("locale");
+
   const TRANSFER_CAT = 13;
   if (parent === TRANSFER_CAT) {
     // Спец-бакет «Перекази і зняття»: незакриті рухи (готівка/зняття без реальної категорії)
     // + справжні перекази. Інформативно, ПОЗА канонічними витратами. Групуємо за реальною суттю.
-    const base = "t.time >= ? AND t.time <= ? AND t.amount < 0 AND t.hold = 0 AND COALESCE(c.parent_id, t.category_id) = 13" + curFilter;
     const [subs, merchants, txs] = await Promise.all([
-      c.env.DB.prepare(
-        `SELECT t.real_category_id AS category_id, COALESCE(${catNameSql(c.get("locale"), "rc.name")}, ${stLit(c.get("locale"), "unidentified")}) AS name, rc.color AS color,
-                ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-         FROM transactions t ${STATS_JOINS}
-         WHERE ${base} GROUP BY t.real_category_id ORDER BY spent DESC`,
-      ).bind(from, to).all(),
-      c.env.DB.prepare(
-        `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-         FROM transactions t ${STATS_JOINS}
-         WHERE ${base} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
-      ).bind(from, to).all(),
-      c.env.DB.prepare(
-        `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
-                ${catNameSql(c.get("locale"), "rc.name")} AS category_name, rc.color AS category_color
-         FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
-                              LEFT JOIN categories rc ON rc.id = t.real_category_id
-         WHERE ${base} ORDER BY t.amount ASC LIMIT 60`,
-      ).bind(from, to).all(),
+      analyticsRepo.transferBucketSubs(c.env.DB, loc, v, range),
+      analyticsRepo.transferBucketMerchants(c.env.DB, v, range),
+      analyticsRepo.transferBucketTransactions(c.env.DB, loc, v, range),
     ]);
-    return c.json({ subs: subs.results ?? [], merchants: merchants.results ?? [], transactions: txs.results ?? [] });
+    return c.json({ subs, merchants, transactions: txs });
   }
 
   // Звичайна категорія: канонічні витрати, де ЕФЕКТИВНА категорія (рол-ап) = parent.
   // Розбивка — по фактичній листовій категорії (реальна для готівки, інакше звичайна).
-  const base = `t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?${curFilter}`;
   const [subs, merchants, txs] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT COALESCE(rc.id, c.id) AS category_id,
-              COALESCE(${catNameSql(c.get("locale"), "COALESCE(rc.name, c.name)")}, ${stLit(c.get("locale"), "uncategorized")}) AS name,
-              COALESCE(rc.color, c.color) AS color, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS}
-       WHERE ${base} GROUP BY COALESCE(rc.id, c.id) ORDER BY spent DESC`,
-    ).bind(from, to, parent).all(),
-    c.env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS}
-       WHERE ${base} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
-    ).bind(from, to, parent).all(),
-    c.env.DB.prepare(
-      `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
-              COALESCE(rc.name, c.name) AS category_name, COALESCE(rc.color, c.color) AS category_color
-       FROM transactions t ${STATS_JOINS}
-       WHERE ${base} ORDER BY t.amount ASC LIMIT 60`,
-    ).bind(from, to, parent).all(),
+    analyticsRepo.categorySubs(c.env.DB, loc, v, range, parent),
+    analyticsRepo.categoryMerchants(c.env.DB, v, range, parent),
+    analyticsRepo.categoryTransactions(c.env.DB, v, range, parent),
   ]);
-  return c.json({ subs: subs.results ?? [], merchants: merchants.results ?? [], transactions: txs.results ?? [] });
+  return c.json({ subs, merchants, transactions: txs });
 });
 
 // §R2-ST5(б): drill будь-якого зрізу (мерчант / картка / група) — підсумок + самі
@@ -2121,40 +1985,17 @@ api.get("/analytics/slice", async (c) => {
   const { mult, curFilter } = valueMode(rates, cur);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 60), 300);
 
-  // Канонічний фільтр за типом (щоб сума зрізу узгоджувалась із KPI Огляду).
-  const canon = type === "income" ? INCOME_WHERE : SPEND_WHERE;
-  // §E1: dim=weekday — 0=нд..6=сб. dim=day — конкретна календарна дата (той самий UTC-бакет,
-  // яким рахувались series). dim=all — увесь період (для дрилу «Витрати/Надходження»).
-  const dimCol = dim === "account" ? "t.account_id"
-    : dim === "event" ? "t.event_id"
-    : dim === "weekday" ? "CAST(strftime('%w', t.time, 'unixepoch') AS INTEGER)"
-    : dim === "day" ? "strftime('%Y-%m-%d', t.time, 'unixepoch')"
-    : dim === "dom" ? "CAST(strftime('%d', t.time, 'unixepoch') AS INTEGER)" // §1: число місяця (heat-map)
-    : dim === "importance" ? EFF_IMPORTANCE // §6: вагомість ефективної категорії/override
-    : dim === "all" ? null
-    : "t.merchant";
-  const dimClause = dimCol ? ` AND ${dimCol} = ?` : "";
-  const base = `t.time >= ? AND t.time <= ? AND ${canon}${curFilter}${dimClause}`;
-  const binds: unknown[] = dimCol
-    ? [from, to, dim === "event" || dim === "weekday" || dim === "dom" ? Number(value) : value]
-    : [from, to];
-  const order = type === "income" ? "DESC" : "ASC"; // найбільша витрата / найбільше надходження зверху
+  const v = { mult, curFilter };
+  const range = { from, to };
+  const q = { dim, type, value, limit } as const;
 
   const [summary, txs] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
-       FROM transactions t ${STATS_JOINS} WHERE ${base}`,
-    ).bind(...binds).first<{ spent: number; n: number }>(),
-    c.env.DB.prepare(
-      `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment, t.user_note,
-              ${catNameSql(c.get("locale"), EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color
-       FROM transactions t ${STATS_JOINS}
-       WHERE ${base} ORDER BY t.amount ${order} LIMIT ?`,
-    ).bind(...binds, limit).all(),
+    analyticsRepo.sliceSummary(c.env.DB, v, range, q),
+    analyticsRepo.sliceTransactions(c.env.DB, c.get("locale"), v, range, q),
   ]);
   // Для доходу сума виходить від'ємною (amountSum рахує -amount) — віддаємо абсолют.
   const spent = Math.abs(summary?.spent ?? 0);
-  return c.json({ spent, n: summary?.n ?? 0, transactions: txs.results ?? [] });
+  return c.json({ spent, n: summary?.n ?? 0, transactions: txs });
 });
 
 // Which currencies actually have transactions (for the stats currency switch).
@@ -2200,10 +2041,7 @@ api.post("/enrich/pending", async (c) => {
 });
 
 api.get("/enrich/status", async (c) => {
-  const r = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM transactions WHERE source = 'mono' AND ai_enriched = 0 AND category_id IS NULL AND hold = 0",
-  ).first<{ n: number }>();
-  return c.json({ pending: r?.n ?? 0 });
+  return c.json({ pending: await txRepo.pendingEnrichCount(c.env.DB) });
 });
 
 // Detect internal transfers between own accounts (opposite equal amounts, ±15 min).
@@ -2264,27 +2102,15 @@ api.post("/transfers/review/save", async (c) => {
   const b = await c.req.json<{ items: { id: string; real_category_id: number | null; learn?: boolean }[] }>();
   const now = Math.floor(Date.now() / 1000);
   for (const it of b.items ?? []) {
-    await c.env.DB.prepare("UPDATE transactions SET real_category_id = ? WHERE id = ?")
-      .bind(it.real_category_id, it.id).run();
+    await txRepo.setRealCategory(c.env.DB, it.id, it.real_category_id);
     if (it.learn) {
-      const tx = await c.env.DB.prepare("SELECT source, raw_json FROM transactions WHERE id = ?")
-        .bind(it.id).first<{ source: string; raw_json: string | null }>();
+      const tx = await txRepo.sourceAndRaw(c.env.DB, it.id);
       const rawKey = tx?.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description?.trim() : null;
       if (tx?.source === "mono" && rawKey) {
         // Прив'язуємо реальну категорію до alias по сирому опису + застосовуємо до схожих.
-        const upd = await c.env.DB.prepare(
-          "UPDATE merchant_aliases SET real_category_id = ? WHERE match_type = 'mono_desc' AND raw_key = ?",
-        ).bind(it.real_category_id, rawKey).run();
-        if (!upd.meta.changes) {
-          await c.env.DB.prepare(
-            `INSERT INTO merchant_aliases (match_type, raw_key, real_category_id, created_at) VALUES ('mono_desc', ?, ?, ?)`,
-          ).bind(rawKey, it.real_category_id, now).run();
-        }
-        await c.env.DB.prepare(
-          `UPDATE transactions SET real_category_id = ?
-           WHERE source = 'mono' AND real_category_id IS NULL
-             AND json_extract(raw_json, '$.description') = ?`,
-        ).bind(it.real_category_id, rawKey).run();
+        const changed = await txRepo.updateAliasRealCategory(c.env.DB, rawKey, it.real_category_id);
+        if (!changed) await txRepo.insertAliasRealCategory(c.env.DB, rawKey, it.real_category_id, now);
+        await txRepo.backfillRealCategory(c.env.DB, it.real_category_id, rawKey);
       }
     }
   }
@@ -2387,24 +2213,19 @@ api.get("/facts", async (c) => {
 // масив = прибрати спліт). Валідація: лише витрата, ≥2 частини, кожна <0, сума частин = сумі tx.
 // Спліт міняє категорійну аналітику → інвалідуємо Tx/Summary/Advice на клієнті.
 api.get("/transactions/:id/splits", async (c) => {
-  const rows = await c.env.DB.prepare(
-    `SELECT s.id, s.category_id, s.amount, ${catNameSql(c.get("locale"), "cat.name")} AS category_name, cat.color AS category_color
-     FROM tx_splits s LEFT JOIN categories cat ON cat.id = s.category_id
-     WHERE s.tx_id = ? ORDER BY s.id`,
-  ).bind(c.req.param("id")).all();
-  return c.json(rows.results ?? []);
+  return c.json(await txRepo.splitsFor(c.env.DB, c.get("locale"), c.req.param("id")));
 });
 
 api.put("/transactions/:id/splits", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<{ splits?: { category_id: number; amount: number }[] }>().catch(() => ({ splits: [] }));
   const splits = (body.splits ?? []).map((p) => ({ category_id: Number(p.category_id), amount: Math.round(Number(p.amount)) }));
-  const tx = await c.env.DB.prepare("SELECT amount FROM transactions WHERE id = ?").bind(id).first<{ amount: number }>();
+  const tx = await txRepo.amountOf(c.env.DB, id);
   if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
   if (splits.length > 0) {
     if (tx.amount >= 0) return c.json({ error: st(c.get("locale"), "errSplitOnlyExpense") }, 400);
     // Дзеркало перевірки в `/reimbursement`: спліт і компенсація взаємовиключні (див. там же).
-    const r = await c.env.DB.prepare("SELECT reimbursed FROM transactions WHERE id = ?").bind(id).first<{ reimbursed: number | null }>();
+    const r = await txRepo.reimbursedOf(c.env.DB, id);
     if ((r?.reimbursed ?? 0) > 0) return c.json({ error: st(c.get("locale"), "errSplitHasReimbursement") }, 400);
     if (splits.length < 2) return c.json({ error: st(c.get("locale"), "errSplitMinParts") }, 400);
     if (splits.some((p) => !p.category_id || !Number.isFinite(p.amount) || p.amount >= 0)) {
@@ -2413,12 +2234,7 @@ api.put("/transactions/:id/splits", async (c) => {
     const sum = splits.reduce((s, p) => s + p.amount, 0);
     if (sum !== tx.amount) return c.json({ error: st(c.get("locale"), "errSplitSumMismatch", { amount: tx.amount }) }, 400);
   }
-  const now = Math.floor(Date.now() / 1000);
-  const stmts = [c.env.DB.prepare("DELETE FROM tx_splits WHERE tx_id = ?").bind(id)];
-  for (const p of splits) {
-    stmts.push(c.env.DB.prepare("INSERT INTO tx_splits (tx_id, category_id, amount, created_at) VALUES (?, ?, ?, ?)").bind(id, p.category_id, p.amount, now));
-  }
-  await c.env.DB.batch(stmts);
+  await txRepo.replaceSplits(c.env.DB, id, splits, Math.floor(Date.now() / 1000));
   return c.json({ ok: true, count: splits.length });
 });
 
@@ -2427,67 +2243,29 @@ api.put("/transactions/:id/splits", async (c) => {
 // (`EFF_AMOUNT = t.amount + t.reimbursed`, stats.ts), а привʼязані надходження перестають
 // рахуватись і доходом, і поверненням. Тут лише транспорт + валідація.
 
-// Підпис збираємо на СЕРВЕРІ: у вхідних P2P `merchant` часто порожній, і рядок-кандидат
-// виходив без назви — сама дата й сума, зрозуміти неможливо. Черга: мерчант → коментар
-// банку → нотатка → назва рахунку.
-// The last resort of that chain is a generic word, so it follows the reader's locale like any
-// other label — hence a function of the locale rather than a module constant.
-const rbLabel = (loc: NotifLocale) =>
-  `COALESCE(NULLIF(TRIM(t.merchant), ''), NULLIF(TRIM(t.comment), ''), NULLIF(TRIM(t.user_note), ''), a.title, ${stLit(loc, "incoming")})`;
-
-// Перерахунок обох денормалізованих сум із таблиці розподілів. ЄДИНЕ місце, де вони пишуться —
-// інакше `reimbursed`/`reimburses_total` розійшлися б із `tx_reimbursements`, а канон читає саме їх.
-function rbRecalc(db: AppDb, ids: string[]) {
-  return ids.map((txId) =>
-    db.prepare(
-      `UPDATE transactions SET
-         reimbursed = COALESCE((SELECT SUM(r.amount) FROM tx_reimbursements r WHERE r.expense_id = ?), 0),
-         reimburses_total = COALESCE((SELECT SUM(r.amount) FROM tx_reimbursements r WHERE r.source_tx_id = ?), 0)
-       WHERE id = ?`,
-    ).bind(txId, txId, txId),
-  );
-}
+// Перерахунок обох денормалізованих сум — `repo/transactions.ts recalcStmts` (ЄДИНЕ місце, де
+// вони пишуться; інакше `reimbursed`/`reimburses_total` розійшлися б із `tx_reimbursements`,
+// а канон читає саме їх).
 
 // Поточний стан + кандидати. Кандидат — надходження в межах ±21 дня, у якого ЛИШИВСЯ вільний
 // залишок: одне надходження може покривати кілька витрат («скинули 2400 — 1870 за одне,
 // решта за інше»), тож вичерпаність рахуємо по `reimburses_total`, а не по факту привʼязки.
 api.get("/transactions/:id/reimbursement", async (c) => {
   const id = c.req.param("id");
-  const tx = await c.env.DB.prepare(
-    "SELECT id, amount, currency_code, time, reimbursed FROM transactions WHERE id = ?",
-  ).bind(id).first<{ id: string; amount: number; currency_code: number; time: number; reimbursed: number | null }>();
-  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
-
-  type RbTx = {
-    id: string; label: string; account_title: string | null;
-    amount: number; currency_code: number; time: number;
-    available: number;            // скільки з надходження ще не роздано
-    allocated_here: number;       // скільки з нього вже пішло саме на цю витрату
-  };
-  const SELECT_TX = `
-    SELECT t.id, ${rbLabel(c.get("locale"))} AS label, a.title AS account_title, t.amount, t.currency_code, t.time,
-           t.amount - COALESCE(t.reimburses_total, 0) AS available,
-           COALESCE((SELECT r.amount FROM tx_reimbursements r WHERE r.source_tx_id = t.id AND r.expense_id = ?), 0) AS allocated_here
-    FROM transactions t LEFT JOIN accounts a ON a.id = t.account_id`;
-
-  const linked = await c.env.DB.prepare(
-    `${SELECT_TX} WHERE t.id IN (SELECT source_tx_id FROM tx_reimbursements WHERE expense_id = ?) ORDER BY t.time`,
-  ).bind(id, id).all<RbTx>();
+  const loc = c.get("locale");
+  const tx = await txRepo.reimbursementTarget(c.env.DB, id);
+  if (!tx) return c.json({ error: st(loc, "errTxNotFound") }, 404);
 
   const WINDOW = 21 * 86400;
-  const candidates = await c.env.DB.prepare(
-    `${SELECT_TX}
-     WHERE t.amount > 0 AND t.transfer_pair_id IS NULL AND t.currency_code = ?
-       AND t.time BETWEEN ? AND ?
-       AND t.amount - COALESCE(t.reimburses_total, 0) > 0
-       AND t.id NOT IN (SELECT source_tx_id FROM tx_reimbursements WHERE expense_id = ?)
-     ORDER BY ABS(t.time - ?) LIMIT 12`,
-  ).bind(id, tx.currency_code, tx.time - WINDOW, tx.time + WINDOW, id, tx.time).all<RbTx>();
+  const [linked, candidates] = await Promise.all([
+    txRepo.reimbursementsLinked(c.env.DB, loc, id),
+    txRepo.reimbursementCandidates(c.env.DB, loc, id, tx.currency_code, tx.time, WINDOW),
+  ]);
 
   return c.json({
     tx: { id: tx.id, amount: tx.amount, currency_code: tx.currency_code, reimbursed: tx.reimbursed ?? 0 },
-    linked: linked.results ?? [],
-    candidates: candidates.results ?? [],
+    linked,
+    candidates,
   });
 });
 
@@ -2500,9 +2278,7 @@ api.put("/transactions/:id/reimbursement", async (c) => {
   const body = await c.req.json<RbBody>().catch((): RbBody => ({}));
   const wanted = (body.allocations ?? []).filter((a) => a?.source_id);
 
-  const tx = await c.env.DB.prepare(
-    "SELECT amount, currency_code FROM transactions WHERE id = ?",
-  ).bind(id).first<{ amount: number; currency_code: number }>();
+  const tx = await txRepo.amountAndCurrency(c.env.DB, id);
   if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
   if (tx.amount >= 0) return c.json({ error: st(c.get("locale"), "errReimbOnlyExpense") }, 400);
   const expenseTotal = -tx.amount;
@@ -2510,7 +2286,7 @@ api.put("/transactions/:id/reimbursement", async (c) => {
   // §SPLIT×§COMPENSATION: свідомо взаємовиключні. Компенсація каже «скільки з цього моє»,
   // спліт — «на що пішло»; накласти одне на одне означало б ділити компенсацію по частинах
   // з округленням, і сума частин перестала б сходитись із сумою операції.
-  const hasSplits = await c.env.DB.prepare("SELECT 1 FROM tx_splits WHERE tx_id = ? LIMIT 1").bind(id).first();
+  const hasSplits = await txRepo.hasSplits(c.env.DB, id);
   if (hasSplits && (wanted.length || body.manual_amount)) {
     return c.json({ error: st(c.get("locale"), "errReimbHasSplit") }, 400);
   }
@@ -2520,15 +2296,9 @@ api.put("/transactions/:id/reimbursement", async (c) => {
 
   if (wanted.length) {
     const ids = [...new Set(wanted.map((a) => String(a.source_id)))];
-    const ph = ids.map(() => "?").join(",");
     // `available` рахуємо БЕЗ урахування того, що вже віддано ЦІЙ витраті: інакше редагування
     // наявного розподілу впиралося б у власний же залишок і зменшити суму було б неможливо.
-    const found = (await c.env.DB.prepare(
-      `SELECT t.id, t.amount, t.currency_code,
-              t.amount - COALESCE(t.reimburses_total, 0)
-                + COALESCE((SELECT r.amount FROM tx_reimbursements r WHERE r.source_tx_id = t.id AND r.expense_id = ?), 0) AS available
-       FROM transactions t WHERE t.id IN (${ph})`,
-    ).bind(id, ...ids).all<{ id: string; amount: number; currency_code: number; available: number }>()).results ?? [];
+    const found = await txRepo.sourcesWithAvailable(c.env.DB, id, ids);
     if (found.length !== ids.length) return c.json({ error: st(c.get("locale"), "errReimbSomeNotFound") }, 400);
     const byId = new Map(found.map((r) => [r.id, r]));
 
@@ -2563,23 +2333,17 @@ api.put("/transactions/:id/reimbursement", async (c) => {
   }
 
   // Джерела, яких торкаємось: старі (їх треба перерахувати після видалення) + нові.
-  const prev = (await c.env.DB.prepare(
-    "SELECT source_tx_id FROM tx_reimbursements WHERE expense_id = ?",
-  ).bind(id).all<{ source_tx_id: string }>()).results ?? [];
-  const touched = [...new Set([id, ...prev.map((p) => p.source_tx_id), ...rows.map((r) => r.source_id)])];
+  const prev = await txRepo.allocationSources(c.env.DB, id);
+  const touched = [...new Set([id, ...prev, ...rows.map((r) => r.source_id)])];
 
+  // Порядок у батчі — ЦЕ і є поведінка: спершу зняти старі розподіли, тоді записати нові, тоді
+  // перерахувати денормалізовані суми з таблиці, і лише в кінці добити ручну компенсацію
+  // (у неї немає рядка-джерела, тож перерахунок її не побачив би).
   const now = Math.floor(Date.now() / 1000);
-  const stmts = [c.env.DB.prepare("DELETE FROM tx_reimbursements WHERE expense_id = ?").bind(id)];
-  for (const r of rows) {
-    stmts.push(c.env.DB.prepare(
-      "INSERT INTO tx_reimbursements (expense_id, source_tx_id, amount, created_at) VALUES (?, ?, ?, ?)",
-    ).bind(id, r.source_id, r.amount, now));
-  }
-  stmts.push(...rbRecalc(c.env.DB, touched));
-  // Ручна компенсація не має рядка-джерела, тож `reimbursed` після перерахунку треба добити нею.
-  if (manual > 0) {
-    stmts.push(c.env.DB.prepare("UPDATE transactions SET reimbursed = reimbursed + ? WHERE id = ?").bind(manual, id));
-  }
+  const stmts = [txRepo.clearAllocationsStmt(c.env.DB, id)];
+  for (const r of rows) stmts.push(txRepo.insertAllocationStmt(c.env.DB, id, r.source_id, r.amount, now));
+  stmts.push(...txRepo.recalcStmts(c.env.DB, touched));
+  if (manual > 0) stmts.push(txRepo.addManualReimbursedStmt(c.env.DB, id, manual));
   await c.env.DB.batch(stmts);
 
   return c.json({ ok: true, reimbursed: total, allocations: rows.length, manual });
@@ -2589,19 +2353,11 @@ api.put("/transactions/:id/reimbursement", async (c) => {
 // («скинули 2400, використано 1870 — 530 ще вільні») і дійти звідси до інших витрат.
 api.get("/transactions/:id/reimbursement-usage", async (c) => {
   const id = c.req.param("id");
-  const tx = await c.env.DB.prepare(
-    "SELECT id, amount, currency_code, reimburses_total FROM transactions WHERE id = ?",
-  ).bind(id).first<{ id: string; amount: number; currency_code: number; reimburses_total: number | null }>();
+  const tx = await txRepo.reimbursementSource(c.env.DB, id);
   if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
   if (tx.amount <= 0) return c.json({ used: [], allocated: 0, available: 0 });
 
-  const used = (await c.env.DB.prepare(
-    `SELECT e.id, r.amount,
-            COALESCE(NULLIF(TRIM(e.merchant), ''), NULLIF(TRIM(e.comment), ''), ${stLit(c.get("locale"), "expense")}) AS label,
-            e.time, e.amount AS expense_amount
-     FROM tx_reimbursements r JOIN transactions e ON e.id = r.expense_id
-     WHERE r.source_tx_id = ? ORDER BY e.time`,
-  ).bind(id).all<{ id: string; amount: number; label: string; time: number; expense_amount: number }>()).results ?? [];
+  const used = await txRepo.reimbursementUsage(c.env.DB, c.get("locale"), id);
 
   const allocated = tx.reimburses_total ?? 0;
   return c.json({ used, allocated, available: tx.amount - allocated, currency_code: tx.currency_code });
@@ -2723,35 +2479,8 @@ api.get("/search", async (c) => {
   // лишається поза — це свідомий компроміс проти сканування всієї таблиці на кожну літеру.
   const variants = [...new Set([q, q.toLocaleLowerCase("uk"), q.toLocaleUpperCase("uk"),
     q.charAt(0).toLocaleUpperCase("uk") + q.slice(1).toLocaleLowerCase("uk")])];
-  const likes = variants.map((v) => `%${v}%`);
-  const orLike = (col: string) => `(${variants.map(() => `${col} LIKE ?`).join(" OR ")})`;
 
-  const [merchants, categories, transactions] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT t.merchant AS name, COUNT(DISTINCT t.id) AS n, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS}
-       WHERE ${orLike("t.merchant")} AND ${SPEND_WHERE}
-       GROUP BY t.merchant ORDER BY spent DESC LIMIT 6`,
-    ).bind(...likes).all<{ name: string; n: number; spent: number }>(),
-    c.env.DB.prepare(
-      `SELECT c.id, ${catNameSql(c.get("locale"), "c.name")} AS name, c.color, ${catNameSql(c.get("locale"), "p.name")} AS parent_name
-       FROM categories c LEFT JOIN categories p ON p.id = c.parent_id
-       WHERE ${orLike("c.name")} ORDER BY c.parent_id IS NOT NULL, c.name LIMIT 6`,
-    ).bind(...likes).all<{ id: number; name: string; color: string | null; parent_name: string | null }>(),
-    c.env.DB.prepare(
-      `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, ${catNameSql(c.get("locale"), "c.name")} AS category_name
-       FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
-       WHERE ${orLike("t.merchant")} OR ${orLike("t.comment")} OR ${orLike("t.user_note")}
-       ORDER BY t.time DESC LIMIT 6`,
-    ).bind(...likes, ...likes, ...likes)
-      .all<{ id: string; time: number; amount: number; currency_code: number; merchant: string | null; category_name: string | null }>(),
-  ]);
-
-  return c.json({
-    merchants: merchants.results ?? [],
-    categories: categories.results ?? [],
-    transactions: transactions.results ?? [],
-  });
+  return c.json(await txRepo.search(c.env.DB, c.get("locale"), mult, variants));
 });
 
 // §A5: корпус знань — вбудовані доки + користувацький шар (`knowledge_docs`, міграція 0028).
@@ -2871,14 +2600,9 @@ api.get("/analytics/health", async (c) => {
   // порівнює саме ці рядки — просідання «за 5 днів» рахувалось по зсунутій сітці днів.
   const day = localYmd(now);
   try {
-    await c.env.DB.prepare(
-      "INSERT INTO health_history (day, score, ts) VALUES (?, ?, ?) ON CONFLICT(day) DO UPDATE SET score = excluded.score, ts = excluded.ts",
-    ).bind(day, h.score, now).run();
-    const since = localYmd(now - 45 * 86400);
-    const rows = await c.env.DB.prepare(
-      "SELECT day, score FROM health_history WHERE day >= ? ORDER BY day",
-    ).bind(since).all<{ day: string; score: number }>();
-    return c.json({ ...h, trend: rows.results ?? [] });
+    await analyticsRepo.recordHealthScore(c.env.DB, day, h.score, now);
+    const trend = await analyticsRepo.healthTrend(c.env.DB, localYmd(now - 45 * 86400));
+    return c.json({ ...h, trend });
   } catch {
     return c.json({ ...h, trend: [] }); // таблиця може лагати на remote до міграції
   }

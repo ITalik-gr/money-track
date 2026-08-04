@@ -11,6 +11,7 @@ import {
   EFF_IMPORTANCE, spendSum, incomeSum, amountSum, localYmSql,
 } from "../lib/finance/stats.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
+import { stLit } from "../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 
 /**
@@ -405,5 +406,264 @@ export async function spendByImportance(
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY ${EFF_IMPORTANCE}`,
   ).bind(r.from, r.to).all();
+  return res.results ?? [];
+}
+
+// ---- patterns (§E1/E2/E3) ----------------------------------------------------
+
+export interface CategoryMonthCell {
+  id: number | null; name: string | null; color: string | null; m: string; spent: number;
+}
+
+/**
+ * Spend per effective category per calendar month — the trailing matrix behind the anomaly radar.
+ *
+ * Month keys come from `localYmSql(now)`, not from a UTC `strftime`, and that matters more here
+ * than anywhere else: the caller builds the list of month keys in JS while SQL builds the row
+ * keys, so a timezone mismatch between the two does not raise an error — it silently reads as a
+ * ZERO month and drags the category's level down (§APP_TZ).
+ */
+export async function categoryMonthMatrix(
+  db: AppDb, locale: NotifLocale, mult: string, now: number, r: Range,
+): Promise<CategoryMonthCell[]> {
+  const res = await db.prepare(
+    `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(locale, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
+            ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
+     GROUP BY ${EFF_CAT_ID}, m`,
+  ).bind(r.from, r.to).all<CategoryMonthCell>();
+  return res.results ?? [];
+}
+
+export interface MonthCategorySplit {
+  id: number | null; recurring: number; oneoff: number; n: number; biggest: number;
+}
+
+/**
+ * The current month per category, split into recurring and one-off, plus the two lumpiness
+ * signals the projection needs: `n` (how many operations) and `biggest` (the largest single one).
+ *
+ * `recurringExpr` is `isRecurringExpr(...)` from the canon, passed in rather than rebuilt here —
+ * "is this spending regular" is the canon's definition to make, and restating it locally is
+ * exactly the move that produced §CUR-PLAN.
+ *
+ * `COUNT(DISTINCT t.id)`, never `COUNT(*)`: `STATS_JOINS` multiplies a split transaction into one
+ * row per part, so `COUNT(*)` would overstate the count and understate the average cheque (§SPLIT).
+ */
+export async function currentMonthSplitByCategory(
+  db: AppDb, mult: string, recurringExpr: string, r: Range,
+): Promise<MonthCategorySplit[]> {
+  const res = await db.prepare(
+    `SELECT ${EFF_CAT_ID} AS id,
+            CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurringExpr} THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS recurring,
+            CAST(ROUND(COALESCE(SUM(CASE WHEN ${recurringExpr} THEN 0 ELSE (-${EFF_AMOUNT}) * ${mult} END), 0)) AS INTEGER) AS oneoff,
+            COUNT(DISTINCT t.id) AS n,
+            CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER) AS biggest
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
+     GROUP BY ${EFF_CAT_ID}`,
+  ).bind(r.from, r.to).all<MonthCategorySplit>();
+  return res.results ?? [];
+}
+
+// ---- one-category drill-down (§F5) -------------------------------------------
+
+/** Bucket 13, "Transfers and withdrawals" — the one category that is NOT canonical spending. */
+const TRANSFER_BUCKET = 13;
+
+/**
+ * The filter for the transfer bucket, shared by its three queries.
+ *
+ * Deliberately NOT `SPEND_WHERE`: this bucket is what the canon *excludes*, so asking for it with
+ * the spending filter would return nothing. It is informational — unresolved cash movements plus
+ * genuine transfers — and it is grouped by what the money was really for (`real_category_id`).
+ */
+function transferBucketWhere(v: ValueScope): string {
+  return `t.time >= ? AND t.time <= ? AND t.amount < 0 AND t.hold = 0 AND COALESCE(c.parent_id, t.category_id) = ${TRANSFER_BUCKET}` + v.curFilter;
+}
+
+export async function transferBucketSubs(
+  db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
+): Promise<Record<string, unknown>[]> {
+  const res = await db.prepare(
+    `SELECT t.real_category_id AS category_id, COALESCE(${catNameSql(locale, "rc.name")}, ${stLit(locale, "unidentified")}) AS name, rc.color AS color,
+            ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE ${transferBucketWhere(v)} GROUP BY t.real_category_id ORDER BY spent DESC`,
+  ).bind(r.from, r.to).all();
+  return res.results ?? [];
+}
+
+export async function transferBucketMerchants(
+  db: AppDb, v: ValueScope, r: Range,
+): Promise<Record<string, unknown>[]> {
+  const res = await db.prepare(
+    `SELECT t.merchant AS merchant, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE ${transferBucketWhere(v)} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
+  ).bind(r.from, r.to).all();
+  return res.results ?? [];
+}
+
+/**
+ * The bucket's own transactions.
+ *
+ * ⚠️ Joins `categories` by hand instead of using `STATS_JOINS`, and that is intentional, not an
+ * oversight: this query selects raw `t.amount` and never touches `sp.*`, so the split join would
+ * duplicate rows in a plain list for no benefit. The `c` alias is still needed — the filter reads
+ * `COALESCE(c.parent_id, t.category_id)`.
+ */
+export async function transferBucketTransactions(
+  db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
+): Promise<Record<string, unknown>[]> {
+  const res = await db.prepare(
+    `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
+            ${catNameSql(locale, "rc.name")} AS category_name, rc.color AS category_color
+     FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
+                          LEFT JOIN categories rc ON rc.id = t.real_category_id
+     WHERE ${transferBucketWhere(v)} ORDER BY t.amount ASC LIMIT 60`,
+  ).bind(r.from, r.to).all();
+  return res.results ?? [];
+}
+
+/**
+ * The filter for an ordinary category: canonical spending whose EFFECTIVE (rolled-up) category is
+ * the requested parent. The breakdown below then splits it by the actual leaf category — the real
+ * one for cash, the plain one otherwise.
+ */
+function categoryDrillWhere(v: ValueScope): string {
+  return `t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?${v.curFilter}`;
+}
+
+export async function categorySubs(
+  db: AppDb, locale: NotifLocale, v: ValueScope, r: Range, parent: number,
+): Promise<Record<string, unknown>[]> {
+  const res = await db.prepare(
+    `SELECT COALESCE(rc.id, c.id) AS category_id,
+            COALESCE(${catNameSql(locale, "COALESCE(rc.name, c.name)")}, ${stLit(locale, "uncategorized")}) AS name,
+            COALESCE(rc.color, c.color) AS color, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE ${categoryDrillWhere(v)} GROUP BY COALESCE(rc.id, c.id) ORDER BY spent DESC`,
+  ).bind(r.from, r.to, parent).all();
+  return res.results ?? [];
+}
+
+export async function categoryMerchants(
+  db: AppDb, v: ValueScope, r: Range, parent: number,
+): Promise<Record<string, unknown>[]> {
+  const res = await db.prepare(
+    `SELECT t.merchant AS merchant, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE ${categoryDrillWhere(v)} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
+  ).bind(r.from, r.to, parent).all();
+  return res.results ?? [];
+}
+
+export async function categoryTransactions(
+  db: AppDb, v: ValueScope, r: Range, parent: number,
+): Promise<Record<string, unknown>[]> {
+  const res = await db.prepare(
+    `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
+            COALESCE(rc.name, c.name) AS category_name, COALESCE(rc.color, c.color) AS category_color
+     FROM transactions t ${STATS_JOINS}
+     WHERE ${categoryDrillWhere(v)} ORDER BY t.amount ASC LIMIT 60`,
+  ).bind(r.from, r.to, parent).all();
+  return res.results ?? [];
+}
+
+// ---- arbitrary slice drill (§R2-ST5б) ----------------------------------------
+
+export interface SliceQuery {
+  /** merchant | account | event | weekday | day | dom | importance | all */
+  dim: string;
+  type: "expense" | "income";
+  /** The dimension's value; ignored when `dim` is "all". */
+  value: string;
+  limit: number;
+}
+
+/**
+ * Resolves a slice request into a WHERE clause and its bindings.
+ *
+ * The dimension is mapped onto a FIXED set of SQL expressions — user input picks which literal,
+ * it never reaches the query as text. The value itself is always bound.
+ *
+ * The type filter is the canon (`SPEND_WHERE` / `INCOME_WHERE`) rather than a local `amount < 0`,
+ * so a drill-down always reconciles with the KPI on the Overview screen it was opened from.
+ */
+function sliceParts(v: ValueScope, r: Range, q: SliceQuery): { base: string; binds: unknown[] } {
+  const canon = q.type === "income" ? INCOME_WHERE : SPEND_WHERE;
+  // §E1: weekday — 0=Sun..6=Sat. day — one calendar date (the same UTC bucket `series` grouped
+  // by). dom — day of month, for the heat-map. all — the whole period, for drilling the
+  // "Spending / Income" KPI itself.
+  const dimCol = q.dim === "account" ? "t.account_id"
+    : q.dim === "event" ? "t.event_id"
+    : q.dim === "weekday" ? "CAST(strftime('%w', t.time, 'unixepoch') AS INTEGER)"
+    : q.dim === "day" ? "strftime('%Y-%m-%d', t.time, 'unixepoch')"
+    : q.dim === "dom" ? "CAST(strftime('%d', t.time, 'unixepoch') AS INTEGER)"
+    : q.dim === "importance" ? EFF_IMPORTANCE
+    : q.dim === "all" ? null
+    : "t.merchant";
+  const dimClause = dimCol ? ` AND ${dimCol} = ?` : "";
+  // The numeric dimensions are compared against INTEGER columns/expressions, so the value is
+  // coerced here rather than bound as the string it arrived as.
+  const numeric = q.dim === "event" || q.dim === "weekday" || q.dim === "dom";
+  const binds: unknown[] = dimCol
+    ? [r.from, r.to, numeric ? Number(q.value) : q.value]
+    : [r.from, r.to];
+  return { base: `t.time >= ? AND t.time <= ? AND ${canon}${v.curFilter}${dimClause}`, binds };
+}
+
+/** Slice total. NOTE: `amountSum` counts `-amount`, so income comes back negative — the caller
+ *  takes the absolute value. */
+export async function sliceSummary(
+  db: AppDb, v: ValueScope, r: Range, q: SliceQuery,
+): Promise<{ spent: number; n: number } | null> {
+  const { base, binds } = sliceParts(v, r, q);
+  return await db.prepare(
+    `SELECT ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS} WHERE ${base}`,
+  ).bind(...binds).first<{ spent: number; n: number }>();
+}
+
+/** The slice's transactions: biggest expense / biggest income first. */
+export async function sliceTransactions(
+  db: AppDb, locale: NotifLocale, v: ValueScope, r: Range, q: SliceQuery,
+): Promise<Record<string, unknown>[]> {
+  const { base, binds } = sliceParts(v, r, q);
+  const order = q.type === "income" ? "DESC" : "ASC";
+  const res = await db.prepare(
+    `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment, t.user_note,
+            ${catNameSql(locale, EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color
+     FROM transactions t ${STATS_JOINS}
+     WHERE ${base} ORDER BY t.amount ${order} LIMIT ?`,
+  ).bind(...binds, q.limit).all();
+  return res.results ?? [];
+}
+
+// ---- health index (§H) -------------------------------------------------------
+
+/**
+ * Records today's health score, one row per day.
+ *
+ * §APP_TZ: `day` MUST be a Kyiv-local key. The notification feed's `draftHealthDrop` compares
+ * these rows to spot a decline "over 5 days", so a UTC key would put an evening view and a
+ * late-night view of the same day into two different rows and measure the drop on a shifted grid.
+ */
+export async function recordHealthScore(
+  db: AppDb, day: string, score: number, ts: number,
+): Promise<void> {
+  await db.prepare(
+    "INSERT INTO health_history (day, score, ts) VALUES (?, ?, ?) ON CONFLICT(day) DO UPDATE SET score = excluded.score, ts = excluded.ts",
+  ).bind(day, score, ts).run();
+}
+
+export async function healthTrend(
+  db: AppDb, since: string,
+): Promise<{ day: string; score: number }[]> {
+  const res = await db.prepare(
+    "SELECT day, score FROM health_history WHERE day >= ? ORDER BY day",
+  ).bind(since).all<{ day: string; score: number }>();
   return res.results ?? [];
 }

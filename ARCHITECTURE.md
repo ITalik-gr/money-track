@@ -197,7 +197,8 @@ off twice (the SQL linter, `numbersAreGrounded`). Each rule in §4 gets a determ
 | C2 | route response types imported from `shared/` | client↔server contract drift | phase 2 |
 | C3 | line ceiling per route file | `api.ts` regrowing | phase 3 |
 | C4 | client declares no API response types of its own | working around C2 | phase 2 |
-| C5 | golden `/analytics` responses match to the kopeck | silent money regressions | ✅ `worker/test/` |
+| C5 | golden `/analytics` responses match to the kopeck | silent money regressions | ✅ `worker/test/golden.test.ts` |
+| C6 | golden DATABASE STATE after every write endpoint | silent regressions in writes, where the response says nothing | ✅ `worker/test/writes.test.ts` |
 
 ---
 
@@ -241,9 +242,16 @@ red test is never "fixed" by re-recording.
 Moving the 179 queries into `worker/repo/` **without changing the SQL text** (a copy, not a
 rewrite — rewriting changes behaviour).
 
-Progress: **`api.ts` is at 129 inline queries and 3 124 lines, down from 179 / 3 331** — 28% of
-the queries migrated. Golden tests green after every batch. The whole `/analytics` surface is
-done except `patterns`, `category` and `slice`.
+Progress: **`api.ts` is at 70 inline queries, down from 179** — 61% of the queries migrated.
+Golden tests green after every batch. **The whole `/analytics` surface is done**, and with it the
+entire money-facing region, plus every transaction write path.
+
+**Milestone (2026-08-04): the canon no longer appears in the route layer at all.** `STATS_JOINS`,
+`SPEND_WHERE` and `amountSum` are gone from `api.ts`'s imports — `tsc` reported each one
+unprompted as it fell out of use. That is the actual goal of phase 1 stated precisely: a route can
+no longer *reach* the fragments it would need to write its own definition of spending. What
+remains imported from `stats.ts` is JS-side canon (period bounds, category levels, projections),
+which routes are meant to call.
 
 | Module | Covers |
 |---|---|
@@ -270,8 +278,8 @@ region where a mistake is caught by types rather than by a fixture.
 
 | # | Batch | Handlers | Queries | Target module | Covered by golden? |
 |---|---|---|---|---|---|
-| **A** | **`/analytics` tail** — `patterns` 2, `category` 6, `slice` 2, `health` 2 | 4 | **12** | `repo/analytics.ts` | ✅ fully |
-| **B** | **transactions + splits + reimbursements** — feed detail, bulk, transfer, `PATCH :id` (9), splits 6, reimbursement 12, transfers review 5, search 3, enrich status | 13 | **47** | `repo/transactions.ts`, new `repo/splits.ts`, new `repo/reimbursements.ts` | partly (splits/§COMPENSATION are in the fixture; writes are not) |
+| ~~**A**~~ | ~~**`/analytics` tail** — `patterns` 2, `category` 6, `slice` 2, `health` 2~~ | 4 | **12** ✅ | `repo/analytics.ts` | ✅ fully |
+| ~~**B**~~ | ~~**transactions + splits + reimbursements** — B1 reads 15, B2 writes 32~~ | 19 | **47** ✅ | `repo/transactions.ts` | ✅ reads by golden, writes by the new write suite |
 | **C** | **categories** — create, patch, usage, and `DELETE /categories/:id` alone at **15** | 4 | **21** | `repo/categories.ts` | rollup reads only |
 | **D** | **planning surface** — budgets 7, reports 3, planned 9, events 11 | 18 | **30** | `repo/planning.ts`, new `repo/budgets.ts`, new `repo/events.ts` | budgets via `budgetStatus` only |
 | **E** | **accounts CRUD + odds** — manual accounts 4, title/meta/active 3, delete 3, rates 2, export 4, knowledge 3 | 15 | **19** | `repo/accounts.ts`, new `repo/knowledge.ts` | ❌ writes, no fixture |
@@ -431,16 +439,49 @@ describe the *target*, this describes the *position*.
 |---|---|---|---|---|---|
 | 2026-08-03 | 0 | — | 3 331 lines · 179 queries | 23 → **59** | Golden harness + fixture + 36 snapshots. No production code touched. |
 | 2026-08-03 | 1 | **50 queries** (28%) | 3 124 lines · **129 queries** | 59 ✅ | `repo/{accounts,categories,transactions,goals,planning,receipts,analytics}.ts`. All of `/analytics` except `patterns`, `category`, `slice`. Four duplicates consolidated; `/analytics/income` bug found and filed, not fixed. |
-| 2026-08-04 | 1 | — | unchanged | 59 ✅ | Re-verified the tree against this document (counts match exactly, `npm run check` green). Remaining 129 queries inventoried into batches **A–E** above. **Nothing committed yet** — phase-1 work to date is still a working tree. |
+| 2026-08-04 | 1 | — | unchanged | 59 ✅ | Re-verified the tree against this document. Remaining 129 queries inventoried into batches **A–E** above. |
+| 2026-08-04 | 1 | **batch A, 12** | **117** queries | 59 ✅ | `/analytics` tail: `patterns`, `category` (incl. the bucket-13 branch), `slice`, `health`. `/analytics` is now entirely behind the repo layer. |
+| 2026-08-04 | 1 | **batch B1, 15** | **102** queries | 59 ✅ | Read-only transactions: detail + tags + receipt, frequent, splits GET, both reimbursement GETs, `/search`. **`STATS_JOINS` / `SPEND_WHERE` / `amountSum` left `api.ts` entirely.** `npm run build` green. |
+| 2026-08-04 | 0 + 1 | **batch B2, 32** | **70** queries | 59 → **92** ✅ | Write suite built FIRST (`worker/test/writes.test.ts`, 32 scenarios), then all six write handlers moved. Found and fixed a fixture defect (below). `npm run build` green. |
+
+### Phase 0b — the write suite (2026-08-04)
+
+`golden.test.ts` guards what the API *returns*; a write's real output is the state it leaves
+behind, and its response is usually `{ok: true}`. So `writes.test.ts` snapshots **both** — the
+response and a probe of every table a write may touch (`transactions` projection, `tx_splits`,
+`tx_reimbursements`, `transaction_tags`, `merchant_aliases`).
+
+- **The probe is deliberately wider than the row in the URL.** These handlers maintain the
+  DENORMALISED columns the canon reads: `recalcStmts` writes `reimbursed` on the expense *and*
+  `reimburses_total` on every source it touched. A probe narrowed to the addressed row would go
+  green through exactly the §COMPENSATION v2 bug, where money vanished from both spending and
+  income.
+- **Error paths are scenarios too** (11 of the 32). Most of the code in these handlers *is* the
+  validation — the currency guard, the split/compensation exclusion, the ceiling at the expense
+  total — and each rule exists because of a specific way real data went wrong.
+- **A fresh database per scenario**, unlike the read suite: writes mutate, and a shared fixture
+  would make each case depend on the ones before it.
+- **Not vacuous** — three deliberate mutations, all caught: `recalcStmts` stops maintaining
+  `reimburses_total` → **4 fail**; the §R2-TX4 cleanup stops wiping `real_category_id` → **2**;
+  `replaceSplits` stops deleting the old parts → **2**.
+
+**A real defect in the fixture, found by these tests.** The §COMPENSATION rows seeded `reimbursed`
+and `reimburses_total` **without inserting the `tx_reimbursements` rows they are derived from** —
+a state production cannot reach, since `recalcStmts` is the single writer of both and computes
+them from that table. It was not harmless: the endpoint recomputes a source's `available` from
+`tx_reimbursements`, so every source looked fully spent, and the scenario aimed at the
+"compensation exceeds the expense" ceiling was rejected earlier by the source-exhausted guard —
+leaving that ceiling untested. Fixed by seeding the allocations themselves. **The analytics
+goldens did not move**, which confirms the canon reads only the denormalised columns and is the
+proof the fixture change was safe.
 
 ### Next session starts here
 
-1. **Commit the working tree first.** Everything from the 2026-08-03 phase-1 session is still
-   uncommitted (`worker/repo/{analytics,planning,receipts}.ts` are untracked). A green bar plus 50
-   moved queries is a good commit boundary, and batching two sessions of movement into one commit
-   is exactly the shape that hides a regression.
-2. **Then take batch A** (`/analytics` tail — 12 queries, 4 handlers, fully covered by golden
-   snapshots). It is the last of the analytics surface, so finishing it means the money-facing
-   region is entirely behind the repo layer.
-3. Follow the five-step order under "Remaining work, batch by batch". Lower the budget in the same
-   commit as the batch.
+**Batch C — categories (21 queries, 4 handlers).** `DELETE /categories/:id` alone is **15** and is
+a cascade: children, transactions, budgets, rules, aliases, splits. Same treatment that worked for
+B2 — individual statements into `repo/categories.ts`, orchestration stays in the handler — and
+**write down the deletion ORDER while moving it**: the order is the behaviour, and nothing in the
+type system records it. Add write scenarios to `writes.test.ts` first; deleting a category that is
+in use is exactly the shape of operation where a reordered cascade fails silently.
+
+Then D (planning surface, 30) and E (accounts CRUD, 19).

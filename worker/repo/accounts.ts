@@ -72,3 +72,13 @@ export async function balanceHistory(db: AppDb): Promise<BalancePoint[] | null> 
     return null;
   }
 }
+
+/** Currency of specific accounts — the manual-transfer route needs both sides before writing. */
+export async function currenciesFor(
+  db: AppDb, ids: string[],
+): Promise<{ id: string; currency_code: number }[]> {
+  const r = await db.prepare(
+    `SELECT id, currency_code FROM accounts WHERE id IN (${ids.map(() => "?").join(",")})`,
+  ).bind(...ids).all<{ id: string; currency_code: number }>();
+  return r.results ?? [];
+}

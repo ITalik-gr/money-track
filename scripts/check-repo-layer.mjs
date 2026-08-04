@@ -32,7 +32,7 @@ const ROUTES = "worker/routes";
  * When you empty a file, delete its line — do not leave a `0`.
  */
 const BUDGET = {
-  "api.ts": 129,
+  "api.ts": 70,
   "import.ts": 3,
   "telegram.ts": 3,
   "setup.ts": 2,

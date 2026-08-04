@@ -130,12 +130,29 @@ export function seed(db: MemDb): void {
 
   // ---- §COMPENSATION -----------------------------------------------------------------------
   // Fully covered: nets to zero spending, and the covering income is not earnings.
-  tx(db, { time: NOW - 9 * DAY, amount: -1_800_00, category_id: 11, merchant: "Готель", reimbursed: 1_800_00 });
-  tx(db, { time: NOW - 9 * DAY, amount: 1_800_00, merchant: "Від: колега", reimburses_total: 1_800_00 });
+  const hotel = tx(db, { time: NOW - 9 * DAY, amount: -1_800_00, category_id: 11, merchant: "Готель", reimbursed: 1_800_00 });
+  const fromColleague = tx(db, { time: NOW - 9 * DAY, amount: 1_800_00, merchant: "Від: колега", reimburses_total: 1_800_00 });
   // Partly covered: the remainder stays spending, AND the unallocated part of the incoming
   // transfer stays income. This is the v2 bug — money used to vanish from both sides.
-  tx(db, { time: NOW - 10 * DAY, amount: -3_000_00, category_id: 11, merchant: "Квитки", reimbursed: 1_000_00 });
-  tx(db, { time: NOW - 10 * DAY, amount: 2_500_00, merchant: "Від: друг 2", reimburses_total: 1_000_00 });
+  const tickets = tx(db, { time: NOW - 10 * DAY, amount: -3_000_00, category_id: 11, merchant: "Квитки", reimbursed: 1_000_00 });
+  const fromFriend2 = tx(db, { time: NOW - 10 * DAY, amount: 2_500_00, merchant: "Від: друг 2", reimburses_total: 1_000_00 });
+  // The allocations THEMSELVES, not just their denormalised shadow.
+  //
+  // `reimbursed` / `reimburses_total` are derived columns: `rbRecalc` is their single writer and
+  // it computes both from this table. Seeding the columns without the rows produced a state
+  // production cannot reach — and it was not harmless. The write tests found it: an endpoint that
+  // recomputes `available` from `tx_reimbursements` saw every source as fully spent, so a
+  // scenario aimed at the "compensation exceeds the expense" ceiling was rejected earlier, by the
+  // source-exhausted guard, and that ceiling went untested.
+  //
+  // The canon reads the denormalised columns, so the analytics goldens are unaffected by this.
+  for (const [expense, source, amount] of [
+    [hotel, fromColleague, 1_800_00],
+    [tickets, fromFriend2, 1_000_00],
+  ] as const) {
+    exec(db, "INSERT INTO tx_reimbursements (expense_id, source_tx_id, amount, created_at) VALUES (?,?,?,?)",
+      [expense, source, amount, NOW]);
+  }
 
   // ---- transfers ---------------------------------------------------------------------------
   // A detected pair: both legs are outside spending and income entirely.

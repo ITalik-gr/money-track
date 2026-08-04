@@ -123,6 +123,22 @@ export function freezeTime(iso: string): () => void {
   return () => { Date.now = realNow; };
 }
 
+/**
+ * Make `crypto.randomUUID` deterministic. Returns a restore function.
+ *
+ * Needed only by the WRITE tests: `/transactions/transfer` mints ids and a `transfer_pair_id`
+ * itself, and a random pair id would change the snapshot on every run. Sequential ids keep the
+ * golden file stable while still proving the two legs share one pair — which is the invariant
+ * that matters (§Інваріанти: a transfer is a PAIR, not a flag).
+ */
+export function freezeUuid(): () => void {
+  let n = 0;
+  const real = crypto.randomUUID;
+  crypto.randomUUID = (() =>
+    `00000000-0000-4000-8000-${String(++n).padStart(12, "0")}`) as typeof crypto.randomUUID;
+  return () => { crypto.randomUUID = real; };
+}
+
 /** Minimal `Env` for read-only route tests: analytics touches the database and nothing else. */
 export function testEnv(db: MemDb): Record<string, unknown> {
   return {
