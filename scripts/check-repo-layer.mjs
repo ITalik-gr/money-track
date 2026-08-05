@@ -32,7 +32,8 @@ const ROUTES = "worker/routes";
  * When you empty a file, delete its line — do not leave a `0`.
  */
 const BUDGET = {
-  "api.ts": 70,
+  // `api.ts` is GONE from this map (2026-08-05): it went 179 → 0 and is now under the flat ban,
+  // which is the point of the whole exercise. A route can no longer reach for SQL at all.
   "import.ts": 3,
   "telegram.ts": 3,
   "setup.ts": 2,

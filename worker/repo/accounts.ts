@@ -82,3 +82,117 @@ export async function currenciesFor(
   ).bind(...ids).all<{ id: string; currency_code: number }>();
   return r.results ?? [];
 }
+
+// ---- writes -----------------------------------------------------------------
+
+export interface NewManualAccount {
+  id: string;
+  type: string;
+  title: string;
+  currency_code: number;
+  balance: number;
+  credit_limit: number;
+  role: string;
+  ai_note: string | null;
+  updated_at: number;
+}
+
+export async function createManual(db: AppDb, a: NewManualAccount): Promise<void> {
+  await db.prepare(
+    `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, role, ai_note, is_manual, is_active, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
+  ).bind(a.id, a.type, a.title, a.currency_code, a.balance, a.credit_limit, a.role, a.ai_note, a.updated_at).run();
+}
+
+/**
+ * Balance / title of a MANUAL account.
+ *
+ * `is_manual = 1` is part of the WHERE clause, not a check in the handler: a bank-synced balance
+ * is the bank's to state, and a client that could set it would make the account disagree with the
+ * statement it is reconciled against.
+ *
+ * @returns false when the patch was empty, so the caller can skip the write.
+ */
+export async function updateManual(
+  db: AppDb, id: string, patch: { balance?: number; title?: string }, updatedAt: number,
+): Promise<boolean> {
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  for (const col of ["balance", "title"] as const) {
+    const v = patch[col];
+    if (v !== undefined) { sets.push(`${col} = ?`); binds.push(v); }
+  }
+  if (!sets.length) return false;
+  sets.push("updated_at = ?"); binds.push(updatedAt);
+  await db.prepare(`UPDATE accounts SET ${sets.join(", ")} WHERE id = ? AND is_manual = 1`)
+    .bind(...binds, id).run();
+  return true;
+}
+
+/** Display name only, so it is allowed on any account — the bank sync no longer overwrites it. */
+export async function rename(db: AppDb, id: string, title: string): Promise<void> {
+  await db.prepare("UPDATE accounts SET title = ? WHERE id = ?").bind(title, id).run();
+}
+
+/** §R3 role and AI note, plus the credit-card terms that feed the payment reminder. */
+export interface AccountMeta {
+  role?: string;
+  ai_note?: string | null;
+  statement_day?: number | null;
+  payment_day?: number | null;
+  min_payment?: number | null;
+}
+
+export async function updateMeta(db: AppDb, id: string, meta: AccountMeta): Promise<boolean> {
+  const sets: string[] = [];
+  const binds: unknown[] = [];
+  for (const col of ["role", "ai_note", "statement_day", "payment_day", "min_payment"] as const) {
+    const v = meta[col];
+    if (v !== undefined) { sets.push(`${col} = ?`); binds.push(v); }
+  }
+  if (!sets.length) return false;
+  await db.prepare(`UPDATE accounts SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
+  return true;
+}
+
+/** Archive / restore. The transaction history is untouched — the account just leaves the lists. */
+export async function setActive(db: AppDb, id: string, active: boolean): Promise<void> {
+  await db.prepare("UPDATE accounts SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();
+}
+
+export async function findKind(db: AppDb, id: string): Promise<{ is_manual: number } | null> {
+  return await db.prepare("SELECT is_manual FROM accounts WHERE id = ?").bind(id).first<{ is_manual: number }>();
+}
+
+export async function transactionCount(db: AppDb, id: string): Promise<number> {
+  const r = await db.prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ?")
+    .bind(id).first<{ n: number }>();
+  return r?.n ?? 0;
+}
+
+/**
+ * Hard delete, and only ever a manual account with no transactions — the caller checks both
+ * before calling. `is_manual = 1` is repeated in the WHERE clause as a second lock: this is the
+ * one statement here that cannot be undone.
+ */
+export async function removeManual(db: AppDb, id: string): Promise<void> {
+  await db.prepare("DELETE FROM accounts WHERE id = ? AND is_manual = 1").bind(id).run();
+}
+
+/**
+ * Record a balance snapshot, at most one per day.
+ *
+ * The same day is REPLACED rather than appended, so a run of corrections in one sitting leaves a
+ * single point and the net-worth line steps by day instead of by edit.
+ */
+export async function recordBalance(
+  db: AppDb, accountId: string, balance: number, at: number,
+): Promise<void> {
+  const dayStart = at - (at % 86400);
+  await db.prepare(
+    "DELETE FROM account_balance_history WHERE account_id = ? AND recorded_at >= ? AND recorded_at < ?",
+  ).bind(accountId, dayStart, dayStart + 86400).run();
+  await db.prepare(
+    "INSERT INTO account_balance_history (account_id, balance, recorded_at, created_at) VALUES (?, ?, ?, ?)",
+  ).bind(accountId, balance, at, at).run();
+}

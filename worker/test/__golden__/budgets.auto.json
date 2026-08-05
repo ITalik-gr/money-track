@@ -1,0 +1,30 @@
+{
+  "status": 200,
+  "body": {
+    "trim_pct": 10,
+    "total_level": 1454000,
+    "total_suggested": 1335000,
+    "items": [
+      {
+        "category_id": 8,
+        "name": "Дім і побут",
+        "color": "#1F6E4C",
+        "importance": "discretionary",
+        "essential": false,
+        "level": 1200000,
+        "suggested": 1080000,
+        "current": null
+      },
+      {
+        "category_id": 1,
+        "name": "Продукти",
+        "color": "#1F6E4C",
+        "importance": "essential",
+        "essential": true,
+        "level": 254000,
+        "suggested": 255000,
+        "current": 1500000
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "merchant": "Оренда",
+      "amount": 1200000,
+      "n": 7,
+      "first_time": 1763024400,
+      "last_time": 1778576400,
+      "months": 7,
+      "currency_code": 980,
+      "category_id": 8,
+      "avg_interval_days": 30
+    }
+  ]
+}

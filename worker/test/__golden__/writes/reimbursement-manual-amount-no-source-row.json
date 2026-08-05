@@ -41,7 +41,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0305",
+        "id": "tx0001",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -57,7 +57,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0306",
+        "id": "tx0002",
         "amount": -42400,
         "currency_code": 980,
         "category_id": 30,
@@ -73,7 +73,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0307",
+        "id": "tx0003",
         "amount": -39100,
         "currency_code": 980,
         "category_id": 1,
@@ -89,7 +89,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0308",
+        "id": "tx0004",
         "amount": -47900,
         "currency_code": 980,
         "category_id": 30,
@@ -105,7 +105,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0309",
+        "id": "tx0005",
         "amount": -43400,
         "currency_code": 980,
         "category_id": 1,
@@ -121,7 +121,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0310",
+        "id": "tx0006",
         "amount": -17900,
         "currency_code": 980,
         "category_id": 35,
@@ -137,7 +137,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0311",
+        "id": "tx0007",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -153,7 +153,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0312",
+        "id": "tx0008",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -169,7 +169,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0313",
+        "id": "tx0009",
         "amount": -35600,
         "currency_code": 980,
         "category_id": 30,
@@ -185,7 +185,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0314",
+        "id": "tx0010",
         "amount": -38500,
         "currency_code": 980,
         "category_id": 1,
@@ -201,7 +201,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0315",
+        "id": "tx0011",
         "amount": -57400,
         "currency_code": 980,
         "category_id": 30,
@@ -217,7 +217,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0316",
+        "id": "tx0012",
         "amount": -59500,
         "currency_code": 980,
         "category_id": 1,
@@ -233,7 +233,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0317",
+        "id": "tx0013",
         "amount": -22600,
         "currency_code": 980,
         "category_id": 35,
@@ -249,7 +249,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0318",
+        "id": "tx0014",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -265,7 +265,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0319",
+        "id": "tx0015",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -281,7 +281,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0320",
+        "id": "tx0016",
         "amount": -62400,
         "currency_code": 980,
         "category_id": 30,
@@ -297,7 +297,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0321",
+        "id": "tx0017",
         "amount": -44500,
         "currency_code": 980,
         "category_id": 1,
@@ -313,7 +313,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0322",
+        "id": "tx0018",
         "amount": -49900,
         "currency_code": 980,
         "category_id": 30,
@@ -329,7 +329,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0323",
+        "id": "tx0019",
         "amount": -37700,
         "currency_code": 980,
         "category_id": 1,
@@ -345,7 +345,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0324",
+        "id": "tx0020",
         "amount": -28100,
         "currency_code": 980,
         "category_id": 35,
@@ -361,7 +361,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0325",
+        "id": "tx0021",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -377,7 +377,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0326",
+        "id": "tx0022",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -393,7 +393,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0327",
+        "id": "tx0023",
         "amount": -46600,
         "currency_code": 980,
         "category_id": 30,
@@ -409,7 +409,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0328",
+        "id": "tx0024",
         "amount": -68500,
         "currency_code": 980,
         "category_id": 1,
@@ -425,7 +425,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0329",
+        "id": "tx0025",
         "amount": -51800,
         "currency_code": 980,
         "category_id": 30,
@@ -441,7 +441,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0330",
+        "id": "tx0026",
         "amount": -30400,
         "currency_code": 980,
         "category_id": 1,
@@ -457,7 +457,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0331",
+        "id": "tx0027",
         "amount": -29900,
         "currency_code": 980,
         "category_id": 35,
@@ -473,7 +473,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0332",
+        "id": "tx0028",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -489,7 +489,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0333",
+        "id": "tx0029",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -505,7 +505,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0334",
+        "id": "tx0030",
         "amount": -32400,
         "currency_code": 980,
         "category_id": 30,
@@ -521,7 +521,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0335",
+        "id": "tx0031",
         "amount": -33900,
         "currency_code": 980,
         "category_id": 1,
@@ -537,7 +537,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0336",
+        "id": "tx0032",
         "amount": -42000,
         "currency_code": 980,
         "category_id": 30,
@@ -553,7 +553,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0337",
+        "id": "tx0033",
         "amount": -74800,
         "currency_code": 980,
         "category_id": 1,
@@ -569,7 +569,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0338",
+        "id": "tx0034",
         "amount": -15300,
         "currency_code": 980,
         "category_id": 35,
@@ -585,7 +585,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0339",
+        "id": "tx0035",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -601,7 +601,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0340",
+        "id": "tx0036",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -617,7 +617,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0341",
+        "id": "tx0037",
         "amount": -78800,
         "currency_code": 980,
         "category_id": 30,
@@ -633,7 +633,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0342",
+        "id": "tx0038",
         "amount": -78300,
         "currency_code": 980,
         "category_id": 1,
@@ -649,7 +649,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0343",
+        "id": "tx0039",
         "amount": -79300,
         "currency_code": 980,
         "category_id": 30,
@@ -665,7 +665,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0344",
+        "id": "tx0040",
         "amount": -36800,
         "currency_code": 980,
         "category_id": 1,
@@ -681,7 +681,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0345",
+        "id": "tx0041",
         "amount": -22400,
         "currency_code": 980,
         "category_id": 35,
@@ -697,7 +697,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0346",
+        "id": "tx0042",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -713,7 +713,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0347",
+        "id": "tx0043",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -729,7 +729,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0348",
+        "id": "tx0044",
         "amount": -61400,
         "currency_code": 980,
         "category_id": 30,
@@ -745,7 +745,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0349",
+        "id": "tx0045",
         "amount": -67900,
         "currency_code": 980,
         "category_id": 1,
@@ -761,7 +761,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0350",
+        "id": "tx0046",
         "amount": -37400,
         "currency_code": 980,
         "category_id": 30,
@@ -777,7 +777,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0351",
+        "id": "tx0047",
         "amount": -37700,
         "currency_code": 980,
         "category_id": 1,
@@ -793,7 +793,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0352",
+        "id": "tx0048",
         "amount": -13100,
         "currency_code": 980,
         "category_id": 35,
@@ -809,7 +809,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0353",
+        "id": "tx0049",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -825,7 +825,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0354",
+        "id": "tx0050",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -841,7 +841,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0355",
+        "id": "tx0051",
         "amount": -60000,
         "currency_code": 980,
         "category_id": 30,
@@ -857,7 +857,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0356",
+        "id": "tx0052",
         "amount": -77100,
         "currency_code": 980,
         "category_id": 1,
@@ -873,7 +873,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0357",
+        "id": "tx0053",
         "amount": -43300,
         "currency_code": 980,
         "category_id": 30,
@@ -889,7 +889,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0358",
+        "id": "tx0054",
         "amount": -69200,
         "currency_code": 980,
         "category_id": 1,
@@ -905,7 +905,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0359",
+        "id": "tx0055",
         "amount": -23900,
         "currency_code": 980,
         "category_id": 35,
@@ -921,7 +921,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0360",
+        "id": "tx0056",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -937,7 +937,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0361",
+        "id": "tx0057",
         "amount": -1200000,
         "currency_code": 980,
         "category_id": 8,
@@ -953,7 +953,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0362",
+        "id": "tx0058",
         "amount": -32800,
         "currency_code": 980,
         "category_id": 30,
@@ -969,7 +969,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0363",
+        "id": "tx0059",
         "amount": -73800,
         "currency_code": 980,
         "category_id": 1,
@@ -985,7 +985,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0364",
+        "id": "tx0060",
         "amount": -41000,
         "currency_code": 980,
         "category_id": 30,
@@ -1001,7 +1001,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0365",
+        "id": "tx0061",
         "amount": -71600,
         "currency_code": 980,
         "category_id": 1,
@@ -1017,7 +1017,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0366",
+        "id": "tx0062",
         "amount": -27800,
         "currency_code": 980,
         "category_id": 35,
@@ -1033,7 +1033,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0367",
+        "id": "tx0063",
         "amount": 4500000,
         "currency_code": 980,
         "category_id": 15,
@@ -1049,7 +1049,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0368",
+        "id": "tx0064",
         "amount": -200000,
         "currency_code": 980,
         "category_id": 1,
@@ -1065,7 +1065,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0369",
+        "id": "tx0065",
         "amount": 45000,
         "currency_code": 980,
         "category_id": 3,
@@ -1081,7 +1081,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0370",
+        "id": "tx0066",
         "amount": 120000,
         "currency_code": 980,
         "category_id": null,
@@ -1097,7 +1097,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0371",
+        "id": "tx0067",
         "amount": -180000,
         "currency_code": 980,
         "category_id": 11,
@@ -1113,7 +1113,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0372",
+        "id": "tx0068",
         "amount": 180000,
         "currency_code": 980,
         "category_id": null,
@@ -1129,7 +1129,7 @@
         "reimburses_total": 180000
       },
       {
-        "id": "tx0373",
+        "id": "tx0069",
         "amount": -300000,
         "currency_code": 980,
         "category_id": 11,
@@ -1145,7 +1145,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0374",
+        "id": "tx0070",
         "amount": 250000,
         "currency_code": 980,
         "category_id": null,
@@ -1161,7 +1161,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0375",
+        "id": "tx0071",
         "amount": -200000,
         "currency_code": 980,
         "category_id": 13,
@@ -1177,7 +1177,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0376",
+        "id": "tx0072",
         "amount": -90000,
         "currency_code": 980,
         "category_id": 13,
@@ -1193,7 +1193,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0377",
+        "id": "tx0073",
         "amount": -35000,
         "currency_code": 980,
         "category_id": 2,
@@ -1209,7 +1209,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0378",
+        "id": "tx0074",
         "amount": -60000,
         "currency_code": 980,
         "category_id": 2,
@@ -1225,7 +1225,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0379",
+        "id": "tx0075",
         "amount": -5000,
         "currency_code": 840,
         "category_id": 43,
@@ -1241,7 +1241,7 @@
         "reimburses_total": 0
       },
       {
-        "id": "tx0380",
+        "id": "tx0076",
         "amount": -3000,
         "currency_code": 978,
         "category_id": 6,
@@ -1259,20 +1259,20 @@
     ],
     "tx_splits": [
       {
-        "tx_id": "tx0368",
+        "tx_id": "tx0064",
         "category_id": 1,
         "amount": -140000
       },
       {
-        "tx_id": "tx0368",
+        "tx_id": "tx0064",
         "category_id": 8,
         "amount": -60000
       }
     ],
     "tx_reimbursements": [
       {
-        "expense_id": "tx0371",
-        "source_tx_id": "tx0372",
+        "expense_id": "tx0067",
+        "source_tx_id": "tx0068",
         "amount": 180000
       }
     ],

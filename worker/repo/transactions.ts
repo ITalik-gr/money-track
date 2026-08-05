@@ -664,3 +664,46 @@ export function addManualReimbursedStmt(db: AppDb, expenseId: string, amount: nu
   return db.prepare("UPDATE transactions SET reimbursed = reimbursed + ? WHERE id = ?")
     .bind(amount, expenseId);
 }
+
+/**
+ * Rows for the CSV export (§J).
+ *
+ * The `+` leg of a detected pair is dropped, exactly as the transaction list drops it: a transfer
+ * between your own accounts is ONE movement, and exporting both sides would make an accountant's
+ * total count the money twice.
+ *
+ * `from` / `to` are optional and appended as bound predicates. The 20 000 ceiling is the file's,
+ * not the query's — a spreadsheet stops being a spreadsheet well before that.
+ */
+export interface CsvRow {
+  time: number;
+  merchant: string | null;
+  comment: string | null;
+  user_note: string | null;
+  amount: number;
+  currency_code: number;
+  is_transfer: number;
+  category_name: string | null;
+  account_title: string | null;
+  event_name: string | null;
+}
+
+export async function forCsvExport(
+  db: AppDb, locale: NotifLocale, from: number | null, to: number | null,
+): Promise<CsvRow[]> {
+  const where: string[] = ["NOT (t.transfer_pair_id IS NOT NULL AND t.amount > 0)"];
+  const binds: unknown[] = [];
+  if (from != null) { where.push("t.time >= ?"); binds.push(from); }
+  if (to != null) { where.push("t.time <= ?"); binds.push(to); }
+  const r = await db.prepare(
+    `SELECT t.time, t.merchant, t.comment, t.user_note, t.amount, t.currency_code, t.is_transfer,
+            ${catNameSql(locale, "c.name")} AS category_name, a.title AS account_title, e.name AS event_name
+     FROM transactions t
+     LEFT JOIN categories c ON c.id = t.category_id
+     LEFT JOIN accounts a ON a.id = t.account_id
+     LEFT JOIN event_groups e ON e.id = t.event_id
+     WHERE ${where.join(" AND ")}
+     ORDER BY t.time DESC LIMIT 20000`,
+  ).bind(...binds).all<CsvRow>();
+  return r.results ?? [];
+}

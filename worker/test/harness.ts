@@ -139,6 +139,20 @@ export function freezeUuid(): () => void {
   return () => { crypto.randomUUID = real; };
 }
 
+/**
+ * Make `Math.random` deterministic. Returns a restore function.
+ *
+ * `POST /knowledge` mints its own id from the clock plus a random suffix. The clock is already
+ * frozen, so the suffix is the only thing left that would change the snapshot on every run.
+ */
+export function freezeRandom(): () => void {
+  let n = 0;
+  const real = Math.random;
+  // A fixed sequence rather than a constant: two ids minted in one request must still differ.
+  Math.random = () => ((++n * 0.618033988749895) % 1);
+  return () => { Math.random = real; };
+}
+
 /** Minimal `Env` for read-only route tests: analytics touches the database and nothing else. */
 export function testEnv(db: MemDb): Record<string, unknown> {
   return {

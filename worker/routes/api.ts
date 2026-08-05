@@ -20,7 +20,13 @@ import * as goalsRepo from "../repo/goals.ts";
 import * as analyticsRepo from "../repo/analytics.ts";
 import * as planningRepo from "../repo/planning.ts";
 import * as receiptsRepo from "../repo/receipts.ts";
-import { catNameSql, localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
+import * as budgetsRepo from "../repo/budgets.ts";
+import * as eventsRepo from "../repo/events.ts";
+import * as reportsRepo from "../repo/reports.ts";
+import * as knowledgeRepo from "../repo/knowledge.ts";
+import * as stateRepo from "../repo/state.ts";
+// `catNameSql` is deliberately absent: it produces SQL, and the route layer no longer writes any.
+import { localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
 import { recalcGoal, isGoalKind, isAutofillKind } from "../lib/finance/goals.ts";
 import { st } from "../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
@@ -165,41 +171,27 @@ const EXPORT_SKIP = new Set([
 ]);
 
 api.get("/export/all.json", async (c) => {
-  // Усе службове починається з `_`: `_mt_migrations` (журнал міграцій — версія йде в `meta`),
-  // `_cf_*` у проді й `__miniflare_do_name` у локальному дев. Жодна прикладна таблиця так не
-  // зветься, тож один префікс закриває всі три, і наступний внутрішній артефакт рантайму не
-  // просочиться у файл користувача.
-  const tables = await c.env.DB.prepare(
-    `SELECT name FROM sqlite_master WHERE type = 'table'
-       AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '\\_%' ESCAPE '\\'
-     ORDER BY name`,
-  ).all<{ name: string }>();
+  const tables = await stateRepo.exportableTables(c.env.DB);
 
   // Порожній список означає, що схему не вдалося прочитати — а не що даних нема. Віддати за
   // цієї умови «успішний» файл на кілька байт було б найгіршим із можливих результатів: людина
   // вважала б, що бекап у неї є.
-  if (!tables.results?.length) return c.json({ error: "export_schema_unreadable" }, 500);
+  if (!tables.length) return c.json({ error: "export_schema_unreadable" }, 500);
 
   const data: Record<string, unknown[]> = {};
   const counts: Record<string, number> = {};
-  for (const { name } of tables.results) {
+  for (const name of tables) {
     if (EXPORT_SKIP.has(name)) continue;
-    // Імена таблиць приходять із самої схеми, не від користувача, але лапки лишаємо: інтерполяція
-    // в SQL без них — звичка, яка одного разу зустріне таблицю з дефісом.
-    const rows = await c.env.DB.prepare(`SELECT * FROM "${name.replace(/"/g, '""')}"`).all();
-    data[name] = rows.results ?? [];
+    data[name] = await stateRepo.dumpTable(c.env.DB, name);
     counts[name] = data[name].length;
   }
-
-  const version = await c.env.DB.prepare("SELECT MAX(name) AS v FROM _mt_migrations")
-    .first<{ v: string | null }>().catch(() => null);
 
   const body = JSON.stringify({
     meta: {
       app: "money-track",
       format: 1,
       exported_at: Math.floor(Date.now() / 1000),
-      schema_version: version?.v ?? null,
+      schema_version: await stateRepo.schemaVersion(c.env.DB),
       // Кількості поруч із даними — щоб урізаний або побитий файл було видно без парсингу всього.
       rows: counts,
       note: "Full dump of this account's Durable Object. Encrypted API keys (user_secrets) are excluded.",
@@ -223,24 +215,8 @@ api.get("/export/transactions.csv", async (c) => {
   const url = new URL(c.req.url);
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
-  const where: string[] = ["NOT (t.transfer_pair_id IS NOT NULL AND t.amount > 0)"];
-  const binds: unknown[] = [];
-  if (from) { where.push("t.time >= ?"); binds.push(Number(from)); }
-  if (to) { where.push("t.time <= ?"); binds.push(Number(to)); }
-  const rows = await c.env.DB.prepare(
-    `SELECT t.time, t.merchant, t.comment, t.user_note, t.amount, t.currency_code, t.is_transfer,
-            ${catNameSql(c.get("locale"), "c.name")} AS category_name, a.title AS account_title, e.name AS event_name
-     FROM transactions t
-     LEFT JOIN categories c ON c.id = t.category_id
-     LEFT JOIN accounts a ON a.id = t.account_id
-     LEFT JOIN event_groups e ON e.id = t.event_id
-     WHERE ${where.join(" AND ")}
-     ORDER BY t.time DESC LIMIT 20000`,
-  ).bind(...binds).all<{
-    time: number; merchant: string | null; comment: string | null; user_note: string | null;
-    amount: number; currency_code: number; is_transfer: number;
-    category_name: string | null; account_title: string | null; event_name: string | null;
-  }>();
+  const rows = await txRepo.forCsvExport(
+    c.env.DB, c.get("locale"), from ? Number(from) : null, to ? Number(to) : null);
   // ---- CSV dialect (B2) ----------------------------------------------------
   // The RFC-4180 file we used to emit (`,` + decimal point) opens as ONE column in Excel on a
   // Ukrainian/European locale, which reads as "the export is broken" — and even after splitting
@@ -281,7 +257,7 @@ api.get("/export/transactions.csv", async (c) => {
     st(loc, "csvGroup"), st(loc, "csvTransfer"),
   ];
   const lines = [header.map(esc).join(sep)];
-  for (const r of rows.results ?? []) {
+  for (const r of rows) {
     lines.push([
       new Date(r.time * 1000).toISOString().slice(0, 10),
       r.merchant ?? "", r.comment ?? "", r.user_note ?? "",
@@ -510,24 +486,16 @@ api.patch("/transactions/:id", async (c) => {
 // ---- budgets & planned ------------------------------------------------------
 
 api.get("/budgets", async (c) => {
-  const rows = await c.env.DB.prepare("SELECT * FROM budgets").all();
-  return c.json(rows.results);
+  return c.json(await budgetsRepo.listAll(c.env.DB));
 });
 
-// Idempotent set: one budget per category+period. amount<=0 clears it. No unique
-// index on the table, so replace by delete-then-insert in a batch.
+// Idempotent set: one budget per category+period. amount<=0 clears it.
 api.put("/budgets", async (c) => {
   const b = await c.req.json<{ category_id: number; period: "month" | "week"; amount: number; rollover?: boolean }>();
-  const del = c.env.DB.prepare("DELETE FROM budgets WHERE category_id = ? AND period = ?")
-    .bind(b.category_id, b.period);
   if (b.amount > 0) {
-    await c.env.DB.batch([
-      del,
-      c.env.DB.prepare("INSERT INTO budgets (category_id, period, amount, currency_code, rollover) VALUES (?, ?, ?, 980, ?)")
-        .bind(b.category_id, b.period, b.amount, b.rollover ? 1 : 0),
-    ]);
+    await budgetsRepo.set(c.env.DB, b.category_id, b.period, b.amount, !!b.rollover);
   } else {
-    await del.run();
+    await budgetsRepo.clear(c.env.DB, b.category_id, b.period);
   }
   return c.json({ ok: true });
 });
@@ -552,19 +520,14 @@ api.get("/budgets/auto", async (c) => {
   const { mult } = valueMode(rates, null);
   const now = Math.floor(Date.now() / 1000);
 
-  const [levels, cats, existing] = await Promise.all([
+  const [levels, cats, currentByCat] = await Promise.all([
     categoryMonthlyLevels(c.env, mult, { now }),
-    c.env.DB.prepare(
-      `SELECT c.id, ${catNameSql(c.get("locale"), "c.name")} AS name, c.color, c.importance FROM categories c
-       WHERE c.parent_id IS NULL AND COALESCE(c.is_income, 0) = 0`,
-    ).all<{ id: number; name: string; color: string | null; importance: string | null }>(),
-    c.env.DB.prepare("SELECT category_id, amount FROM budgets WHERE period = 'month'")
-      .all<{ category_id: number; amount: number }>(),
+    categoriesRepo.budgetable(c.env.DB, c.get("locale")),
+    budgetsRepo.monthlyAmounts(c.env.DB),
   ]);
-  const currentByCat = new Map((existing.results ?? []).map((b) => [b.category_id, b.amount]));
 
   const MIN_LEVEL = 30000; // 300 ₴/міс — дрібним категоріям конверт не потрібен
-  const items = (cats.results ?? [])
+  const items = cats
     .map((cat) => {
       const level = levels.get(cat.id)?.level ?? 0;
       if (level < MIN_LEVEL) return null;
@@ -599,13 +562,7 @@ api.post("/budgets/auto", async (c) => {
     .filter((i) => Number.isFinite(i.category_id) && i.amount > 0);
   if (!items.length) return c.json({ error: st(c.get("locale"), "errNothingToApply") }, 400);
 
-  // Той самий delete-then-insert, що й у PUT /budgets (унікального індексу на таблиці нема).
-  const stmts = items.flatMap((i) => [
-    c.env.DB.prepare("DELETE FROM budgets WHERE category_id = ? AND period = 'month'").bind(i.category_id),
-    c.env.DB.prepare("INSERT INTO budgets (category_id, period, amount, currency_code, rollover) VALUES (?, 'month', ?, 980, 0)")
-      .bind(i.category_id, i.amount),
-  ]);
-  await c.env.DB.batch(stmts);
+  await budgetsRepo.setMonthlyBatch(c.env.DB, items);
   return c.json({ ok: true, applied: items.length });
 });
 
@@ -624,21 +581,12 @@ api.get("/planned/actuals", async (c) => {
 // §Аналітика 2.0 — AI-репорти (щотижня/щомісяця, історія зберігається).
 api.get("/reports", async (c) => {
   const url = new URL(c.req.url);
-  const type = url.searchParams.get("type");
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 24), 60);
-  const where = type === "week" || type === "month" || type === "custom" ? "WHERE period_type = ?" : "";
-  const binds = where ? [type, limit] : [limit];
-  const rows = await c.env.DB.prepare(
-    `SELECT id, period_type, period_from, period_to, created_at, model, cost_usd, summary
-     FROM ai_reports ${where} ORDER BY period_to DESC, created_at DESC LIMIT ?`,
-  ).bind(...binds).all();
-  return c.json(rows.results ?? []);
+  return c.json(await reportsRepo.list(c.env.DB, url.searchParams.get("type"), limit));
 });
 
 api.get("/reports/:id", async (c) => {
-  const row = await c.env.DB.prepare(
-    "SELECT id, period_type, period_from, period_to, created_at, model, cost_usd, summary, data_json FROM ai_reports WHERE id = ?",
-  ).bind(c.req.param("id")).first<{ data_json: string } & Record<string, unknown>>();
+  const row = await reportsRepo.find(c.env.DB, c.req.param("id"));
   if (!row) return c.json({ error: "not_found" }, 404);
   const { data_json, ...meta } = row;
   return c.json({ ...meta, data: JSON.parse(data_json) });
@@ -646,7 +594,7 @@ api.get("/reports/:id", async (c) => {
 
 // Видалити репорт (напр. тестові генерації). Ідемпотентно — 404 не критично.
 api.delete("/reports/:id", async (c) => {
-  await c.env.DB.prepare("DELETE FROM ai_reports WHERE id = ?").bind(c.req.param("id")).run();
+  await reportsRepo.remove(c.env.DB, c.req.param("id"));
   return c.json({ ok: true });
 });
 
@@ -740,8 +688,7 @@ api.post("/jobs/:id/seen", async (c) => {
 });
 
 api.get("/planned", async (c) => {
-  const rows = await c.env.DB.prepare("SELECT * FROM planned_payments WHERE is_active = 1").all();
-  return c.json(rows.results);
+  return c.json(await planningRepo.listActive(c.env.DB));
 });
 
 api.post("/planned", async (c) => {
@@ -759,14 +706,15 @@ api.post("/planned", async (c) => {
     const step = (b.period === "week" ? 7 * 86400 : 30 * 86400) * periodCount;
     end_date = b.start_date + occurrences * step;
   }
-  const r = await c.env.DB.prepare(
-    `INSERT INTO planned_payments (title, kind, total_amount, period_amount, period, period_count, start_date, end_date, occurrences, category_id, account_id, currency_code, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
-  )
-    .bind(b.title, b.kind, b.total_amount ?? null, b.period_amount ?? null, b.period, periodCount,
-          b.start_date, end_date, occurrences, b.category_id ?? null, b.account_id ?? null, b.currency_code ?? 980)
-    .run();
-  return c.json({ ok: true, id: r.meta.last_row_id, occurrences, end_date });
+  const id = await planningRepo.create(c.env.DB, {
+    title: b.title, kind: b.kind,
+    total_amount: b.total_amount ?? null, period_amount: b.period_amount ?? null,
+    period: b.period, period_count: periodCount, start_date: b.start_date,
+    end_date, occurrences,
+    category_id: b.category_id ?? null, account_id: b.account_id ?? null,
+    currency_code: b.currency_code ?? 980,
+  });
+  return c.json({ ok: true, id, occurrences, end_date });
 });
 
 // AI-детект підписки за описом (§F4): користувач описує словами → AI дістає пошуковий
@@ -795,19 +743,9 @@ api.post("/planned/ai-detect", async (c) => {
 
   // Схожі витрати за ~200 днів згруповані по мерчанту+валюті (без переказів/холдів).
   const since = Math.floor(Date.now() / 1000) - 200 * 86400;
-  const rows = await c.env.DB.prepare(
-    `SELECT t.merchant, t.currency_code, -AVG(t.amount) AS avg_amount, COUNT(*) AS n,
-            MIN(t.time) AS first_time, MAX(t.time) AS last_time,
-            (SELECT x.category_id FROM transactions x
-             WHERE x.merchant = t.merchant AND x.category_id IS NOT NULL
-             GROUP BY x.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id
-     FROM transactions t
-     WHERE t.amount < 0 AND t.is_transfer = 0 AND t.hold = 0 AND t.merchant LIKE ? AND t.time >= ?
-     GROUP BY t.merchant, t.currency_code
-     HAVING n >= 1 ORDER BY n DESC, last_time DESC LIMIT 8`,
-  ).bind(`%${query}%`, since).all<{ merchant: string; currency_code: number; avg_amount: number; n: number; first_time: number; last_time: number; category_id: number | null }>();
+  const matches = await planningRepo.merchantMatches(c.env.DB, query, since);
 
-  const candidates = (rows.results ?? []).map((r) => ({
+  const candidates = matches.map((r) => ({
     title: r.merchant,
     period_amount: Math.round(r.avg_amount),
     currency_code: r.currency_code,
@@ -820,21 +758,17 @@ api.post("/planned/ai-detect", async (c) => {
 });
 
 api.delete("/planned/:id", async (c) => {
-  await c.env.DB.prepare("UPDATE planned_payments SET is_active = 0 WHERE id = ?")
-    .bind(Number(c.req.param("id"))).run();
+  await planningRepo.deactivate(c.env.DB, Number(c.req.param("id")));
   return c.json({ ok: true });
 });
 
 // §R5: редагувати підписку (наразі — опис для AI; розширювано за потреби).
 api.patch("/planned/:id", async (c) => {
-  const id = Number(c.req.param("id"));
   const b = await c.req.json<{ note?: string | null; category_id?: number | null }>();
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  if (b.note !== undefined) { sets.push("note = ?"); binds.push(b.note?.trim() || null); }
-  if (b.category_id !== undefined) { sets.push("category_id = ?"); binds.push(b.category_id); }
-  if (!sets.length) return c.json({ ok: true });
-  await c.env.DB.prepare(`UPDATE planned_payments SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
+  await planningRepo.update(c.env.DB, Number(c.req.param("id")), {
+    ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
+    ...(b.category_id !== undefined ? { category_id: b.category_id } : {}),
+  });
   return c.json({ ok: true });
 });
 
@@ -842,9 +776,7 @@ api.patch("/planned/:id", async (c) => {
 api.post("/planned/dismiss", async (c) => {
   const { merchant } = await c.req.json<{ merchant?: string }>();
   if (!merchant?.trim()) return c.json({ error: "merchant required" }, 400);
-  await c.env.DB.prepare(
-    "INSERT OR IGNORE INTO planned_dismissed (merchant, created_at) VALUES (?, ?)",
-  ).bind(merchant.trim().toLowerCase(), Math.floor(Date.now() / 1000)).run();
+  await planningRepo.dismissMerchant(c.env.DB, merchant.trim(), Math.floor(Date.now() / 1000));
   return c.json({ ok: true });
 });
 
@@ -865,33 +797,12 @@ api.get("/planned/detect", async (c) => {
   // §G2: ВИКЛЮЧАЄМО перекази (is_transfer) і бакет «Перекази і зняття» (13 + діти) —
   // інакше в кандидати лізуть «Округлення балансу», перекази брату/людям тощо.
   // §G3: пропонуємо суджену категорію (найчастіша серед матчів) для звʼязку з підпискою.
-  const rows = await c.env.DB.prepare(
-    `SELECT t.merchant, -t.amount AS amount, COUNT(*) AS n,
-            MIN(t.time) AS first_time, MAX(t.time) AS last_time,
-            COUNT(DISTINCT strftime('%Y-%m', t.time, 'unixepoch')) AS months,
-            t.currency_code AS currency_code,
-            (SELECT x.category_id FROM transactions x
-             WHERE x.merchant = t.merchant AND x.amount = t.amount AND x.category_id IS NOT NULL
-             GROUP BY x.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id
-     FROM transactions t
-     LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.amount < 0 AND t.hold = 0 AND t.is_transfer = 0
-       AND t.merchant IS NOT NULL AND t.merchant <> '' AND t.time >= ?
-       AND COALESCE(c.parent_id, t.category_id) IS NOT 13
-     GROUP BY t.merchant, t.amount
-     HAVING n >= 2 AND months >= 2
-     ORDER BY n DESC, last_time DESC LIMIT 40`,
-  ).bind(since).all<{ merchant: string; amount: number; n: number; first_time: number; last_time: number; months: number; currency_code: number; category_id: number | null }>();
-
-  const declared = await c.env.DB.prepare(
-    "SELECT LOWER(title) AS title FROM planned_payments WHERE is_active = 1",
-  ).all<{ title: string }>();
-  const declaredSet = new Set((declared.results ?? []).map((d) => d.title));
+  const rows = await planningRepo.detectCandidates(c.env.DB, since);
+  const declaredSet = await planningRepo.declaredTitles(c.env.DB);
   // §R5: виключаємо закриті користувачем кандидати («це не підписка»).
-  const dismissed = await c.env.DB.prepare("SELECT merchant FROM planned_dismissed").all<{ merchant: string }>();
-  const dismissedSet = new Set((dismissed.results ?? []).map((d) => d.merchant));
+  const dismissedSet = await planningRepo.dismissedMerchants(c.env.DB);
 
-  const candidates = (rows.results ?? [])
+  const candidates = rows
     .map((r) => ({
       ...r,
       avg_interval_days: r.n > 1 ? Math.round((r.last_time - r.first_time) / (r.n - 1) / 86400) : 0,
@@ -913,18 +824,7 @@ api.get("/events", async (c) => {
   // НЕ рахувались. Для подорожі це найгірше можливе місце для такої дірки — саме там
   // валюта і трапляється, і бюджет поїздки виглядав би виконаним. Зводимо в ₴ як усюди.
   const rates = await getRates(c.env.DB);
-  const mult = uahMult(rates);
-  const rows = await c.env.DB.prepare(
-    `SELECT e.*,
-            COUNT(t.id) AS tx_count,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount < 0 THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS spent,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER) AS income
-     FROM event_groups e
-     LEFT JOIN transactions t ON t.event_id = e.id
-     WHERE e.is_active = 1
-     GROUP BY e.id ORDER BY e.created_at DESC`,
-  ).all();
-  return c.json(rows.results ?? []);
+  return c.json(await eventsRepo.listWithTotals(c.env.DB, uahMult(rates)));
 });
 
 // Бюджет події («скільки закладаю на цю подорож»). amount<=0 або null — прибрати ліміт.
@@ -932,69 +832,55 @@ api.patch("/events/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const b = await c.req.json<{ budget?: number | null; name?: string; note?: string | null }>()
     .catch(() => ({} as { budget?: number | null; name?: string; note?: string | null }));
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  if (b.budget !== undefined) {
-    const v = b.budget == null || b.budget <= 0 ? null : Math.round(b.budget);
-    sets.push("budget = ?"); binds.push(v);
-  }
-  if (b.name !== undefined && b.name.trim()) { sets.push("name = ?"); binds.push(b.name.trim()); }
-  if (b.note !== undefined) { sets.push("note = ?"); binds.push(b.note?.trim() || null); }
-  if (!sets.length) return c.json({ ok: true });
-  await c.env.DB.prepare(`UPDATE event_groups SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
+  await eventsRepo.update(c.env.DB, id, {
+    ...(b.budget !== undefined
+      ? { budget: b.budget == null || b.budget <= 0 ? null : Math.round(b.budget) } : {}),
+    // A blank name is IGNORED rather than rejected: this endpoint is also how the budget alone
+    // is set, and failing the whole patch over an empty field the caller did not mean to send
+    // would block that.
+    ...(b.name !== undefined && b.name.trim() ? { name: b.name.trim() } : {}),
+    ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
+  });
   return c.json({ ok: true });
 });
 
 api.post("/events", async (c) => {
   const b = await c.req.json<{ name: string; kind?: string; color?: string; icon?: string; note?: string }>();
   if (!b.name?.trim()) return c.json({ error: "name required" }, 400);
-  const r = await c.env.DB.prepare(
-    `INSERT INTO event_groups (name, kind, color, icon, note, is_active, created_at)
-     VALUES (?, ?, ?, ?, ?, 1, ?)`,
-  ).bind(b.name.trim(), b.kind ?? "event", b.color ?? null, b.icon ?? null, b.note ?? null, Math.floor(Date.now() / 1000)).run();
-  return c.json({ ok: true, id: r.meta.last_row_id });
+  const id = await eventsRepo.create(c.env.DB, {
+    name: b.name.trim(), kind: b.kind ?? "event",
+    color: b.color ?? null, icon: b.icon ?? null, note: b.note ?? null,
+    created_at: Math.floor(Date.now() / 1000),
+  });
+  return c.json({ ok: true, id });
 });
 
 api.delete("/events/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  await c.env.DB.prepare("UPDATE transactions SET event_id = NULL WHERE event_id = ?").bind(id).run();
-  await c.env.DB.prepare("UPDATE event_groups SET is_active = 0 WHERE id = ?").bind(id).run();
+  // Order matters and the spending outlives the event: the transactions are unlinked first, and
+  // only the GROUP is archived. Deleting a trip must never delete what was spent on it.
+  await eventsRepo.unlinkTransactions(c.env.DB, id);
+  await eventsRepo.archive(c.env.DB, id);
   return c.json({ ok: true });
 });
 
 // Деталь події: підсумок + список транзакцій.
 api.get("/events/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const event = await c.env.DB.prepare("SELECT * FROM event_groups WHERE id = ?").bind(id).first();
+  const event = await eventsRepo.find(c.env.DB, id);
   if (!event) return c.json({ error: "not_found" }, 404);
   // Підсумки рахує СЕРВЕР і зводить у ₴. Раніше сторінка рахувала їх сама, фільтруючи
   // `currency_code === 980`, тож валютні операції випадали — і та сама група показувала
   // на сторінці меншу суму, ніж у списку. Одна цифра має бути одна.
   const rates = await getRates(c.env.DB);
-  const mult = uahMult(rates);
-  const [txs, agg, planned] = await Promise.all([
-    c.env.DB.prepare(
-      `SELECT t.*, ${catNameSql(c.get("locale"), "c.name")} AS category_name, c.color AS category_color, a.title AS account_title
-       FROM transactions t
-       LEFT JOIN categories c ON c.id = t.category_id
-       LEFT JOIN accounts a ON a.id = t.account_id
-       WHERE t.event_id = ? ORDER BY t.time DESC`,
-    ).bind(id).all(),
-    c.env.DB.prepare(
-      `SELECT CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount < 0 THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS spent,
-              CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER) AS income
-       FROM transactions t WHERE t.event_id = ?`,
-    ).bind(id).first<{ spent: number; income: number }>(),
-    // Plan line items (P2.3) — amounts already in ₴, so they compare directly to the ₴ roll-up.
-    c.env.DB.prepare(
-      `SELECT p.id, p.label, p.amount, p.category_id, ${catNameSql(c.get("locale"), "c.name")} AS category_name
-       FROM event_planned p LEFT JOIN categories c ON c.id = p.category_id
-       WHERE p.event_id = ? ORDER BY p.amount DESC`,
-    ).bind(id).all<{ id: number; label: string; amount: number; category_id: number | null; category_name: string | null }>(),
+  const loc = c.get("locale");
+  const [txs, agg, plannedItems] = await Promise.all([
+    eventsRepo.transactions(c.env.DB, loc, id),
+    eventsRepo.totals(c.env.DB, uahMult(rates), id),
+    eventsRepo.plannedItems(c.env.DB, loc, id),
   ]);
-  const plannedItems = planned.results ?? [];
   return c.json({
-    event, transactions: txs.results ?? [],
+    event, transactions: txs,
     spent: agg?.spent ?? 0, income: agg?.income ?? 0,
     planned: plannedItems,
     planned_total: plannedItems.reduce((s, p) => s + p.amount, 0),
@@ -1008,15 +894,14 @@ api.post("/events/:id/planned", async (c) => {
     .catch(() => ({} as { label?: string; amount?: number; category_id?: number | null }));
   if (!b.label?.trim() || !b.amount || b.amount <= 0) return c.json({ error: "label and positive amount required" }, 400);
   const catId = typeof b.category_id === "number" ? b.category_id : null;
-  const r = await c.env.DB.prepare(
-    "INSERT INTO event_planned (event_id, label, amount, category_id, created_at) VALUES (?, ?, ?, ?, ?)",
-  ).bind(id, b.label.trim(), Math.round(b.amount), catId, Math.floor(Date.now() / 1000)).run();
-  return c.json({ ok: true, id: r.meta.last_row_id });
+  const newId = await eventsRepo.addPlannedItem(
+    c.env.DB, id, b.label.trim(), Math.round(b.amount), catId, Math.floor(Date.now() / 1000));
+  return c.json({ ok: true, id: newId });
 });
 
 api.delete("/events/:id/planned/:pid", async (c) => {
-  await c.env.DB.prepare("DELETE FROM event_planned WHERE id = ? AND event_id = ?")
-    .bind(Number(c.req.param("pid")), Number(c.req.param("id"))).run();
+  await eventsRepo.deletePlannedItem(
+    c.env.DB, Number(c.req.param("id")), Number(c.req.param("pid")));
   return c.json({ ok: true });
 });
 
@@ -1144,10 +1029,15 @@ api.delete("/goals/:id/contributions/:cid", async (c) => {
 api.post("/categories", async (c) => {
   const b = await c.req.json<{ name: string; color?: string; icon?: string; parent_id?: number | null; is_income?: boolean; importance?: string | null }>();
   if (!b.name?.trim()) return c.json({ error: "name required" }, 400);
-  const r = await c.env.DB.prepare(
-    "INSERT INTO categories (name, color, icon, parent_id, is_income, is_custom, importance) VALUES (?, ?, ?, ?, ?, 1, ?)",
-  ).bind(b.name.trim(), b.color ?? "#6B7A74", b.icon ?? "dots", b.parent_id ?? null, b.is_income ? 1 : 0, normImportance(b.importance)).run();
-  return c.json({ ok: true, id: r.meta.last_row_id });
+  const id = await categoriesRepo.create(c.env.DB, {
+    name: b.name.trim(),
+    color: b.color ?? "#6B7A74",
+    icon: b.icon ?? "dots",
+    parent_id: b.parent_id ?? null,
+    is_income: !!b.is_income,
+    importance: normImportance(b.importance),
+  });
+  return c.json({ ok: true, id });
 });
 
 // Редагувати будь-яку категорію (зокрема вбудовану): назва/колір/іконка/батько.
@@ -1155,35 +1045,23 @@ api.post("/categories", async (c) => {
 api.patch("/categories/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const b = await c.req.json<{ name?: string; color?: string; icon?: string; parent_id?: number | null; importance?: string | null }>();
-  const cat = await c.env.DB.prepare("SELECT id FROM categories WHERE id = ?").bind(id).first();
-  if (!cat) return c.json({ error: "not_found" }, 404);
+  if (!(await categoriesRepo.exists(c.env.DB, id))) return c.json({ error: "not_found" }, 404);
+  if (b.name !== undefined && !b.name.trim()) return c.json({ error: "name required" }, 400);
 
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  if (b.name !== undefined) {
-    if (!b.name.trim()) return c.json({ error: "name required" }, 400);
-    sets.push("name = ?"); binds.push(b.name.trim());
-  }
-  if (b.color !== undefined) { sets.push("color = ?"); binds.push(b.color); }
-  if (b.icon !== undefined) { sets.push("icon = ?"); binds.push(b.icon); }
-  if (b.importance !== undefined) { sets.push("importance = ?"); binds.push(normImportance(b.importance)); }
-  // Не даємо категорії стати власним батьком (проста петля).
-  if (b.parent_id !== undefined) { sets.push("parent_id = ?"); binds.push(b.parent_id === id ? null : b.parent_id); }
-  if (!sets.length) return c.json({ ok: true });
-  await c.env.DB.prepare(`UPDATE categories SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
+  await categoriesRepo.update(c.env.DB, id, {
+    ...(b.name !== undefined ? { name: b.name.trim() } : {}),
+    ...(b.color !== undefined ? { color: b.color } : {}),
+    ...(b.icon !== undefined ? { icon: b.icon } : {}),
+    ...(b.importance !== undefined ? { importance: normImportance(b.importance) } : {}),
+    ...(b.parent_id !== undefined ? { parent_id: b.parent_id } : {}),
+  });
   return c.json({ ok: true });
 });
 
 // Видалити можна лише кастомну категорію; транзакції знеприв'язуються.
 // Скільки всього прив'язано до категорії (для діалогу «куди перенести перед видаленням»).
 api.get("/categories/:id/usage", async (c) => {
-  const id = Number(c.req.param("id"));
-  const tx = await c.env.DB.prepare(
-    "SELECT COUNT(*) AS n FROM transactions WHERE category_id = ? OR real_category_id = ?",
-  ).bind(id, id).first<{ n: number }>();
-  const tags = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM transaction_tags WHERE category_id = ?").bind(id).first<{ n: number }>();
-  const subs = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM categories WHERE parent_id = ?").bind(id).first<{ n: number }>();
-  return c.json({ transactions: tx?.n ?? 0, tags: tags?.n ?? 0, subcategories: subs?.n ?? 0 });
+  return c.json(await categoriesRepo.usage(c.env.DB, Number(c.req.param("id"))));
 });
 
 // Видалити категорію, перенісши всі прив'язки на іншу (reassign) або знявши їх (null).
@@ -1191,40 +1069,26 @@ api.get("/categories/:id/usage", async (c) => {
 api.delete("/categories/:id", async (c) => {
   const id = Number(c.req.param("id"));
   if (id === 13) return c.json({ error: st(c.get("locale"), "errTransferCatLocked") }, 400);
-  const cat = await c.env.DB.prepare("SELECT id FROM categories WHERE id = ?").bind(id).first();
-  if (!cat) return c.json({ error: "not_found" }, 404);
+  if (!(await categoriesRepo.exists(c.env.DB, id))) return c.json({ error: "not_found" }, 404);
 
   const raw = new URL(c.req.url).searchParams.get("reassign");
   const target = raw && raw !== "none" && Number(raw) !== id ? Number(raw) : null;
 
   try {
-    // Транзакції: основна й реальна категорія.
-    await c.env.DB.prepare("UPDATE transactions SET category_id = ? WHERE category_id = ?").bind(target, id).run();
-    await c.env.DB.prepare("UPDATE transactions SET real_category_id = ? WHERE real_category_id = ?").bind(target, id).run();
-    // Теги: перекидаємо на target (уникаючи дублів), або прибираємо.
-    if (target != null) {
-      await c.env.DB.prepare("DELETE FROM transaction_tags WHERE category_id = ? AND transaction_id IN (SELECT transaction_id FROM transaction_tags WHERE category_id = ?)").bind(id, target).run();
-      await c.env.DB.prepare("UPDATE transaction_tags SET category_id = ? WHERE category_id = ?").bind(target, id).run();
-    } else {
-      await c.env.DB.prepare("DELETE FROM transaction_tags WHERE category_id = ?").bind(id).run();
-    }
-    // Навчені aliases (FK на categories) — саме через них падав 500, коли їх не чіпали.
-    await c.env.DB.prepare("UPDATE merchant_aliases SET category_id = ? WHERE category_id = ?").bind(target, id).run();
-    await c.env.DB.prepare("UPDATE merchant_aliases SET real_category_id = ? WHERE real_category_id = ?").bind(target, id).run();
-    // Позиції чеків (FK на categories).
-    await c.env.DB.prepare("UPDATE receipt_items SET category_id = ? WHERE category_id = ?").bind(target, id).run();
-    // Правила (category_id NOT NULL): без цілі — видаляємо, інакше переносимо.
-    if (target != null) {
-      await c.env.DB.prepare("UPDATE rules SET category_id = ? WHERE category_id = ?").bind(target, id).run();
-    } else {
-      await c.env.DB.prepare("DELETE FROM rules WHERE category_id = ?").bind(id).run();
-    }
-    // Планові, бюджети, підкатегорії.
-    await c.env.DB.prepare("UPDATE planned_payments SET category_id = ? WHERE category_id = ?").bind(target, id).run();
-    await c.env.DB.prepare("UPDATE budgets SET category_id = ? WHERE category_id = ?").bind(target, id).run();
-    await c.env.DB.prepare("UPDATE categories SET parent_id = ? WHERE parent_id = ?").bind(target, id).run();
-
-    await c.env.DB.prepare("DELETE FROM categories WHERE id = ?").bind(id).run();
+    // ORDER IS THE BEHAVIOUR: every table referencing the category is dealt with first, and the
+    // row itself goes last — the schema enforces those foreign keys, so a step moved after the
+    // delete fails. Each call is one table; what "no target" means differs per table and is
+    // documented at each function.
+    const db = c.env.DB;
+    await categoriesRepo.reassignTransactions(db, id, target);
+    await categoriesRepo.reassignTags(db, id, target);
+    await categoriesRepo.reassignAliases(db, id, target);
+    await categoriesRepo.reassignReceiptItems(db, id, target);
+    await categoriesRepo.reassignRules(db, id, target);
+    await categoriesRepo.reassignPlanned(db, id, target);
+    await categoriesRepo.reassignBudgets(db, id, target);
+    await categoriesRepo.reassignChildren(db, id, target);
+    await categoriesRepo.remove(db, id);
     return c.json({ ok: true });
   } catch (e) {
     return c.json({ error: String(e instanceof Error ? e.message : e) }, 500);
@@ -2514,9 +2378,8 @@ api.post("/knowledge", async (c) => {
   }
   const now = Math.floor(Date.now() / 1000);
   const id = `user:${now}:${Math.random().toString(36).slice(2, 7)}`;
-  await c.env.DB.prepare(
-    "INSERT INTO knowledge_docs (id, kind, title, summary, body, enabled, created_at, updated_at) VALUES (?, 'user', ?, ?, ?, 1, ?, ?)",
-  ).bind(id, title, (b.summary ?? "").trim().slice(0, 200), body, now, now).run();
+  await knowledgeRepo.createUserDoc(
+    c.env.DB, id, title, (b.summary ?? "").trim().slice(0, 200), body, now);
   return c.json({ ok: true, id });
 });
 
@@ -2544,12 +2407,8 @@ api.put("/knowledge/:id", async (c) => {
   if (!title) return c.json({ error: st(c.get("locale"), "errDocTitleRequired") }, 400);
   const kind = base ? "override" : "user";
   const enabled = b.enabled === false ? 0 : 1;
-  await c.env.DB.prepare(
-    `INSERT INTO knowledge_docs (id, kind, title, summary, body, enabled, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET title = excluded.title, summary = excluded.summary,
-       body = excluded.body, enabled = excluded.enabled, updated_at = excluded.updated_at`,
-  ).bind(id, kind, title, (b.summary ?? base?.summary ?? "").trim().slice(0, 200), body, enabled, now, now).run();
+  await knowledgeRepo.upsert(
+    c.env.DB, id, kind, title, (b.summary ?? base?.summary ?? "").trim().slice(0, 200), body, enabled, now);
   return c.json({ ok: true, id });
 });
 
@@ -2558,7 +2417,7 @@ api.delete("/knowledge/:id", async (c) => {
   const { isLocked } = await import("../lib/ai/knowledge/index.ts");
   const id = c.req.param("id");
   if (isLocked(id)) return c.json({ error: st(c.get("locale"), "errDocCannotHide") }, 400);
-  await c.env.DB.prepare("DELETE FROM knowledge_docs WHERE id = ?").bind(id).run();
+  await knowledgeRepo.remove(c.env.DB, id);
   return c.json({ ok: true });
 });
 
@@ -2713,51 +2572,31 @@ api.post("/accounts/manual", async (c) => {
   const aiNote = b.ai_note?.trim() || null;
   const id = crypto.randomUUID();
   const nowS = Math.floor(Date.now() / 1000);
-  await c.env.DB.prepare(
-    `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, role, ai_note, is_manual, is_active, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
-  ).bind(id, type, b.title, b.currency_code, b.balance, creditLimit, role, aiNote, nowS).run();
-  await recordBalance(c.env.DB, id, b.balance, nowS);
+  await accountsRepo.createManual(c.env.DB, {
+    id, type, title: b.title, currency_code: b.currency_code, balance: b.balance,
+    credit_limit: creditLimit, role, ai_note: aiNote, updated_at: nowS,
+  });
+  // Перший зріз балансу одразу: без нього нетворт не має від чого відштовхнутись і малює
+  // рахунок так, ніби він зʼявився сьогодні.
+  await accountsRepo.recordBalance(c.env.DB, id, b.balance, nowS);
   return c.json({ ok: true, id });
 });
 
 api.patch("/accounts/manual/:id", async (c) => {
   const b = await c.req.json<{ balance?: number; title?: string }>();
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  if (b.balance !== undefined) { sets.push("balance = ?"); binds.push(b.balance); }
-  if (b.title !== undefined) { sets.push("title = ?"); binds.push(b.title); }
-  if (!sets.length) return c.json({ ok: true });
+  const id = c.req.param("id");
   const nowS = Math.floor(Date.now() / 1000);
-  sets.push("updated_at = ?"); binds.push(nowS);
-  await c.env.DB.prepare(`UPDATE accounts SET ${sets.join(", ")} WHERE id = ? AND is_manual = 1`)
-    .bind(...binds, c.req.param("id")).run();
-  // Зріз балансу в історію → нетворт крокує по ньому назад (не плоский). Лише коли баланс змінили.
-  if (b.balance !== undefined) await recordBalance(c.env.DB, c.req.param("id"), b.balance, nowS);
+  await accountsRepo.updateManual(c.env.DB, id, b, nowS);
+  // Зріз балансу в історію → нетворт крокує по ньому назад (не плоский). Лише коли баланс змінили:
+  // перейменування — не подія балансу, і крок на графіку там означав би зміну, якої не було.
+  if (b.balance !== undefined) await accountsRepo.recordBalance(c.env.DB, id, b.balance, nowS);
   return c.json({ ok: true });
 });
-
-// Зафіксувати зріз балансу ручного рахунку. Один запис на день (перезаписуємо останній того ж
-// дня), щоб серія лишалась охайною при кількох правках поспіль.
-async function recordBalance(db: AppDb, accountId: string, balance: number, at: number): Promise<void> {
-  const dayStart = at - (at % 86400);
-  await db.prepare(
-    "DELETE FROM account_balance_history WHERE account_id = ? AND recorded_at >= ? AND recorded_at < ?",
-  ).bind(accountId, dayStart, dayStart + 86400).run();
-  await db.prepare(
-    "INSERT INTO account_balance_history (account_id, balance, recorded_at, created_at) VALUES (?, ?, ?, ?)",
-  ).bind(accountId, balance, at, at).run();
-}
 
 // Cached rates map (currency code → UAH per unit) + last-updated, for client-side
 // ≈₴ conversion of FX cards/jars. Same source computeSummary uses.
 api.get("/rates", async (c) => {
-  const ratesRaw = await c.env.DB.prepare("SELECT value FROM app_state WHERE key = 'rates'").first<{ value: string }>();
-  const updRaw = await c.env.DB.prepare("SELECT value FROM app_state WHERE key = 'rates_updated'").first<{ value: string }>();
-  return c.json({
-    rates: ratesRaw ? (JSON.parse(ratesRaw.value) as Record<string, number>) : {},
-    updated: updRaw ? Number(updRaw.value) : null,
-  });
+  return c.json(await stateRepo.rates(c.env.DB));
 });
 
 // Перейменувати рахунок (напр. банку — mono дає generic «БАНКА»). Title — лише
@@ -2765,7 +2604,7 @@ api.get("/rates", async (c) => {
 api.patch("/accounts/:id/title", async (c) => {
   const { title } = await c.req.json<{ title?: string }>();
   if (!title?.trim()) return c.json({ error: "title required" }, 400);
-  await c.env.DB.prepare("UPDATE accounts SET title = ? WHERE id = ?").bind(title.trim(), c.req.param("id")).run();
+  await accountsRepo.rename(c.env.DB, c.req.param("id"), title.trim());
   return c.json({ ok: true });
 });
 
@@ -2773,17 +2612,17 @@ api.patch("/accounts/:id/title", async (c) => {
 // + умови кредитки (statement_day/payment_day/min_payment) — живлять нагадування про платіж.
 api.patch("/accounts/:id/meta", async (c) => {
   const b = await c.req.json<{ role?: "liquid" | "investment"; ai_note?: string; statement_day?: number | null; payment_day?: number | null; min_payment?: number | null }>();
-  const sets: string[] = [];
-  const binds: unknown[] = [];
-  // День місяця валідуємо 1..31; порожнє/некоректне → NULL (умову знято).
+  // День місяця валідуємо 1..31; порожнє/некоректне → NULL (умову знято): нагадування «на 40-те
+  // число» не спрацювало б ніколи, тобто виглядало б налаштованим, будучи мертвим.
   const dayOrNull = (v: number | null | undefined) => (typeof v === "number" && v >= 1 && v <= 31 ? Math.trunc(v) : null);
-  if (b.role !== undefined) { sets.push("role = ?"); binds.push(b.role === "investment" ? "investment" : "liquid"); }
-  if (b.ai_note !== undefined) { sets.push("ai_note = ?"); binds.push(b.ai_note.trim() || null); }
-  if (b.statement_day !== undefined) { sets.push("statement_day = ?"); binds.push(dayOrNull(b.statement_day)); }
-  if (b.payment_day !== undefined) { sets.push("payment_day = ?"); binds.push(dayOrNull(b.payment_day)); }
-  if (b.min_payment !== undefined) { sets.push("min_payment = ?"); binds.push(typeof b.min_payment === "number" && b.min_payment > 0 ? Math.round(b.min_payment) : null); }
-  if (!sets.length) return c.json({ ok: true });
-  await c.env.DB.prepare(`UPDATE accounts SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, c.req.param("id")).run();
+  await accountsRepo.updateMeta(c.env.DB, c.req.param("id"), {
+    ...(b.role !== undefined ? { role: b.role === "investment" ? "investment" : "liquid" } : {}),
+    ...(b.ai_note !== undefined ? { ai_note: b.ai_note.trim() || null } : {}),
+    ...(b.statement_day !== undefined ? { statement_day: dayOrNull(b.statement_day) } : {}),
+    ...(b.payment_day !== undefined ? { payment_day: dayOrNull(b.payment_day) } : {}),
+    ...(b.min_payment !== undefined
+      ? { min_payment: typeof b.min_payment === "number" && b.min_payment > 0 ? Math.round(b.min_payment) : null } : {}),
+  });
   return c.json({ ok: true });
 });
 
@@ -2791,8 +2630,7 @@ api.patch("/accounts/:id/meta", async (c) => {
 // підсумки/подушку/нетворт. Історію операцій НЕ чіпаємо — лише ховаємо рахунок зі списку.
 api.patch("/accounts/:id/active", async (c) => {
   const { active } = await c.req.json<{ active: boolean }>();
-  await c.env.DB.prepare("UPDATE accounts SET is_active = ? WHERE id = ?")
-    .bind(active ? 1 : 0, c.req.param("id")).run();
+  await accountsRepo.setActive(c.env.DB, c.req.param("id"), active);
   return c.json({ ok: true });
 });
 
@@ -2800,12 +2638,13 @@ api.patch("/accounts/:id/active", async (c) => {
 // сирітські tx / FK). Для mono-рахунків видалення нема — тільки архів вище.
 api.delete("/accounts/:id", async (c) => {
   const id = c.req.param("id");
-  const acc = await c.env.DB.prepare("SELECT is_manual FROM accounts WHERE id = ?").bind(id).first<{ is_manual: number }>();
+  const acc = await accountsRepo.findKind(c.env.DB, id);
   if (!acc) return c.json({ error: st(c.get("locale"), "errAccountNotFound") }, 404);
   if (!acc.is_manual) return c.json({ error: st(c.get("locale"), "errAccountOnlyManual") }, 400);
-  const cnt = await c.env.DB.prepare("SELECT COUNT(*) AS n FROM transactions WHERE account_id = ?").bind(id).first<{ n: number }>();
-  if ((cnt?.n ?? 0) > 0) return c.json({ error: st(c.get("locale"), "errAccountHasTx") }, 400);
-  await c.env.DB.prepare("DELETE FROM accounts WHERE id = ? AND is_manual = 1").bind(id).run();
+  if (await accountsRepo.transactionCount(c.env.DB, id) > 0) {
+    return c.json({ error: st(c.get("locale"), "errAccountHasTx") }, 400);
+  }
+  await accountsRepo.removeManual(c.env.DB, id);
   return c.json({ ok: true });
 });
 

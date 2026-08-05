@@ -56,6 +56,15 @@ function tx(db: MemDb, row: Record<string, unknown>): string {
 }
 
 export function seed(db: MemDb): void {
+  // Reset the id counter per seeded database.
+  //
+  // It is module state, so without this the ids a scenario gets depend on how many scenarios ran
+  // BEFORE it — which quietly undid the write suite's "a fresh database per scenario" guarantee:
+  // inserting one case anywhere rewrote the golden of every case after it, and those diffs are
+  // pure noise that trains you to re-record without reading. Found when batch E added two
+  // knowledge scenarios and five unrelated ones went red.
+  txSeq = 0;
+
   // ---- app state -------------------------------------------------------------------------
   // Round rates, so any figure in a golden file can be checked by hand.
   for (const [k, v] of [
@@ -196,4 +205,106 @@ export function seed(db: MemDb): void {
     exec(db, "INSERT INTO budgets (category_id, period, amount, currency_code) VALUES (?, 'month', ?, ?)",
       [cat, amount, UAH]);
   }
+}
+
+/** The custom category the cascade scenarios delete, and its sub-category. */
+export const CASCADE_CAT = 900;
+export const CASCADE_SUBCAT = 901;
+/** Where those scenarios reassign to — an ordinary seeded category (Кафе). */
+export const CASCADE_TARGET = 2;
+
+/**
+ * Extra rows for the `DELETE /categories/:id` cascade, seeded ON TOP of `seed()`.
+ *
+ * Kept OUT of `seed()` on purpose. A category carrying spending would move every analytics
+ * golden, and those snapshots are the baseline the whole refactor is measured against — a
+ * fixture change that churns them destroys the only evidence that nothing else moved.
+ *
+ * One row per table the handler touches, because the cascade's correctness is not "the category
+ * is gone" but "every FK that pointed at it was dealt with, in an order SQLite accepts". Explicit
+ * ids instead of AUTOINCREMENT so the golden files stay readable and stable.
+ */
+export function seedCategoryCascade(db: MemDb): void {
+  exec(db, "INSERT INTO categories (id, name, icon, color, parent_id, is_income, is_custom, importance) VALUES (?,?,?,?,?,0,1,?)",
+    [CASCADE_CAT, "Хобі", "dots", "#6B7A74", null, "optional"]);
+  exec(db, "INSERT INTO categories (id, name, icon, color, parent_id, is_income, is_custom, importance) VALUES (?,?,?,?,?,0,1,?)",
+    [CASCADE_SUBCAT, "Настолки", "dots", "#6B7A74", CASCADE_CAT, null]);
+
+  // Both category columns on transactions: the handler reassigns them in two separate statements,
+  // and `real_category_id` is the one a reader forgets (§R2-TX4 lives on it).
+  tx(db, { id: "casc-main", time: NOW - 3 * DAY, amount: -700_00, category_id: CASCADE_CAT, merchant: "Ігротека" });
+  tx(db, { id: "casc-real", time: NOW - 3 * DAY, amount: -400_00, category_id: 13,
+    real_category_id: CASCADE_CAT, merchant: "Зняття на хобі" });
+
+  // Two tagged rows, and the second is ALSO tagged with the reassign target. That is the only
+  // input that exercises the de-duplicating DELETE — without it, reassignment would collide with
+  // the (transaction_id, category_id) primary key and the whole cascade would fail.
+  exec(db, "INSERT INTO transaction_tags (transaction_id, category_id) VALUES (?,?)", ["casc-main", CASCADE_CAT]);
+  exec(db, "INSERT INTO transaction_tags (transaction_id, category_id) VALUES (?,?)", ["casc-real", CASCADE_CAT]);
+  exec(db, "INSERT INTO transaction_tags (transaction_id, category_id) VALUES (?,?)", ["casc-real", CASCADE_TARGET]);
+
+  // Learned aliases — the FK that actually threw a 500 in production when it was left out.
+  exec(db, "INSERT INTO merchant_aliases (match_type, raw_key, display_name, category_id, created_at, source) VALUES ('mono_desc',?,?,?,?, 'manual')",
+    ["igroteka", "Ігротека", CASCADE_CAT, NOW]);
+  exec(db, "INSERT INTO merchant_aliases (match_type, raw_key, display_name, real_category_id, created_at, source) VALUES ('mono_desc',?,?,?,?, 'ai')",
+    ["znyattya-hobi", "Зняття на хобі", CASCADE_CAT, NOW]);
+
+  // Receipt line items (FK on categories, via a receipt).
+  exec(db, "INSERT INTO receipts (id, transaction_id, store, purchased_at, total, currency_code) VALUES (1, 'casc-main', 'Ігротека', ?, ?, ?)",
+    [NOW - 3 * DAY, -700_00, UAH]);
+  exec(db, "INSERT INTO receipt_items (receipt_id, name, qty, price, category_id) VALUES (1, 'Гра', 1, 70000, ?)",
+    [CASCADE_CAT]);
+
+  // `rules.category_id` is NOT NULL, which is why this one row splits the handler in two: with a
+  // target the rule moves, without one it must be DELETED rather than nulled.
+  exec(db, "INSERT INTO rules (match_type, pattern, category_id, priority) VALUES ('text', 'ігротека', ?, 0)",
+    [CASCADE_CAT]);
+
+  exec(db, `INSERT INTO planned_payments (title, kind, period_amount, period, start_date, category_id,
+      is_active, currency_code, period_count) VALUES ('Клуб', 'subscription', ?, 'monthly', ?, ?, 1, ?, 1)`,
+    [300_00, NOW - 60 * DAY, CASCADE_CAT, UAH]);
+  exec(db, "INSERT INTO budgets (category_id, period, amount, currency_code) VALUES (?, 'month', 100000, ?)",
+    [CASCADE_CAT, UAH]);
+}
+
+/** The event the planning scenarios patch, delete and read. */
+export const EVENT_ID = 700;
+/** Its plan line item, and the stored report the delete scenario removes. */
+export const EVENT_PLANNED_ID = 710;
+export const REPORT_ID = 720;
+
+/**
+ * Extra rows for the planning surface — events, plan line items and a stored AI report.
+ *
+ * Out of `seed()` for the same reason as the cascade rows: an event carrying spending would move
+ * `/events`, `/events/:id` and the `byEvent` breakdown in every `/analytics/overview` golden.
+ *
+ * The two attached transactions are deliberately in DIFFERENT currencies. Both event endpoints
+ * roll their totals up in ₴ through `uahMult`, and both once filtered on `currency_code = 980`
+ * instead — which is the worst possible place for that hole, since a trip is exactly where
+ * foreign currency shows up. A single-currency event would go green through the bug.
+ */
+export function seedPlanning(db: MemDb): void {
+  exec(db, "INSERT INTO event_groups (id, name, kind, color, icon, note, is_active, created_at, budget) VALUES (?,?,?,?,?,?,1,?,?)",
+    [EVENT_ID, "Карпати", "trip", "#334455", "star", "зимова поїздка", NOW - 40 * DAY, 20_000_00]);
+  // An archived one, so a list read has something it must NOT return.
+  exec(db, "INSERT INTO event_groups (id, name, kind, is_active, created_at) VALUES (701, 'Старий івент', 'event', 0, ?)",
+    [NOW - 300 * DAY]);
+
+  tx(db, { id: "ev-uah", time: NOW - 30 * DAY, amount: -3_000_00, category_id: 11, merchant: "Готель Карпати", event_id: EVENT_ID });
+  tx(db, { id: "ev-eur", time: NOW - 29 * DAY, amount: -100_00, currency_code: EUR, account_id: "acc-usd",
+    category_id: 3, merchant: "Підйомник", event_id: EVENT_ID });
+  tx(db, { id: "ev-back", time: NOW - 28 * DAY, amount: 500_00, merchant: "Повернення за житло", event_id: EVENT_ID });
+
+  exec(db, "INSERT INTO event_planned (id, event_id, label, amount, category_id, created_at) VALUES (?,?,?,?,?,?)",
+    [EVENT_PLANNED_ID, EVENT_ID, "Житло", 8_000_00, 11, NOW - 40 * DAY]);
+  exec(db, "INSERT INTO event_planned (event_id, label, amount, category_id, created_at) VALUES (?,?,?,?,?)",
+    [EVENT_ID, "Підйомники", 4_000_00, null, NOW - 40 * DAY]);
+
+  exec(db, `INSERT INTO ai_reports (id, period_type, period_from, period_to, created_at, model, cost_usd, summary, data_json)
+      VALUES (?, 'week', ?, ?, ?, 'claude-haiku', 0.004, 'Тиждень як тиждень', ?)`,
+    [REPORT_ID, NOW - 14 * DAY, NOW - 7 * DAY, NOW - 7 * DAY, JSON.stringify({ headline: "Тиждень як тиждень" })]);
+
+  // A dismissed candidate, so the detect endpoint has an exclusion to honour.
+  exec(db, "INSERT INTO planned_dismissed (merchant, created_at) VALUES ('таксі', ?)", [NOW - 20 * DAY]);
 }

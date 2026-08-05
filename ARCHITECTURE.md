@@ -30,7 +30,7 @@
 | Metric | Value |
 |---|---|
 | Total code | **32 252 lines** (16 019 worker · 15 811 client · 422 shared) |
-| `worker/routes/api.ts` | **3 331 lines · 179 `.prepare()` · 129 routes · 26 domains** |
+| `worker/routes/api.ts` | **3 331 lines · 179 `.prepare()` · 129 routes · 26 domains** → **0 queries** as of 2026-08-05 |
 | `src/store/api.ts` | 1 287 lines · **86 hand-written response types** |
 | `shared/types.ts` | 142 lines · 13 types · **0 imports from the worker** |
 | `src/pages/Stats.tsx` | 1 375 lines |
@@ -237,14 +237,19 @@ deliberate mutations of the canon:
 Re-recording: `UPDATE_GOLDEN=1 npm test` — only for a deliberate, explained behaviour change. A
 red test is never "fixed" by re-recording.
 
-### Phase 1 — repository layer + C1 🔄 IN PROGRESS
+### Phase 1 — repository layer + C1 ✅ `api.ts` DONE 2026-08-05
 
 Moving the 179 queries into `worker/repo/` **without changing the SQL text** (a copy, not a
 rewrite — rewriting changes behaviour).
 
-Progress: **`api.ts` is at 70 inline queries, down from 179** — 61% of the queries migrated.
-Golden tests green after every batch. **The whole `/analytics` surface is done**, and with it the
-entire money-facing region, plus every transaction write path.
+**`api.ts` is at 0 inline queries, down from 179.** Its line is deleted from the budget map in
+`check-repo-layer.mjs`, so the file is now under the flat ban rather than a ratchet: a route can
+no longer *reach* for SQL at all. Golden tests green after every batch, 23 → **169**.
+
+Ten queries remain in the route layer, in files that were never part of batches A–E:
+`import.ts` 3, `telegram.ts` 3, `setup.ts` 2, `webhook.ts` 2. Those are the ingest and
+integration paths and they have **no characterization coverage of any kind** — see "Next session
+starts here".
 
 **Milestone (2026-08-04): the canon no longer appears in the route layer at all.** `STATS_JOINS`,
 `SPEND_WHERE` and `amountSum` are gone from `api.ts`'s imports — `tsc` reported each one
@@ -262,6 +267,11 @@ which routes are meant to call.
 | `repo/planning.ts` | active plans in three shapes, as raw rows for the schedule helpers |
 | `repo/receipts.ts` | OCR line items: top items, window metadata, price points |
 | `repo/analytics.ts` | period totals, series, all five breakdowns, monthly history, month-to-date, capital and net-worth reconstruction, single-merchant, period comparison, income, sparklines |
+| `repo/budgets.ts` | envelope limits — list, monthly map, replace, clear, batch apply |
+| `repo/events.ts` | event groups with ₴ totals, their transactions, and plan line items |
+| `repo/reports.ts` | stored AI reports: list without payload, one with it, delete |
+| `repo/knowledge.ts` | corpus notes and overrides of built-in docs |
+| `repo/state.ts` | `app_state` rates, and the schema introspection the backup export reads |
 
 ### Remaining work, batch by batch
 
@@ -280,9 +290,9 @@ region where a mistake is caught by types rather than by a fixture.
 |---|---|---|---|---|---|
 | ~~**A**~~ | ~~**`/analytics` tail** — `patterns` 2, `category` 6, `slice` 2, `health` 2~~ | 4 | **12** ✅ | `repo/analytics.ts` | ✅ fully |
 | ~~**B**~~ | ~~**transactions + splits + reimbursements** — B1 reads 15, B2 writes 32~~ | 19 | **47** ✅ | `repo/transactions.ts` | ✅ reads by golden, writes by the new write suite |
-| **C** | **categories** — create, patch, usage, and `DELETE /categories/:id` alone at **15** | 4 | **21** | `repo/categories.ts` | rollup reads only |
-| **D** | **planning surface** — budgets 7, reports 3, planned 9, events 11 | 18 | **30** | `repo/planning.ts`, new `repo/budgets.ts`, new `repo/events.ts` | budgets via `budgetStatus` only |
-| **E** | **accounts CRUD + odds** — manual accounts 4, title/meta/active 3, delete 3, rates 2, export 4, knowledge 3 | 15 | **19** | `repo/accounts.ts`, new `repo/knowledge.ts` | ❌ writes, no fixture |
+| ~~**C**~~ | ~~**categories** — create, patch, usage, and `DELETE /categories/:id` alone at **15**~~ | 4 | **21** ✅ | `repo/categories.ts` | ✅ 16 new write scenarios |
+| ~~**D**~~ | ~~**planning surface** — budgets 7, reports 3, planned 9, events 11~~ | 18 | **30** ✅ | `repo/planning.ts`, new `repo/{budgets,events,reports}.ts` | ✅ 28 write scenarios + 4 new read goldens |
+| ~~**E**~~ | ~~**accounts CRUD + odds** — manual accounts 4, title/meta/active 3, delete 3, rates 2, export 4, knowledge 3~~ | 15 | **19** ✅ | `repo/accounts.ts`, new `repo/{knowledge,state}.ts` | ✅ 28 new write scenarios |
 
 **Order of operations inside every batch** (this is what has kept the snapshots green so far):
 
@@ -443,6 +453,9 @@ describe the *target*, this describes the *position*.
 | 2026-08-04 | 1 | **batch A, 12** | **117** queries | 59 ✅ | `/analytics` tail: `patterns`, `category` (incl. the bucket-13 branch), `slice`, `health`. `/analytics` is now entirely behind the repo layer. |
 | 2026-08-04 | 1 | **batch B1, 15** | **102** queries | 59 ✅ | Read-only transactions: detail + tags + receipt, frequent, splits GET, both reimbursement GETs, `/search`. **`STATS_JOINS` / `SPEND_WHERE` / `amountSum` left `api.ts` entirely.** `npm run build` green. |
 | 2026-08-04 | 0 + 1 | **batch B2, 32** | **70** queries | 59 → **92** ✅ | Write suite built FIRST (`worker/test/writes.test.ts`, 32 scenarios), then all six write handlers moved. Found and fixed a fixture defect (below). `npm run build` green. |
+| 2026-08-05 | 1 | **batch C, 21** | **49** queries | 92 → **108** ✅ | 16 category scenarios recorded first, then create / patch / usage / the 15-query delete cascade moved. `npm run check` + `npm run build` green. |
+| 2026-08-05 | 1 | **batch D, 30** | **19** queries | 108 → **141** ✅ | Planning surface: budgets, reports, planned, events. 28 write scenarios + 4 read goldens (`/budgets/auto` ×2, `/planned/detect`, `/reports`) recorded first. New `repo/{budgets,events,reports}.ts`. `npm run check` + `npm run build` green. |
+| 2026-08-05 | 1 | **batch E, 19** | **0** queries 🎉 | 141 → **169** ✅ | Accounts CRUD, knowledge corpus, both exports. New `repo/{knowledge,state}.ts`. **`api.ts` line deleted from the budget map — flat ban now.** `catNameSql` fell out of its imports (`tsc` said so unprompted). Second fixture defect found and fixed (below). |
 
 ### Phase 0b — the write suite (2026-08-04)
 
@@ -475,13 +488,146 @@ leaving that ceiling untested. Fixed by seeding the allocations themselves. **Th
 goldens did not move**, which confirms the canon reads only the denormalised columns and is the
 proof the fixture change was safe.
 
+### Phase 0c — the cascade scenarios (2026-08-05)
+
+Batch C needed the write suite to grow three capabilities, each for a reason worth keeping:
+
+- **`GET` and `DELETE` are scenarios now.** `DELETE /categories/:id` is the densest handler in the
+  project and had no test of any kind; `/usage` is a read that `golden.test.ts` cannot cover,
+  because its whole answer depends on rows that must not exist in the shared fixture.
+- **Per-scenario `setup`, not a bigger fixture.** The cascade needs a category carrying
+  transactions, tags, aliases, receipt items, a rule, a plan and a budget. Seeding that into
+  `fixture.ts` would have moved every analytics golden — and those snapshots are the only evidence
+  that the rest of the refactor changed nothing. `seedCategoryCascade` runs on top, per scenario.
+- **Opt-in `extraProbes`.** Widening the default probe rewrites all 32 existing write goldens, and
+  a churned baseline is one nobody reads. Only the cascade scenarios pay for the six extra tables.
+
+**The harness enforces foreign keys** (`node:sqlite` defaults to it), so the deletion ORDER is
+genuinely under test rather than merely documented: a step moved after `DELETE FROM categories`
+fails outright. That is why the order is now written at the calls in the handler as well as in
+`repo/categories.ts`.
+
+**Not vacuous** — three deliberate mutations, all caught: dropping the tag de-duplicating DELETE
+→ **2 fail** (primary-key collision on reassignment); not reassigning `merchant_aliases` → **5**;
+not re-parenting sub-categories → **5**. The last two fail as foreign-key violations, which is
+exactly the 500 the handler's own comment records from production.
+
+**One rule moved deliberately.** The "a category cannot be its own parent" guard now lives in
+`categoriesRepo.update` rather than the handler. It is a property of the row, not of the request,
+and a second caller re-deriving it is the first step of the usual divergence. Behaviour for the
+existing caller is identical — the golden proves it.
+
+### Phase 0d — batches D and E (2026-08-05)
+
+The suite grew three more capabilities, each earning its keep immediately:
+
+- **`reduceBody`** — `/export/all.json` returns the entire database. Recording that verbatim would
+  make the golden a second copy of the fixture, so every unrelated change would rewrite it and
+  nobody would read the diff. Only its `meta` block is snapshotted, and that is the part carrying
+  the guarantee: the per-table row counts prove the dump enumerates tables from the SCHEMA (so a
+  table from a later migration cannot be silently missed) and that `user_secrets` stays out of a
+  file that lands on the user's disk.
+- **`raw`** — the CSV export is not JSON. Its two dialects are snapshotted as text, which pins the
+  `sep=;` line, the decimal comma, and the formula-injection prefix in one readable file.
+- **`freezeRandom`** — `POST /knowledge` mints its id from the clock plus a random suffix. The
+  clock was already frozen; the suffix was the last non-determinism.
+
+**A second fixture defect, found the same way as the first — by a test going red for a reason
+that had nothing to do with the code under test.** `txSeq` was module-level, so a scenario's
+transaction ids depended on how many scenarios had run BEFORE it. That quietly undid the write
+suite's "a fresh database per scenario" guarantee: adding two knowledge scenarios turned five
+unrelated ones red, with diffs that were pure id churn. Left alone it would have trained the next
+person to re-record without reading — the exact habit that makes a golden suite worthless. Fixed
+by resetting the counter in `seed()`; the write goldens were re-recorded once, and **the analytics
+goldens did not move**, which is what confirms the change touched only ids.
+
+**Not vacuous** — eight more deliberate mutations across the two batches, all caught:
+`PUT /budgets` skipping its delete-before-insert → **2 fail**; the instalment step ignoring
+`period_count` → **2**; deleting an event not unlinking its transactions → **2**; dismissed
+merchants not lower-cased → **3**; the manual-account patch dropping its `is_manual` guard →
+**4**; account creation not snapshotting the balance → **2**; delete not checking for
+transactions → **2**; the export not skipping `user_secrets` → **2**.
+
 ### Next session starts here
 
-**Batch C — categories (21 queries, 4 handlers).** `DELETE /categories/:id` alone is **15** and is
-a cascade: children, transactions, budgets, rules, aliases, splits. Same treatment that worked for
-B2 — individual statements into `repo/categories.ts`, orchestration stays in the handler — and
-**write down the deletion ORDER while moving it**: the order is the behaviour, and nothing in the
-type system records it. Add write scenarios to `writes.test.ts` first; deleting a category that is
-in use is exactly the shape of operation where a reordered cascade fails silently.
+> **This section is a recommendation, not a mandate.** It records *why* the order was chosen, so a
+> later session can disagree on the same evidence rather than re-derive it. If circumstances have
+> changed — a bug that needs the type contract first, a deploy that makes the ingest paths urgent —
+> switch, and write down what changed. The alternatives are listed at the bottom with their costs.
 
-Then D (planning surface, 30) and E (accounts CRUD, 19).
+**Phase 3 — split `api.ts` into domain files and introduce `services/`** (owner's call,
+2026-08-05).
+
+Current state of the target: **2 687 lines · 138 routes · 26 first-path domains.**
+
+| Routes | Domain | | Routes | Domain |
+|---|---|---|---|---|
+| 19 | `analytics` | | 6 | `budgets`, `transfers` |
+| 14 | `transactions` | | 5 | `categories`, `advisor`, `knowledge` |
+| 10 | `accounts`, `planned` | | 4 | `reports`, `facts` |
+| 9 | `events`, `settings` | | 3 | `jobs` |
+| 7 | `goals`, `notifications` | | 1–2 | the remaining 11 |
+
+#### Why phase 3 before phase 2, against the numbering above
+
+The phase list in §6 is ordered by the §3 register's *importance* (D2, the missing type contract,
+ranks second only to the SQL). Importance is not sequencing, and on sequencing the evidence points
+the other way:
+
+1. **The split is mechanical exactly now, and will not be again.** Nothing in `api.ts` touches the
+   database any more, so moving a handler moves transport code only. Every batch of phase 1 made
+   this cheaper; nothing later makes it cheaper still.
+2. **Both phases edit the same lines.** Phase 2 changes the return type of essentially every
+   handler. Doing that first means one enormous diff inside a 2 687-line file, and then moving all
+   of it anyway. Doing it after the split means **12 small diffs, one domain at a time**, each
+   reviewable on its own and each independently revertible.
+3. **The golden suite is at its most useful for movement, and weakest for types.** 169 snapshots
+   prove a moved route still answers identically. They cannot prove a type annotation is right —
+   that is `tsc`'s job, and `tsc` reads a small file as well as a large one.
+
+The counter-argument, recorded honestly: phase 2 is where the *user-visible* class of bug lives
+(client and server drifting), and a split does not fix a single bug on its own. If that starts to
+bite before the split is finished, stopping mid-way is cheap — half-split is a working state, and
+the domains already moved keep their benefit.
+
+#### How to do it
+
+1. **One domain per commit, biggest first** (`analytics` 19 → `transactions` 14 → …). `npm test`
+   after each: a moved route that changes a snapshot was rewritten, not moved.
+2. **Route order is behaviour.** Hono matches in registration order, and `CLAUDE.md` records the
+   literal-before-parameterised rule from a real outage (`/transactions/frequent` before
+   `/transactions/:id`). Splitting reorders registration by definition — check each domain's
+   literals still precede its patterns, and keep the mount order of the sub-apps deliberate.
+3. **`services/` takes the scenarios, not the CRUD.** The candidates are already identified and
+   each has a comment saying its order matters: `PATCH /transactions/:id` (transfers →
+   `name_locked` → splits → reimbursements), the category delete cascade, and the reimbursement
+   recalculation. These are the handlers that are *sequences*, and today the only thing recording
+   the sequence is prose. Plain CRUD routes stay in `routes/` and call `repo/` directly — a service
+   per table would be ceremony.
+4. **C3 (a line ceiling per route file) lands with the last domain**, not the first — a ceiling
+   written while the file is still splitting just gets edited every commit. Same ratchet shape as
+   `check-repo-layer.mjs`, which is already proven to fail in both directions.
+5. **`api.ts` should not survive as a stub.** §"Готово-коли" in `ROADMAP.md` says the file stops
+   existing; a leftover re-export file is exactly the sort of thing that quietly accumulates the
+   next handler.
+
+#### If you want something else instead
+
+- **Phase 2 (type contract).** Defensible — it is the higher-ranked defect. Cost: one large diff
+  in one large file, then the split moves it all again.
+- **Phase 1 tail (10 queries: `import.ts` 3, `telegram.ts` 3, `setup.ts` 2, `webhook.ts` 2).**
+  Empties the budget map so `check-repo-layer.mjs` reports "no inline SQL in worker/routes".
+  ⚠️ Deliberately deferred: these are the **least safe queries in the project to move** and deserve
+  more care than their count suggests. They sit on the ingest and integration paths — a mono
+  webhook, a bot update, the legacy import — with **no characterization coverage of any kind**.
+  Unlike batch E, where a mistake showed up as a red snapshot, a mistake here shows up as a
+  transaction that silently never arrives. Write a scenario per entry point first (the write suite
+  already drives any method and seeds its own rows). A stale allowance of 10 is honest meanwhile,
+  and the ratchet still blocks new debt.
+- **Phase 4 (D1 own funds, D4 `period_mode`, D5 `RequestContext`).** The only phase that **changes
+  behaviour**, so it needs deliberate golden re-recording and an explanation per changed number —
+  which is why it is not mixed into a movement phase. Note before starting: verify the register's
+  claim about `notify.ts:316` — `credit_limit − balance` there is labelled as computing **debt**,
+  which is a different quantity from own funds, not necessarily an inverted copy.
+- **Phase 5 (`ai.ts`, 1 335 lines, 6 responsibilities).** Independent of all of the above; the
+  provider seam sits between L3 and L4.
