@@ -30,7 +30,7 @@
 | Metric | Value |
 |---|---|
 | Total code | **32 252 lines** (16 019 worker · 15 811 client · 422 shared) |
-| `worker/routes/api.ts` | **3 331 lines · 179 `.prepare()` · 129 routes · 26 domains** → **0 queries** as of 2026-08-05 |
+| `worker/routes/api.ts` | **3 331 lines · 179 `.prepare()` · 129 routes · 26 domains** → **0 queries** (2026-08-05), then **deleted** (2026-08-07): 16 files under `routes/api/`, largest 769 |
 | `src/store/api.ts` | 1 287 lines · **86 hand-written response types** |
 | `shared/types.ts` | 142 lines · 13 types · **0 imports from the worker** |
 | `src/pages/Stats.tsx` | 1 375 lines |
@@ -195,7 +195,7 @@ off twice (the SQL linter, `numbersAreGrounded`). Each rule in §4 gets a determ
 |---|---|---|---|
 | C1 | `.prepare()` only in `repo/` | SQL creeping back into routes | ✅ `scripts/check-repo-layer.mjs` |
 | C2 | route response types imported from `shared/` | client↔server contract drift | phase 2 |
-| C3 | line ceiling per route file | `api.ts` regrowing | phase 3 |
+| C3 | line ceiling per route/service file | `api.ts` regrowing | ✅ `scripts/check-route-size.mjs` |
 | C4 | client declares no API response types of its own | working around C2 | phase 2 |
 | C5 | golden `/analytics` responses match to the kopeck | silent money regressions | ✅ `worker/test/golden.test.ts` |
 | C6 | golden DATABASE STATE after every write endpoint | silent regressions in writes, where the response says nothing | ✅ `worker/test/writes.test.ts` |
@@ -372,8 +372,44 @@ Verified to fail in both directions.
 `shared/` becomes the real source; the worker types its returns with it; the client's 86
 hand-written types become imports.
 
-### Phase 3 — split `api.ts` + introduce `services/` + C3
-129 routes → ~12 domain files. Mechanical once phase 1 is complete.
+### Phase 3 — split `api.ts` + introduce `services/` + C3 ✅ DONE 2026-08-07
+
+138 routes → **16 domain files** under `worker/routes/api/`, grouped by FIRST PATH SEGMENT.
+`index.ts` is a 66-line mount table that declares no route of its own; `api.ts` no longer exists.
+
+- **Grouping by path prefix, not by concept.** `POST /transactions/:id/enrich` is conceptually
+  AI enrichment, but it lives in `transactions.ts` with the rest of its prefix. One file owning a
+  whole prefix is what makes the literal-before-parameterised rule (`/transactions/frequent` above
+  `/transactions/:id` — a real outage) checkable by reading a single file, instead of depending on
+  the order sub-apps happen to be mounted in. No two modules compete for a path, so the mount
+  order in `index.ts` is inert by construction.
+- **The parent owns the locale middleware.** Hono runs parent middleware for mounted sub-apps, so
+  `ownerLocale` is still resolved exactly once per request.
+- **`services/` took the three sequence handlers**, the ones already carrying a comment saying
+  their order matters: `PATCH /transactions/:id` (tags → row → §R2-TX4 cleanup → alias learning),
+  `PUT /transactions/:id/reimbursement` (the §COMPENSATION recalculation batch), and the category
+  delete cascade. Plain CRUD stayed in `routes/` and calls `repo/` directly — a service per table
+  would be ceremony. `PATCH /transactions/:id` is **6 lines** now.
+- **The layer boundary that made this work:** a service takes parsed input and returns a RESULT.
+  It never reads the request, picks a status code, or builds a user-facing string. So the
+  reimbursement service NAMES its failures (`errReimbCurrency`, `errReimbSourceExceeded` + params)
+  and the route words them through `st(locale, …)`. One place owns the rules, another the wording
+  — and `services/` stays free of i18n and of Hono.
+- **`normImportance` moved to `lib/finance/importance.ts`.** A service cannot import from
+  `routes/`, and both layers normalise it. Small, but it is the layering rule doing actual work.
+- **C1 was extended before anything moved.** `check-repo-layer.mjs` read `worker/routes`
+  non-recursively, so every `routes/api/*.ts` file would have been free to carry SQL again while
+  the check kept printing a tick. It now walks sub-directories and also covers `worker/services/`
+  with **no budget** — that directory was created after the ban, so it has no debt to ratchet down.
+- **C3 (`scripts/check-route-size.mjs`)**: 400 lines per file under `routes/` and `services/`, two
+  recorded exceptions (`api/analytics.ts`, `telegram.ts`) that may never rise. Deliberately NOT a
+  strict two-directional ratchet like C1: a query count moves in whole steps and rarely, so a drop
+  means someone forgot to tighten it; line counts move on every edit, and a check that fails
+  because a file got three lines shorter trains people to edit the budget without reading it.
+  It fails only when the slack exceeds 80 lines. Verified to fail on an over-cap probe.
+
+Tests stayed at **169 green** throughout — the point of doing this after phase 1 was that with
+zero queries left in the route layer, moving a handler moves transport code only.
 
 ### Phase 4 — consolidate the duplicates
 D1 (own funds), D4 (`period_mode`), D5 (`RequestContext`).
@@ -456,6 +492,7 @@ describe the *target*, this describes the *position*.
 | 2026-08-05 | 1 | **batch C, 21** | **49** queries | 92 → **108** ✅ | 16 category scenarios recorded first, then create / patch / usage / the 15-query delete cascade moved. `npm run check` + `npm run build` green. |
 | 2026-08-05 | 1 | **batch D, 30** | **19** queries | 108 → **141** ✅ | Planning surface: budgets, reports, planned, events. 28 write scenarios + 4 read goldens (`/budgets/auto` ×2, `/planned/detect`, `/reports`) recorded first. New `repo/{budgets,events,reports}.ts`. `npm run check` + `npm run build` green. |
 | 2026-08-05 | 1 | **batch E, 19** | **0** queries 🎉 | 141 → **169** ✅ | Accounts CRUD, knowledge corpus, both exports. New `repo/{knowledge,state}.ts`. **`api.ts` line deleted from the budget map — flat ban now.** `catNameSql` fell out of its imports (`tsc` said so unprompted). Second fixture defect found and fixed (below). |
+| 2026-08-07 | **3** | **138 routes** | **`api.ts` deleted** 🎉 | 169 ✅ | Split into 16 files under `routes/api/` (largest 769, was 3 331); `index.ts` is a 66-line mount table declaring no route. `services/` created for the three sequence handlers. C1 made recursive + extended to `services/`; **C3 landed** (`check-route-size.mjs`). `npm run check` + `npm run build` green. |
 
 ### Phase 0b — the write suite (2026-08-04)
 
@@ -555,66 +592,39 @@ transactions → **2**; the export not skipping `user_secrets` → **2**.
 > changed — a bug that needs the type contract first, a deploy that makes the ingest paths urgent —
 > switch, and write down what changed. The alternatives are listed at the bottom with their costs.
 
-**Phase 3 — split `api.ts` into domain files and introduce `services/`** (owner's call,
-2026-08-05).
+**Phase 2 — the client↔worker type contract (D2), plus C2 and C4.**
 
-Current state of the target: **2 687 lines · 138 routes · 26 first-path domains.**
+It is the highest-ranked defect still open, and the one argument for deferring it is now spent:
+phase 3 was postponing it only because both phases edit the same lines and the split would have
+moved the whole diff again. That is done. The lines have stopped moving.
 
-| Routes | Domain | | Routes | Domain |
-|---|---|---|---|---|
-| 19 | `analytics` | | 6 | `budgets`, `transfers` |
-| 14 | `transactions` | | 5 | `categories`, `advisor`, `knowledge` |
-| 10 | `accounts`, `planned` | | 4 | `reports`, `facts` |
-| 9 | `events`, `settings` | | 3 | `jobs` |
-| 7 | `goals`, `notifications` | | 1–2 | the remaining 11 |
-
-#### Why phase 3 before phase 2, against the numbering above
-
-The phase list in §6 is ordered by the §3 register's *importance* (D2, the missing type contract,
-ranks second only to the SQL). Importance is not sequencing, and on sequencing the evidence points
-the other way:
-
-1. **The split is mechanical exactly now, and will not be again.** Nothing in `api.ts` touches the
-   database any more, so moving a handler moves transport code only. Every batch of phase 1 made
-   this cheaper; nothing later makes it cheaper still.
-2. **Both phases edit the same lines.** Phase 2 changes the return type of essentially every
-   handler. Doing that first means one enormous diff inside a 2 687-line file, and then moving all
-   of it anyway. Doing it after the split means **12 small diffs, one domain at a time**, each
-   reviewable on its own and each independently revertible.
-3. **The golden suite is at its most useful for movement, and weakest for types.** 169 snapshots
-   prove a moved route still answers identically. They cannot prove a type annotation is right —
-   that is `tsc`'s job, and `tsc` reads a small file as well as a large one.
-
-The counter-argument, recorded honestly: phase 2 is where the *user-visible* class of bug lives
-(client and server drifting), and a split does not fix a single bug on its own. If that starts to
-bite before the split is finished, stopping mid-way is cheap — half-split is a working state, and
-the domains already moved keep their benefit.
+Current state of the target: `shared/types.ts` — **142 lines, 13 types, imported by 0 worker
+files**. `src/store/api.ts` — **1 287 lines, 86 hand-written response types**. The client declares
+what it believes the server returns; the worker declares its own shapes inline via `.all<{…}>()`;
+`tsc` sees two independent truths and cannot reconcile them, so drift surfaces in production.
 
 #### How to do it
 
-1. **One domain per commit, biggest first** (`analytics` 19 → `transactions` 14 → …). `npm test`
-   after each: a moved route that changes a snapshot was rewritten, not moved.
-2. **Route order is behaviour.** Hono matches in registration order, and `CLAUDE.md` records the
-   literal-before-parameterised rule from a real outage (`/transactions/frequent` before
-   `/transactions/:id`). Splitting reorders registration by definition — check each domain's
-   literals still precede its patterns, and keep the mount order of the sub-apps deliberate.
-3. **`services/` takes the scenarios, not the CRUD.** The candidates are already identified and
-   each has a comment saying its order matters: `PATCH /transactions/:id` (transfers →
-   `name_locked` → splits → reimbursements), the category delete cascade, and the reimbursement
-   recalculation. These are the handlers that are *sequences*, and today the only thing recording
-   the sequence is prose. Plain CRUD routes stay in `routes/` and call `repo/` directly — a service
-   per table would be ceremony.
-4. **C3 (a line ceiling per route file) lands with the last domain**, not the first — a ceiling
-   written while the file is still splitting just gets edited every commit. Same ratchet shape as
-   `check-repo-layer.mjs`, which is already proven to fail in both directions.
-5. **`api.ts` should not survive as a stub.** §"Готово-коли" in `ROADMAP.md` says the file stops
-   existing; a leftover re-export file is exactly the sort of thing that quietly accumulates the
-   next handler.
+1. **One domain per commit** — and the split is what makes that possible: each of the 16 route
+   modules is 70–180 lines (bar `analytics.ts`), so "type this domain's responses" is a diff a
+   person can read in full. Do the small ones first here, opposite to phase 3: the value is in
+   proving the pattern, not in covering volume.
+2. **The guarantee comes from the worker annotating its RETURN, not from generation** (decision 5
+   at the top of this file). `shared/` holds the type; the handler's return is typed with it; the
+   client imports the same one. Then `tsc` catches drift on its own, with no build step and no
+   opaque artefact in a public repo.
+3. **Start where the shape is already stable and already snapshotted** — `/analytics/*`. The 169
+   goldens pin those responses to the kopeck, so a type written against them cannot be wishful.
+4. **C2 and C4 land last** (route response types come from `shared/`; the client declares none of
+   its own). Same reason C3 landed last in phase 3: a check written while the thing is still
+   moving just gets edited every commit.
+5. ⚠️ **Do not "fix" a shape while typing it.** A field that is `number | null` in practice gets
+   typed that way, even if it looks like an oversight — API shapes are explicitly out of scope
+   (§7), and a type change that quietly narrows a response is the same class of silent break the
+   goldens exist to catch. File a card instead.
 
 #### If you want something else instead
 
-- **Phase 2 (type contract).** Defensible — it is the higher-ranked defect. Cost: one large diff
-  in one large file, then the split moves it all again.
 - **Phase 1 tail (10 queries: `import.ts` 3, `telegram.ts` 3, `setup.ts` 2, `webhook.ts` 2).**
   Empties the budget map so `check-repo-layer.mjs` reports "no inline SQL in worker/routes".
   ⚠️ Deliberately deferred: these are the **least safe queries in the project to move** and deserve
@@ -630,4 +640,6 @@ the domains already moved keep their benefit.
   claim about `notify.ts:316` — `credit_limit − balance` there is labelled as computing **debt**,
   which is a different quantity from own funds, not necessarily an inverted copy.
 - **Phase 5 (`ai.ts`, 1 335 lines, 6 responsibilities).** Independent of all of the above; the
-  provider seam sits between L3 and L4.
+  provider seam sits between L3 and L4. Note that it is now the largest file in the worker by a
+  wide margin, and the only one of this size left outside `routes/`, so it is also the obvious
+  next target if the type work stalls.

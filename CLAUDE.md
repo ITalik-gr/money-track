@@ -41,7 +41,7 @@ Rules:
 3. **Доробив задачу** → (а) видали пункт з `ROADMAP.md`; (б) якщо це змінює «як усе працює» (новий інваріант, нове канонічне визначення, новий ops-крок) — онови відповідний розділ `CLAUDE.md`.
 4. **Гроші/статистика** → будь-яка нова аналітика рахується ТІЛЬКИ через `worker/lib/finance/stats.ts` (єдине джерело). Не дублюй SQL-фільтри в ендпоінтах.
 5. **Green-бар перед «готово»:** `npm run check` (tsc app+worker **+ SQL-лінт + тести канону**) + `npm run build`. Канонічний SQL — валідуй на D1.
-   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/gen-migrations.mjs --check` + `npm test`.
+   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/check-repo-layer.mjs` (C1: `.prepare()` лише в `repo/`) + `scripts/check-route-size.mjs` (C3: ≤400 рядків на файл у `routes/`+`services/`) + `scripts/gen-migrations.mjs --check` + `npm test`.
    Остання (2026-07-24, платформа-фаза) падає, якщо `migrations/*.sql` змінились, а ембед для
    Durable Object (`worker/do/migrations.generated.ts`) не перегенеровано — інакше нова міграція
    мовчки не доїхала б у БД юзера. Перегенерувати: `node scripts/gen-migrations.mjs`.
@@ -71,7 +71,8 @@ Rules:
      це закриває, який інваріант тримається. Обовʼязково — біля канону (`stats.ts`, `EFF_AMOUNT`,
      `SPEND_WHERE`), біля обходів чужих вад (кирилиця в `LIKE`, специфічність `.modal`) і біля
      кожної перевірки, що існує через невдачу (`numbersAreGrounded`, SQL-лінт).
-   - **Шари:** `routes/*` — транспорт і валідація; `lib/*` — логіка; жодного SQL у компонентах.
+   - **Шари:** `routes/*` — транспорт і валідація; `services/*` — сценарії (послідовності);
+     `lib/*` — логіка й канон; `repo/*` — ЄДИНЕ місце, де є SQL. Жодного SQL у компонентах.
    - **Перевірка > інструкція.** Якщо коректність тримається на памʼяті розробника або моделі —
      зробити детерміновану перевірку. Це правило вже двічі окупилось: SQL-лінт (регресія §SPLIT)
      і `numbersAreGrounded` (вигадані суми в AI-сповіщеннях).
@@ -90,8 +91,21 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 **Воркер**
 - `worker/index.ts` — Hono: авторизація, заголовки безпеки, роутинг у Durable Object, крон.
 - `worker/user-app.ts` — застосунок ВСЕРЕДИНІ DO; `worker/do/*` — сам `UserDO`, міграції, імпорт.
-- `worker/routes/*` — транспорт і валідація: `api`, `setup`, `credentials`, `admin`, `auth`,
-  `webhook`, `telegram`, `ingest`, `import`.
+- `worker/routes/*` — транспорт і валідація: `setup`, `credentials`, `admin`, `auth`,
+  `webhook`, `telegram`, `ingest`, `import`, `account`.
+  **`worker/routes/api/`** (2026-08-07) — 16 доменних файлів, ФАЙЛ = ПЕРШИЙ СЕГМЕНТ ШЛЯХУ
+  (`transactions.ts` тримає весь `/transactions/*`, зокрема `POST /transactions/:id/enrich`, хоч
+  за змістом це enrich). Один файл володіє цілим префіксом → правило «літерал вище
+  параметризованого» видно в одному файлі, а не в порядку монтування. `index.ts` — лише мідлвар
+  локалі + `api.route("/", …)`; **власних роутів не оголошує ніколи** (файл, який приймає ще один
+  обробник, набере й наступний — так і виріс `api.ts` до 3331 рядка). Ліміт — 400 рядків на файл
+  (лінт C3).
+- `worker/services/*` — СЦЕНАРІЇ: обробники, що є послідовністю кроків над кількома таблицями
+  (`transactions.editTransaction`, `reimbursements.setReimbursement`, `categories.deleteCategory`).
+  Сервіс бере вже розпарсений вхід і повертає РЕЗУЛЬТАТ: не читає запит, не обирає код статусу,
+  не будує рядок для людини — помилку він НАЗИВАЄ (`errReimbCurrency`), а словами її оформлює
+  роут через `st(locale)`. Простий CRUD сюди не їде: сервіс на кожну таблицю — це церемонія.
+- `worker/repo/*` — ЄДИНИЙ шар, що пише SQL (лінт C1; `services/` теж під забороною, без бюджету).
 - `worker/lib/finance/` — **гроші й канон**: `stats.ts` (ЄДИНЕ джерело розрахунків), `finance`,
   `subscriptions`, `transfers`, `categorize`, `categories-i18n`, `repo`, `merchants`.
 - `worker/lib/ai/` — усе модельне: `ai.ts` (транспорт, ціни, demo-clamp), `advisor`, `enrich`,
