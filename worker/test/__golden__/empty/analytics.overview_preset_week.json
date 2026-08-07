@@ -4,12 +4,12 @@
     "summary": {
       "spend": 0,
       "income": 0,
-      "n": null
+      "n": 0
     },
     "prev": {
       "spend": 0,
       "income": 0,
-      "n": null
+      "n": 0
     },
     "range": {
       "from": 1778446800,

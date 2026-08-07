@@ -25,13 +25,11 @@ export interface CategorySpend {
 /**
  * Period totals.
  *
- * ⚠️ `n` is `null`, not `0`, when NO transaction row matched at all — an empty account, or a
- * period before the first import. `spendSum`/`incomeSum` wrap themselves in `COALESCE(…, 0)`;
- * `SPEND_COUNT` does not, and SQL `SUM()` over an empty set is NULL. The contract says so
- * because that is what goes over the wire (recorded in `__golden__/empty/`), not because it is
- * desirable — the fix belongs on the server and has its own card in ROADMAP.md.
+ * `n` was `null` rather than `0` on an empty account until 2026-08-07 — `SUM()` over an empty set
+ * is NULL and `SPEND_COUNT` carried no `COALESCE`, so a new user's "operations" card rendered
+ * blank. Fixed at the canon; the empty-account goldens pin it.
  */
-export interface PeriodTotals { spend: number; income: number; n: number | null }
+export interface PeriodTotals { spend: number; income: number; n: number }
 
 export interface Overview {
   summary: PeriodTotals;

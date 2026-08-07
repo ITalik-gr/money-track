@@ -591,6 +591,7 @@ describe the *target*, this describes the *position*.
 | 2026-08-05 | 1 | **batch E, 19** | **0** queries 🎉 | 141 → **169** ✅ | Accounts CRUD, knowledge corpus, both exports. New `repo/{knowledge,state}.ts`. **`api.ts` line deleted from the budget map — flat ban now.** `catNameSql` fell out of its imports (`tsc` said so unprompted). Second fixture defect found and fixed (below). |
 | 2026-08-07 | **3** | **138 routes** | **`api.ts` deleted** 🎉 | 169 ✅ | Split into 16 files under `routes/api/` (largest 769, was 3 331); `index.ts` is a 66-line mount table declaring no route. `services/` created for the three sequence handlers. C1 made recursive + extended to `services/`; **C3 landed** (`check-route-size.mjs`). `npm run check` + `npm run build` green. |
 | 2026-08-07 | **2** | **86 client types → `shared/api/`** | — | 169 → **209** ✅ | Contract closed on BOTH sides: `src/store/api.ts` 1 287 → 809 lines and declares nothing; `repo/` returns contract types (26 `Record<string, unknown>` gone, 4 half-twins folded in). **C2 + C4 landed** (`check-api-contract.mjs`), so all six checks C1–C6 are now green. New golden sweep over an EMPTY account (+40 tests) found `summary.n: null` — carried over, card filed. |
+| 2026-08-07 | tail | **2 carried-over bugs fixed** | — | 222 ✅ | `SPEND_COUNT`/`INCOME_COUNT` got their missing `COALESCE` (8 golden values `null → 0`, all under `empty/`); `incomeBySource` switched to canonical `incomeSum` (sources 102% → 100% of the total). Both re-records were deliberate and both diffs are small enough to read line by line. |
 | 2026-08-07 | tail | self-review · C3 over `lib/` · §WEEKDAY | — | 218 → **222** ✅ | Reviewed the session's own work: no runtime import cycles introduced (the one that exists is older, in `lib/finance/`), restored files byte-identical, and **a real gap found in phase 2's own guarantee** (below). C3 extended to `lib/` with 5 named exceptions. New `/analytics/weekday` — and the cap immediately forced `networth` out of the route into `lib/finance/networth.ts`, which is where reconstruction belonged anyway. |
 | 2026-08-07 | tail | webhook characterization | — | 209 → **218** ✅ | `worker/test/ingest.test.ts`: 8 scenarios over the mono webhook, the highest-traffic path with no coverage at all. Found that an event for an un-synced account is rejected by the FK and lost — filed, not fixed. `telegram`/`import`/`setup` still uncovered. |
 | 2026-08-07 | **5** | `ai.ts` **1 335 → 212** | — | 209 ✅ | Six responsibilities → one. New `models`/`cost`/`json`/`prompt`/`tasks`; feature calls moved to the feature files that already existed. Provider seam at `json.ts`. `demoClamp` left Anthropic-only, deliberately. |
@@ -719,10 +720,15 @@ own. In rough order of value:
    ⚠️ **Still uncovered: `telegram.ts` (3), `import.ts` (3), `setup.ts` (2).** Write a scenario per
    entry point before moving any of them. The bot is the awkward one — its handlers are driven by
    an update payload rather than an HTTP route, so the harness needs a small entry point of its own.
-2. **The two carried-over bugs**, both filed in `ROADMAP.md` and both found by tests written
-   during this refactor rather than by eye: `/analytics/income` percentages summing to 102%, and
-   `summary.n` arriving as `null` on an empty account. Each changes numbers, so each needs its own
-   commit with deliberate golden re-recording.
+2. ✅ **Done 2026-08-07 — both carried-over bugs fixed**, each with a deliberate golden
+   re-record and a diff small enough to read:
+   - `SPEND_COUNT`/`INCOME_COUNT` gained the `COALESCE(…, 0)` their neighbours always had. The
+     re-record touched **exactly 8 values, all `null → 0`, all under `empty/`** — no figure
+     computed from real data moved, which is what proves the fix was point-blank.
+   - `incomeBySource` now uses canonical `incomeSum` instead of raw `SUM(t.amount)`. Sources went
+     48 700 ₴ → 47 700 ₴ against an unchanged total of 47 700 ₴, i.e. **102% → 100%**.
+   Both were found by tests written during this refactor rather than by eye — the first by the
+   empty-account sweep, the second by a fixture that deliberately holds a partial reimbursement.
 3. ✅ **Done 2026-08-07** — C3 now covers `lib/` too, with five named exceptions (`advisor.ts`,
    `notify.ts`, `stats.ts`, `enrich.ts`, `report.ts`). It paid for itself the same hour: adding
    `/analytics/weekday` pushed `routes/api/analytics.ts` over its allowance, and instead of

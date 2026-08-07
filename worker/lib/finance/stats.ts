@@ -153,8 +153,13 @@ export function incomeSum(mult: string): string {
 // §REFUND: рахуємо лише реальні ВІДТОКИ. Рефанд проходить SPEND_WHERE (щоб відняти суму),
 // але як «операція-витрата» він не рахується — інакше середній чек ділився б на більшу
 // кількість і виходив заниженим.
-export const SPEND_COUNT = `SUM(CASE WHEN (${SPEND_WHERE}) AND ${EFF_AMOUNT} < 0 THEN 1 ELSE 0 END)`;
-export const INCOME_COUNT = `SUM(CASE WHEN ${INCOME_WHERE} THEN 1 ELSE 0 END)`;
+// `COALESCE(…, 0)` не косметика: `SUM()` над ПОРОЖНЬОЮ множиною в SQL — це NULL, а не нуль.
+// Сусідні `spendSum`/`incomeSum` COALESCE мали з самого початку, ці два — ні, тож новий акаунт
+// (і демо в перші хвилини) отримував `n: null` там, де UI чекає число, і картка «операцій»
+// показувала ПОРОЖНЄ місце. Порожнеча читається як збій, а не як «даних ще нема» — те саме
+// правило, що для «вантажиться vs даних нема» (CLAUDE.md).
+export const SPEND_COUNT = `COALESCE(SUM(CASE WHEN (${SPEND_WHERE}) AND ${EFF_AMOUNT} < 0 THEN 1 ELSE 0 END), 0)`;
+export const INCOME_COUNT = `COALESCE(SUM(CASE WHEN ${INCOME_WHERE} THEN 1 ELSE 0 END), 0)`;
 // §CADENCE: скільки РЕАЛЬНИХ списань, а не рядків. `SPEND_COUNT` рахує рядки після
 // STATS_JOINS, тож витрата, розбита на 3 частини (§SPLIT), важить у ньому 3 — для середнього
 // чека це свідомо, а для «як часто ця категорія списується» — ні: підписка виглядала б

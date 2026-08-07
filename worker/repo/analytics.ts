@@ -307,24 +307,23 @@ export interface IncomeSource {
 /**
  * Income broken down by effective category.
  *
- * ⚠️ **Known defect, preserved deliberately.** The sum here is `SUM(t.amount)`, NOT the canonical
- * `incomeSum` — so it does not subtract `reimburses_total` (§COMPENSATION) the way the period
- * total does. An incoming transfer that was partly allocated to expenses therefore appears in
- * full in its category row but only as its remainder in the total, and the percentages can add
- * up to more than 100%. Reproduced by the golden fixture: total 47 700 ₴ against 48 700 ₴ of
- * sources, 102%.
+ * Uses the canonical `incomeSum`, which is the whole point: it summed raw `SUM(t.amount)` until
+ * 2026-08-07, so it did NOT subtract `reimburses_total` (§COMPENSATION) the way the period total
+ * beside it does. An incoming payment partly allocated to expenses appeared in FULL in its
+ * category row but only as its remainder in the total — and the percentages, computed against
+ * that total, added up to more than 100%. On the fixture: 47 700 ₴ total against 48 700 ₴ of
+ * sources, i.e. **102%** on screen.
  *
- * It is carried over unchanged because this refactor is behaviour-preserving; the fix (use
- * `incomeSum(mult)` and re-record the goldens) is its own card in `ROADMAP.md`. This comment
- * exists so the next reader does not "tidy" it into a silent behaviour change.
+ * Found by the golden fixture rather than by eye, because the fixture deliberately contains a
+ * partial reimbursement. It is the §CUR-PLAN mechanism in miniature: a local restatement of the
+ * canon, sitting one function away from the canon itself, drifting quietly.
  */
 export async function incomeBySource(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
 ): Promise<IncomeSource[]> {
-  const rawIncomeSum = `CAST(ROUND(COALESCE(SUM(t.amount * ${v.mult}), 0)) AS INTEGER)`;
   const res = await db.prepare(
     `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(locale, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
-            ${rawIncomeSum} AS amount, COUNT(*) AS n
+            ${incomeSum(v.mult)} AS amount, COUNT(*) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${INCOME_WHERE}${v.curFilter}
      GROUP BY ${EFF_CAT_ID} ORDER BY amount DESC`,
