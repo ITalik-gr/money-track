@@ -7,32 +7,29 @@
 // no two domains share a path prefix, which is what makes the mount order below safe to read.
 import { apiRoutes, normChatMessages } from "./_shared.ts";
 import { analytics } from "./analytics.ts";
+import { notifications } from "./notifications.ts";
+import { settings } from "./settings.ts";
+import { events } from "./events.ts";
+import { goals } from "./goals.ts";
 import { budgets } from "./budgets.ts";
 import { planned } from "./planned.ts";
 import { categories } from "./categories.ts";
 import { accounts } from "./accounts.ts";
 import { transactions } from "./transactions.ts";
-import { setState, getState } from "../../lib/finance/repo.ts";
 import { getRates } from "../../lib/finance/finance.ts";
 // NOTE: no `STATS_JOINS` / `SPEND_WHERE` / `amountSum` here any more — the canonical SQL
 // fragments now live behind `worker/repo/`, and a route that needs one is a route that is about
 // to grow its own definition of "spending". What is left below is JS-side canon (period bounds,
 // levels, projections), which routes are allowed to call.
 import {
-  valueMode, uahMult, type PeriodMode,
-} from "../../lib/finance/stats.ts";
-import type { AppDb } from "../../lib/platform/db-shim.ts";
+  valueMode, } from "../../lib/finance/stats.ts";
 import * as txRepo from "../../repo/transactions.ts";
-import * as goalsRepo from "../../repo/goals.ts";
-import * as eventsRepo from "../../repo/events.ts";
 import * as reportsRepo from "../../repo/reports.ts";
 import * as knowledgeRepo from "../../repo/knowledge.ts";
 import * as stateRepo from "../../repo/state.ts";
 // `catNameSql` is deliberately absent: it produces SQL, and the route layer no longer writes any.
 import { ownerLocale } from "../../lib/finance/categories-i18n.ts";
-import { recalcGoal, isGoalKind, isAutofillKind } from "../../lib/finance/goals.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 
 export const api = apiRoutes();
 
@@ -51,6 +48,10 @@ api.use("*", async (c, next) => {
 // ---- domain modules ---------------------------------------------------------
 
 api.route("/", analytics);
+api.route("/", notifications);
+api.route("/", settings);
+api.route("/", events);
+api.route("/", goals);
 api.route("/", budgets);
 api.route("/", planned);
 api.route("/", categories);
@@ -295,264 +296,6 @@ api.post("/jobs/:id/seen", async (c) => {
   return c.json({ ok: true });
 });
 
-// ---- events / groups (івент / проєкт / спец-день) ---------------------------
-
-// Список подій із агрегатами (скільки транзакцій і сума витрат по кожній).
-api.get("/events", async (c) => {
-  // Рахуємо ВСІ операції групи (вкл. holds — тест/мono-холди мають лічитись).
-  // ⚠️ Раніше тут стояв фільтр `currency_code = 980`, тобто валютні витрати групи просто
-  // НЕ рахувались. Для подорожі це найгірше можливе місце для такої дірки — саме там
-  // валюта і трапляється, і бюджет поїздки виглядав би виконаним. Зводимо в ₴ як усюди.
-  const rates = await getRates(c.env.DB);
-  return c.json(await eventsRepo.listWithTotals(c.env.DB, uahMult(rates)));
-});
-
-// Бюджет події («скільки закладаю на цю подорож»). amount<=0 або null — прибрати ліміт.
-api.patch("/events/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  const b = await c.req.json<{ budget?: number | null; name?: string; note?: string | null }>()
-    .catch(() => ({} as { budget?: number | null; name?: string; note?: string | null }));
-  await eventsRepo.update(c.env.DB, id, {
-    ...(b.budget !== undefined
-      ? { budget: b.budget == null || b.budget <= 0 ? null : Math.round(b.budget) } : {}),
-    // A blank name is IGNORED rather than rejected: this endpoint is also how the budget alone
-    // is set, and failing the whole patch over an empty field the caller did not mean to send
-    // would block that.
-    ...(b.name !== undefined && b.name.trim() ? { name: b.name.trim() } : {}),
-    ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
-  });
-  return c.json({ ok: true });
-});
-
-api.post("/events", async (c) => {
-  const b = await c.req.json<{ name: string; kind?: string; color?: string; icon?: string; note?: string }>();
-  if (!b.name?.trim()) return c.json({ error: "name required" }, 400);
-  const id = await eventsRepo.create(c.env.DB, {
-    name: b.name.trim(), kind: b.kind ?? "event",
-    color: b.color ?? null, icon: b.icon ?? null, note: b.note ?? null,
-    created_at: Math.floor(Date.now() / 1000),
-  });
-  return c.json({ ok: true, id });
-});
-
-api.delete("/events/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  // Order matters and the spending outlives the event: the transactions are unlinked first, and
-  // only the GROUP is archived. Deleting a trip must never delete what was spent on it.
-  await eventsRepo.unlinkTransactions(c.env.DB, id);
-  await eventsRepo.archive(c.env.DB, id);
-  return c.json({ ok: true });
-});
-
-// Деталь події: підсумок + список транзакцій.
-api.get("/events/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  const event = await eventsRepo.find(c.env.DB, id);
-  if (!event) return c.json({ error: "not_found" }, 404);
-  // Підсумки рахує СЕРВЕР і зводить у ₴. Раніше сторінка рахувала їх сама, фільтруючи
-  // `currency_code === 980`, тож валютні операції випадали — і та сама група показувала
-  // на сторінці меншу суму, ніж у списку. Одна цифра має бути одна.
-  const rates = await getRates(c.env.DB);
-  const loc = c.get("locale");
-  const [txs, agg, plannedItems] = await Promise.all([
-    eventsRepo.transactions(c.env.DB, loc, id),
-    eventsRepo.totals(c.env.DB, uahMult(rates), id),
-    eventsRepo.plannedItems(c.env.DB, loc, id),
-  ]);
-  return c.json({
-    event, transactions: txs,
-    spent: agg?.spent ?? 0, income: agg?.income ?? 0,
-    planned: plannedItems,
-    planned_total: plannedItems.reduce((s, p) => s + p.amount, 0),
-  });
-});
-
-// Plan line items CRUD (P2.3). Amounts arrive in ₴ minor units.
-api.post("/events/:id/planned", async (c) => {
-  const id = Number(c.req.param("id"));
-  const b = await c.req.json<{ label?: string; amount?: number; category_id?: number | null }>()
-    .catch(() => ({} as { label?: string; amount?: number; category_id?: number | null }));
-  if (!b.label?.trim() || !b.amount || b.amount <= 0) return c.json({ error: "label and positive amount required" }, 400);
-  const catId = typeof b.category_id === "number" ? b.category_id : null;
-  const newId = await eventsRepo.addPlannedItem(
-    c.env.DB, id, b.label.trim(), Math.round(b.amount), catId, Math.floor(Date.now() / 1000));
-  return c.json({ ok: true, id: newId });
-});
-
-api.delete("/events/:id/planned/:pid", async (c) => {
-  await eventsRepo.deletePlannedItem(
-    c.env.DB, Number(c.req.param("id")), Number(c.req.param("pid")));
-  return c.json({ ok: true });
-});
-
-// ---- savings goals (§7) -----------------------------------------------------
-
-// Список цілей із прогресом. Якщо привʼязано банку (account_id) — прогрес = її баланс,
-// інакше — ручний current_amount.
-api.get("/goals", async (c) => {
-  const goals = (await goalsRepo.listActive(c.env.DB)).map((g) => ({
-    ...g,
-    current: g.account_id != null && g.account_balance != null ? g.account_balance : g.current_amount,
-  }));
-  return c.json(goals);
-});
-
-/**
- * §P2.1 — правило авто-поповнення з тіла запиту (міграція 0037).
- *
- * Валідуємо ОБИДВА поля разом: `autofill_kind` без осмисленого значення = мовчазне «нічого
- * не нараховується», а це найгірший стан для фічі, суть якої «воно саме». `null` (вимкнути)
- * лишається легальним, тож `undefined` (не чіпати) і `null` тут різні речі.
- */
-function parseAutofill(kind: unknown, value: unknown, locale: NotifLocale): { kind: string | null; value: number | null } | { error: string } {
-  if (kind == null) return { kind: null, value: null };
-  if (!isAutofillKind(kind)) return { error: st(locale, "goalAutofillKind") };
-  const v = Math.round(Number(value));
-  if (!Number.isFinite(v) || v <= 0) return { error: st(locale, "goalAutofillValue") };
-  // Відсоток — саме відсоток: 150% доходу не «агресивна ціль», а помилка вводу.
-  if (kind === "income_pct" && v > 100) return { error: st(locale, "goalAutofillPct") };
-  return { kind, value: v };
-}
-
-api.post("/goals", async (c) => {
-  const b = await c.req.json<{ name: string; target_amount: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string; kind?: string; autofill_kind?: string | null; autofill_value?: number | null }>();
-  const locale = c.get("locale");
-  if (!b.name?.trim()) return c.json({ error: "name required" }, 400);
-  if (!(b.target_amount > 0)) return c.json({ error: "target required" }, 400);
-  if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
-  const auto = parseAutofill(b.autofill_kind ?? null, b.autofill_value, locale);
-  if ("error" in auto) return c.json({ error: auto.error }, 400);
-  const id = await goalsRepo.create(c.env.DB, {
-    name: b.name.trim(),
-    target_amount: b.target_amount,
-    current_amount: b.current_amount ?? 0,
-    account_id: b.account_id ?? null,
-    deadline: b.deadline ?? null,
-    color: b.color ?? "#2e6be6",
-    note: b.note ?? null,
-    kind: b.kind ?? "save_up",
-    autofill_kind: auto.kind,
-    autofill_value: auto.value,
-    created_at: Math.floor(Date.now() / 1000),
-  });
-  return c.json({ ok: true, id });
-});
-
-api.patch("/goals/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  const locale = c.get("locale");
-  const b = await c.req.json<{ name?: string; target_amount?: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string; kind?: string; autofill_kind?: string | null; autofill_value?: number | null }>();
-  if (b.name !== undefined && !b.name.trim()) return c.json({ error: "name required" }, 400);
-  if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
-
-  const patch: goalsRepo.GoalPatch = {
-    name: b.name !== undefined ? b.name.trim() : undefined,
-    target_amount: b.target_amount, current_amount: b.current_amount,
-    account_id: b.account_id, deadline: b.deadline,
-    color: b.color, note: b.note, kind: b.kind,
-  };
-  if (b.autofill_kind !== undefined) {
-    const auto = parseAutofill(b.autofill_kind, b.autofill_value, locale);
-    if ("error" in auto) return c.json({ error: auto.error }, 400);
-    patch.autofill = auto;
-  }
-  await goalsRepo.update(c.env.DB, id, patch);
-  return c.json({ ok: true });
-});
-
-api.delete("/goals/:id", async (c) => {
-  await goalsRepo.archive(c.env.DB, Number(c.req.param("id")));
-  return c.json({ ok: true });
-});
-
-// ---- §P2.1: внески в ціль ---------------------------------------------------
-//
-// `current_amount` — денормалізований SUM внесків; його ЄДИНИЙ писар — `recalcGoal`
-// (`lib/finance/goals.ts`). Переїхав у lib, щойно зʼявився другий охочий писати цю суму —
-// крон авто-поповнення. Те саме правило, що для §COMPENSATION.
-//
-// ⚠️ Ціль, привʼязану до БАНКИ (`account_id`), внески не чіпають: там джерело правди —
-// баланс рахунку, який веде банк. Дозволити ще й ручні внески означало б рахувати ті самі
-// гроші двічі.
-
-api.get("/goals/:id/contributions", async (c) => {
-  return c.json(await goalsRepo.listContributions(c.env.DB, Number(c.req.param("id"))));
-});
-
-api.post("/goals/:id/contributions", async (c) => {
-  const id = Number(c.req.param("id"));
-  const locale = c.get("locale");
-  const b = await c.req.json<{ amount?: number; at?: number; note?: string | null }>()
-    .catch(() => ({} as { amount?: number; at?: number; note?: string | null }));
-  const amount = Math.round(Number(b.amount));
-  // Нуль забороняємо окремо від NaN: «0» проходить `Number.isFinite`, але внесок на нуль —
-  // це рядок в історії, який нічого не означає.
-  if (!Number.isFinite(amount) || amount === 0) return c.json({ error: st(locale, "goalContribAmount") }, 400);
-
-  const goal = await goalsRepo.findActive(c.env.DB, id);
-  if (!goal) return c.json({ error: st(locale, "goalNotFound") }, 404);
-  if (goal.account_id) return c.json({ error: st(locale, "goalJarNoContrib") }, 400);
-
-  await goalsRepo.addContribution(c.env.DB, id, amount,
-    Math.floor(b.at ?? Date.now() / 1000), b.note?.trim() || null);
-  return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
-});
-
-api.delete("/goals/:id/contributions/:cid", async (c) => {
-  const id = Number(c.req.param("id"));
-  await goalsRepo.deleteContribution(c.env.DB, id, Number(c.req.param("cid")));
-  return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
-});
-
-// Режим періоду (календарний ⇄ ковзний) — єдине джерело для Головної/Статистики/AI.
-api.get("/settings/period-mode", async (c) => {
-  const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
-  return c.json({ mode });
-});
-api.put("/settings/period-mode", async (c) => {
-  const { mode } = await c.req.json<{ mode: PeriodMode }>();
-  await setState(c.env.DB, "period_mode", mode === "rolling" ? "rolling" : "calendar");
-  return c.json({ ok: true, mode });
-});
-
-// UI locale (PLATFORM.md §12). Stored per-user in app_state so it is durable across devices
-// and readable server-side (AI/notify locale, P3.4). The client renders from localStorage for
-// instant paint; this endpoint is the durable mirror, not the render source. Empty = unset,
-// the client then falls back to the browser language.
-api.get("/settings/locale", async (c) => {
-  const locale = (await getState(c.env.DB, "locale")) || "";
-  return c.json({ locale });
-});
-api.put("/settings/locale", async (c) => {
-  const { locale } = await c.req.json<{ locale: string }>();
-  const v = locale === "uk" ? "uk" : locale === "en" ? "en" : null;
-  if (!v) return c.json({ error: "invalid locale" }, 400);
-  await setState(c.env.DB, "locale", v);
-  return c.json({ ok: true, locale: v });
-});
-
-// AI-моделі ОКРЕМО НА ЗАДАЧУ (report/advisor/insight/…): токен haiku|sonnet|opus на кожну.
-// UI редагує три головні (report/advisor/insight); решта — дефолти. Enrich/OCR завжди Haiku.
-const AI_MODEL_TASKS = ["report", "advisor", "insight", "chat", "budget", "group", "notify"] as const;
-api.get("/settings/ai-models", async (c) => {
-  const { AI_TASK_DEFAULTS, TOKEN_BY_MODEL, MODEL_BY_TOKEN } = await import("../../lib/ai/ai.ts");
-  const out: Record<string, string> = {};
-  for (const t of AI_MODEL_TASKS) {
-    const saved = await getState(c.env.DB, `ai_model_${t}`);
-    out[t] = saved && MODEL_BY_TOKEN[saved] ? saved : TOKEN_BY_MODEL[AI_TASK_DEFAULTS[t]];
-  }
-  return c.json({ models: out });
-});
-api.put("/settings/ai-models", async (c) => {
-  const { MODEL_BY_TOKEN } = await import("../../lib/ai/ai.ts");
-  const { task, model } = await c.req.json<{ task: string; model: string }>();
-  if (!AI_MODEL_TASKS.includes(task as typeof AI_MODEL_TASKS[number]) || !MODEL_BY_TOKEN[model]) {
-    return c.json({ error: "invalid task or model" }, 400);
-  }
-  await setState(c.env.DB, `ai_model_${task}`, model);
-  return c.json({ ok: true, task, model });
-});
-
 // Bulk-enrich uncategorised transactions, a small batch per call (client loops).
 api.post("/enrich/pending", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
@@ -660,20 +403,6 @@ api.post("/insight/generate", async (c) => {
   }
 });
 
-// ---- AI advisor: financial profile + structured advice ----------------------
-
-api.get("/profile", async (c) => {
-  const { getProfile } = await import("../../lib/ai/advisor.ts");
-  return c.json({ text: await getProfile(c.env) });
-});
-
-api.put("/profile", async (c) => {
-  const { text } = await c.req.json<{ text?: string }>();
-  const { setProfile } = await import("../../lib/ai/advisor.ts");
-  await setProfile(c.env, (text ?? "").slice(0, 4000));
-  return c.json({ ok: true });
-});
-
 api.get("/advisor", async (c) => {
   const { getStoredAdvice } = await import("../../lib/ai/advisor.ts");
   return c.json(await getStoredAdvice(c.env));
@@ -731,100 +460,6 @@ api.post("/advisor/chat", async (c) => {
 api.get("/facts", async (c) => {
   const { listFacts } = await import("../../lib/ai/advisor.ts");
   return c.json(await listFacts(c.env));
-});
-
-// ---- Центр сповіщень (ROADMAP §Черга 2, v1 in-app) ---------------------------
-// Стрічка того, що система «хоче сказати». Уся логіка — `lib/notify.ts` (ЄДИНЕ джерело),
-// тут лише транспорт. Генерація йде добовим кроном; `/notifications/generate` — ручний прогін.
-api.get("/notifications", async (c) => {
-  const url = new URL(c.req.url);
-  const { listNotifications } = await import("../../lib/messaging/notify.ts");
-  return c.json(await listNotifications(c.env, {
-    limit: Number(url.searchParams.get("limit") ?? 60),
-    kind: url.searchParams.get("kind"),
-    unreadOnly: url.searchParams.get("unread") === "1",
-  }));
-});
-
-api.post("/notifications/read", async (c) => {
-  const body = await c.req.json<{ ids?: number[] }>().catch(() => ({ ids: [] }));
-  const ids = (body.ids ?? []).map(Number).filter(Number.isFinite);
-  const { markRead, unreadCount } = await import("../../lib/messaging/notify.ts");
-  await markRead(c.env, ids);
-  return c.json({ ok: true, unread: await unreadCount(c.env) });
-});
-
-api.post("/notifications/read-all", async (c) => {
-  const { markAllRead } = await import("../../lib/messaging/notify.ts");
-  await markAllRead(c.env);
-  return c.json({ ok: true, unread: 0 });
-});
-
-api.delete("/notifications", async (c) => {
-  const { clearNotifications } = await import("../../lib/messaging/notify.ts");
-  await clearNotifications(c.env);
-  return c.json({ ok: true });
-});
-
-api.post("/notifications/generate", async (c) => {
-  const { generateNotifications } = await import("../../lib/messaging/notify.ts");
-  return c.json(await generateNotifications(c.env));
-});
-
-api.get("/notifications/prefs", async (c) => {
-  const { getPrefs } = await import("../../lib/messaging/notify.ts");
-  return c.json(await getPrefs(c.env));
-});
-
-api.put("/notifications/prefs", async (c) => {
-  const body = await c.req.json<Record<string, boolean>>().catch(() => ({}));
-  const { setPrefs } = await import("../../lib/messaging/notify.ts");
-  return c.json(await setPrefs(c.env, body));
-});
-
-/**
- * Збережені фільтри Транзакцій («Робочі витрати», «Готівка цього місяця»).
- *
- * Зберігаємо САМ QUERY-РЯДОК, а не розібрані поля: фільтри й так живуть в URL (єдине
- * джерело стану сторінки), тож збережений набір — це просто той самий URL. Нове поле
- * фільтра почне зберігатись автоматично, без міграції й без правок тут.
- * Ліміт 24 — це особистий список швидкого доступу, а не сховище.
- */
-const FILTERS_KEY = "saved_filters";
-interface SavedFilter { id: string; name: string; query: string }
-
-async function readFilters(db: AppDb): Promise<SavedFilter[]> {
-  const raw = await getState(db, FILTERS_KEY);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as SavedFilter[];
-    return Array.isArray(parsed) ? parsed.filter((f) => f?.id && f?.name) : [];
-  } catch { return []; }
-}
-
-api.get("/settings/saved-filters", async (c) => c.json(await readFilters(c.env.DB)));
-
-api.post("/settings/saved-filters", async (c) => {
-  const b = await c.req.json<{ name?: string; query?: string }>().catch(() => ({} as { name?: string; query?: string }));
-  const name = (b.name ?? "").trim().slice(0, 60);
-  const query = (b.query ?? "").replace(/^\?/, "").slice(0, 500);
-  if (!name) return c.json({ error: st(c.get("locale"), "errFilterNameRequired") }, 400);
-  if (!query) return c.json({ error: st(c.get("locale"), "errFilterNoActive") }, 400);
-
-  const list = await readFilters(c.env.DB);
-  if (list.length >= 24) return c.json({ error: st(c.get("locale"), "errFilterTooMany", { max: 24 }) }, 400);
-  // Та сама назва — перезапис, а не дубль: інакше список швидко заростає «Робочі (2)».
-  const idx = list.findIndex((f) => f.name.toLowerCase() === name.toLowerCase());
-  const item: SavedFilter = { id: idx >= 0 ? list[idx].id : crypto.randomUUID(), name, query };
-  if (idx >= 0) list[idx] = item; else list.push(item);
-  await setState(c.env.DB, FILTERS_KEY, JSON.stringify(list));
-  return c.json(list);
-});
-
-api.delete("/settings/saved-filters/:id", async (c) => {
-  const list = (await readFilters(c.env.DB)).filter((f) => f.id !== c.req.param("id"));
-  await setState(c.env.DB, FILTERS_KEY, JSON.stringify(list));
-  return c.json(list);
 });
 
 /**
@@ -953,49 +588,4 @@ api.delete("/facts/:id", async (c) => {
   const { deleteFact } = await import("../../lib/ai/advisor.ts");
   await deleteFact(c.env, Number(c.req.param("id")));
   return c.json({ ok: true });
-});
-
-// §GR2: AI-оцінка групи (структуровані факти) + чат по конкретній групі.
-api.post("/events/:id/ai", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { evaluateGroupAdvice } = await import("../../lib/ai/advisor.ts");
-  try {
-    const r = await evaluateGroupAdvice(c.env, Number(c.req.param("id")));
-    return r ? c.json(r) : c.json({ error: "not_found" }, 404);
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
-api.post("/events/:id/chat", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
-  const msgs = normChatMessages(body.messages);
-  if (!msgs.length) return c.json({ error: "messages required" }, 400);
-  const { chatAboutGroup } = await import("../../lib/ai/advisor.ts");
-  try {
-    return c.json(await chatAboutGroup(c.env, Number(c.req.param("id")), msgs));
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
-// Ручний тригер проактивного TG-пушу (тест без очікування тижневого крону).
-api.post("/tg/proactive", async (c) => {
-  const { runWeeklyProactive } = await import("../../lib/messaging/proactive.ts");
-  try {
-    return c.json(await runWeeklyProactive(c.env));
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
-// §F2 крок 2: скан вагомих непояснених операцій за 14 днів → TG-алерти (ручний тест/фолбек).
-api.post("/alerts/scan", async (c) => {
-  const { scanAlerts } = await import("../../lib/messaging/alert.ts");
-  try {
-    return c.json(await scanAlerts(c.env, new URL(c.req.url).origin));
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
 });
