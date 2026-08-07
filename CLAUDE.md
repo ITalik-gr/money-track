@@ -63,12 +63,19 @@ Rules:
 6. **Деплой/жива перевірка — рутина КОРИСТУВАЧА** (див. §Ops). Секрети й реальний API-ключ — не в мене.
 7. **Код читатиме сторонній інженер** (проєкт стає публічним портфоліо — `HISTORY.md`).
    Звідси конвенції, що діють ВІДРАЗУ (повністю — `HISTORY.md`):
-   - **Коментарі в новому коді — англійською. Нові й переписані `.md`-документи — теж
-     англійською** (рішення 2026-08-04; уже так написані `ARCHITECTURE.md`, `SECURITY.md`,
-     `CONTRIBUTING.md`, `README.md`). Наявні українські масово НЕ переписуємо (їх тисячі, і в них
-     нюанси «чому саме так»); мігруємо принагідно, коли й так правимо файл. **Не чіпати** мовою:
-     UI-рядки (вони йдуть через `t()`), промти моделі, матч-ключі (`.includes("фоп")`,
-     `/переказ|зняття/i`) — це дані, а не проза.
+   - 🔴 **ENGLISH IS THE WRITING LANGUAGE OF THIS REPOSITORY** (2026-08-04, restated 2026-08-07).
+     Everything newly written goes in English: code comments, **and every `.md` addition — a new
+     section, a new ROADMAP card, a new DESIGN journal row — even inside a document that is
+     otherwise Ukrainian.** The rule is about what you WRITE, not about what the file already
+     contains; the earlier reading ("this file is Ukrainian, so I write Ukrainian in it") was
+     wrong and is the exact thing this line now forbids.
+     Existing Ukrainian prose is NOT translated en masse (there are thousands of lines and they
+     carry the "why it is like this") — it migrates when that text is rewritten for another
+     reason, so these documents stay mixed for a while. That is the accepted transitional state.
+     **Never translated** (data, not prose): UI strings — they go through `t()` · model prompts ·
+     matching keys (`.includes("фоп")`, `/переказ|зняття/i`) · seeded category names.
+     ⚠️ Chat replies to the owner stay Ukrainian — this rule covers artifacts committed to the
+     repo, never the conversation.
    - Коментувати **«чому саме так»**, а не «що робить рядок»: яку альтернативу відкинуто, який баг
      це закриває, який інваріант тримається. Обовʼязково — біля канону (`stats.ts`, `EFF_AMOUNT`,
      `SPEND_WHERE`), біля обходів чужих вад (кирилиця в `LIKE`, специфічність `.modal`) і біля
@@ -83,7 +90,18 @@ Rules:
 PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook + бекфіл). React 19 + Redux Toolkit + React Router 7 + Recharts, Vite + vite-plugin-pwa, `@cloudflare/vite-plugin`. AI = гібрид **Haiku 4.5** (масово: enrich/OCR/parse/insight/batch) / **Sonnet 5** (розумний user-facing: порадник, репорти, txChat, бюджет-план, рев'ю). **Виняток (2026-07-14):** enrich бере Sonnet, коли користувач САМ описав операцію нотаткою (`user_note` непорожній) — розпізнання поважає пояснення (не плутає «вивів зарплату» з «Подарунком»); авто-enrich без нотатки лишається на Haiku. Telegram-бот (каркас). Мова UI — українська. Шрифти: Geist Sans (герой-суми) / Geist Mono (колонки, `tabular-nums`).
 
 ### Скрипти
-`npm run dev` · `npm run build` (tsc -b + vite build) · `npm run check` (tsc) · `npm run deploy` (build + wrangler deploy) · `npm run db:migrate:local` / `:remote` · `npm run db:seed:local`.
+`npm run dev` · `npm run build` (types + tsc -b + vite build) · `npm run check` (types + tsc + лінти + тести) · `npm run deploy` (build + wrangler deploy) · `npm run db:migrate:local` / `:remote` · `npm run db:seed:local`.
+
+⚠️ **`worker-configuration.d.ts` ГЕНЕРУЄТЬСЯ, і генерація стоїть ПЕРШИМ кроком `build`/`check`**
+(2026-08-07). Файл у `.gitignore`, тож на CI (Cloudflare Build) його просто немає — збірка падала
+`TS2688: Cannot find type definition file`, хоч локально все зелене. Коміт файлу теж вирішив би
+проблему, але 549 КБ згенерованого, що мовчки старіє відносно `wrangler.jsonc`, — гірший розмін:
+локальна копія була від 24 липня й НЕ знала про `vars.SIGNUP`, доданий 31-го.
+⚠️ **`wrangler types` виводить ЛІТЕРАЛ поточного значення vars** (`SIGNUP: "open"`), бо описує те,
+що задеплоєно. Тому `env.ts` виключає `SIGNUP` з успадкованого типу (`Omit<Cloudflare.Env, "DB" |
+"SIGNUP">`) і оголошує ширше — інакше кіл-світч `open|invite` неможливо було б перемкнути без
+помилки компіляції. **Нова змінна у `vars` + її оголошення в `env.ts` = той самий конфлікт**;
+рішення — Omit із коментарем ЧОМУ, а не `--strict-vars=false` (той прибирає літерали в усіх vars).
 
 ### Мапа коду (структура за доменами, 2026-07-26)
 > Було: `worker/lib/` (29 файлів) і `src/components/` (59) плоскими списками — знайти щось можна

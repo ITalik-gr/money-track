@@ -2,6 +2,10 @@ node_modules
 dist
 .wrangler
 .dev.vars
+# Generated from wrangler.jsonc by `wrangler types`, which `npm run build` and `npm run check`
+# both run first. Ignored rather than committed on purpose: 549 KB of generated types that go
+# stale against the config without saying so — the committed copy had been missing `vars.SIGNUP`
+# for a week. Do not "fix" a CI type error by committing this file.
 worker-configuration.d.ts
 *.tsbuildinfo
 .DS_Store

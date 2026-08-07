@@ -196,11 +196,15 @@ negative when the card is in debt.
 
 ## 7. Working language: English
 
-**New code comments and new/edited Markdown docs are written in English.** The repository is
-public, so the audience is a stranger reading it cold. Existing Ukrainian comments are not
-rewritten wholesale — there are thousands of them and they carry the "why it is like this" that a
-mass translation would flatten — they migrate when the surrounding file is edited for another
-reason. Unchanged either way: UI strings (they go through `t()`), model prompts, and matching keys
-(`.includes("фоп")`, `/переказ|зняття/i`) — those are data, not prose.
+**Everything newly written into this repository is English** — code comments and every Markdown
+addition, *including a new section inside a document that is otherwise Ukrainian*. The rule is
+about what gets written, not about what a file already holds. The repository is public, so the
+audience is a stranger reading it cold.
+
+Existing Ukrainian prose is not rewritten wholesale — there are thousands of lines and they carry
+the "why it is like this" that a mass translation would flatten. It migrates when that text is
+edited for another reason, so several documents stay mixed for a while; that is the accepted
+transitional state. Unchanged either way: UI strings (they go through `t()`), model prompts, and
+matching keys (`.includes("фоп")`, `/переказ|зняття/i`) — those are data, not prose.
 
 **When the tail in §5 is empty, this file becomes a short section of `CLAUDE.md` and is deleted.**

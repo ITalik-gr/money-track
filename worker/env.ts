@@ -7,7 +7,13 @@ import type { AppDb } from "./lib/platform/db-shim.ts";
 // satisfies it, so nothing at the call sites changes; what changes is that reaching for a
 // D1-only feature (sessions, `dump()`, `.raw()`) now fails in `tsc` instead of failing in
 // production for whichever user happens to hit that endpoint. Check > instruction.
-export interface Env extends Omit<Cloudflare.Env, "DB"> {
+// `SIGNUP` is omitted for a different reason than `DB`: `wrangler types` reads the CURRENT value
+// out of `wrangler.jsonc` and emits it as a literal (`SIGNUP: "open"`), because that is what the
+// deployment has today. But the whole point of the switch is that flipping it to `"invite"` needs
+// no code change — so the code has to accept BOTH values, and inheriting a one-value type would
+// make the kill-switch un-flippable without a compile error. Widening it here is the accurate
+// statement: the config knows what it is set to, the code knows what it may be set to.
+export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
   DB: AppDb;
   MONO_TOKEN: string;
   ANTHROPIC_API_KEY: string;
