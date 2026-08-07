@@ -5,32 +5,31 @@
 // order, and `/transactions/frequent` has to be reachable before `/transactions/:id` (a real
 // outage, recorded in CLAUDE.md). Each domain keeps its own literals above its own patterns, and
 // no two domains share a path prefix, which is what makes the mount order below safe to read.
-import { apiRoutes, normImportance, normChatMessages } from "./_shared.ts";
+import { apiRoutes, normChatMessages } from "./_shared.ts";
 import { analytics } from "./analytics.ts";
+import { budgets } from "./budgets.ts";
+import { planned } from "./planned.ts";
+import { categories } from "./categories.ts";
+import { accounts } from "./accounts.ts";
 import { transactions } from "./transactions.ts";
 import { setState, getState } from "../../lib/finance/repo.ts";
-import { computeSummary, getRates } from "../../lib/finance/finance.ts";
+import { getRates } from "../../lib/finance/finance.ts";
 // NOTE: no `STATS_JOINS` / `SPEND_WHERE` / `amountSum` here any more — the canonical SQL
 // fragments now live behind `worker/repo/`, and a route that needs one is a route that is about
 // to grow its own definition of "spending". What is left below is JS-side canon (period bounds,
 // levels, projections), which routes are allowed to call.
 import {
-  valueMode, uahMult, categoryMonthlyLevels, localMonthStart,
-  type PeriodMode,
+  valueMode, uahMult, type PeriodMode,
 } from "../../lib/finance/stats.ts";
 import type { AppDb } from "../../lib/platform/db-shim.ts";
-import * as accountsRepo from "../../repo/accounts.ts";
-import * as categoriesRepo from "../../repo/categories.ts";
 import * as txRepo from "../../repo/transactions.ts";
 import * as goalsRepo from "../../repo/goals.ts";
-import * as planningRepo from "../../repo/planning.ts";
-import * as budgetsRepo from "../../repo/budgets.ts";
 import * as eventsRepo from "../../repo/events.ts";
 import * as reportsRepo from "../../repo/reports.ts";
 import * as knowledgeRepo from "../../repo/knowledge.ts";
 import * as stateRepo from "../../repo/state.ts";
 // `catNameSql` is deliberately absent: it produces SQL, and the route layer no longer writes any.
-import { localizeCatName, ownerLocale } from "../../lib/finance/categories-i18n.ts";
+import { ownerLocale } from "../../lib/finance/categories-i18n.ts";
 import { recalcGoal, isGoalKind, isAutofillKind } from "../../lib/finance/goals.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
@@ -52,65 +51,11 @@ api.use("*", async (c, next) => {
 // ---- domain modules ---------------------------------------------------------
 
 api.route("/", analytics);
+api.route("/", budgets);
+api.route("/", planned);
+api.route("/", categories);
+api.route("/", accounts);
 api.route("/", transactions);
-
-// ---- reference data ---------------------------------------------------------
-
-api.get("/categories", async (c) => {
-  const rows = await categoriesRepo.listAll(c.env.DB);
-  const loc = c.get("locale");
-  // Localize seed names in JS (the row already carries `name`); user categories pass through.
-  return c.json(rows.map((r) => ({ ...r, name: localizeCatName(loc, r.name) })));
-});
-
-api.get("/accounts", async (c) => {
-  return c.json(await accountsRepo.listActive(c.env.DB));
-});
-
-// Канонічна розбивка коштів (§R3) — ТА САМА, що бачить Порадник. Огляд на сторінці Рахунків
-// бере її, а не рахує композицію на клієнті, щоб «подушка/борг/інвестиції» тут = у Пораднику.
-api.get("/accounts/funds", async (c) => {
-  const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
-  return c.json(await fundsBreakdown(c.env));
-});
-
-// Архівовані рахунки (is_active=0) — для секції «Архів». Історія операцій лишається.
-api.get("/accounts/archived", async (c) => {
-  return c.json(await accountsRepo.listArchived(c.env.DB));
-});
-
-// Історія балансу ручних рахунків по місяцях — для міні-спарклайнів на картках. Значення у
-// ВАЛЮТІ рахунку (для тренду валюта не важлива); крок = останній зріз ≤ кінець місяця (carry-forward).
-api.get("/accounts/history", async (c) => {
-  const url = new URL(c.req.url);
-  const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
-  const rows = await accountsRepo.balanceHistory(c.env.DB);
-  if (rows === null) return c.json({ history: {} }); // таблиця може ще не бути на remote (0026)
-  const byAcc = new Map<string, { at: number; balance: number }[]>();
-  for (const r of rows) (byAcc.get(r.acc) ?? byAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
-  const now = Math.floor(Date.now() / 1000);
-  const ends: number[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    // кінець i-го місяця назад; для поточного (i=0) — «зараз», бо кінець місяця ще попереду.
-    ends.push(i === 0 ? now : localMonthStart(now, -i + 1) - 1);
-  }
-  const out: Record<string, number[]> = {};
-  for (const [acc, hist] of byAcc) {
-    if (!hist.length) continue;
-    out[acc] = ends.map((t) => {
-      let v = hist[0].balance;
-      for (const p of hist) { if (p.at <= t) v = p.balance; else break; }
-      return Math.round(v / 100);
-    });
-  }
-  return c.json({ history: out });
-});
-
-// ---- net-worth summary (§5 credit-limit handling) ---------------------------
-
-api.get("/summary", async (c) => {
-  return c.json(await computeSummary(c.env));
-});
 
 // L10 — повний дамп власних даних одним файлом.
 //
@@ -235,99 +180,10 @@ api.get("/export/transactions.csv", async (c) => {
   });
 });
 
-// ---- budgets & planned ------------------------------------------------------
-
-api.get("/budgets", async (c) => {
-  return c.json(await budgetsRepo.listAll(c.env.DB));
-});
-
-// Idempotent set: one budget per category+period. amount<=0 clears it.
-api.put("/budgets", async (c) => {
-  const b = await c.req.json<{ category_id: number; period: "month" | "week"; amount: number; rollover?: boolean }>();
-  if (b.amount > 0) {
-    await budgetsRepo.set(c.env.DB, b.category_id, b.period, b.amount, !!b.rollover);
-  } else {
-    await budgetsRepo.clear(c.env.DB, b.category_id, b.period);
-  }
-  return c.json({ ok: true });
-});
-
-/**
- * Автобюджет із історії — детерміновано, БЕЗ AI (є окремий `/budgets/chat` для розмови).
- *
- * Ліміт = канонічний місячний рівень категорії (`categoryMonthlyLevels`, §Канонічне) мінус
- * запас `trim`%. Беремо саме рівень, а не «середнє за 90 днів»: він уже вміє відрізняти
- * fixed-кост від змінної категорії й не роздувається разовим піком.
- *
- * ⚠️ Обовʼязкові категорії (`importance='essential'` — оренда, продукти, ліки) НЕ ріжемо:
- * запропонувати «оренду на 10% менше» неможливо виконати, і такий бюджет одразу стає
- * фальшивим червоним. Їм ліміт = рівень як є.
- * GET віддає ПРОПОЗИЦІЮ (нічого не змінює), POST застосовує обрані — щоб один тап не
- * переписав мовчки вже налаштовані конверти.
- */
-api.get("/budgets/auto", async (c) => {
-  const url = new URL(c.req.url);
-  const trim = Math.min(Math.max(Number(url.searchParams.get("trim") ?? 10), 0), 50) / 100;
-  const rates = await getRates(c.env.DB);
-  const { mult } = valueMode(rates, null);
-  const now = Math.floor(Date.now() / 1000);
-
-  const [levels, cats, currentByCat] = await Promise.all([
-    categoryMonthlyLevels(c.env, mult, { now }),
-    categoriesRepo.budgetable(c.env.DB, c.get("locale")),
-    budgetsRepo.monthlyAmounts(c.env.DB),
-  ]);
-
-  const MIN_LEVEL = 30000; // 300 ₴/міс — дрібним категоріям конверт не потрібен
-  const items = cats
-    .map((cat) => {
-      const level = levels.get(cat.id)?.level ?? 0;
-      if (level < MIN_LEVEL) return null;
-      const essential = cat.importance === "essential";
-      // Округлюємо до 50 ₴ — «2 350 ₴» читається як рішення, «2 347 ₴» як шум обчислення.
-      const raw = essential ? level : level * (1 - trim);
-      const suggested = Math.max(MIN_LEVEL, Math.round(raw / 5000) * 5000);
-      return {
-        category_id: cat.id, name: cat.name, color: cat.color,
-        importance: cat.importance ?? "discretionary",
-        essential,
-        level, suggested,
-        current: currentByCat.get(cat.id) ?? null,
-      };
-    })
-    .filter((x): x is NonNullable<typeof x> => x !== null)
-    .sort((a, b) => b.level - a.level);
-
-  return c.json({
-    trim_pct: Math.round(trim * 100),
-    total_level: items.reduce((s, i) => s + i.level, 0),
-    total_suggested: items.reduce((s, i) => s + i.suggested, 0),
-    items,
-  });
-});
-
-api.post("/budgets/auto", async (c) => {
-  const b = await c.req.json<{ items?: { category_id: number; amount: number }[] }>()
-    .catch(() => ({} as { items?: { category_id: number; amount: number }[] }));
-  const items = (b.items ?? [])
-    .map((i) => ({ category_id: Number(i.category_id), amount: Math.round(Number(i.amount)) }))
-    .filter((i) => Number.isFinite(i.category_id) && i.amount > 0);
-  if (!items.length) return c.json({ error: st(c.get("locale"), "errNothingToApply") }, 400);
-
-  await budgetsRepo.setMonthlyBatch(c.env.DB, items);
-  return c.json({ ok: true, applied: items.length });
-});
-
 // §Хвіст C: глобальний лічильник витрат AI — «$ за сьогодні / цей місяць / за весь час».
 api.get("/ai-usage", async (c) => {
   const { readUsageStats } = await import("../../lib/ai/ai.ts");
   return c.json(await readUsageStats(c.env));
-});
-
-// §Хвіст: факт vs план по підписках — фактичні списання, лічильник, ознака подорожчання.
-api.get("/planned/actuals", async (c) => {
-  const { plannedActuals } = await import("../../lib/finance/subscriptions.ts");
-  return c.json(await plannedActuals(c.env.DB));
 });
 
 // §Аналітика 2.0 — AI-репорти (щотижня/щомісяця, історія зберігається).
@@ -437,134 +293,6 @@ api.post("/jobs/:id/seen", async (c) => {
   const { markSeen } = await import("../../lib/ai/jobs.ts");
   await markSeen(c.env, id);
   return c.json({ ok: true });
-});
-
-api.get("/planned", async (c) => {
-  return c.json(await planningRepo.listActive(c.env.DB));
-});
-
-api.post("/planned", async (c) => {
-  const b = await c.req.json<{
-    title: string; kind: "subscription" | "installment"; total_amount?: number;
-    period_amount?: number; period: "month" | "week"; period_count?: number; start_date: number;
-    category_id?: number; account_id?: string; currency_code?: number;
-  }>();
-  const periodCount = Math.max(1, Math.round(b.period_count ?? 1)); // «кожні N періодів» (§SUB4)
-  // Installment auto-math (§6.5): derive occurrences/end_date from total & per-period.
-  let occurrences: number | null = null;
-  let end_date: number | null = null;
-  if (b.kind === "installment" && b.total_amount && b.period_amount) {
-    occurrences = Math.ceil(b.total_amount / b.period_amount);
-    const step = (b.period === "week" ? 7 * 86400 : 30 * 86400) * periodCount;
-    end_date = b.start_date + occurrences * step;
-  }
-  const id = await planningRepo.create(c.env.DB, {
-    title: b.title, kind: b.kind,
-    total_amount: b.total_amount ?? null, period_amount: b.period_amount ?? null,
-    period: b.period, period_count: periodCount, start_date: b.start_date,
-    end_date, occurrences,
-    category_id: b.category_id ?? null, account_id: b.account_id ?? null,
-    currency_code: b.currency_code ?? 980,
-  });
-  return c.json({ ok: true, id, occurrences, end_date });
-});
-
-// AI-детект підписки за описом (§F4): користувач описує словами → AI дістає пошуковий
-// запит; шукаємо схожі транзакції, рахуємо середню суму/валюту/каденцію → кандидат.
-api.post("/planned/ai-detect", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { description } = await c.req.json<{ description?: string }>();
-  if (!description?.trim()) return c.json({ error: "description required" }, 400);
-
-  const { callHaikuJson, MODEL_SMART } = await import("../../lib/ai/ai.ts");
-  let query = "";
-  try {
-    // Sonnet 5 — точніше витягує ключове слово мерчанта з вільного опису підписки.
-    const { result } = await callHaikuJson<{ merchant_query: string }>(
-      c.env,
-      [{ type: "text", text: "Користувач описує рекурентний платіж (підписку). Витягни коротке ключове слово для пошуку мерчанта в транзакціях (латиницею або як у виписці, напр. «моя підписка на Anthropic»→«Anthropic», «інтернет Київстар»→«Київстар»). Відповідай ВИКЛЮЧНО JSON {\"merchant_query\": \"...\"}." }],
-      [{ type: "text", text: description.slice(0, 300) }],
-      120,
-      MODEL_SMART,
-    );
-    query = (result.merchant_query ?? "").trim();
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-  if (!query) return c.json({ candidates: [] });
-
-  // Схожі витрати за ~200 днів згруповані по мерчанту+валюті (без переказів/холдів).
-  const since = Math.floor(Date.now() / 1000) - 200 * 86400;
-  const matches = await planningRepo.merchantMatches(c.env.DB, query, since);
-
-  const candidates = matches.map((r) => ({
-    title: r.merchant,
-    period_amount: Math.round(r.avg_amount),
-    currency_code: r.currency_code,
-    n: r.n,
-    last_time: r.last_time,
-    category_id: r.category_id,
-    avg_interval_days: r.n > 1 ? Math.round((r.last_time - r.first_time) / (r.n - 1) / 86400) : 30,
-  }));
-  return c.json({ query, candidates });
-});
-
-api.delete("/planned/:id", async (c) => {
-  await planningRepo.deactivate(c.env.DB, Number(c.req.param("id")));
-  return c.json({ ok: true });
-});
-
-// §R5: редагувати підписку (наразі — опис для AI; розширювано за потреби).
-api.patch("/planned/:id", async (c) => {
-  const b = await c.req.json<{ note?: string | null; category_id?: number | null }>();
-  await planningRepo.update(c.env.DB, Number(c.req.param("id")), {
-    ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
-    ...(b.category_id !== undefined ? { category_id: b.category_id } : {}),
-  });
-  return c.json({ ok: true });
-});
-
-// §R5: закрити кандидата в підписки («це не підписка») — детект більше не пропонує.
-api.post("/planned/dismiss", async (c) => {
-  const { merchant } = await c.req.json<{ merchant?: string }>();
-  if (!merchant?.trim()) return c.json({ error: "merchant required" }, 400);
-  await planningRepo.dismissMerchant(c.env.DB, merchant.trim(), Math.floor(Date.now() / 1000));
-  return c.json({ ok: true });
-});
-
-// Ре-світ: виправити категорію наявних операцій, що підпадають під активну підписку,
-// але зараз розкладені інакше (fix для вже неправильних, як Apple $1 у «Розвагах»). Без AI.
-api.post("/planned/apply-categories", async (c) => {
-  const { applySubscriptionCategories } = await import("../../lib/finance/subscriptions.ts");
-  const r = await applySubscriptionCategories(c.env.DB);
-  return c.json(r);
-});
-
-// Detect recurring payments (§7 "детект підписок"): same merchant+amount charged in
-// ≥2 distinct months over the last ~120 days, on a roughly monthly cadence. Heuristic,
-// no AI. Excludes merchants already declared as active planned payments.
-api.get("/planned/detect", async (c) => {
-  const now = Math.floor(Date.now() / 1000);
-  const since = now - 200 * 86400; // ширше вікно — щоб зловити квартальні/рідші підписки
-  // §G2: ВИКЛЮЧАЄМО перекази (is_transfer) і бакет «Перекази і зняття» (13 + діти) —
-  // інакше в кандидати лізуть «Округлення балансу», перекази брату/людям тощо.
-  // §G3: пропонуємо суджену категорію (найчастіша серед матчів) для звʼязку з підпискою.
-  const rows = await planningRepo.detectCandidates(c.env.DB, since);
-  const declaredSet = await planningRepo.declaredTitles(c.env.DB);
-  // §R5: виключаємо закриті користувачем кандидати («це не підписка»).
-  const dismissedSet = await planningRepo.dismissedMerchants(c.env.DB);
-
-  const candidates = rows
-    .map((r) => ({
-      ...r,
-      avg_interval_days: r.n > 1 ? Math.round((r.last_time - r.first_time) / (r.n - 1) / 86400) : 0,
-    }))
-    // Каденція від ~тижня до ~кварталу (виключає щоденні однакові покупки, напр. каву).
-    .filter((r) => r.avg_interval_days >= 6 && r.avg_interval_days <= 100)
-    .filter((r) => !declaredSet.has(r.merchant.toLowerCase()))
-    .filter((r) => !dismissedSet.has(r.merchant.toLowerCase()));
-
-  return c.json(candidates);
 });
 
 // ---- events / groups (івент / проєкт / спец-день) ---------------------------
@@ -776,77 +504,6 @@ api.delete("/goals/:id/contributions/:cid", async (c) => {
   return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
 });
 
-// ---- custom categories ------------------------------------------------------
-
-api.post("/categories", async (c) => {
-  const b = await c.req.json<{ name: string; color?: string; icon?: string; parent_id?: number | null; is_income?: boolean; importance?: string | null }>();
-  if (!b.name?.trim()) return c.json({ error: "name required" }, 400);
-  const id = await categoriesRepo.create(c.env.DB, {
-    name: b.name.trim(),
-    color: b.color ?? "#6B7A74",
-    icon: b.icon ?? "dots",
-    parent_id: b.parent_id ?? null,
-    is_income: !!b.is_income,
-    importance: normImportance(b.importance),
-  });
-  return c.json({ ok: true, id });
-});
-
-// Редагувати будь-яку категорію (зокрема вбудовану): назва/колір/іконка/батько.
-// Колонки вже є (міграція 0005), нової міграції не треба. parent_id=null → верхній рівень.
-api.patch("/categories/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  const b = await c.req.json<{ name?: string; color?: string; icon?: string; parent_id?: number | null; importance?: string | null }>();
-  if (!(await categoriesRepo.exists(c.env.DB, id))) return c.json({ error: "not_found" }, 404);
-  if (b.name !== undefined && !b.name.trim()) return c.json({ error: "name required" }, 400);
-
-  await categoriesRepo.update(c.env.DB, id, {
-    ...(b.name !== undefined ? { name: b.name.trim() } : {}),
-    ...(b.color !== undefined ? { color: b.color } : {}),
-    ...(b.icon !== undefined ? { icon: b.icon } : {}),
-    ...(b.importance !== undefined ? { importance: normImportance(b.importance) } : {}),
-    ...(b.parent_id !== undefined ? { parent_id: b.parent_id } : {}),
-  });
-  return c.json({ ok: true });
-});
-
-// Видалити можна лише кастомну категорію; транзакції знеприв'язуються.
-// Скільки всього прив'язано до категорії (для діалогу «куди перенести перед видаленням»).
-api.get("/categories/:id/usage", async (c) => {
-  return c.json(await categoriesRepo.usage(c.env.DB, Number(c.req.param("id"))));
-});
-
-// Видалити категорію, перенісши всі прив'язки на іншу (reassign) або знявши їх (null).
-// Захищена лише категорія «Перекази і зняття» (13) — на ній тримається логіка бакета.
-api.delete("/categories/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  if (id === 13) return c.json({ error: st(c.get("locale"), "errTransferCatLocked") }, 400);
-  if (!(await categoriesRepo.exists(c.env.DB, id))) return c.json({ error: "not_found" }, 404);
-
-  const raw = new URL(c.req.url).searchParams.get("reassign");
-  const target = raw && raw !== "none" && Number(raw) !== id ? Number(raw) : null;
-
-  try {
-    // ORDER IS THE BEHAVIOUR: every table referencing the category is dealt with first, and the
-    // row itself goes last — the schema enforces those foreign keys, so a step moved after the
-    // delete fails. Each call is one table; what "no target" means differs per table and is
-    // documented at each function.
-    const db = c.env.DB;
-    await categoriesRepo.reassignTransactions(db, id, target);
-    await categoriesRepo.reassignTags(db, id, target);
-    await categoriesRepo.reassignAliases(db, id, target);
-    await categoriesRepo.reassignReceiptItems(db, id, target);
-    await categoriesRepo.reassignRules(db, id, target);
-    await categoriesRepo.reassignPlanned(db, id, target);
-    await categoriesRepo.reassignBudgets(db, id, target);
-    await categoriesRepo.reassignChildren(db, id, target);
-    await categoriesRepo.remove(db, id);
-    return c.json({ ok: true });
-  } catch (e) {
-    return c.json({ error: String(e instanceof Error ? e.message : e) }, 500);
-  }
-});
-
 // Режим періоду (календарний ⇄ ковзний) — єдине джерело для Головної/Статистики/AI.
 api.get("/settings/period-mode", async (c) => {
   const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
@@ -894,37 +551,6 @@ api.put("/settings/ai-models", async (c) => {
   }
   await setState(c.env.DB, `ai_model_${task}`, model);
   return c.json({ ok: true, task, model });
-});
-
-// §4 Прийдешні планові списання (підписки/розстрочки) у горизонті N днів — для віджета
-// «скоро спишеться» на Головній. Перетинає межу місяця (на відміну від forecast).
-api.get("/planned/upcoming", async (c) => {
-  const url = new URL(c.req.url);
-  const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 30), 1), 90);
-  const now = Math.floor(Date.now() / 1000);
-  const horizon = now + days * 86400;
-
-  const { nextChargeUnix, plannedUAH } = await import("../../lib/finance/subscriptions.ts");
-  const rates = await getRates(c.env.DB);
-  const planned = await planningRepo.activeWithCategory(c.env.DB);
-
-  // §CUR-PLAN: `amount` лишається у ВАЛЮТІ ПЛАНУ (щоб показати «$5», а не «≈208 ₴»),
-  // `amount_uah` — зведення для підсумків. Раніше валюта губилась і $5 ставало 5 ₴.
-  const items = planned
-    .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
-    .map((p) => ({
-      id: p.id, title: p.title,
-      amount: p.period_amount ?? 0,
-      currency_code: p.currency_code ?? 980,
-      amount_uah: plannedUAH(p.period_amount, p.currency_code, rates),
-      at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now),
-      days_until: 0,
-    }))
-    .filter((p) => p.amount > 0 && p.at <= horizon)
-    .map((p) => ({ ...p, days_until: Math.max(0, Math.round((p.at - now) / 86400)) }))
-    .sort((a, b) => a.at - b.at);
-
-  return c.json({ days, total: items.reduce((s, p) => s + p.amount_uah, 0), items });
 });
 
 // Bulk-enrich uncategorised transactions, a small batch per call (client loops).
@@ -1354,119 +980,6 @@ api.post("/events/:id/chat", async (c) => {
   }
 });
 
-// AI-план бюджету: пропозиції місячних лімітів-конвертів (приймаються на /plan).
-api.post("/budgets/propose", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { proposeBudgets } = await import("../../lib/ai/advisor.ts");
-  try {
-    return c.json(await proposeBudgets(c.env));
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
-// §3 діалоговий бюджет: чат, у якому AI пропонує/коригує ліміти й пояснює чому.
-api.post("/budgets/chat", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { messages } = await c.req.json<{ messages: { role: "user" | "assistant"; content: string }[] }>();
-  const { budgetChatReply } = await import("../../lib/ai/advisor.ts");
-  try {
-    return c.json(await budgetChatReply(c.env, normChatMessages(messages)));
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
-// ---- manual accounts (позамоно картка / крипта, §5) -------------------------
-
-const MANUAL_TYPES = new Set(["manual_card", "crypto", "cash", "jar"]);
-api.post("/accounts/manual", async (c) => {
-  const b = await c.req.json<{
-    type: string; title: string; currency_code: number; balance: number;
-    role?: "liquid" | "investment"; credit_limit?: number; ai_note?: string;
-  }>();
-  const type = MANUAL_TYPES.has(b.type) ? b.type : "manual_card";
-  const role = b.role === "investment" ? "investment" : "liquid";
-  const creditLimit = typeof b.credit_limit === "number" && b.credit_limit > 0 ? Math.round(b.credit_limit) : 0;
-  const aiNote = b.ai_note?.trim() || null;
-  const id = crypto.randomUUID();
-  const nowS = Math.floor(Date.now() / 1000);
-  await accountsRepo.createManual(c.env.DB, {
-    id, type, title: b.title, currency_code: b.currency_code, balance: b.balance,
-    credit_limit: creditLimit, role, ai_note: aiNote, updated_at: nowS,
-  });
-  // Перший зріз балансу одразу: без нього нетворт не має від чого відштовхнутись і малює
-  // рахунок так, ніби він зʼявився сьогодні.
-  await accountsRepo.recordBalance(c.env.DB, id, b.balance, nowS);
-  return c.json({ ok: true, id });
-});
-
-api.patch("/accounts/manual/:id", async (c) => {
-  const b = await c.req.json<{ balance?: number; title?: string }>();
-  const id = c.req.param("id");
-  const nowS = Math.floor(Date.now() / 1000);
-  await accountsRepo.updateManual(c.env.DB, id, b, nowS);
-  // Зріз балансу в історію → нетворт крокує по ньому назад (не плоский). Лише коли баланс змінили:
-  // перейменування — не подія балансу, і крок на графіку там означав би зміну, якої не було.
-  if (b.balance !== undefined) await accountsRepo.recordBalance(c.env.DB, id, b.balance, nowS);
-  return c.json({ ok: true });
-});
-
-// Cached rates map (currency code → UAH per unit) + last-updated, for client-side
-// ≈₴ conversion of FX cards/jars. Same source computeSummary uses.
-api.get("/rates", async (c) => {
-  return c.json(await stateRepo.rates(c.env.DB));
-});
-
-// Перейменувати рахунок (напр. банку — mono дає generic «БАНКА»). Title — лише
-// показ, тож дозволяємо для будь-якого рахунку; синк банок його вже не перезапише.
-api.patch("/accounts/:id/title", async (c) => {
-  const { title } = await c.req.json<{ title?: string }>();
-  if (!title?.trim()) return c.json({ error: "title required" }, 400);
-  await accountsRepo.rename(c.env.DB, c.req.param("id"), title.trim());
-  return c.json({ ok: true });
-});
-
-// §R3: роль рахунку (ліквідний/інвестиційний) + опис для AI. Для будь-якого рахунку.
-// + умови кредитки (statement_day/payment_day/min_payment) — живлять нагадування про платіж.
-api.patch("/accounts/:id/meta", async (c) => {
-  const b = await c.req.json<{ role?: "liquid" | "investment"; ai_note?: string; statement_day?: number | null; payment_day?: number | null; min_payment?: number | null }>();
-  // День місяця валідуємо 1..31; порожнє/некоректне → NULL (умову знято): нагадування «на 40-те
-  // число» не спрацювало б ніколи, тобто виглядало б налаштованим, будучи мертвим.
-  const dayOrNull = (v: number | null | undefined) => (typeof v === "number" && v >= 1 && v <= 31 ? Math.trunc(v) : null);
-  await accountsRepo.updateMeta(c.env.DB, c.req.param("id"), {
-    ...(b.role !== undefined ? { role: b.role === "investment" ? "investment" : "liquid" } : {}),
-    ...(b.ai_note !== undefined ? { ai_note: b.ai_note.trim() || null } : {}),
-    ...(b.statement_day !== undefined ? { statement_day: dayOrNull(b.statement_day) } : {}),
-    ...(b.payment_day !== undefined ? { payment_day: dayOrNull(b.payment_day) } : {}),
-    ...(b.min_payment !== undefined
-      ? { min_payment: typeof b.min_payment === "number" && b.min_payment > 0 ? Math.round(b.min_payment) : null } : {}),
-  });
-  return c.json({ ok: true });
-});
-
-// Архів/відновлення рахунку (is_active). Схований рахунок не показується й не входить у
-// підсумки/подушку/нетворт. Історію операцій НЕ чіпаємо — лише ховаємо рахунок зі списку.
-api.patch("/accounts/:id/active", async (c) => {
-  const { active } = await c.req.json<{ active: boolean }>();
-  await accountsRepo.setActive(c.env.DB, c.req.param("id"), active);
-  return c.json({ ok: true });
-});
-
-// Видалення РУЧНОГО рахунку — лише якщо на ньому немає операцій (інакше лишились би
-// сирітські tx / FK). Для mono-рахунків видалення нема — тільки архів вище.
-api.delete("/accounts/:id", async (c) => {
-  const id = c.req.param("id");
-  const acc = await accountsRepo.findKind(c.env.DB, id);
-  if (!acc) return c.json({ error: st(c.get("locale"), "errAccountNotFound") }, 404);
-  if (!acc.is_manual) return c.json({ error: st(c.get("locale"), "errAccountOnlyManual") }, 400);
-  if (await accountsRepo.transactionCount(c.env.DB, id) > 0) {
-    return c.json({ error: st(c.get("locale"), "errAccountHasTx") }, 400);
-  }
-  await accountsRepo.removeManual(c.env.DB, id);
-  return c.json({ ok: true });
-});
-
 // Ручний тригер проактивного TG-пушу (тест без очікування тижневого крону).
 api.post("/tg/proactive", async (c) => {
   const { runWeeklyProactive } = await import("../../lib/messaging/proactive.ts");
@@ -1482,24 +995,6 @@ api.post("/alerts/scan", async (c) => {
   const { scanAlerts } = await import("../../lib/messaging/alert.ts");
   try {
     return c.json(await scanAlerts(c.env, new URL(c.req.url).origin));
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
-// Refresh currency rates cache from public mono endpoint (call daily / on demand).
-api.post("/rates/refresh", async (c) => {
-  const { getCurrencyRates } = await import("../../lib/bank/mono.ts");
-  try {
-    const rates = await getCurrencyRates();
-    const map: Record<string, number> = {};
-    for (const r of rates) {
-      if (r.currencyCodeB === 980 && r.rateSell) map[String(r.currencyCodeA)] = r.rateSell;
-      else if (r.currencyCodeB === 980 && r.rateCross) map[String(r.currencyCodeA)] = r.rateCross;
-    }
-    await setState(c.env.DB, "rates", JSON.stringify(map));
-    await setState(c.env.DB, "rates_updated", String(Math.floor(Date.now() / 1000)));
-    return c.json({ ok: true, rates: map });
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }
