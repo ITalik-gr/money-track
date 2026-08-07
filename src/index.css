@@ -2772,6 +2772,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .chat-log2 .chat-typing span:nth-child(2) { animation-delay: 0.15s; }
 .chat-log2 .chat-typing span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes chat-dot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+/* Відповідь, що ще пишеться: курсор у кінці останнього рядка.
+   Це ТРЕТІЙ стан, а не варіант крапок — крапки означають «ще нічого не сказано», курсор означає
+   «текст іде далі». Показувати обидва разом = обіцяти другу відповідь, якої не буде.
+   `::after` на самому блоці, а не окремий елемент: markdown усередині перемальовується на КОЖНІЙ
+   дельті, і будь-яка вставлена нода мигала б разом із ним. */
+.chat-msg.assistant.streaming::after {
+  content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 2px;
+  vertical-align: text-bottom; background: var(--ink-2); animation: chat-caret 1s steps(2) infinite;
+}
+@keyframes chat-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .chat-msg.assistant.streaming::after { animation: none; } }
 .chat-retry { align-self: flex-start; margin-top: 2px; font-size: 12.5px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 2px; }
 .chat-retry:hover { text-decoration: underline; }
 .chat-empty { margin: auto; text-align: center; color: var(--muted); max-width: 460px; }

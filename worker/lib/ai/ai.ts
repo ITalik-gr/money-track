@@ -74,6 +74,99 @@ export function webSearchTool(model: string, maxUses = 4): Record<string, unknow
 
 
 
+/**
+ * Called with every text fragment as it arrives. Passing one switches a request to streaming.
+ *
+ * WHY STREAMING EXISTS HERE AND NOWHERE ELSE (2026-08-07): an agentic chat answer takes tens of
+ * seconds, and until now the user watched a spinner for all of them — the app looked hung next to
+ * every other AI product, which show the first words in about a second. Nothing about the ANSWER
+ * changes; only when the reader starts seeing it. That is why it is a callback rather than a new
+ * code path: the accumulated result, the usage accounting and `demoClamp` stay exactly as they are.
+ */
+export type OnText = (chunk: string) => void;
+
+/**
+ * Read Anthropic's SSE stream into the same shape a non-streamed response has.
+ *
+ * The reconstruction is the point: everything above the transport — the tool loop, the JSON
+ * repair, the cost counter — keeps working on `{content, usage, stop}` and never learns that the
+ * bytes arrived in pieces. Two block types have to be rebuilt from deltas: text (`text_delta`) and
+ * tool input (`input_json_delta`, whose fragments are a JSON string split at arbitrary points, so
+ * they can only be concatenated and parsed at the end).
+ */
+async function readStream(
+  res: Response,
+  onText?: OnText,
+): Promise<{ content: RawBlock[]; usage: AnthropicUsage; stop: string | null }> {
+  const blocks: RawBlock[] = [];
+  const partialJson: string[] = [];
+  const usage: AnthropicUsage = { input_tokens: 0, output_tokens: 0 };
+  let stop: string | null = null;
+
+  const reader = res.body!.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    // SSE frames are separated by a blank line; a chunk can split one anywhere, so only whole
+    // frames are consumed and the remainder stays in the buffer.
+    let sep: number;
+    while ((sep = buf.indexOf("\n\n")) !== -1) {
+      const frame = buf.slice(0, sep);
+      buf = buf.slice(sep + 2);
+      const dataLine = frame.split("\n").find((l) => l.startsWith("data:"));
+      if (!dataLine) continue;
+      let ev: Record<string, unknown>;
+      try { ev = JSON.parse(dataLine.slice(5).trim()) as Record<string, unknown>; } catch { continue; }
+
+      switch (ev.type) {
+        case "message_start": {
+          const u = (ev.message as { usage?: AnthropicUsage } | undefined)?.usage;
+          if (u) Object.assign(usage, u);
+          break;
+        }
+        case "content_block_start": {
+          const i = ev.index as number;
+          blocks[i] = { ...(ev.content_block as RawBlock) };
+          partialJson[i] = "";
+          break;
+        }
+        case "content_block_delta": {
+          const i = ev.index as number;
+          const d = ev.delta as { type?: string; text?: string; partial_json?: string };
+          if (d.type === "text_delta" && d.text) {
+            blocks[i] = { ...blocks[i], type: "text", text: (blocks[i]?.text ?? "") + d.text };
+            onText?.(d.text);
+          } else if (d.type === "input_json_delta" && d.partial_json != null) {
+            partialJson[i] = (partialJson[i] ?? "") + d.partial_json;
+          }
+          break;
+        }
+        case "content_block_stop": {
+          const i = ev.index as number;
+          if (partialJson[i]) {
+            try { blocks[i] = { ...blocks[i], input: JSON.parse(partialJson[i]) as Record<string, unknown> }; }
+            catch { /* a tool call we cannot parse is one the loop will report as failed */ }
+          }
+          break;
+        }
+        case "message_delta": {
+          stop = (ev.delta as { stop_reason?: string | null } | undefined)?.stop_reason ?? stop;
+          // Output tokens are only final here — `message_start` reports the input side.
+          const u = ev.usage as Partial<AnthropicUsage> | undefined;
+          if (u?.output_tokens != null) usage.output_tokens = u.output_tokens;
+          break;
+        }
+        case "error":
+          throw new Error(`anthropic stream: ${JSON.stringify(ev.error)}`);
+      }
+    }
+  }
+  return { content: blocks.filter(Boolean), usage, stop };
+}
+
 export async function callHaiku(
   env: Env,
   system: AnthropicContentBlock[],
@@ -126,6 +219,7 @@ export async function callHaikuMessages(
   messages: ChatMsg[],
   maxTokensIn = 700,
   modelIn: string = MODEL_FAST,
+  onText?: OnText,
 ): Promise<{ text: string; usage: AnthropicUsage; stop: string | null; capped: boolean }> {
   await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
   const { model, maxTokens } = demoClamp(env, { model: modelIn, maxTokens: maxTokensIn });
@@ -137,9 +231,18 @@ export async function callHaikuMessages(
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ model, max_tokens: maxTokens, ...thinkingOff(model), system, messages }),
+    body: JSON.stringify({
+      model, max_tokens: maxTokens, ...thinkingOff(model), system, messages,
+      ...(onText ? { stream: true } : {}),
+    }),
   });
   if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
+  if (onText) {
+    const s = await readStream(res, onText);
+    const text = s.content.filter((b) => b.type === "text").map((b) => b.text).join("");
+    await recordUsage(env, model, s.usage);
+    return { text, usage: s.usage, stop: s.stop, capped };
+  }
   const data = (await res.json()) as { content: { type: string; text?: string }[]; usage: AnthropicUsage; stop_reason?: string | null };
   const text = data.content.filter((b) => b.type === "text").map((b) => b.text).join("");
   await recordUsage(env, model, data.usage); // §Хвіст C: акумулюємо вартість усіх викликів
@@ -162,15 +265,25 @@ export async function callMessagesRaw(
   maxTokensIn: number,
   modelIn: string,
   toolsIn?: unknown[], // client-side ChatTool[] та/або серверні блоки (web_search)
+  onText?: OnText,
 ): Promise<{ content: RawBlock[]; usage: AnthropicUsage; stop: string | null }> {
   await demoAiGate(env); // P4.3: cap/deny Anthropic spend for demo sandboxes (no-op for real users)
   const { model, maxTokens, tools } = demoClamp(env, { model: modelIn, maxTokens: maxTokensIn, tools: toolsIn });
   const res = await fetch(API, {
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-    body: JSON.stringify({ model, max_tokens: maxTokens, ...thinkingOff(model), system, messages, ...(tools?.length ? { tools } : {}) }),
+    body: JSON.stringify({
+      model, max_tokens: maxTokens, ...thinkingOff(model), system, messages,
+      ...(tools?.length ? { tools } : {}),
+      ...(onText ? { stream: true } : {}),
+    }),
   });
   if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
+  if (onText) {
+    const s = await readStream(res, onText);
+    await recordUsage(env, model, s.usage);
+    return s;
+  }
   const data = (await res.json()) as { content: RawBlock[]; usage: AnthropicUsage; stop_reason?: string | null };
   await recordUsage(env, model, data.usage); // §Хвіст C: кожен виклик (вкл. tool-turns) у лічильник
   return { content: data.content ?? [], usage: data.usage, stop: data.stop_reason ?? null };
@@ -187,6 +300,11 @@ export async function runToolConversation(
   model: string,
   maxTurns = 6,
   serverTools: unknown[] = [], // §A3: серверні tools (web_search) — виконуються на боці Anthropic
+  // Streamed to the reader as it is produced. EVERY turn streams, not just the last one: which
+  // turn is final is only known after it answers, so waiting to find out would put the whole
+  // point of streaming behind the delay it exists to remove. Tool turns emit little or no text,
+  // so in practice the reader sees the answer turn.
+  onText?: OnText,
 ): Promise<{ text: string; usage: AnthropicUsage }> {
   const reqTools = [...tools, ...serverTools];
   const messages: RawMsg[] = initial.map((m) => ({ role: m.role, content: m.content }));
@@ -199,7 +317,7 @@ export async function runToolConversation(
   const textOf = (content: RawBlock[]) => content.filter((b) => b.type === "text").map((b) => b.text).join("");
 
   for (let turn = 0; turn < maxTurns; turn++) {
-    const { content, usage, stop } = await callMessagesRaw(env, system, messages, maxTokens, model, reqTools);
+    const { content, usage, stop } = await callMessagesRaw(env, system, messages, maxTokens, model, reqTools, onText);
     add(usage);
     // §A3: серверний цикл (web_search) міг паузитись — дослати ту саму розмову, щоб він завершив.
     if (stop === "pause_turn") { messages.push({ role: "assistant", content }); continue; }
@@ -220,7 +338,7 @@ export async function runToolConversation(
   }
   // Вичерпали ходи → фінальний виклик БЕЗ client-інструментів (примус тексту), але серверні
   // лишаємо: історія може містити незавершений server_tool_use, і виклик без нього дав би 400.
-  const final = await callMessagesRaw(env, system, messages, maxTokens, model, serverTools.length ? serverTools : undefined);
+  const final = await callMessagesRaw(env, system, messages, maxTokens, model, serverTools.length ? serverTools : undefined, onText);
   add(final.usage);
   return { text: textOf(final.content), usage: total };
 }

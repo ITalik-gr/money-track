@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useChatAdviceMutation, useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
+import { useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { errText } from "../lib/errors.ts";
+import { streamChat } from "../lib/aiStream.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { getLocale } from "../i18n/locale.ts";
 
@@ -67,7 +68,14 @@ function load(scope: string, adoptLegacy: boolean): Convo[] {
 // Стійка до переходу під час запиту: якщо відповідь не дійшла — «надіслати ще раз».
 export function Chat() {
   const tr = useT();
-  const [chat, { isLoading }] = useChatAdviceMutation();
+  // Відповідь стрімиться (`lib/aiStream.ts`), тож «зайнято» тримає власний стан, а не RTK Query:
+  // у мутації два стани («летить» / «прийшло»), а вся суть тут — у проміжних.
+  const [streaming, setStreaming] = useState(false);
+  // Чи вже пішов ТЕКСТ. Три різні стани, які раніше були одним: чекаємо першого слова (крапки),
+  // текст іде (курсор у кінці), готово (нічого). Крапки під уже написаною відповіддю читались би
+  // як друга відповідь, що зараз почнеться.
+  const [streamStarted, setStreamStarted] = useState(false);
+  const isLoading = streaming;
   const { data: me } = useGetMeQuery();
   // Скоуп сховища. Демо — свій спільний бакет; реальний акаунт — по id.
   const scope = me?.demo ? "demo" : (me?.user?.id ?? null);
@@ -130,6 +138,10 @@ export function Chat() {
     const ta = taRef.current;
     if (!ta) return;
     ta.style.height = "auto";
+    // ⚠️ Порожнє поле НЕ міряємо. У WebKit (iPhone) `scrollHeight` враховує ПЛЕЙСХОЛДЕР, а на
+    // вузькому екрані він переноситься на чотири рядки — тобто порожній ввід відкривався
+    // висотою в абзац, хоч `rows={1}`. `height:auto` лишає власну висоту одного рядка з CSS.
+    if (!input) { ta.style.overflowY = "hidden"; return; }
     const h = Math.min(ta.scrollHeight, 160);
     ta.style.height = `${h}px`;
     ta.style.overflowY = ta.scrollHeight > 160 ? "auto" : "hidden";
@@ -141,14 +153,51 @@ export function Chat() {
     setConvos((prev) => prev.map((c) => c.id === activeId ? { ...c, messages: updater(c.messages), updatedAt: Date.now() } : c));
   }, [activeId]);
 
+  /**
+   * Питання → відповідь, що ТЕЧЕ.
+   *
+   * Порожнє повідомлення асистента додається ОДРАЗУ й наповнюється дельтами. Це і є вся різниця
+   * для читача: перші слова зʼявляються за секунду, а не через півхвилини мовчання, протягом якої
+   * застосунок виглядав завислим поруч із будь-яким іншим AI-продуктом.
+   *
+   * Реф-накопичувач, а не стан: дельти приходять десятками за секунду, і читати «попереднє
+   * значення» зі стану в кожній з них означало б гонку з батчингом React.
+   */
   async function ask(history: Msg[], attachedTxIds: string[]) {
+    const acc = { text: "" };
+    let opened = false;
+    const put = (content: string) => setMessages((m) => {
+      const next = [...m];
+      if (opened && next.length && next[next.length - 1].role === "assistant") next[next.length - 1] = { role: "assistant", content };
+      else { next.push({ role: "assistant", content }); opened = true; }
+      return next;
+    });
+
+    setStreaming(true);
+    setStreamStarted(false);
     try {
-      const res = await chat({ messages: history, attachedTxIds }).unwrap();
-      if (mounted.current) { pinTo.current = "user"; setMessages((m) => [...m, { role: "assistant", content: res.reply }]); }
+      await streamChat("/api/advisor/chat/stream", { messages: history, attachedTxIds }, {
+        onDelta: (chunk) => {
+          acc.text += chunk;
+          if (!mounted.current) return;
+          // Пін на МОЄ питання лише при першій дельті: далі скрол мусить лишатись там, де його
+          // поставив читач, інакше сторінка смикалась би на кожному слові.
+          if (!opened) { pinTo.current = "user"; setStreamStarted(true); }
+          put(acc.text);
+        },
+        onDone: (reply) => { if (mounted.current) put(reply); },
+      });
     } catch (e) {
       // Реальна причина, не глухе «спробуй ще раз» (див. `lib/errors.ts`).
       const msg = tr("tx.chatReplyFailed", { error: errText(e) });
-      if (mounted.current) { pinTo.current = "bottom"; setMessages((m) => [...m, { role: "assistant", content: msg }]); }
+      if (mounted.current) {
+        pinTo.current = "bottom";
+        // Уже почали малювати відповідь → дописуємо помилку до неї, а не лишаємо обірваний
+        // текст, який читається як закінчена думка.
+        put(acc.text ? `${acc.text}\n\n${msg}` : msg);
+      }
+    } finally {
+      if (mounted.current) { setStreaming(false); setStreamStarted(false); }
     }
   }
 
@@ -270,7 +319,7 @@ export function Chat() {
                 const isLastUser = m.role === "user" && i === messages.length - 1;
                 return (
                   <div key={i} className={`chat-msg-wrap ${m.role}`} ref={isLastUser ? lastUserRef : undefined}>
-                    <div className={`chat-msg ${m.role}`}>{renderMarkdown(m.content)}</div>
+                    <div className={`chat-msg ${m.role}${streamStarted && i === messages.length - 1 && m.role === "assistant" ? " streaming" : ""}`}>{renderMarkdown(m.content)}</div>
                     {m.role === "assistant" && m.content && (
                       <div className="chat-msg-actions">
                         <button onClick={() => copyMsg(m.content, i)} title={tr("tx.copy")}>
@@ -285,7 +334,7 @@ export function Chat() {
                 );
               })
             )}
-            {isLoading && (
+            {isLoading && !streamStarted && (
               <div className="chat-msg assistant chat-typing"><span></span><span></span><span></span></div>
             )}
             {awaitingReply && (

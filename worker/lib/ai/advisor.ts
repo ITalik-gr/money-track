@@ -1,7 +1,7 @@
 // AI-порадник (структурований): рахуємо runway із власних коштів і місячного burn,
 // подаємо разом із профілем ситуації в Haiku → поради-картки. Кешуємо в app_state.
 import type { Env } from "../../env.ts";
-import type { ChatMsg, ChatTool } from "./ai.ts";
+import type { ChatMsg, ChatTool, OnText } from "./ai.ts";
 import { type AdviceResult, type AiFact, type BudgetChatResult, budgetChat, chatAdvice, evaluateGroup, generateAdvice, proposeBudgetLimits, txChat } from "./tasks.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
@@ -14,7 +14,6 @@ import { ownFundsMinor } from "../finance/own-funds.ts";
 import { buildWeekdayAnalytics } from "../finance/weekday.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
 import { st, num } from "../platform/i18n.ts";
-import type { Fact, FactInput as SharedFactInput } from "../../../shared/api/ai.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -719,7 +718,15 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
 
 // Чат-порадник: діалог по фінансах із контекстом (профіль + власні + burn + топ-категорії
 // + помітні транзакції з id, які AI може цитувати чипами; + прикріплені юзером операції).
-export async function chatReply(env: Env, messages: ChatMsg[], attachedTxIds: string[] = []): Promise<{ reply: string }> {
+export async function chatReply(
+  env: Env,
+  messages: ChatMsg[],
+  attachedTxIds: string[] = [],
+  // Present when the caller is streaming the answer to a reader (see `routes/api/advisor.ts`).
+  // The full text is still returned exactly as before — streaming adds a second delivery of the
+  // same words, it does not replace the return value.
+  onText?: OnText,
+): Promise<{ reply: string }> {
   // §CTX (2026-07-14): чат тепер отримує ТОЙ САМИЙ багатий знімок, що й Порадник
   // (`collectFinanceSnapshot`) — розбивка коштів, канонічний burn/runway, підписки, бюджети,
   // вагомість, тренд, разові, найближчі списання. Раніше контекст був збіднений (нетто + 90д÷3),
@@ -748,6 +755,7 @@ export async function chatReply(env: Env, messages: ChatMsg[], attachedTxIds: st
   const { text, usage } = await chatAdvice(env, context, messages, {
     tools: financeChatTools(),
     executor: (name, input) => runFinanceTool(env, name, input),
+    onText,
   });
   logUsage("chat", usage);
   return { reply: text };
@@ -933,59 +941,6 @@ export async function runFinanceTool(env: Env, name: string, input: Record<strin
   }
 
   return { error: `невідомий інструмент: ${name}` };
-}
-
-// ---- §A1: CRUD фактів для API (Порадник/Налаштування) ------------------------
-/**
- * A stored fact, i.e. the CONTRACT type.
- *
- * `adjust_kind` is narrowed to the two literals rather than `string` even though the column is a
- * plain `TEXT` with no CHECK: every write goes through `FactInput`, which already accepts only
- * those two, so a third value cannot arrive. Declaring it wider here was the sort of imprecision
- * that forced the client to hand-write its own narrower twin — defect D2 in one line.
- */
-export type FactRow = Fact;
-/** Creation input. `source` is server-side only, which is why this is not `SharedFactInput`. */
-export interface FactInput extends SharedFactInput { source?: string }
-
-export async function listFacts(env: Env): Promise<FactRow[]> {
-  const rows = await env.DB.prepare(
-    `SELECT f.id, f.text, f.effective_from, f.expires_at, f.category_id,
-            c.name AS category_name, f.adjust_kind, f.adjust_value,
-            f.confirmed_at, f.source, f.created_at
-     FROM facts f LEFT JOIN categories c ON c.id = f.category_id
-     ORDER BY f.confirmed_at IS NOT NULL, f.created_at DESC`,
-  ).all<FactRow>();
-  return rows.results ?? [];
-}
-
-export async function addFact(env: Env, f: FactInput): Promise<{ id: number | null }> {
-  const now = Math.floor(Date.now() / 1000);
-  const text = (f.text ?? "").trim();
-  if (!text) throw new Error("потрібен текст факту");
-  // Коригування числа тільки при заданій категорії.
-  const kind = f.category_id != null ? (f.adjust_kind ?? null) : null;
-  const value = kind ? (f.adjust_value ?? null) : null;
-  // Ручний факт від користувача = він сам ввів число → підтвердження за замовчуванням дозволене.
-  const confirmedAt = f.confirm !== false && kind != null ? now : null;
-  const res = await env.DB.prepare(
-    `INSERT INTO facts (text, effective_from, expires_at, category_id, adjust_kind, adjust_value, confirmed_at, source, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-  ).bind(
-    text, f.effective_from ?? now, f.expires_at ?? null, f.category_id ?? null,
-    kind, value, confirmedAt, f.source ?? "user", now,
-  ).first<{ id: number }>();
-  return { id: res?.id ?? null };
-}
-
-// Гейт підтвердження: лише підтверджений факт із коригуванням рухає числа (categoryMonthlyLevels).
-export async function confirmFact(env: Env, id: number, on: boolean): Promise<void> {
-  await env.DB.prepare("UPDATE facts SET confirmed_at = ? WHERE id = ?")
-    .bind(on ? Math.floor(Date.now() / 1000) : null, id).run();
-}
-
-export async function deleteFact(env: Env, id: number): Promise<void> {
-  await env.DB.prepare("DELETE FROM facts WHERE id = ?").bind(id).run();
 }
 
 // §GR2: спільний контекст групи — тотали, категорії всередині, транзакції (з id).

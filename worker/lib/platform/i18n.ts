@@ -194,6 +194,12 @@ const S = {
     en: "AI features need your own Anthropic key — add it in Settings → “Keys & data”.",
   },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
+  // Says the number and when it resets: "limit reached" without either forces the reader to guess
+  // whether to wait a minute or give up on the feature.
+  errReceiptQuota: {
+    uk: "Ліміт чеків на сьогодні вичерпано ({n} на добу). Наступні можна завантажити завтра.",
+    en: "Today’s receipt limit is used up ({n} per day). You can upload more tomorrow.",
+  },
   goalContribAmount: { uk: "Сума внеску має бути ненульовим числом", en: "A contribution needs a non-zero amount" },
   goalNotFound: { uk: "Ціль не знайдено", en: "Goal not found" },
   goalJarNoContrib: {

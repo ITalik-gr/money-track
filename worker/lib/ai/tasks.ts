@@ -12,7 +12,7 @@
 //  • **The model does not know what it already said.** Repetition is cured by an EXPLICIT list of
 //    what has been covered, not by asking it to "be interesting".
 import type { Env } from "../../env.ts";
-import { callHaikuMessages, runToolConversation, webSearchTool, type AnthropicContentBlock, type ChatMsg, type ChatTool, type ToolExecutor } from "./ai.ts";
+import { callHaikuMessages, runToolConversation, webSearchTool, type AnthropicContentBlock, type ChatMsg, type ChatTool, type OnText, type ToolExecutor } from "./ai.ts";
 import { isDemoEnv } from "../platform/demo.ts";
 import { buildKnowledgeCorpus } from "./knowledge/index.ts";
 import { callHaikuJson, callHaikuMessagesJson } from "./json.ts";
@@ -25,7 +25,7 @@ export async function chatAdvice(
   env: Env,
   context: unknown,
   messages: ChatMsg[],
-  opts?: { tools?: ChatTool[]; executor?: ToolExecutor },
+  opts?: { tools?: ChatTool[]; executor?: ToolExecutor; onText?: OnText },
 ): Promise<{ text: string; usage: AnthropicUsage }> {
   const today = new Date().toISOString().slice(0, 10);
   // Demo: no server-side web_search (billed per search on top of tokens) and a shorter tool loop.
@@ -96,11 +96,11 @@ export async function chatAdvice(
     // Each turn is a separate billed request AND a separate `demoAiGate` hit, so a demo sandbox
     // gets a shorter loop: 6 turns of one question could eat half its whole session allowance.
     const maxTurns = demo ? 3 : 6;
-    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model, maxTurns, serverTools);
+    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model, maxTurns, serverTools, opts.onText);
     return { text: text.trim(), usage };
   }
   // §R6/§CTX: детальні відповіді менеджера — більший ліміт виводу.
-  const { text, usage } = await callHaikuMessages(env, system, messages, 1500, model);
+  const { text, usage } = await callHaikuMessages(env, system, messages, 1500, model, opts?.onText);
   return { text: text.trim(), usage };
 }
 

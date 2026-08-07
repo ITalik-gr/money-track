@@ -6,7 +6,9 @@ ANTHROPIC_API_KEY=
 # Secret path segment for the mono webhook, e.g. a random uuid. The webhook URL
 # becomes https://<worker>/webhook/<WEBHOOK_SECRET>
 WEBHOOK_SECRET=
-# Пароль для входу в застосунок (гейт у воркері)
+# ⚠️ LEGACY. Парольного входу вже НЕМА (вхід тільки через Google, 2026-07-26). Змінна лишилась
+# єдиним фолбеком ключа підпису сесій у `lib/platform/auth.ts` — задавай SESSION_SECRET нижче,
+# а це поле лишай порожнім.
 APP_PASSWORD=
 
 # --- Мультиюзер (PLATFORM.md §3) ---------------------------------------------
@@ -29,3 +31,14 @@ SECRETS_MASTER_KEY=
 # Anthropic — останній рубіж за per-session/global капами. Не заданий → демо-AI бере звичайний
 # ключ (усе одно капнутий + примусово Haiku).
 DEMO_ANTHROPIC_KEY=
+
+# --- Telegram-бот (опційно) ---------------------------------------------------
+# Без цих трьох бот просто не активується — застосунок працює повністю, лише без пушів у TG.
+# Токен від @BotFather.
+TG_BOT_TOKEN=
+# Секретний сегмент шляху вебхука бота (/tg/<TG_SECRET>) + значення заголовка
+# X-Telegram-Bot-Api-Secret-Token. Будь-який випадковий рядок.
+TG_SECRET=
+# ⚠️ Chat_id ВЛАСНИКА і лише його. Це deployment-секрет, тож він owner-only (§D1): решта юзерів
+# привʼязують свій чат самі, через deep-link у Налаштуваннях, і їхній chat_id живе в їхньому DO.
+TG_CHAT_ID=

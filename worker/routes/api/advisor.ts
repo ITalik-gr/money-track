@@ -66,6 +66,11 @@ advisor.post("/advisor/generate", async (c) => {
 });
 
 // Чат-порадник: діалог по фінансах (клієнт тримає історію, шлемо останні ходи).
+//
+// Наш веб-клієнт із 2026-08-07 ходить у `/advisor/chat/stream` (нижче). Ця форма лишається
+// свідомо: вона віддає ОДИН JSON, тобто це те, що потрібно викликачу без стріму — і такий уже
+// існує (Telegram-бот кличе `chatReply` напряму). Обидві стоять на одній функції, тож
+// розійтись у відповідях вони не можуть.
 advisor.post("/advisor/chat", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const body = await c.req.json<{ messages?: { role: string; content: string }[]; attachedTxIds?: string[] }>();
@@ -80,15 +85,68 @@ advisor.post("/advisor/chat", async (c) => {
   }
 });
 
+/**
+ * Той самий чат, але відповідь ТЕЧЕ до читача, а не падає одним шматком у кінці.
+ *
+ * ⚠️ Літерал `/advisor/chat/stream` мусить лишатись НИЖЧЕ `/advisor/chat` за глибиною, а не за
+ * порядком: у них різна кількість сегментів, тож вони не перекриваються (лінт C7 це і перевіряє).
+ *
+ * **Формат — NDJSON, не SSE.** Тут немає нічого, заради чого потрібен `EventSource`: ані типів
+ * подій, ані реконекту, ані last-event-id. Рядок JSON на подію читається звичайним `fetch`
+ * + `getReader()`, а помилку посеред потоку можна віддати тим самим `{error}`, який `errText()`
+ * на клієнті вже вміє розгортати — тобто збій моделі на 20-й секунді лишається діагностованим,
+ * а не перетворюється на обірваний текст.
+ *
+ * Помилка ПІСЛЯ першого байта не може змінити код статусу — він уже 200. Тому вона їде тілом
+ * (`{error}`), і клієнт показує її як повідомлення, а не як мовчазний обрив.
+ */
+advisor.post("/advisor/chat/stream", async (c) => {
+  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
+  const body = await c.req.json<{ messages?: { role: string; content: string }[]; attachedTxIds?: string[] }>();
+  const msgs = normChatMessages(body.messages);
+  if (!msgs.length) return c.json({ error: "messages required" }, 400);
+  const attached = Array.isArray(body.attachedTxIds) ? body.attachedTxIds.filter((x) => typeof x === "string").slice(0, 10) : [];
+
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const enc = new TextEncoder();
+  const send = (o: unknown) => writer.write(enc.encode(JSON.stringify(o) + "\n"));
+
+  c.executionCtx.waitUntil((async () => {
+    try {
+      const { chatReply } = await import("../../lib/ai/advisor.ts");
+      const { reply } = await chatReply(c.env, msgs, attached, (t) => { void send({ delta: t }); });
+      // The whole text is sent again at the end, and deliberately: a client that joined late, or
+      // dropped a chunk, must not be left holding a half-sentence it cannot tell from a finished
+      // one. The client replaces what it accumulated with this.
+      await send({ done: true, reply });
+    } catch (e) {
+      await send({ error: e instanceof Error ? e.message : String(e) });
+    } finally {
+      await writer.close();
+    }
+  })());
+
+  return new Response(readable, {
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store",
+      // Nothing between here and the browser may buffer the answer into one chunk — that would
+      // reinstate exactly the wait this endpoint exists to remove.
+      "x-accel-buffering": "no",
+    },
+  });
+});
+
 // §A1: шар фактів про світ. Список / додати (ручний) / підтвердити-скасувати / видалити.
 // Гейт: лише confirmed факт із коригуванням рухає числа (categoryMonthlyLevels).
 advisor.get("/facts", async (c) => {
-  const { listFacts } = await import("../../lib/ai/advisor.ts");
+  const { listFacts } = await import("../../lib/ai/facts.ts");
   return c.json(await listFacts(c.env) satisfies Fact[]);
 });
 
 advisor.post("/facts", async (c) => {
-  const { addFact } = await import("../../lib/ai/advisor.ts");
+  const { addFact } = await import("../../lib/ai/facts.ts");
   const b = await c.req.json<{
     text?: string; effective_from?: number; expires_at?: number | null;
     category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
@@ -103,14 +161,14 @@ advisor.post("/facts", async (c) => {
 });
 
 advisor.post("/facts/:id/confirm", async (c) => {
-  const { confirmFact } = await import("../../lib/ai/advisor.ts");
+  const { confirmFact } = await import("../../lib/ai/facts.ts");
   const on = (await c.req.json<{ on?: boolean }>().catch(() => ({ on: true }))).on !== false;
   await confirmFact(c.env, Number(c.req.param("id")), on);
   return c.json({ ok: true });
 });
 
 advisor.delete("/facts/:id", async (c) => {
-  const { deleteFact } = await import("../../lib/ai/advisor.ts");
+  const { deleteFact } = await import("../../lib/ai/facts.ts");
   await deleteFact(c.env, Number(c.req.param("id")));
   return c.json({ ok: true });
 });

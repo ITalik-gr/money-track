@@ -43,10 +43,13 @@ const EXCEPTIONS = {
   "worker/routes/api/analytics.ts": 720,
   // Predates the split: the Telegram bot's command surface, still holding 3 inline queries too.
   "worker/routes/telegram.ts": 420,
-  // The AI adviser: the finance snapshot, the chat, budgets, facts, and the deterministic
+  // The AI adviser: the finance snapshot, the chat, the chat's tools, and the deterministic
   // fallback advice. The snapshot alone is the single source every AI screen reads, so splitting
   // it is a design decision — recorded rather than done.
-  "worker/lib/ai/advisor.ts": 1120,
+  // 1120 → 1080 (2026-08-07): streaming pushed the file over its allowance, and instead of
+  // raising the number the §A1 facts CRUD moved to `lib/ai/facts.ts` — where it belonged anyway,
+  // since it is plain CRUD with no advice logic in it. Second time C3 has forced that call.
+  "worker/lib/ai/advisor.ts": 1080,
   // The notification centre: one drafting function per event kind, plus the Telegram push.
   "worker/lib/messaging/notify.ts": 1000,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says

@@ -87,6 +87,7 @@ runs all of them.
 | C4 | client declares no API response types of its own | working around C2 | `scripts/check-api-contract.mjs` |
 | C5 | golden `/analytics` responses match to the kopeck | silent money regressions | `worker/test/golden.test.ts` |
 | C6 | golden DATABASE STATE after every write endpoint | silent regressions in writes, where the response says nothing | `worker/test/writes.test.ts` |
+| C7 | no literal route below a parameterised one that matches it; one prefix, one file | an endpoint silently unreachable — a real past outage | `scripts/check-route-order.mjs` |
 
 Two things learned about the checks themselves:
 
@@ -98,6 +99,10 @@ Two things learned about the checks themselves:
   hour it landed: adding `/analytics/weekday` pushed `routes/api/analytics.ts` over its allowance,
   and instead of raising the number the net-worth reconstruction moved to `lib/finance/networth.ts`
   — which is where reconstruction belonged anyway.
+- **C7 exists because the split made a claim that nobody could keep by hand.** "One file owns a
+  whole prefix, so route ordering is checkable by reading one file" is true and useless if the
+  reading never happens. It found nothing on the day it landed — which is the answer the security
+  pass needed, and now it is an answer that stays true without being re-derived.
 
 **Re-recording a golden** (`UPDATE_GOLDEN=1 npm test`) is only for a deliberate, explained
 behaviour change. A red test is never "fixed" by re-recording — and the two fixture defects found
@@ -167,10 +172,19 @@ the order.
       its generated embed). A third party's first name, attached to a money transfer, went with
       them. The lesson is preserved everywhere; only the number is gone.
 - [x] **`HISTORY.md` verified to be in `.gitignore`** — the internal history was never published.
-- [ ] **Full git-history secret scan** (`gitleaks`/`trufflehog`, all branches). `git log -S` is not
-      proof — it matches one pattern out of many.
-- [ ] **`.dev.vars.example`** — verify it is complete and holds no real values.
-- [ ] **Re-run `/security-review`** (item 4 above).
+- [x] **`.dev.vars.example`** — checked 2026-08-07: no real values, and never was (`.dev.vars`
+      itself has never been committed). Two gaps fixed: the three Telegram variables were missing
+      entirely, and `APP_PASSWORD` still described itself as the login password although password
+      login was removed in July — a stranger following the file would have configured a broken bot
+      and set a variable that means something else now.
+- [x] **Perimeter re-audit after the refactor** — done 2026-08-07, findings in `CLAUDE.md §Безпека`.
+      The relocation itself introduced nothing: gates, headers, forwarding and the new `repo/`
+      layer all hold. C7 was added so the one property the split relies on is machine-checked.
+- [x] **Full git-history secret scan** — `gitleaks` over all branches, run by the owner
+      2026-08-07: clean. (A pattern sweep for the known key shapes had already found nothing, but
+      that was never equivalent — it only matches the shapes one thinks of.)
+- [x] **Per-user quota on receipt uploads** — `lib/platform/quota.ts`, 60/day, counted in the
+      user's own `app_state`. The last open item from the perimeter pass.
 
 **Closed as owner's decisions (2026-08-03):** git history is not rewritten — the removed figures
 stay in old commits, and a force-push on a public repo costs more than the partial gain, since
