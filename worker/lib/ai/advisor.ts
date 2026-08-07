@@ -11,6 +11,8 @@ import { nextChargeUnix, plannedUAH, monthlyPlannedUAH, sumMonthlyPlannedUAH } f
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm } from "../finance/stats.ts";
 import { ownerLocale } from "../finance/categories-i18n.ts";
 import { ownFundsMinor } from "../finance/own-funds.ts";
+import { buildWeekdayAnalytics } from "../finance/weekday.ts";
+import * as analyticsRepo from "../../repo/analytics.ts";
 import { st, num } from "../platform/i18n.ts";
 import type { Fact, FactInput as SharedFactInput } from "../../../shared/api/ai.ts";
 
@@ -183,7 +185,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
 
   const rates = ratesIn ?? await getRates(env.DB); // §D5: приймаємо вже прочитаний знімок
   const { mult } = valueMode(rates, null); // канонічно, зведено в ₴
-  const [funds, levels, cats, merchants, events, importance, trend, budgetRows, monthByCat, prevMonthByCat, subsAgg, split, upcomingRows] = await Promise.all([
+  const [funds, levels, cats, merchants, events, importance, trend, budgetRows, monthByCat, prevMonthByCat, subsAgg, split, upcomingRows, weekdayRows] = await Promise.all([
     fundsBreakdown(env, rates), // §D5: той самий знімок курсів, що й решта цього контексту
     // P1: канонічний місячний рівень категорій — джерело і для avg_month, і для burn (sumLevels).
     categoryMonthlyLevels(env, mult, { now }),
@@ -257,8 +259,13 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     env.DB.prepare(
       `SELECT title, period, period_count, start_date, period_amount, currency_code, kind FROM planned_payments WHERE is_active = 1`,
     ).all<{ title: string; period: string; period_count: number; start_date: number; period_amount: number | null; currency_code: number | null; kind: string }>(),
+    // §WEEKDAY: коли саме йдуть гроші. Той самий репозиторій, що живить екран — інакше порадник
+    // і Статистика назвали б різні «найдорожчі дні», що для читача виглядає як помилка в одному
+    // з них, а насправді є двома визначеннями одного числа.
+    analyticsRepo.spendByWeekday(env.DB, { mult, curFilter: "" }, { from: from90, to: now }, now),
   ]);
 
+  const weekday = buildWeekdayAnalytics(weekdayRows, from90, now);
   const ownFunds = funds.net;
   // P1 (2026-07-14): burn = сума місячних рівнів категорій (канон), а не «витрати_90д ÷ 3».
   // Узгоджено з Патернами/Бюджетами; не роздувається разовими лумпами (податок/лікар).
@@ -372,6 +379,12 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     subscriptions: subsItems,
     subscriptions_note: "subscriptions — ОГОЛОШЕНІ регулярні платежі користувача (planned_payments) з їхньою категорією; monthly_uah уже усереднено на місяць (квартальний план = третина суми, тижневий ≈ 4.3). ⚠️ Підписка НЕ дорівнює категорії «Підписки»: інтернет може лежати в «Комуналці», хмара — в «Софті», страховка — в «Здоровʼї». Коли говориш про регулярні платежі, спирайся на цей список і на subscriptions_monthly_uah, а НЕ на суму категорії «Підписки» з top_categories — вона менша й описує інше.",
     upcoming_charges: upcoming,
+    // §WEEKDAY: типовий день тижня за 90 днів. `lumpy` дні модель має ІГНОРУВАТИ як поведінку —
+    // це дата списання оренди, а не звичка; прапорець їде разом із числом саме тому.
+    weekday: weekday.days.map((d) => ({
+      dow: d.dow, typical_uah: Math.round(d.typical / 100), operations: d.n, one_payment: d.lumpy,
+    })),
+    weekday_note: "weekday — витрати за днями тижня за 90 днів; dow: 0=неділя … 6=субота. typical_uah — СЕРЕДНЄ на такий день (сума ділена на кількість таких днів у вікні), тож дні порівнянні між собою. ⚠️ one_payment=true означає, що майже вся сума дня — ОДИН платіж (оренда, податок): це про дату списання, а не про поведінку — не називай такий день «дорогим» і не радь «витрачати менше по цих днях». busiest_day/weekend_share рахуй лише по днях з one_payment=false.",
     top_categories: (cats.results ?? []).map((c) => ({ id: c.id, name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: catAvgMonth(c.id, c.spent) })),
     top_merchants: (merchants.results ?? []).map((m) => ({ merchant: m.merchant, spent_90d_uah: Math.round(m.spent / 100), avg_month_uah: Math.round(m.spent / 3 / 100) })),
     by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), avg_month_uah: Math.round(e.spent / 3 / 100) })),
