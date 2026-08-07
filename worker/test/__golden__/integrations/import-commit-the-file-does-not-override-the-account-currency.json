@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "body": {
+    "ok": true,
+    "inserted": 2,
+    "duplicates": 0,
+    "skipped": 2
+  },
+  "db": {
+    "imported": [
+      {
+        "id": "csv_76d864931f4a7a42f923fe9976fe978e",
+        "account_id": "acc-usd",
+        "source": "import",
+        "time": 1777593600,
+        "amount": -25000,
+        "currency_code": 840,
+        "mcc": 5411,
+        "merchant": "Сільпо",
+        "comment": null,
+        "category_id": 1,
+        "is_transfer": 0
+      },
+      {
+        "id": "csv_3a694ba173f723e89a9635140554db1b",
+        "account_id": "acc-usd",
+        "source": "import",
+        "time": 1777680000,
+        "amount": 1000000,
+        "currency_code": 840,
+        "mcc": 4829,
+        "merchant": "Зарплата",
+        "comment": null,
+        "category_id": 13,
+        "is_transfer": 0
+      }
+    ]
+  }
+}

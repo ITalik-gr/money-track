@@ -53,9 +53,13 @@ export async function syncAccounts(db: AppDb, info: MonoClientInfo): Promise<voi
         .prepare(
           // Title беремо лише при першому інсерті — ручне перейменування банки має
           // пережити наступний синк (mono віддає generic «БАНКА»).
+          // COALESCE, а не пропуск: рядок міг зʼявитись заглушкою з вебхука (див. upsertMonoTx),
+          // і тоді title/type порожні — їх треба ЗАПОВНИТИ, але не перетерти те, що вже є.
           `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, is_manual, is_active, updated_at)
            VALUES (?, 'jar', ?, ?, ?, 0, 0, 1, ?)
            ON CONFLICT(id) DO UPDATE SET
+             type=COALESCE(accounts.type, excluded.type),
+             title=COALESCE(accounts.title, excluded.title),
              currency_code=excluded.currency_code,
              balance=excluded.balance, updated_at=excluded.updated_at`,
         )
@@ -83,6 +87,31 @@ export async function upsertMonoTx(
     .prepare("SELECT currency_code FROM accounts WHERE id = ?")
     .bind(accountId)
     .first<{ currency_code: number | null }>();
+
+  // An event may arrive for an account we have never synced — the user opens a new card or jar
+  // and monobank pushes its first operation before the app has fetched client-info. Since
+  // `transactions.account_id` is `NOT NULL REFERENCES accounts(id)` and the Durable Object
+  // enforces foreign keys, the insert below used to fail with a 500 and the operation was LOST
+  // until monobank happened to retry — i.e. whether money appeared in the app depended on
+  // someone else's retry policy. So we mint a STUB row instead: identity only, everything else
+  // left NULL for the next `syncAccounts` to fill in.
+  //
+  // `title`/`type` are deliberately NULL rather than a placeholder string: the client already
+  // falls back to a type label when the title is empty, and a real-looking made-up name would
+  // survive as data. The currency is the one honest guess we can make — `item.currencyCode` is
+  // the OPERATION currency, which equals the account's in the common case and is the same value
+  // the transaction itself falls back to below, so the row and its account cannot disagree.
+  if (!acc) {
+    await db
+      .prepare(
+        `INSERT INTO accounts (id, currency_code, balance, credit_limit, is_manual, is_active, updated_at)
+         VALUES (?, ?, ?, 0, 0, 1, ?)
+         ON CONFLICT(id) DO NOTHING`,
+      )
+      .bind(accountId, item.currencyCode, item.balance ?? 0, Math.floor(Date.now() / 1000))
+      .run();
+  }
+
   const accountCurrency = acc?.currency_code ?? item.currencyCode;
 
   const { category_id, display_name, is_transfer, real_category_id, planned_id } = await categorize(db, {

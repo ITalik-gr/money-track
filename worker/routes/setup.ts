@@ -6,6 +6,7 @@ import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { MonoRateLimit } from "../lib/bank/mono.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
+import { rowCounts } from "../repo/state.ts";
 import { type Cursor, CURSOR_KEY, startBackfill, stepBackfill } from "../lib/bank/backfill.ts";
 
 export const setup = new Hono<{ Bindings: Env }>();
@@ -159,8 +160,7 @@ setup.post("/merchants/translit", async (c) => {
 setup.get("/status", async (c) => {
   const webhook = await getState(c.env.DB, "webhook_url");
   const raw = await getState(c.env.DB, CURSOR_KEY);
-  const accounts = await c.env.DB.prepare("SELECT COUNT(*) n FROM accounts").first<{ n: number }>();
-  const txCount = await c.env.DB.prepare("SELECT COUNT(*) n FROM transactions").first<{ n: number }>();
+  const counts = await rowCounts(c.env.DB);
   const cursor: Cursor | null = raw ? JSON.parse(raw) : null;
   // How many foreign-currency rates are cached. The first-run checklist needs to know whether the
   // "refresh rates" step has ever succeeded, and `app_state` stores no timestamps — presence of
@@ -170,8 +170,8 @@ setup.get("/status", async (c) => {
   try { rates = ratesRaw ? Object.keys(JSON.parse(ratesRaw) as Record<string, number>).length : 0; } catch { rates = 0; }
   return c.json({
     webhookRegistered: !!webhook,
-    accounts: accounts?.n ?? 0,
-    transactions: txCount?.n ?? 0,
+    accounts: counts.accounts,
+    transactions: counts.transactions,
     rates,
     backfill: cursor ? { progress: cursor.idx, total: cursor.total, done: cursor.idx >= cursor.total } : null,
   });

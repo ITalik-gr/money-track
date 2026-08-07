@@ -1,0 +1,9 @@
+{
+  "status": 400,
+  "body": {
+    "error": "empty_file"
+  },
+  "db": {
+    "imported": []
+  }
+}

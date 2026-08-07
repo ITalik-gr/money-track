@@ -1,8 +1,22 @@
 {
-  "status": 500,
-  "body": "Internal Server Error",
+  "status": 200,
+  "body": "ok",
   "db": {
     "transactions": [
+      {
+        "id": "hook-orphan",
+        "account_id": "acc-unknown",
+        "time": 1778000000,
+        "amount": -25000,
+        "currency_code": 980,
+        "mcc": 5411,
+        "merchant": "Сільпо",
+        "comment": null,
+        "hold": 0,
+        "balance_after": 500000,
+        "category_id": 1,
+        "is_transfer": 0
+      },
       {
         "id": "pair-in",
         "account_id": "acc-jar",
@@ -1099,27 +1113,62 @@
     "accounts": [
       {
         "id": "acc-cred",
+        "type": "black",
+        "title": "Кредитка",
+        "currency_code": 980,
         "balance": 20000,
+        "is_manual": 0,
+        "is_active": 1,
         "updated_at": 1778749200
       },
       {
         "id": "acc-inv",
+        "type": "crypto",
+        "title": "Крипта",
+        "currency_code": 840,
         "balance": 120000,
+        "is_manual": 0,
+        "is_active": 1,
         "updated_at": 1778749200
       },
       {
         "id": "acc-jar",
+        "type": "jar",
+        "title": "Банка",
+        "currency_code": 980,
         "balance": 300000,
+        "is_manual": 0,
+        "is_active": 1,
         "updated_at": 1778749200
       },
       {
         "id": "acc-uah",
+        "type": "black",
+        "title": "Картка ₴",
+        "currency_code": 980,
         "balance": 450000,
+        "is_manual": 0,
+        "is_active": 1,
+        "updated_at": 1778749200
+      },
+      {
+        "id": "acc-unknown",
+        "type": null,
+        "title": null,
+        "currency_code": 980,
+        "balance": 500000,
+        "is_manual": 0,
+        "is_active": 1,
         "updated_at": 1778749200
       },
       {
         "id": "acc-usd",
+        "type": "fop",
+        "title": "Рахунок $",
+        "currency_code": 840,
         "balance": 80000,
+        "is_manual": 0,
+        "is_active": 1,
         "updated_at": 1778749200
       }
     ]

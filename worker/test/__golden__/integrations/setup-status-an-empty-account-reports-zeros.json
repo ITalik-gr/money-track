@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "body": {
+    "webhookRegistered": false,
+    "accounts": 0,
+    "transactions": 0,
+    "rates": 0,
+    "backfill": null
+  },
+  "db": {
+    "imported": []
+  }
+}

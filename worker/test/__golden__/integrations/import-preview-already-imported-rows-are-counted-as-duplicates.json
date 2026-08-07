@@ -1,0 +1,101 @@
+{
+  "status": 200,
+  "body": {
+    "delimiter": ";",
+    "headers": [
+      "Дата",
+      "Опис",
+      "Сума",
+      "MCC"
+    ],
+    "sample": [
+      [
+        "01.05.2026",
+        "Сільпо",
+        "-250,00",
+        "5411"
+      ],
+      [
+        "02.05.2026",
+        "Зарплата",
+        "10000,00",
+        "4829"
+      ],
+      [
+        "не дата",
+        "Аптека",
+        "-100,00",
+        "5912"
+      ],
+      [
+        "04.05.2026",
+        "Нульова",
+        "0,00",
+        "5411"
+      ]
+    ],
+    "total_rows": 4,
+    "mapping": {
+      "date": 0,
+      "amount": 2,
+      "description": 1,
+      "mcc": 3
+    },
+    "complete": true,
+    "parsed": 2,
+    "duplicates": 2,
+    "skipped": [
+      {
+        "line": 4,
+        "reason": "не розпізнав дату: «не дата»"
+      },
+      {
+        "line": 5,
+        "reason": "нульова сума"
+      }
+    ],
+    "skipped_total": 2,
+    "preview": [
+      {
+        "time": 1777593600,
+        "amount": -25000,
+        "description": "Сільпо"
+      },
+      {
+        "time": 1777680000,
+        "amount": 1000000,
+        "description": "Зарплата"
+      }
+    ]
+  },
+  "db": {
+    "imported": [
+      {
+        "id": "csv_dff523a67ab89275fb9c1fbf80bba0df",
+        "account_id": "acc-uah",
+        "source": "import",
+        "time": 1777593600,
+        "amount": -25000,
+        "currency_code": 980,
+        "mcc": 5411,
+        "merchant": "Сільпо",
+        "comment": null,
+        "category_id": 1,
+        "is_transfer": 0
+      },
+      {
+        "id": "csv_4f1482bf9c28baf0b626e9d0b6cd1ba1",
+        "account_id": "acc-uah",
+        "source": "import",
+        "time": 1777680000,
+        "amount": 1000000,
+        "currency_code": 980,
+        "mcc": 4829,
+        "merchant": "Зарплата",
+        "comment": null,
+        "category_id": 13,
+        "is_transfer": 0
+      }
+    ]
+  }
+}

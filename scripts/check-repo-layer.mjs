@@ -39,10 +39,13 @@ const SERVICES = "worker/services";
 const BUDGET = {
   // `api.ts` is GONE from this map (2026-08-05): it went 179 → 0 and is now under the flat ban,
   // which is the point of the whole exercise. A route can no longer reach for SQL at all.
-  "import.ts": 3,
+  // `import.ts` and `setup.ts` joined it on 2026-08-07, once `worker/test/integrations.test.ts`
+  // could prove the CSV import and the first-run status still behave — the rule for this tail was
+  // never "move it eventually", it was "no query moves before something can catch a mistake",
+  // because a mistake here is a transaction that silently never arrives.
+  // `webhook.ts` followed the same day: its two queries were the last ones the ingest suite
+  // already covered end to end.
   "telegram.ts": 3,
-  "setup.ts": 2,
-  "webhook.ts": 2,
 };
 
 /** Count real call sites, ignoring comment lines so prose about `.prepare()` is not a violation. */

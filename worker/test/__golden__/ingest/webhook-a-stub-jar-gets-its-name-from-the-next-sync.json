@@ -4,17 +4,17 @@
   "db": {
     "transactions": [
       {
-        "id": "hook-in",
-        "account_id": "acc-uah",
+        "id": "hook-jar",
+        "account_id": "jar-new",
         "time": 1778000000,
-        "amount": 1000000,
+        "amount": 100000,
         "currency_code": 980,
-        "mcc": 4829,
-        "merchant": "Зарплата",
+        "mcc": 5411,
+        "merchant": "Сільпо",
         "comment": null,
         "hold": 0,
         "balance_after": 500000,
-        "category_id": 13,
+        "category_id": 1,
         "is_transfer": 0
       },
       {
@@ -1146,7 +1146,7 @@
         "type": "black",
         "title": "Картка ₴",
         "currency_code": 980,
-        "balance": 500000,
+        "balance": 450000,
         "is_manual": 0,
         "is_active": 1,
         "updated_at": 1778749200
@@ -1157,6 +1157,16 @@
         "title": "Рахунок $",
         "currency_code": 840,
         "balance": 80000,
+        "is_manual": 0,
+        "is_active": 1,
+        "updated_at": 1778749200
+      },
+      {
+        "id": "jar-new",
+        "type": "jar",
+        "title": "На квартиру",
+        "currency_code": 980,
+        "balance": 100000,
         "is_manual": 0,
         "is_active": 1,
         "updated_at": 1778749200

@@ -68,6 +68,28 @@ function buildWhere(f: FeedFilter): { clause: string; binds: unknown[] } {
 }
 
 /**
+ * The columns of `transactions` the FEED sends. Exactly the `t.*` half of `TxRow` — the joined
+ * display columns are added by the query below.
+ *
+ * **Why this list exists instead of `t.*`.** The feed used to send all 31 columns while `TxRow`
+ * declares 21 of them, so a quarter of the response was fields only the detail screen reads:
+ * `raw_json` above all, which on a real monobank operation is the bank's entire payload, shipped
+ * on every row of a list that never shows it (measured: 24% of the response on the test fixture,
+ * more in production). The type could not catch this — `satisfies` proves every declared field is
+ * PRESENT, not that nothing else is, because the excess-property check only fires for object
+ * literals and this is a row spread out of the database.
+ *
+ * So: adding a column to the table no longer widens this response by itself. A field that the
+ * list genuinely needs is added here AND to `TxRow`, together.
+ */
+const FEED_COLUMNS = [
+  "id", "account_id", "source", "time", "amount", "currency_code",
+  "original_amount", "original_currency", "mcc", "category_id", "merchant",
+  "comment", "user_note", "hold", "is_transfer", "real_category_id",
+  "transfer_pair_id", "planned_id", "event_id", "importance", "reimbursed",
+].map((c) => `t.${c}`).join(", ");
+
+/**
  * The transaction feed, newest first, with the display joins the list needs.
  *
  * The self-join on `transfer_pair_id` resolves the other leg of a transfer into a
@@ -81,7 +103,7 @@ export async function listFeed(
 ): Promise<TxRow[]> {
   const { clause, binds } = buildWhere(filter);
   const r = await db.prepare(
-    `SELECT t.*, ${catNameSql(locale, "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
+    `SELECT ${FEED_COLUMNS}, ${catNameSql(locale, "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
             a.title AS account_title, e.name AS event_name, e.color AS event_color,
             ap.title AS pair_account_title
      FROM transactions t
@@ -184,6 +206,42 @@ export async function pendingEnrichCount(db: AppDb): Promise<number> {
     "SELECT COUNT(*) AS n FROM transactions WHERE source = 'mono' AND ai_enriched = 0 AND category_id IS NULL AND hold = 0",
   ).first<{ n: number }>();
   return r?.n ?? 0;
+}
+
+/**
+ * The three fields that decide whether a freshly stored operation needs the AI.
+ *
+ * Read right after the write rather than inferred from what was written: the deterministic
+ * categoriser may have matched an alias, a subscription or an MCC rule during the insert, and
+ * calling a model for a row that already has a category is money spent to learn nothing.
+ */
+export async function enrichStatusOf(
+  db: AppDb, id: string,
+): Promise<{ category_id: number | null; ai_enriched: number; hold: number } | null> {
+  return await db.prepare("SELECT category_id, ai_enriched, hold FROM transactions WHERE id = ?")
+    .bind(id).first<{ category_id: number | null; ai_enriched: number; hold: number }>();
+}
+
+/**
+ * How many of these ids are already stored — the CSV import's duplicate count.
+ *
+ * Chunked at 100 because the ids come from a file the user chose: a decade of statements is one
+ * `IN (…)` list otherwise, and SQLite has a hard ceiling on bound parameters. The chunk size is
+ * the query's business, which is why the loop lives here rather than in the handler.
+ *
+ * Counted BEFORE writing, deliberately: "imported 0 of 300" after the fact reads as a failure
+ * when it is the correct answer for a statement that was already imported.
+ */
+export async function countExisting(db: AppDb, ids: string[]): Promise<number> {
+  let found = 0;
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const row = await db.prepare(
+      `SELECT COUNT(*) AS n FROM transactions WHERE id IN (${chunk.map(() => "?").join(",")})`,
+    ).bind(...chunk).first<number>("n");
+    found += Number(row ?? 0);
+  }
+  return found;
 }
 
 // ---- §SPLIT ------------------------------------------------------------------

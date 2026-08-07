@@ -1,0 +1,24 @@
+{
+  "status": 200,
+  "body": {
+    "delimiter": ";",
+    "headers": [
+      "col1",
+      "col2",
+      "col3"
+    ],
+    "sample": [
+      [
+        "a",
+        "b",
+        "c"
+      ]
+    ],
+    "total_rows": 1,
+    "mapping": {},
+    "complete": false
+  },
+  "db": {
+    "imported": []
+  }
+}

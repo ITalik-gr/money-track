@@ -15,6 +15,8 @@ import {
   type ColumnMapping,
 } from "../lib/bank/providers/csv.ts";
 import { ownerLocale } from "../lib/finance/categories-i18n.ts";
+import { findForImport } from "../repo/accounts.ts";
+import { countExisting } from "../repo/transactions.ts";
 
 export const importRoutes = new Hono<{ Bindings: Env }>();
 
@@ -54,11 +56,7 @@ importRoutes.post("/csv/preview", async (c) => {
     });
   }
 
-  const account = body.account_id
-    ? await c.env.DB.prepare("SELECT id, currency_code FROM accounts WHERE id = ?")
-        .bind(body.account_id)
-        .first<{ id: string; currency_code: number | null }>()
-    : null;
+  const account = body.account_id ? await findForImport(c.env.DB, body.account_id) : null;
 
   const { txs, skipped } = await toCanonical(
     rows,
@@ -71,19 +69,9 @@ importRoutes.post("/csv/preview", async (c) => {
 
   // Which of these rows are already in the database. Shown BEFORE writing, because "imported
   // 0 of 300" after the fact reads as a failure when it is actually a correct no-op.
-  let duplicates = 0;
-  if (account && txs.length) {
-    const ids = txs.map((t) => t.id);
-    for (let i = 0; i < ids.length; i += 100) {
-      const chunk = ids.slice(i, i + 100);
-      const row = await c.env.DB.prepare(
-        `SELECT COUNT(*) AS n FROM transactions WHERE id IN (${chunk.map(() => "?").join(",")})`,
-      )
-        .bind(...chunk)
-        .first<number>("n");
-      duplicates += Number(row ?? 0);
-    }
-  }
+  const duplicates = account && txs.length
+    ? await countExisting(c.env.DB, txs.map((t) => t.id))
+    : 0;
 
   return c.json({
     delimiter,
@@ -106,9 +94,7 @@ importRoutes.post("/csv/commit", async (c) => {
   if (body.text.length > MAX_CHARS) return c.json({ error: "file_too_large" }, 400);
   if (!body.account_id) return c.json({ error: "account_required" }, 400);
 
-  const account = await c.env.DB.prepare("SELECT id, currency_code FROM accounts WHERE id = ?")
-    .bind(body.account_id)
-    .first<{ id: string; currency_code: number | null }>();
+  const account = await findForImport(c.env.DB, body.account_id);
   if (!account) return c.json({ error: "unknown_account" }, 400);
 
   const delimiter = body.delimiter || detectDelimiter(body.text);

@@ -23,6 +23,8 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { webhook } from "../routes/webhook.ts";
+import { syncAccounts } from "../lib/finance/repo.ts";
+import type { MonoClientInfo } from "../lib/bank/mono.ts";
 import { migratedDb, testEnv, freezeTime, type MemDb } from "./harness.ts";
 import { seed, FROZEN_NOW_ISO } from "./fixture.ts";
 
@@ -45,7 +47,11 @@ function probe(db: MemDb): Record<string, unknown> {
       `SELECT id, account_id, time, amount, currency_code, mcc, merchant, comment, hold,
               balance_after, category_id, is_transfer
        FROM transactions ORDER BY id`),
-    accounts: rows(db, "SELECT id, balance, updated_at FROM accounts ORDER BY id"),
+    // `type`/`title`/`currency_code` are in the probe because the webhook can now CREATE an
+    // account (the stub for an un-synced one), so "which row exists and how complete is it"
+    // became part of what this path decides — not just the balance on a row that already existed.
+    accounts: rows(db,
+      "SELECT id, type, title, currency_code, balance, is_manual, is_active, updated_at FROM accounts ORDER BY id"),
   };
 }
 
@@ -72,6 +78,8 @@ interface Scenario {
   name: string;
   /** One event, or a sequence delivered in order — a hold and its settlement are two events. */
   body: unknown | unknown[];
+  /** Client-info to sync AFTER the events, for the cases where the repair is the point. */
+  sync?: MonoClientInfo;
 }
 
 const SCENARIOS: Scenario[] = [
@@ -116,12 +124,40 @@ const SCENARIOS: Scenario[] = [
     body: { type: "StatementItem", data: { account: "acc-uah" } },
   },
   {
-    // ⚠️ CHARACTERIZATION, NOT ENDORSEMENT. `transactions.account_id` is `NOT NULL REFERENCES
-    // accounts(id)` and foreign keys are enforced in the Durable Object too, so an event for an
-    // account we have not synced yet fails with a 500 and the row is LOST until monobank retries.
-    // Nobody knew this; it is filed in ROADMAP.md. Recorded here so a fix is a visible diff.
-    name: "webhook: an event for an unknown account is rejected by the foreign key",
+    // An event for an account we have never synced — a card or jar opened minutes ago. This used
+    // to be a 500 and the operation was LOST until monobank happened to retry, i.e. whether the
+    // money showed up depended on someone else's retry policy. Now the account is minted as a
+    // stub so the transaction always lands; identity only, the rest NULL.
+    name: "webhook: an event for an unknown account mints a stub account",
     body: { type: "StatementItem", data: { account: "acc-unknown", statementItem: statementItem({ id: "hook-orphan" }) } },
+  },
+  {
+    // The half that makes the stub acceptable: it is TEMPORARY. The next sync fills in the type,
+    // the name and the true currency. Without this scenario the stub would only be proven to
+    // exist, not proven to heal — and a permanent nameless account is its own bug.
+    name: "webhook: the next sync fills the stub in",
+    body: { type: "StatementItem", data: { account: "acc-unknown", statementItem: statementItem({ id: "hook-orphan" }) } },
+    sync: {
+      name: "Test",
+      accounts: [{
+        id: "acc-unknown", currencyCode: 980, balance: 500_000, creditLimit: 0,
+        maskedPan: ["444111******5181"], type: "white", iban: "UA00",
+      }],
+      jars: [],
+    },
+  },
+  {
+    // The same repair for a JAR, because its upsert is the one that does NOT overwrite the title
+    // (a manual rename must survive every sync). A stub therefore had to be filled in with
+    // COALESCE rather than skipped, or a jar first seen through the webhook would stay nameless
+    // forever — the exact "temporary state that quietly becomes permanent" this fix exists to avoid.
+    name: "webhook: a stub jar gets its name from the next sync",
+    body: { type: "StatementItem", data: { account: "jar-new", statementItem: statementItem({ id: "hook-jar", amount: 100_000 }) } },
+    sync: {
+      name: "Test",
+      accounts: [],
+      jars: [{ id: "jar-new", title: "На квартиру", currencyCode: 980, balance: 100_000 }],
+    },
   },
 ];
 
@@ -156,6 +192,8 @@ test("golden: the monobank webhook leaves the same database state", async (t) =>
           status = res.status;
           text = await res.text();
         }
+
+        if (sc.sync) await syncAccounts(db, sc.sync);
 
         const actual = JSON.stringify({ status, body: text, db: probe(db) }, null, 2);
         const file = join(GOLDEN_DIR, `${sc.name.replace(/[^a-zA-Z0-9]+/g, "-").replace(/^-|-$/g, "")}.json`);

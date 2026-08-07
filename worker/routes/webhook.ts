@@ -9,6 +9,8 @@ import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import type { MonoStatementItem } from "../lib/bank/mono.ts";
 import { upsertMonoTx } from "../lib/finance/repo.ts";
+import { applyEventBalance } from "../repo/accounts.ts";
+import { enrichStatusOf } from "../repo/transactions.ts";
 
 interface WebhookEvent {
   type: string;
@@ -41,11 +43,7 @@ webhook.post("/:token", async (c) => {
   await upsertMonoTx(c.env.DB, account, statementItem);
 
   // Keep the account balance fresh from the event's post-transaction balance.
-  await c.env.DB.prepare(
-    "UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?",
-  )
-    .bind(statementItem.balance, Math.floor(Date.now() / 1000), account)
-    .run();
+  await applyEventBalance(c.env.DB, account, statementItem.balance, Math.floor(Date.now() / 1000));
 
   // Pair this event with its counterpart if it's an internal card-to-card transfer.
   try {
@@ -58,9 +56,7 @@ webhook.post("/:token", async (c) => {
   // Hybrid AI: only enrich when mcc/alias rules couldn't categorise it.
   try {
     if (c.env.ANTHROPIC_API_KEY) {
-      const row = await c.env.DB.prepare(
-        "SELECT category_id, ai_enriched, hold FROM transactions WHERE id = ?",
-      ).bind(statementItem.id).first<{ category_id: number | null; ai_enriched: number; hold: number }>();
+      const row = await enrichStatusOf(c.env.DB, statementItem.id);
       // Enrich holds too — вони тепер рахуються як витрата (stats.ts), тож мають мати
       // категорію одразу, а не лише після сеттлменту. Опис у hold-події вже повний.
       if (row && row.category_id == null && !row.ai_enriched) {

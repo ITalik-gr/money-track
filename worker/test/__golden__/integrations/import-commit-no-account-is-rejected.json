@@ -1,0 +1,9 @@
+{
+  "status": 400,
+  "body": {
+    "error": "account_required"
+  },
+  "db": {
+    "imported": []
+  }
+}

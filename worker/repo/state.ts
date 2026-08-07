@@ -49,6 +49,21 @@ export async function dumpTable(db: AppDb, name: string): Promise<unknown[]> {
   return r.results ?? [];
 }
 
+/**
+ * How much is in this account, in rows — what the first-run checklist reads to decide which
+ * setup step is already done.
+ *
+ * Returns numbers, never null: an empty account is the state EVERY user starts in, and `null`
+ * there would say "unknown" about something we do know (`COUNT(*)` over an empty table is 0).
+ * The same distinction was a real defect once — `SPEND_COUNT` had no `COALESCE`, so a new user's
+ * Statistics rendered blanks where zeros belonged.
+ */
+export async function rowCounts(db: AppDb): Promise<{ accounts: number; transactions: number }> {
+  const accounts = await db.prepare("SELECT COUNT(*) n FROM accounts").first<{ n: number }>();
+  const transactions = await db.prepare("SELECT COUNT(*) n FROM transactions").first<{ n: number }>();
+  return { accounts: accounts?.n ?? 0, transactions: transactions?.n ?? 0 };
+}
+
 /** Latest applied migration, or null when the journal cannot be read. */
 export async function schemaVersion(db: AppDb): Promise<string | null> {
   const v = await db.prepare("SELECT MAX(name) AS v FROM _mt_migrations")

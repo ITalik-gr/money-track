@@ -14,10 +14,13 @@
 //
 // ⚠️ **A contract type is a FLOOR, not a ceiling.** `satisfies` proves every declared field is
 // produced; it does NOT prove the response contains nothing else, because the excess-property
-// check only fires for object literals — and most handlers spread a row from `repo/`. Measured on
-// the fixture: `GET /transactions` puts 38 fields on the wire while `TxRow` names 28, so a
-// quarter of that response is undeclared (`raw_json`, `ai_note`, `alerted`, …). Card in
-// ROADMAP.md. If you need "nothing else", the check has to be a golden, not a type.
+// check only fires for object literals — and most handlers spread a row from `repo/`. This was
+// measured, not theorised: `GET /transactions` used to put every column of the table on the wire
+// while `TxRow` named 21 of them, so a quarter of the response was fields only the detail screen
+// reads — `raw_json` above all, which on a real bank operation is the entire payload, shipped on
+// every row of a list that never shows it. Fixed 2026-08-07 by naming the columns (`FEED_COLUMNS`
+// in `repo/transactions.ts`), and the golden is what holds it: **if you need "nothing else",
+// the check has to be a golden, not a type.**
 export * from "./accounts.ts";
 export * from "./ai.ts";
 export * from "./analytics.ts";

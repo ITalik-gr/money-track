@@ -160,6 +160,36 @@ export async function setActive(db: AppDb, id: string, active: boolean): Promise
   await db.prepare("UPDATE accounts SET is_active = ? WHERE id = ?").bind(active ? 1 : 0, id).run();
 }
 
+/**
+ * Set the balance from a bank event's post-transaction balance.
+ *
+ * Separate from the sync path on purpose: a webhook event carries the balance AFTER its own
+ * operation, which is fresher than anything the last client-info fetch knows. Without this the
+ * feed would show an operation the dashboard's total has not accounted for yet, and the two
+ * screens would disagree for as long as it takes the next sync to run.
+ */
+export async function applyEventBalance(
+  db: AppDb, id: string, balance: number, at: number,
+): Promise<void> {
+  await db.prepare("UPDATE accounts SET balance = ?, updated_at = ? WHERE id = ?")
+    .bind(balance, at, id).run();
+}
+
+/**
+ * Identity and currency of one account, or null when there is no such account.
+ *
+ * This is what the CSV import asks before converting a statement: the ACCOUNT decides the currency
+ * of every imported row, never the file. A statement carries no reliable currency of its own, and
+ * the canon converts by `transactions.currency_code` — so taking it from anywhere else would show
+ * up much later, as a wrong total rather than as an import error.
+ */
+export async function findForImport(
+  db: AppDb, id: string,
+): Promise<{ id: string; currency_code: number | null } | null> {
+  return await db.prepare("SELECT id, currency_code FROM accounts WHERE id = ?")
+    .bind(id).first<{ id: string; currency_code: number | null }>();
+}
+
 export async function findKind(db: AppDb, id: string): Promise<{ is_manual: number } | null> {
   return await db.prepare("SELECT is_manual FROM accounts WHERE id = ?").bind(id).first<{ is_manual: number }>();
 }
