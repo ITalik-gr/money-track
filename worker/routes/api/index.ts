@@ -7,8 +7,9 @@
 // no two domains share a path prefix, which is what makes the mount order below safe to read.
 import { apiRoutes, normImportance, normChatMessages } from "./_shared.ts";
 import { analytics } from "./analytics.ts";
+import { transactions } from "./transactions.ts";
 import { setState, getState } from "../../lib/finance/repo.ts";
-import { computeSummary, createCashTx, getRates } from "../../lib/finance/finance.ts";
+import { computeSummary, getRates } from "../../lib/finance/finance.ts";
 // NOTE: no `STATS_JOINS` / `SPEND_WHERE` / `amountSum` here any more — the canonical SQL
 // fragments now live behind `worker/repo/`, and a route that needs one is a route that is about
 // to grow its own definition of "spending". What is left below is JS-side canon (period bounds,
@@ -51,6 +52,7 @@ api.use("*", async (c, next) => {
 // ---- domain modules ---------------------------------------------------------
 
 api.route("/", analytics);
+api.route("/", transactions);
 
 // ---- reference data ---------------------------------------------------------
 
@@ -108,37 +110,6 @@ api.get("/accounts/history", async (c) => {
 
 api.get("/summary", async (c) => {
   return c.json(await computeSummary(c.env));
-});
-
-// ---- transactions -----------------------------------------------------------
-
-api.get("/transactions", async (c) => {
-  const url = new URL(c.req.url);
-  const limit = Math.min(Number(url.searchParams.get("limit") ?? 50), 200);
-  const offset = Number(url.searchParams.get("offset") ?? 0);
-  const category = url.searchParams.get("category");
-  const catparent = url.searchParams.get("catparent"); // включає підкатегорії
-  const account = url.searchParams.get("account");
-  const type = url.searchParams.get("type"); // expense | income
-  const from = url.searchParams.get("from");
-  const to = url.searchParams.get("to");
-  const q = url.searchParams.get("q");
-  const amin = url.searchParams.get("amin"); // мін. сума (₴, порівняння по модулю)
-  const amax = url.searchParams.get("amax"); // макс. сума (₴)
-
-  return c.json(await txRepo.listFeed(c.env.DB, c.get("locale"), {
-    limit, offset,
-    category: category ? Number(category) : undefined,
-    catparent: catparent ? Number(catparent) : undefined,
-    account: account ?? undefined,
-    type: type === "expense" || type === "income" ? type : undefined,
-    from: from ? Number(from) : undefined,
-    to: to ? Number(to) : undefined,
-    q: q ?? undefined,
-    // ₴ → копійки тут, бо це розбір ВВОДУ; порівняння по модулю — у репозиторії.
-    aminMinor: amin ? Math.round(Number(amin) * 100) : undefined,
-    amaxMinor: amax ? Math.round(Number(amax) * 100) : undefined,
-  }));
 });
 
 // L10 — повний дамп власних даних одним файлом.
@@ -262,212 +233,6 @@ api.get("/export/transactions.csv", async (c) => {
       "content-disposition": `attachment; filename="money-track-transactions.csv"`,
     },
   });
-});
-
-// Bulk-редагування виділених транзакцій (мультивибір на /tx): призначити групу,
-// категорію чи позначити переказом одразу для набору. Порожній ids — no-op.
-api.post("/transactions/bulk", async (c) => {
-  const b = await c.req.json<{
-    ids: string[]; event_id?: number | null; category_id?: number | null; is_transfer?: boolean;
-    importance?: string | null; tag_ids?: number[];
-  }>();
-  const ids = [...new Set(b.ids ?? [])].filter(Boolean);
-  if (!ids.length) return c.json({ ok: true, updated: 0 });
-
-  const patch: txRepo.BulkPatch = {};
-  if (b.event_id !== undefined) patch.event_id = b.event_id;
-  if (b.category_id !== undefined) patch.category_id = b.category_id;
-  if (b.is_transfer !== undefined) patch.is_transfer = b.is_transfer;
-  // §6 вагомість: null = зняти override операції (успадкує від категорії). Чужі значення
-  // не пускаємо — вони мовчки випали б з `EFF_IMPORTANCE` і зіпсували всю аналітику вагомості.
-  if (b.importance !== undefined) {
-    if (b.importance !== null && !["essential", "discretionary", "optional"].includes(b.importance)) {
-      return c.json({ error: "invalid importance" }, 400);
-    }
-    patch.importance = b.importance;
-  }
-
-  // §FK-GUARD: фільтруємо теги по наявних категоріях перед записом — пояснення в
-  // `repo/categories.ts existingIds`.
-  const want = [...new Set(b.tag_ids ?? [])].filter((t): t is number => Number.isFinite(t));
-  const validTags = want.length ? await categoriesRepo.existingIds(c.env.DB, want) : [];
-  if (!Object.keys(patch).length && !validTags.length) return c.json({ ok: true, updated: 0 });
-
-  return c.json({ ok: true, updated: await txRepo.bulkApply(c.env.DB, ids, patch, validTags) });
-});
-
-// Single transaction with joined names + attached receipt (for the detail page).
-// ⚠️ MUST stay above `GET /transactions/:id` — Hono matches in registration order, so a
-// literal path declared after the parameterised one is simply never reached ("frequent"
-// gets read as an id and answers 404).
-/**
- * Cash operations the user repeats, for one-tap re-entry.
- *
- * Only manually entered rows (`source IN ('cash','manual')`) — the point is to save typing the
- * same "кава 45" again, and a bank-imported merchant is not something you re-enter by hand.
- * The suggested amount is the MEDIAN of the last few, not the mean: one atypical 900 ₴ refill
- * would otherwise drag every suggestion off the value the user actually repeats.
- */
-api.get("/transactions/frequent", async (c) => {
-  const rows = await txRepo.frequentManual(c.env.DB, Math.floor(Date.now() / 1000) - 180 * 86400);
-
-  const median = (xs: number[]): number => {
-    const s = [...xs].sort((a, b) => a - b);
-    const m = Math.floor(s.length / 2);
-    return s.length % 2 ? s[m]! : Math.round((s[m - 1]! + s[m]!) / 2);
-  };
-  return c.json(rows.map((r) => ({
-    merchant: r.merchant,
-    category_id: r.category_id,
-    currency_code: r.currency_code,
-    n: r.n,
-    amount: Math.abs(median(r.amounts.split(",").map(Number).filter(Number.isFinite))),
-  })));
-});
-
-api.get("/transactions/:id", async (c) => {
-  const id = c.req.param("id");
-  const loc = c.get("locale");
-  const tx = await txRepo.byId(c.env.DB, loc, id);
-  if (!tx) return c.json({ error: "not_found" }, 404);
-
-  let receipt = null;
-  const receiptId = (tx as { receipt_id: number | null }).receipt_id;
-  if (receiptId) {
-    const r = await txRepo.receiptById(c.env.DB, receiptId);
-    if (r) receipt = { ...r, items: await txRepo.receiptItems(c.env.DB, receiptId) };
-  }
-  const tags = await txRepo.tagsFor(c.env.DB, loc, id);
-  return c.json({ ...tx, receipt, tags });
-});
-
-// Manual / cash entry. For source='cash' we route to the cash account, not a card.
-api.post("/transactions", async (c) => {
-  const b = await c.req.json<{
-    account_id?: string; amount: number; currency_code?: number; time?: number;
-    merchant?: string; category_id?: number; user_note?: string; source?: string;
-  }>();
-  try {
-    const id = await createCashTx(c.env.DB, b);
-    return c.json({ ok: true, id });
-  } catch (e) {
-    return c.json({ error: String(e instanceof Error ? e.message : e) }, 400);
-  }
-});
-
-/**
- * Manual transfer between two of the user's own accounts.
- *
- * Written as a PAIR with a shared `transfer_pair_id`, because that is the canonical definition of
- * "one movement between my accounts" (§Інваріанти) — it is the single thing `SPEND_WHERE` looks
- * at to keep the money out of spending, and the only marker the list uses to collapse the two
- * legs into one row. Setting `is_transfer = 1` alone would NOT do it: five separate code paths
- * set that flag and none of them produces a pair, so the movement would show up as an expense
- * plus an unexplained income.
- *
- * Cross-currency is explicit, never guessed: `transactions.currency_code` is the ACCOUNT's
- * currency, so moving ₴ into a $ account needs both numbers. Converting one into the other at
- * today's rate would silently invent an exchange rate the user never got.
- */
-api.post("/transactions/transfer", async (c) => {
-  type TransferBody = {
-    from_account_id?: string; to_account_id?: string;
-    amount?: number; to_amount?: number; time?: number; user_note?: string;
-  };
-  const b = await c.req.json<TransferBody>().catch((): TransferBody => ({}));
-  const locale = c.get("locale");
-  const from = b.from_account_id, to = b.to_account_id;
-  const amount = Math.round(Number(b.amount));
-  if (!from || !to || from === to) return c.json({ error: st(locale, "errTransferAccounts") }, 400);
-  if (!Number.isFinite(amount) || amount <= 0) return c.json({ error: st(locale, "errTransferAmount") }, 400);
-
-  const accs = await accountsRepo.currenciesFor(c.env.DB, [from, to]);
-  const byId = new Map(accs.map((a) => [a.id, a]));
-  const src = byId.get(from), dst = byId.get(to);
-  if (!src || !dst) return c.json({ error: st(locale, "errTransferAccounts") }, 400);
-
-  const toAmount = dst.currency_code === src.currency_code
-    ? amount
-    : Math.round(Number(b.to_amount));
-  if (!Number.isFinite(toAmount) || toAmount <= 0) {
-    return c.json({ error: st(locale, "errTransferToAmount") }, 400);
-  }
-
-  const pair = crypto.randomUUID();
-  const now = Math.floor(Date.now() / 1000);
-  const time = b.time ?? now;
-  const note = b.user_note?.trim() || null;
-  const ids = [crypto.randomUUID(), crypto.randomUUID()];
-  await txRepo.insertTransferPair(c.env.DB, [
-    { id: ids[0]!, account_id: from, time, amount: -amount, currency_code: src.currency_code },
-    { id: ids[1]!, account_id: to, time, amount: toAmount, currency_code: dst.currency_code },
-  ], pair, note, now);
-  return c.json({ ok: true, pair_id: pair, ids });
-});
-
-// Edit + optional "apply to all like this" learning (§6.3). When learn=true and the
-// tx came from mono, we store a merchant_alias keyed on the raw mono description.
-api.patch("/transactions/:id", async (c) => {
-  const id = c.req.param("id");
-  const b = await c.req.json<{
-    category_id?: number | null; merchant?: string; user_note?: string; learn?: boolean;
-    is_transfer?: boolean; tags?: number[]; event_id?: number | null; real_category_id?: number | null;
-    importance?: string | null; lock_name?: boolean;
-  }>();
-
-  const tx = await txRepo.rawById(c.env.DB, id) as {
-    source: string; raw_json: string | null; comment: string | null; mcc: number | null; merchant: string | null;
-  } | null;
-  if (!tx) return c.json({ error: "not_found" }, 404);
-
-  // §R7: ручна назва авторитетна. Ставимо name_locked=1, коли користувач змінив назву на
-  // непорожню й іншу; явний lock_name (кнопка «дозволити AI змінювати») може зняти/поставити.
-  const renamed = b.merchant !== undefined && !!b.merchant?.trim() && b.merchant.trim() !== (tx.merchant ?? "").trim();
-
-  // Теги (вторинні категорії, до 3, без основної) — повна заміна набору.
-  if (b.tags !== undefined) {
-    await txRepo.clearTags(c.env.DB, id);
-    const tags = [...new Set(b.tags)].filter((t) => t !== b.category_id).slice(0, 3);
-    for (const t of tags) await txRepo.addTag(c.env.DB, id, t);
-  }
-
-  const patch: txRepo.TxPatch = {};
-  if (b.category_id !== undefined) patch.category_id = b.category_id;
-  if (b.merchant !== undefined) patch.merchant = b.merchant;
-  if (b.user_note !== undefined) patch.user_note = b.user_note;
-  if (b.is_transfer !== undefined) patch.is_transfer = b.is_transfer;
-  if (b.real_category_id !== undefined) patch.real_category_id = b.real_category_id;
-  if (b.event_id !== undefined) patch.event_id = b.event_id;
-  if (b.importance !== undefined) patch.importance = normImportance(b.importance);
-  if (b.lock_name !== undefined) patch.name_locked = b.lock_name;
-  else if (renamed) patch.name_locked = true;
-  await txRepo.updateFields(c.env.DB, id, patch);
-
-  // §R2-TX4: «реальна категорія» має сенс лише для бакета «Перекази і зняття».
-  // Для звичайних операцій прибираємо її, щоб не дублювала основну й не плутала.
-  await txRepo.clearRealCategoryOutsideTransfers(c.env.DB, id);
-
-  let learned = false;
-  if (b.learn) {
-    const raw = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }) : null;
-    const rawKey = raw?.description?.trim();
-    if (rawKey) {
-      const transferFlag = b.is_transfer ? 1 : 0;
-      // Реальну категорію переказу зберігаємо в alias; якщо цього разу її не передали —
-      // не губимо раніше навчену (беремо з наявного alias).
-      const prior = await txRepo.aliasRealCategory(c.env.DB, rawKey);
-      const realCat = b.real_category_id !== undefined ? b.real_category_id : (prior?.real_category_id ?? null);
-      // Idempotent: one alias per raw description — a re-edit replaces the old rule.
-      // §Хвіст: source='manual' — ця правка захищена, enrich/консенсус її не перетруть.
-      await txRepo.deleteAlias(c.env.DB, rawKey);
-      await txRepo.insertManualAlias(c.env.DB, rawKey, b.merchant ?? null, b.category_id ?? null,
-        transferFlag, realCat, Math.floor(Date.now() / 1000));
-      // Back-apply to existing matching mono transactions (name, category, transfer flag, real category).
-      await txRepo.backApplyAlias(c.env.DB, b.category_id ?? null, b.merchant ?? null, transferFlag, realCat, rawKey);
-      learned = true;
-    }
-  }
-  return c.json({ ok: true, learned });
 });
 
 // ---- budgets & planned ------------------------------------------------------
@@ -1162,20 +927,6 @@ api.get("/planned/upcoming", async (c) => {
   return c.json({ days, total: items.reduce((s, p) => s + p.amount_uah, 0), items });
 });
 
-// ---- AI enrichment (hybrid) -------------------------------------------------
-
-// Enrich one transaction on demand (manual "AI: що це?").
-api.post("/transactions/:id/enrich", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { enrichOne } = await import("../../lib/ai/enrich.ts");
-  try {
-    const ok = await enrichOne(c.env, c.req.param("id"), { force: true });
-    return c.json(ok ? { ok: true } : { error: "not_found" }, ok ? 200 : 404);
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
 // Bulk-enrich uncategorised transactions, a small batch per call (client loops).
 api.post("/enrich/pending", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
@@ -1354,160 +1105,6 @@ api.post("/advisor/chat", async (c) => {
 api.get("/facts", async (c) => {
   const { listFacts } = await import("../../lib/ai/advisor.ts");
   return c.json(await listFacts(c.env));
-});
-
-// §SPLIT: спліт транзакції на кілька категорій. GET — частини tx; PUT — замінити всі (порожній
-// масив = прибрати спліт). Валідація: лише витрата, ≥2 частини, кожна <0, сума частин = сумі tx.
-// Спліт міняє категорійну аналітику → інвалідуємо Tx/Summary/Advice на клієнті.
-api.get("/transactions/:id/splits", async (c) => {
-  return c.json(await txRepo.splitsFor(c.env.DB, c.get("locale"), c.req.param("id")));
-});
-
-api.put("/transactions/:id/splits", async (c) => {
-  const id = c.req.param("id");
-  const body = await c.req.json<{ splits?: { category_id: number; amount: number }[] }>().catch(() => ({ splits: [] }));
-  const splits = (body.splits ?? []).map((p) => ({ category_id: Number(p.category_id), amount: Math.round(Number(p.amount)) }));
-  const tx = await txRepo.amountOf(c.env.DB, id);
-  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
-  if (splits.length > 0) {
-    if (tx.amount >= 0) return c.json({ error: st(c.get("locale"), "errSplitOnlyExpense") }, 400);
-    // Дзеркало перевірки в `/reimbursement`: спліт і компенсація взаємовиключні (див. там же).
-    const r = await txRepo.reimbursedOf(c.env.DB, id);
-    if ((r?.reimbursed ?? 0) > 0) return c.json({ error: st(c.get("locale"), "errSplitHasReimbursement") }, 400);
-    if (splits.length < 2) return c.json({ error: st(c.get("locale"), "errSplitMinParts") }, 400);
-    if (splits.some((p) => !p.category_id || !Number.isFinite(p.amount) || p.amount >= 0)) {
-      return c.json({ error: st(c.get("locale"), "errSplitPartShape") }, 400);
-    }
-    const sum = splits.reduce((s, p) => s + p.amount, 0);
-    if (sum !== tx.amount) return c.json({ error: st(c.get("locale"), "errSplitSumMismatch", { amount: tx.amount }) }, 400);
-  }
-  await txRepo.replaceSplits(c.env.DB, id, splits, Math.floor(Date.now() / 1000));
-  return c.json({ ok: true, count: splits.length });
-});
-
-// ---- §COMPENSATION: «мені скинули за це гроші» (міграція 0029) ----------------
-// Витрата стає ЧАСТКОВО чужою: у статистику йде лише те, що реально твоє
-// (`EFF_AMOUNT = t.amount + t.reimbursed`, stats.ts), а привʼязані надходження перестають
-// рахуватись і доходом, і поверненням. Тут лише транспорт + валідація.
-
-// Перерахунок обох денормалізованих сум — `repo/transactions.ts recalcStmts` (ЄДИНЕ місце, де
-// вони пишуться; інакше `reimbursed`/`reimburses_total` розійшлися б із `tx_reimbursements`,
-// а канон читає саме їх).
-
-// Поточний стан + кандидати. Кандидат — надходження в межах ±21 дня, у якого ЛИШИВСЯ вільний
-// залишок: одне надходження може покривати кілька витрат («скинули 2400 — 1870 за одне,
-// решта за інше»), тож вичерпаність рахуємо по `reimburses_total`, а не по факту привʼязки.
-api.get("/transactions/:id/reimbursement", async (c) => {
-  const id = c.req.param("id");
-  const loc = c.get("locale");
-  const tx = await txRepo.reimbursementTarget(c.env.DB, id);
-  if (!tx) return c.json({ error: st(loc, "errTxNotFound") }, 404);
-
-  const WINDOW = 21 * 86400;
-  const [linked, candidates] = await Promise.all([
-    txRepo.reimbursementsLinked(c.env.DB, loc, id),
-    txRepo.reimbursementCandidates(c.env.DB, loc, id, tx.currency_code, tx.time, WINDOW),
-  ]);
-
-  return c.json({
-    tx: { id: tx.id, amount: tx.amount, currency_code: tx.currency_code, reimbursed: tx.reimbursed ?? 0 },
-    linked,
-    candidates,
-  });
-});
-
-// Замінити стан цілком. `allocations` — скільки саме взяти з кожного надходження; якщо сума не
-// вказана, беремо стільки, скільки треба й скільки є (min(вільний залишок, непокрита частина)).
-// `manual_amount` — компенсація без надходження в базі (віддали готівкою). Порожньо = зняти все.
-api.put("/transactions/:id/reimbursement", async (c) => {
-  const id = c.req.param("id");
-  type RbBody = { manual_amount?: number | null; allocations?: { source_id: string; amount?: number | null }[] };
-  const body = await c.req.json<RbBody>().catch((): RbBody => ({}));
-  const wanted = (body.allocations ?? []).filter((a) => a?.source_id);
-
-  const tx = await txRepo.amountAndCurrency(c.env.DB, id);
-  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
-  if (tx.amount >= 0) return c.json({ error: st(c.get("locale"), "errReimbOnlyExpense") }, 400);
-  const expenseTotal = -tx.amount;
-
-  // §SPLIT×§COMPENSATION: свідомо взаємовиключні. Компенсація каже «скільки з цього моє»,
-  // спліт — «на що пішло»; накласти одне на одне означало б ділити компенсацію по частинах
-  // з округленням, і сума частин перестала б сходитись із сумою операції.
-  const hasSplits = await txRepo.hasSplits(c.env.DB, id);
-  if (hasSplits && (wanted.length || body.manual_amount)) {
-    return c.json({ error: st(c.get("locale"), "errReimbHasSplit") }, 400);
-  }
-
-  const rows: { source_id: string; amount: number }[] = [];
-  let running = 0;
-
-  if (wanted.length) {
-    const ids = [...new Set(wanted.map((a) => String(a.source_id)))];
-    // `available` рахуємо БЕЗ урахування того, що вже віддано ЦІЙ витраті: інакше редагування
-    // наявного розподілу впиралося б у власний же залишок і зменшити суму було б неможливо.
-    const found = await txRepo.sourcesWithAvailable(c.env.DB, id, ids);
-    if (found.length !== ids.length) return c.json({ error: st(c.get("locale"), "errReimbSomeNotFound") }, 400);
-    const byId = new Map(found.map((r) => [r.id, r]));
-
-    for (const a of wanted) {
-      const r = byId.get(String(a.source_id))!;
-      if (r.id === id) return c.json({ error: st(c.get("locale"), "errReimbSelf") }, 400);
-      if (r.amount <= 0) return c.json({ error: st(c.get("locale"), "errReimbOnlyIncome") }, 400);
-      // Валюти не зводимо: компенсація живе в тій самій валюті, що й витрата (`reimbursed`
-      // додається до `t.amount` напряму). Інакше курс мовчки спотворив би суму витрати.
-      if (r.currency_code !== tx.currency_code) return c.json({ error: st(c.get("locale"), "errReimbCurrency") }, 400);
-
-      // Без явної суми беремо рівно стільки, скільки ще треба і скільки лишилось у джерела.
-      const need = Math.max(0, expenseTotal - running);
-      const take = a.amount == null ? Math.min(r.available, need) : Math.round(Number(a.amount));
-      if (!Number.isFinite(take) || take < 0) return c.json({ error: st(c.get("locale"), "errReimbNegative") }, 400);
-      if (take === 0) continue;
-      if (take > r.available) {
-        return c.json({ error: st(c.get("locale"), "errReimbSourceExceeded", { left: (r.available / 100).toFixed(2), take: (take / 100).toFixed(2) }) }, 400);
-      }
-      running += take;
-      rows.push({ source_id: r.id, amount: take });
-    }
-  }
-
-  const manual = body.manual_amount == null ? 0 : Math.round(Number(body.manual_amount));
-  if (!Number.isFinite(manual) || manual < 0) return c.json({ error: st(c.get("locale"), "errReimbTotalNegative") }, 400);
-  const total = running + manual;
-  // Стеля — сума самої витрати. Компенсація більша за витрату зробила б `EFF_AMOUNT` додатним,
-  // і рядок випав би з аналітики взагалі (ні витрата, ні дохід).
-  if (total > expenseTotal) {
-    return c.json({ error: st(c.get("locale"), "errReimbExceedsExpense", { total: (total / 100).toFixed(2), expense: (expenseTotal / 100).toFixed(2) }) }, 400);
-  }
-
-  // Джерела, яких торкаємось: старі (їх треба перерахувати після видалення) + нові.
-  const prev = await txRepo.allocationSources(c.env.DB, id);
-  const touched = [...new Set([id, ...prev, ...rows.map((r) => r.source_id)])];
-
-  // Порядок у батчі — ЦЕ і є поведінка: спершу зняти старі розподіли, тоді записати нові, тоді
-  // перерахувати денормалізовані суми з таблиці, і лише в кінці добити ручну компенсацію
-  // (у неї немає рядка-джерела, тож перерахунок її не побачив би).
-  const now = Math.floor(Date.now() / 1000);
-  const stmts = [txRepo.clearAllocationsStmt(c.env.DB, id)];
-  for (const r of rows) stmts.push(txRepo.insertAllocationStmt(c.env.DB, id, r.source_id, r.amount, now));
-  stmts.push(...txRepo.recalcStmts(c.env.DB, touched));
-  if (manual > 0) stmts.push(txRepo.addManualReimbursedStmt(c.env.DB, id, manual));
-  await c.env.DB.batch(stmts);
-
-  return c.json({ ok: true, reimbursed: total, allocations: rows.length, manual });
-});
-
-// Зворотний бік: куди пішло ЦЕ надходження. Потрібно, щоб побачити нерозподілений залишок
-// («скинули 2400, використано 1870 — 530 ще вільні») і дійти звідси до інших витрат.
-api.get("/transactions/:id/reimbursement-usage", async (c) => {
-  const id = c.req.param("id");
-  const tx = await txRepo.reimbursementSource(c.env.DB, id);
-  if (!tx) return c.json({ error: st(c.get("locale"), "errTxNotFound") }, 404);
-  if (tx.amount <= 0) return c.json({ used: [], allocated: 0, available: 0 });
-
-  const used = await txRepo.reimbursementUsage(c.env.DB, c.get("locale"), id);
-
-  const allocated = tx.reimburses_total ?? 0;
-  return c.json({ used, allocated, available: tx.amount - allocated, currency_code: tx.currency_code });
 });
 
 // ---- Центр сповіщень (ROADMAP §Черга 2, v1 in-app) ---------------------------
@@ -1752,21 +1349,6 @@ api.post("/events/:id/chat", async (c) => {
   const { chatAboutGroup } = await import("../../lib/ai/advisor.ts");
   try {
     return c.json(await chatAboutGroup(c.env, Number(c.req.param("id")), msgs));
-  } catch (e) {
-    return c.json({ error: String(e) }, 502);
-  }
-});
-
-// Інлайн-чат по конкретній операції: обговорити/уточнити з AI; він може оновити
-// категорію чи прапорець переказу, коли з розмови стало ясно, що це.
-api.post("/transactions/:id/chat", async (c) => {
-  if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
-  const msgs = normChatMessages(body.messages);
-  if (!msgs.length) return c.json({ error: "messages required" }, 400);
-  const { chatAboutTx } = await import("../../lib/ai/advisor.ts");
-  try {
-    return c.json(await chatAboutTx(c.env, c.req.param("id"), msgs));
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }
