@@ -24,7 +24,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { api } from "../routes/api.ts";
+import { api } from "../routes/api/index.ts";
 import { migratedDb, testEnv, freezeTime, freezeUuid, freezeRandom, type MemDb } from "./harness.ts";
 import {
   seed, seedCategoryCascade, seedPlanning, FROZEN_NOW_ISO,

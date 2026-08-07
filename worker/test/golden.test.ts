@@ -22,7 +22,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { api } from "../routes/api.ts";
+import { api } from "../routes/api/index.ts";
 import { migratedDb, testEnv, freezeTime, type MemDb } from "./harness.ts";
 import { seed, FROZEN_NOW_ISO } from "./fixture.ts";
 

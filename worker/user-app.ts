@@ -17,7 +17,7 @@
 // health, login/OAuth, `/me`, the owner-only directory admin, and the static assets.
 import { Hono } from "hono";
 import type { Env } from "./env.ts";
-import { api } from "./routes/api.ts";
+import { api } from "./routes/api/index.ts";
 import { setup } from "./routes/setup.ts";
 import { ingest } from "./routes/ingest.ts";
 import { credentials } from "./routes/credentials.ts";

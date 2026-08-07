@@ -28,7 +28,8 @@ import { join } from "node:path";
 const ROUTES = "worker/routes";
 
 /**
- * Remaining inline queries per route file. ONLY EVER GOES DOWN.
+ * Remaining inline queries per route file, keyed by path RELATIVE to `worker/routes`
+ * (`api/analytics.ts`, not `analytics.ts`). ONLY EVER GOES DOWN.
  * When you empty a file, delete its line — do not leave a `0`.
  */
 const BUDGET = {
@@ -48,10 +49,24 @@ function countPrepares(src) {
     .reduce((n, l) => n + (l.match(/\.prepare\(/g)?.length ?? 0), 0);
 }
 
+/**
+ * Walk sub-directories too. The route layer is being split into `routes/api/<domain>.ts`
+ * (phase 3), and a non-recursive scan would have let every one of those files carry SQL
+ * again — the check would still have printed a tick while the rule silently stopped applying.
+ */
+function routeFiles(dir = ROUTES, prefix = "") {
+  const out = [];
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    if (e.isDirectory()) out.push(...routeFiles(join(dir, e.name), prefix + e.name + "/"));
+    else if (e.name.endsWith(".ts")) out.push(prefix + e.name);
+  }
+  return out;
+}
+
 const problems = [];
 let total = 0;
 
-for (const file of readdirSync(ROUTES).filter((f) => f.endsWith(".ts"))) {
+for (const file of routeFiles()) {
   const actual = countPrepares(readFileSync(join(ROUTES, file), "utf8"));
   const allowed = BUDGET[file] ?? 0;
   total += actual;

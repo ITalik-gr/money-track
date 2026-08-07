@@ -1,8 +1,8 @@
 // Core REST API for the dashboard. All money is minor units; the client divides by 100.
 import { Hono } from "hono";
-import type { Env } from "../env.ts";
-import { setState, getState } from "../lib/finance/repo.ts";
-import { computeSummary, createCashTx, getRates, toUAHMinor, ratesForDays, type Rates } from "../lib/finance/finance.ts";
+import type { Env } from "../../env.ts";
+import { setState, getState } from "../../lib/finance/repo.ts";
+import { computeSummary, createCashTx, getRates, toUAHMinor, ratesForDays, type Rates } from "../../lib/finance/finance.ts";
 // NOTE: no `STATS_JOINS` / `SPEND_WHERE` / `amountSum` here any more — the canonical SQL
 // fragments now live behind `worker/repo/`, and a route that needs one is a route that is about
 // to grow its own definition of "spending". What is left below is JS-side canon (period bounds,
@@ -11,25 +11,25 @@ import {
   valueMode, uahMult, periodBounds,
   recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localParts,
   type PeriodMode, type Preset,
-} from "../lib/finance/stats.ts";
-import type { AppDb } from "../lib/platform/db-shim.ts";
-import * as accountsRepo from "../repo/accounts.ts";
-import * as categoriesRepo from "../repo/categories.ts";
-import * as txRepo from "../repo/transactions.ts";
-import * as goalsRepo from "../repo/goals.ts";
-import * as analyticsRepo from "../repo/analytics.ts";
-import * as planningRepo from "../repo/planning.ts";
-import * as receiptsRepo from "../repo/receipts.ts";
-import * as budgetsRepo from "../repo/budgets.ts";
-import * as eventsRepo from "../repo/events.ts";
-import * as reportsRepo from "../repo/reports.ts";
-import * as knowledgeRepo from "../repo/knowledge.ts";
-import * as stateRepo from "../repo/state.ts";
+} from "../../lib/finance/stats.ts";
+import type { AppDb } from "../../lib/platform/db-shim.ts";
+import * as accountsRepo from "../../repo/accounts.ts";
+import * as categoriesRepo from "../../repo/categories.ts";
+import * as txRepo from "../../repo/transactions.ts";
+import * as goalsRepo from "../../repo/goals.ts";
+import * as analyticsRepo from "../../repo/analytics.ts";
+import * as planningRepo from "../../repo/planning.ts";
+import * as receiptsRepo from "../../repo/receipts.ts";
+import * as budgetsRepo from "../../repo/budgets.ts";
+import * as eventsRepo from "../../repo/events.ts";
+import * as reportsRepo from "../../repo/reports.ts";
+import * as knowledgeRepo from "../../repo/knowledge.ts";
+import * as stateRepo from "../../repo/state.ts";
 // `catNameSql` is deliberately absent: it produces SQL, and the route layer no longer writes any.
-import { localizeCatName, ownerLocale } from "../lib/finance/categories-i18n.ts";
-import { recalcGoal, isGoalKind, isAutofillKind } from "../lib/finance/goals.ts";
-import { st } from "../lib/platform/i18n.ts";
-import type { NotifLocale } from "../../shared/notif-i18n.ts";
+import { localizeCatName, ownerLocale } from "../../lib/finance/categories-i18n.ts";
+import { recalcGoal, isGoalKind, isAutofillKind } from "../../lib/finance/goals.ts";
+import { st } from "../../lib/platform/i18n.ts";
+import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 
 export const api = new Hono<{ Bindings: Env; Variables: { locale: NotifLocale } }>();
 
@@ -81,7 +81,7 @@ api.get("/accounts", async (c) => {
 // Канонічна розбивка коштів (§R3) — ТА САМА, що бачить Порадник. Огляд на сторінці Рахунків
 // бере її, а не рахує композицію на клієнті, щоб «подушка/борг/інвестиції» тут = у Пораднику.
 api.get("/accounts/funds", async (c) => {
-  const { fundsBreakdown } = await import("../lib/ai/advisor.ts");
+  const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
   return c.json(await fundsBreakdown(c.env));
 });
 
@@ -568,13 +568,13 @@ api.post("/budgets/auto", async (c) => {
 
 // §Хвіст C: глобальний лічильник витрат AI — «$ за сьогодні / цей місяць / за весь час».
 api.get("/ai-usage", async (c) => {
-  const { readUsageStats } = await import("../lib/ai/ai.ts");
+  const { readUsageStats } = await import("../../lib/ai/ai.ts");
   return c.json(await readUsageStats(c.env));
 });
 
 // §Хвіст: факт vs план по підписках — фактичні списання, лічильник, ознака подорожчання.
 api.get("/planned/actuals", async (c) => {
-  const { plannedActuals } = await import("../lib/finance/subscriptions.ts");
+  const { plannedActuals } = await import("../../lib/finance/subscriptions.ts");
   return c.json(await plannedActuals(c.env.DB));
 });
 
@@ -612,7 +612,7 @@ api.post("/reports/generate", async (c) => {
     .catch(() => ({} as { type?: string; force?: boolean; scope?: string; from?: number; to?: number }));
   const locale = c.get("locale");
 
-  const { generateAndStoreReport, CUSTOM_MIN_DAYS, CUSTOM_MAX_DAYS } = await import("../lib/ai/report.ts");
+  const { generateAndStoreReport, CUSTOM_MIN_DAYS, CUSTOM_MAX_DAYS } = await import("../../lib/ai/report.ts");
 
   // Кастомний діапазон розпізнаємо і за явним type, і за самою присутністю меж — клієнт, що
   // прислав from/to, точно не хоче пресетний тиждень.
@@ -654,13 +654,13 @@ api.post("/jobs", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(locale, "errAiKeyMissing"), code: "no_ai_key" }, 400);
 
   const body = await c.req.json<{ kind?: string; params?: unknown }>().catch(() => ({} as { kind?: string; params?: unknown }));
-  const { JOB_KINDS, enqueueJob, runNextJob } = await import("../lib/ai/jobs.ts");
+  const { JOB_KINDS, enqueueJob, runNextJob } = await import("../../lib/ai/jobs.ts");
   const kind = JOB_KINDS.find((k) => k === body.kind);
   if (!kind) return c.json({ error: st(locale, "jobBadKind") }, 400);
 
   const { id, created } = await enqueueJob(c.env, kind, body.params);
 
-  const { isDemoEnv } = await import("../lib/platform/demo.ts");
+  const { isDemoEnv } = await import("../../lib/platform/demo.ts");
   if (isDemoEnv(c.env)) {
     // Демо рахує синхронно: `demoClamp` тисне вивід до 900 токенів, тож чекати там і так
     // недовго, а єдиний alarm пісочниці зайнятий її самознищенням. Клієнт цього не помічає —
@@ -673,7 +673,7 @@ api.post("/jobs", async (c) => {
 });
 
 api.get("/jobs", async (c) => {
-  const { listJobs } = await import("../lib/ai/jobs.ts");
+  const { listJobs } = await import("../../lib/ai/jobs.ts");
   return c.json({ items: await listJobs(c.env) });
 });
 
@@ -682,7 +682,7 @@ api.get("/jobs", async (c) => {
 api.post("/jobs/:id/seen", async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
-  const { markSeen } = await import("../lib/ai/jobs.ts");
+  const { markSeen } = await import("../../lib/ai/jobs.ts");
   await markSeen(c.env, id);
   return c.json({ ok: true });
 });
@@ -724,7 +724,7 @@ api.post("/planned/ai-detect", async (c) => {
   const { description } = await c.req.json<{ description?: string }>();
   if (!description?.trim()) return c.json({ error: "description required" }, 400);
 
-  const { callHaikuJson, MODEL_SMART } = await import("../lib/ai/ai.ts");
+  const { callHaikuJson, MODEL_SMART } = await import("../../lib/ai/ai.ts");
   let query = "";
   try {
     // Sonnet 5 — точніше витягує ключове слово мерчанта з вільного опису підписки.
@@ -783,7 +783,7 @@ api.post("/planned/dismiss", async (c) => {
 // Ре-світ: виправити категорію наявних операцій, що підпадають під активну підписку,
 // але зараз розкладені інакше (fix для вже неправильних, як Apple $1 у «Розвагах»). Без AI.
 api.post("/planned/apply-categories", async (c) => {
-  const { applySubscriptionCategories } = await import("../lib/finance/subscriptions.ts");
+  const { applySubscriptionCategories } = await import("../../lib/finance/subscriptions.ts");
   const r = await applySubscriptionCategories(c.env.DB);
   return c.json(r);
 });
@@ -1185,7 +1185,7 @@ api.get("/analytics/safe-to-spend", async (c) => {
   // просочувалась просто в safe-to-spend. Розклад відповідає на питання буквально: що ще
   // спишеться між зараз і 1-м числом наступного місяця.
   // §CUR-PLAN: суми в ₴ (`chargesBetween` зводить сам) — вони в одному ряду з витратами місяця.
-  const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
+  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
   const monthEnd = localMonthStart(now, 1);
   const plans = await planningRepo.activeForSchedule(c.env.DB);
   const sum = (from: number, to: number) =>
@@ -1389,7 +1389,7 @@ api.put("/settings/locale", async (c) => {
 // UI редагує три головні (report/advisor/insight); решта — дефолти. Enrich/OCR завжди Haiku.
 const AI_MODEL_TASKS = ["report", "advisor", "insight", "chat", "budget", "group", "notify"] as const;
 api.get("/settings/ai-models", async (c) => {
-  const { AI_TASK_DEFAULTS, TOKEN_BY_MODEL, MODEL_BY_TOKEN } = await import("../lib/ai/ai.ts");
+  const { AI_TASK_DEFAULTS, TOKEN_BY_MODEL, MODEL_BY_TOKEN } = await import("../../lib/ai/ai.ts");
   const out: Record<string, string> = {};
   for (const t of AI_MODEL_TASKS) {
     const saved = await getState(c.env.DB, `ai_model_${t}`);
@@ -1398,7 +1398,7 @@ api.get("/settings/ai-models", async (c) => {
   return c.json({ models: out });
 });
 api.put("/settings/ai-models", async (c) => {
-  const { MODEL_BY_TOKEN } = await import("../lib/ai/ai.ts");
+  const { MODEL_BY_TOKEN } = await import("../../lib/ai/ai.ts");
   const { task, model } = await c.req.json<{ task: string; model: string }>();
   if (!AI_MODEL_TASKS.includes(task as typeof AI_MODEL_TASKS[number]) || !MODEL_BY_TOKEN[model]) {
     return c.json({ error: "invalid task or model" }, 400);
@@ -1520,7 +1520,7 @@ api.get("/analytics/forecast", async (c) => {
   // Майбутні планові платежі, що спишуться до кінця місяця (інформативно).
   // §SUB-MONTH: розклад дає канонічний `chargesBetween` — тижневий план у залишку місяця
   // спишеться кілька разів, а власний однопрохідний цикл рахував рівно одне списання на план.
-  const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
+  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
   const fxRates = await getRates(c.env.DB);
   const planned = await planningRepo.activeWithTitles(c.env.DB);
 
@@ -1601,7 +1601,7 @@ api.get("/planned/upcoming", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const horizon = now + days * 86400;
 
-  const { nextChargeUnix, plannedUAH } = await import("../lib/finance/subscriptions.ts");
+  const { nextChargeUnix, plannedUAH } = await import("../../lib/finance/subscriptions.ts");
   const rates = await getRates(c.env.DB);
   const planned = await planningRepo.activeWithCategory(c.env.DB);
 
@@ -1636,8 +1636,8 @@ api.get("/analytics/cashflow-calendar", async (c) => {
   const from = Number(url.searchParams.get("from") ?? defFrom);
   const to = Number(url.searchParams.get("to") ?? defTo);
 
-  const { chargesBetween } = await import("../lib/finance/subscriptions.ts");
-  const { fundsBreakdown } = await import("../lib/ai/advisor.ts");
+  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
+  const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
   const [planned, funds, rates] = await Promise.all([
     planningRepo.activeWithCategory(c.env.DB),
     fundsBreakdown(c.env),
@@ -1884,7 +1884,7 @@ api.get("/analytics/by-category", async (c) => {
 // Enrich one transaction on demand (manual "AI: що це?").
 api.post("/transactions/:id/enrich", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { enrichOne } = await import("../lib/ai/enrich.ts");
+  const { enrichOne } = await import("../../lib/ai/enrich.ts");
   try {
     const ok = await enrichOne(c.env, c.req.param("id"), { force: true });
     return c.json(ok ? { ok: true } : { error: "not_found" }, ok ? 200 : 404);
@@ -1896,7 +1896,7 @@ api.post("/transactions/:id/enrich", async (c) => {
 // Bulk-enrich uncategorised transactions, a small batch per call (client loops).
 api.post("/enrich/pending", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { enrichPending } = await import("../lib/ai/enrich.ts");
+  const { enrichPending } = await import("../../lib/ai/enrich.ts");
   try {
     return c.json(await enrichPending(c.env));
   } catch (e) {
@@ -1910,7 +1910,7 @@ api.get("/enrich/status", async (c) => {
 
 // Detect internal transfers between own accounts (opposite equal amounts, ±15 min).
 api.post("/transfers/detect", async (c) => {
-  const { detectTransfers } = await import("../lib/finance/transfers.ts");
+  const { detectTransfers } = await import("../../lib/finance/transfers.ts");
   const marked = await detectTransfers(c.env);
   return c.json({ ok: true, marked });
 });
@@ -1919,7 +1919,7 @@ api.post("/transfers/detect", async (c) => {
 // Малий батч за виклик, клієнт повторює поки remaining > 0. Навчене застосовується без AI.
 api.post("/transfers/categorize", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { categorizeTransfers } = await import("../lib/ai/enrich.ts");
+  const { categorizeTransfers } = await import("../../lib/ai/enrich.ts");
   try {
     return c.json(await categorizeTransfers(c.env));
   } catch (e) {
@@ -1929,7 +1929,7 @@ api.post("/transfers/categorize", async (c) => {
 
 // Скільки переказів/знять ще без реальної категорії (для стану кнопки).
 api.get("/transfers/status", async (c) => {
-  const { transfersPending } = await import("../lib/ai/enrich.ts");
+  const { transfersPending } = await import("../../lib/ai/enrich.ts");
   return c.json({ pending: await transfersPending(c.env) });
 });
 
@@ -1937,7 +1937,7 @@ api.get("/transfers/status", async (c) => {
 // (зі збереженням у БД) для перегляду/правки. needs_attention = AI не впевнений/не визначив.
 api.post("/transfers/review", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { reviewTransfers } = await import("../lib/ai/enrich.ts");
+  const { reviewTransfers } = await import("../../lib/ai/enrich.ts");
   const limit = Number(new URL(c.req.url).searchParams.get("limit") ?? 12);
   try {
     return c.json(await reviewTransfers(c.env, limit));
@@ -1951,7 +1951,7 @@ api.post("/transfers/review/one", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const b = await c.req.json<{ id?: string; hint?: string }>();
   if (!b.id || !b.hint?.trim()) return c.json({ error: "id and hint required" }, 400);
-  const { reviewTransferWithHint } = await import("../lib/ai/enrich.ts");
+  const { reviewTransferWithHint } = await import("../../lib/ai/enrich.ts");
   try {
     const row = await reviewTransferWithHint(c.env, b.id, b.hint);
     return row ? c.json(row) : c.json({ error: "not_found" }, 404);
@@ -1984,7 +1984,7 @@ api.post("/transfers/review/save", async (c) => {
 // ---- weekly AI insight (§6.6) -----------------------------------------------
 
 api.get("/insight", async (c) => {
-  const { getStoredInsight } = await import("../lib/ai/insight.ts");
+  const { getStoredInsight } = await import("../../lib/ai/insight.ts");
   return c.json(await getStoredInsight(c.env));
 });
 
@@ -1992,7 +1992,7 @@ api.get("/insight", async (c) => {
 api.post("/insight/generate", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const days = Number(new URL(c.req.url).searchParams.get("days")) || undefined;
-  const { buildAndStoreInsight } = await import("../lib/ai/insight.ts");
+  const { buildAndStoreInsight } = await import("../../lib/ai/insight.ts");
   try {
     return c.json(await buildAndStoreInsight(c.env, days));
   } catch (e) {
@@ -2003,29 +2003,29 @@ api.post("/insight/generate", async (c) => {
 // ---- AI advisor: financial profile + structured advice ----------------------
 
 api.get("/profile", async (c) => {
-  const { getProfile } = await import("../lib/ai/advisor.ts");
+  const { getProfile } = await import("../../lib/ai/advisor.ts");
   return c.json({ text: await getProfile(c.env) });
 });
 
 api.put("/profile", async (c) => {
   const { text } = await c.req.json<{ text?: string }>();
-  const { setProfile } = await import("../lib/ai/advisor.ts");
+  const { setProfile } = await import("../../lib/ai/advisor.ts");
   await setProfile(c.env, (text ?? "").slice(0, 4000));
   return c.json({ ok: true });
 });
 
 api.get("/advisor", async (c) => {
-  const { getStoredAdvice } = await import("../lib/ai/advisor.ts");
+  const { getStoredAdvice } = await import("../../lib/ai/advisor.ts");
   return c.json(await getStoredAdvice(c.env));
 });
 
 api.get("/advisor/history", async (c) => {
-  const { getAdviceHistory } = await import("../lib/ai/advisor.ts");
+  const { getAdviceHistory } = await import("../../lib/ai/advisor.ts");
   return c.json(await getAdviceHistory(c.env));
 });
 
 api.delete("/advisor/history", async (c) => {
-  const { clearAdviceHistory } = await import("../lib/ai/advisor.ts");
+  const { clearAdviceHistory } = await import("../../lib/ai/advisor.ts");
   await clearAdviceHistory(c.env);
   return c.json({ ok: true });
 });
@@ -2034,7 +2034,7 @@ api.delete("/advisor/history", async (c) => {
 // й не ховаємось за 502: рахуємо детермінований fallback із канонічних чисел і кажемо, чому
 // він тут (`fallback_reason`). Краще деградувати, ніж мовчати (§Обробка помилок).
 api.post("/advisor/generate", async (c) => {
-  const { buildAdvice, fallbackAdvice } = await import("../lib/ai/advisor.ts");
+  const { buildAdvice, fallbackAdvice } = await import("../../lib/ai/advisor.ts");
   if (!c.env.ANTHROPIC_API_KEY) {
     return c.json(await fallbackAdvice(c.env, st(c.get("locale"), "errAiKeyMissing")));
   }
@@ -2058,7 +2058,7 @@ api.post("/advisor/chat", async (c) => {
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
   const attached = Array.isArray(body.attachedTxIds) ? body.attachedTxIds.filter((x) => typeof x === "string").slice(0, 10) : [];
-  const { chatReply } = await import("../lib/ai/advisor.ts");
+  const { chatReply } = await import("../../lib/ai/advisor.ts");
   try {
     return c.json(await chatReply(c.env, msgs, attached));
   } catch (e) {
@@ -2069,7 +2069,7 @@ api.post("/advisor/chat", async (c) => {
 // §A1: шар фактів про світ. Список / додати (ручний) / підтвердити-скасувати / видалити.
 // Гейт: лише confirmed факт із коригуванням рухає числа (categoryMonthlyLevels).
 api.get("/facts", async (c) => {
-  const { listFacts } = await import("../lib/ai/advisor.ts");
+  const { listFacts } = await import("../../lib/ai/advisor.ts");
   return c.json(await listFacts(c.env));
 });
 
@@ -2232,7 +2232,7 @@ api.get("/transactions/:id/reimbursement-usage", async (c) => {
 // тут лише транспорт. Генерація йде добовим кроном; `/notifications/generate` — ручний прогін.
 api.get("/notifications", async (c) => {
   const url = new URL(c.req.url);
-  const { listNotifications } = await import("../lib/messaging/notify.ts");
+  const { listNotifications } = await import("../../lib/messaging/notify.ts");
   return c.json(await listNotifications(c.env, {
     limit: Number(url.searchParams.get("limit") ?? 60),
     kind: url.searchParams.get("kind"),
@@ -2243,36 +2243,36 @@ api.get("/notifications", async (c) => {
 api.post("/notifications/read", async (c) => {
   const body = await c.req.json<{ ids?: number[] }>().catch(() => ({ ids: [] }));
   const ids = (body.ids ?? []).map(Number).filter(Number.isFinite);
-  const { markRead, unreadCount } = await import("../lib/messaging/notify.ts");
+  const { markRead, unreadCount } = await import("../../lib/messaging/notify.ts");
   await markRead(c.env, ids);
   return c.json({ ok: true, unread: await unreadCount(c.env) });
 });
 
 api.post("/notifications/read-all", async (c) => {
-  const { markAllRead } = await import("../lib/messaging/notify.ts");
+  const { markAllRead } = await import("../../lib/messaging/notify.ts");
   await markAllRead(c.env);
   return c.json({ ok: true, unread: 0 });
 });
 
 api.delete("/notifications", async (c) => {
-  const { clearNotifications } = await import("../lib/messaging/notify.ts");
+  const { clearNotifications } = await import("../../lib/messaging/notify.ts");
   await clearNotifications(c.env);
   return c.json({ ok: true });
 });
 
 api.post("/notifications/generate", async (c) => {
-  const { generateNotifications } = await import("../lib/messaging/notify.ts");
+  const { generateNotifications } = await import("../../lib/messaging/notify.ts");
   return c.json(await generateNotifications(c.env));
 });
 
 api.get("/notifications/prefs", async (c) => {
-  const { getPrefs } = await import("../lib/messaging/notify.ts");
+  const { getPrefs } = await import("../../lib/messaging/notify.ts");
   return c.json(await getPrefs(c.env));
 });
 
 api.put("/notifications/prefs", async (c) => {
   const body = await c.req.json<Record<string, boolean>>().catch(() => ({}));
-  const { setPrefs } = await import("../lib/messaging/notify.ts");
+  const { setPrefs } = await import("../../lib/messaging/notify.ts");
   return c.json(await setPrefs(c.env, body));
 });
 
@@ -2350,14 +2350,14 @@ api.get("/search", async (c) => {
 // §A5: корпус знань — вбудовані доки + користувацький шар (`knowledge_docs`, міграція 0028).
 // Тут лише транспорт; злиття/ліміти/локи — у `worker/lib/knowledge/index.ts`.
 api.get("/knowledge", async (c) => {
-  const { knowledgeMeta } = await import("../lib/ai/knowledge/index.ts");
+  const { knowledgeMeta } = await import("../../lib/ai/knowledge/index.ts");
   return c.json(await knowledgeMeta(c.env.DB, c.get("locale")));
 });
 
 // Повний текст документа — для редактора. Для вбудованого без заміни віддає вбудований текст,
 // щоб «редагувати» починалося з реального вмісту, а не з порожнечі.
 api.get("/knowledge/:id", async (c) => {
-  const { knowledgeBody } = await import("../lib/ai/knowledge/index.ts");
+  const { knowledgeBody } = await import("../../lib/ai/knowledge/index.ts");
   const doc = await knowledgeBody(c.env.DB, c.req.param("id"), c.get("locale"));
   if (!doc) return c.json({ error: st(c.get("locale"), "errDocNotFound") }, 404);
   return c.json(doc);
@@ -2365,7 +2365,7 @@ api.get("/knowledge/:id", async (c) => {
 
 // Створити власну нотатку. Ліміти — щоб корпус (він їде в КОЖЕН виклик чату) не розповзався.
 api.post("/knowledge", async (c) => {
-  const { DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS, userCharsExcept } = await import("../lib/ai/knowledge/index.ts");
+  const { DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS, userCharsExcept } = await import("../../lib/ai/knowledge/index.ts");
   const b = await c.req.json<{ title?: string; summary?: string; body?: string }>();
   const title = (b.title ?? "").trim();
   const body = (b.body ?? "").trim();
@@ -2385,7 +2385,7 @@ api.post("/knowledge", async (c) => {
 
 // Зберегти: власну нотатку — як є; вбудований док — як override (крім locked).
 api.put("/knowledge/:id", async (c) => {
-  const { KNOWLEDGE_DOCS, DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS, userCharsExcept, isLocked } = await import("../lib/ai/knowledge/index.ts");
+  const { KNOWLEDGE_DOCS, DOC_MAX_CHARS, USER_TOTAL_MAX_CHARS, userCharsExcept, isLocked } = await import("../../lib/ai/knowledge/index.ts");
   const id = c.req.param("id");
   const b = await c.req.json<{ title?: string; summary?: string; body?: string; enabled?: boolean }>();
   const base = KNOWLEDGE_DOCS.find((d) => d.id === id);
@@ -2414,7 +2414,7 @@ api.put("/knowledge/:id", async (c) => {
 
 // Видалити власну нотатку АБО повернути вбудований док до заводського тексту.
 api.delete("/knowledge/:id", async (c) => {
-  const { isLocked } = await import("../lib/ai/knowledge/index.ts");
+  const { isLocked } = await import("../../lib/ai/knowledge/index.ts");
   const id = c.req.param("id");
   if (isLocked(id)) return c.json({ error: st(c.get("locale"), "errDocCannotHide") }, 400);
   await knowledgeRepo.remove(c.env.DB, id);
@@ -2451,7 +2451,7 @@ api.get("/analytics/spark", async (c) => {
 
 // §H: детермінований Індекс фінздоров'я (без AI) + запис скору за добу для тренду в часі.
 api.get("/analytics/health", async (c) => {
-  const { financeHealth } = await import("../lib/ai/advisor.ts");
+  const { financeHealth } = await import("../../lib/ai/advisor.ts");
   const h = await financeHealth(c.env);
   const now = Math.floor(Date.now() / 1000);
   // §APP_TZ: доба — київська. Скор пишеться при кожному відкритті сторінки, тож із UTC-ключем
@@ -2468,7 +2468,7 @@ api.get("/analytics/health", async (c) => {
 });
 
 api.post("/facts", async (c) => {
-  const { addFact } = await import("../lib/ai/advisor.ts");
+  const { addFact } = await import("../../lib/ai/advisor.ts");
   const b = await c.req.json<{
     text?: string; effective_from?: number; expires_at?: number | null;
     category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
@@ -2483,14 +2483,14 @@ api.post("/facts", async (c) => {
 });
 
 api.post("/facts/:id/confirm", async (c) => {
-  const { confirmFact } = await import("../lib/ai/advisor.ts");
+  const { confirmFact } = await import("../../lib/ai/advisor.ts");
   const on = (await c.req.json<{ on?: boolean }>().catch(() => ({ on: true }))).on !== false;
   await confirmFact(c.env, Number(c.req.param("id")), on);
   return c.json({ ok: true });
 });
 
 api.delete("/facts/:id", async (c) => {
-  const { deleteFact } = await import("../lib/ai/advisor.ts");
+  const { deleteFact } = await import("../../lib/ai/advisor.ts");
   await deleteFact(c.env, Number(c.req.param("id")));
   return c.json({ ok: true });
 });
@@ -2498,7 +2498,7 @@ api.delete("/facts/:id", async (c) => {
 // §GR2: AI-оцінка групи (структуровані факти) + чат по конкретній групі.
 api.post("/events/:id/ai", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { evaluateGroupAdvice } = await import("../lib/ai/advisor.ts");
+  const { evaluateGroupAdvice } = await import("../../lib/ai/advisor.ts");
   try {
     const r = await evaluateGroupAdvice(c.env, Number(c.req.param("id")));
     return r ? c.json(r) : c.json({ error: "not_found" }, 404);
@@ -2512,7 +2512,7 @@ api.post("/events/:id/chat", async (c) => {
   const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
-  const { chatAboutGroup } = await import("../lib/ai/advisor.ts");
+  const { chatAboutGroup } = await import("../../lib/ai/advisor.ts");
   try {
     return c.json(await chatAboutGroup(c.env, Number(c.req.param("id")), msgs));
   } catch (e) {
@@ -2527,7 +2527,7 @@ api.post("/transactions/:id/chat", async (c) => {
   const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
-  const { chatAboutTx } = await import("../lib/ai/advisor.ts");
+  const { chatAboutTx } = await import("../../lib/ai/advisor.ts");
   try {
     return c.json(await chatAboutTx(c.env, c.req.param("id"), msgs));
   } catch (e) {
@@ -2538,7 +2538,7 @@ api.post("/transactions/:id/chat", async (c) => {
 // AI-план бюджету: пропозиції місячних лімітів-конвертів (приймаються на /plan).
 api.post("/budgets/propose", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { proposeBudgets } = await import("../lib/ai/advisor.ts");
+  const { proposeBudgets } = await import("../../lib/ai/advisor.ts");
   try {
     return c.json(await proposeBudgets(c.env));
   } catch (e) {
@@ -2550,7 +2550,7 @@ api.post("/budgets/propose", async (c) => {
 api.post("/budgets/chat", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { messages } = await c.req.json<{ messages: { role: "user" | "assistant"; content: string }[] }>();
-  const { budgetChatReply } = await import("../lib/ai/advisor.ts");
+  const { budgetChatReply } = await import("../../lib/ai/advisor.ts");
   try {
     return c.json(await budgetChatReply(c.env, normChatMessages(messages)));
   } catch (e) {
@@ -2650,7 +2650,7 @@ api.delete("/accounts/:id", async (c) => {
 
 // Ручний тригер проактивного TG-пушу (тест без очікування тижневого крону).
 api.post("/tg/proactive", async (c) => {
-  const { runWeeklyProactive } = await import("../lib/messaging/proactive.ts");
+  const { runWeeklyProactive } = await import("../../lib/messaging/proactive.ts");
   try {
     return c.json(await runWeeklyProactive(c.env));
   } catch (e) {
@@ -2660,7 +2660,7 @@ api.post("/tg/proactive", async (c) => {
 
 // §F2 крок 2: скан вагомих непояснених операцій за 14 днів → TG-алерти (ручний тест/фолбек).
 api.post("/alerts/scan", async (c) => {
-  const { scanAlerts } = await import("../lib/messaging/alert.ts");
+  const { scanAlerts } = await import("../../lib/messaging/alert.ts");
   try {
     return c.json(await scanAlerts(c.env, new URL(c.req.url).origin));
   } catch (e) {
@@ -2670,7 +2670,7 @@ api.post("/alerts/scan", async (c) => {
 
 // Refresh currency rates cache from public mono endpoint (call daily / on demand).
 api.post("/rates/refresh", async (c) => {
-  const { getCurrencyRates } = await import("../lib/bank/mono.ts");
+  const { getCurrencyRates } = await import("../../lib/bank/mono.ts");
   try {
     const rates = await getCurrencyRates();
     const map: Record<string, number> = {};
