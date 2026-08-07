@@ -2,8 +2,38 @@
 // причепити до наявної mono-транзакції за сумою+датою (±2 дні) або створити готівкову.
 // Викликається з HTTP-інгесту (routes/ingest.ts) і Telegram-бота (routes/telegram.ts).
 import type { Env } from "../../env.ts";
-import { readReceipt, type ReceiptResult, type AiUsageBrief, briefUsage } from "./ai.ts";
+// The OCR call itself now lives HERE, not in `ai.ts` (phase 5, L6). It used to sit in the
+// transport file even though this feature file already existed — the anomaly that smeared one
+// feature across two files and let the next person append to whichever they had open.
+import { callHaikuJson } from "./json.ts";
+import { buildSystemPrefix } from "./prompt.ts";
+import type { AnthropicUsage } from "./cost.ts";
+import { briefUsage, type AiUsageBrief } from "./cost.ts";
 import { ensureCashAccount } from "../finance/finance.ts";
+
+// 6.1 Receipt photo -> line items.
+export interface ReceiptResult {
+  store: string | null;
+  purchased_at: string | null;
+  currency: string;
+  total: number;
+  items: { name: string; qty: number; price: number }[];
+}
+
+export async function readReceipt(
+  env: Env,
+  imageBase64: string,
+  mediaType: string,
+): Promise<{ result: ReceiptResult; usage: AnthropicUsage }> {
+  const system = await buildSystemPrefix(
+    env,
+    "розпізнати чек із фото і повернути JSON {store, purchased_at (ISO), currency, total, items:[{name, qty, price}]}",
+  );
+  return callHaikuJson<ReceiptResult>(env, system, [
+    { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
+    { type: "text", text: "Розпізнай цей чек. Поверни лише JSON." },
+  ]);
+}
 
 const toMinor = (major: number): number => Math.round(major * 100);
 

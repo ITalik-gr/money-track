@@ -4,6 +4,7 @@
 // The Telegram recipient is PERSONAL and comes only from `tgTarget()` (§D1); the deployment
 // secret is a fallback for the owner alone.
 import { apiRoutes } from "./_shared.ts";
+import type { NotifPrefs } from "../../../shared/api/platform.ts";
 
 export const notifications = apiRoutes();
 
@@ -47,13 +48,13 @@ notifications.post("/notifications/generate", async (c) => {
 
 notifications.get("/notifications/prefs", async (c) => {
   const { getPrefs } = await import("../../lib/messaging/notify.ts");
-  return c.json(await getPrefs(c.env));
+  return c.json(await getPrefs(c.env) satisfies NotifPrefs);
 });
 
 notifications.put("/notifications/prefs", async (c) => {
   const body = await c.req.json<Record<string, boolean>>().catch(() => ({}));
   const { setPrefs } = await import("../../lib/messaging/notify.ts");
-  return c.json(await setPrefs(c.env, body));
+  return c.json(await setPrefs(c.env, body) satisfies NotifPrefs);
 });
 
 // Ручний тригер проактивного TG-пушу (тест без очікування тижневого крону).

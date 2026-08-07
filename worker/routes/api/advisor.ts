@@ -5,6 +5,7 @@
 // the same money. Confirmed facts adjust the canon inside `categoryMonthlyLevels`, never here.
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
+import type { Insight, AdviceHistoryItem, Fact } from "../../../shared/api/ai.ts";
 
 export const advisor = apiRoutes();
 
@@ -12,7 +13,7 @@ export const advisor = apiRoutes();
 
 advisor.get("/insight", async (c) => {
   const { getStoredInsight } = await import("../../lib/ai/insight.ts");
-  return c.json(await getStoredInsight(c.env));
+  return c.json(await getStoredInsight(c.env) satisfies Insight | null);
 });
 
 // Manual trigger (cron also runs it). ?days= sets and persists the coverage window.
@@ -34,7 +35,7 @@ advisor.get("/advisor", async (c) => {
 
 advisor.get("/advisor/history", async (c) => {
   const { getAdviceHistory } = await import("../../lib/ai/advisor.ts");
-  return c.json(await getAdviceHistory(c.env));
+  return c.json(await getAdviceHistory(c.env) satisfies AdviceHistoryItem[]);
 });
 
 advisor.delete("/advisor/history", async (c) => {
@@ -83,7 +84,7 @@ advisor.post("/advisor/chat", async (c) => {
 // Гейт: лише confirmed факт із коригуванням рухає числа (categoryMonthlyLevels).
 advisor.get("/facts", async (c) => {
   const { listFacts } = await import("../../lib/ai/advisor.ts");
-  return c.json(await listFacts(c.env));
+  return c.json(await listFacts(c.env) satisfies Fact[]);
 });
 
 advisor.post("/facts", async (c) => {

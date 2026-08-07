@@ -1,0 +1,12 @@
+{
+  "status": 200,
+  "body": {
+    "window": {
+      "from": 1763197200,
+      "to": 1778749200
+    },
+    "basket_change_pct": null,
+    "tracked": 0,
+    "items": []
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "body": {
+    "a": {
+      "from": 1776157200,
+      "to": 1778749200,
+      "spend": 0,
+      "income": 0,
+      "byCategory": []
+    },
+    "b": {
+      "from": 1773565200,
+      "to": 1776157200,
+      "spend": 0,
+      "income": 0,
+      "byCategory": []
+    }
+  }
+}

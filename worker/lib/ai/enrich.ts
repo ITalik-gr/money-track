@@ -2,7 +2,144 @@
 // вчить merchant_alias по сирому опису (повтори застосуються без AI), проставляє
 // теги (вторинні категорії) і прапорець переказу для kind transfer/withdrawal.
 import type { Env } from "../../env.ts";
-import { MODEL_SMART, enrichTransaction, proposeTransferCategory, logUsage } from "./ai.ts";
+// The three model calls this file orchestrates now LIVE here (phase 5, L6): categorising one
+// transaction, guessing the real category behind a withdrawal, and parsing free text into a
+// record. They used to sit in `ai.ts` — see ARCHITECTURE.md §3 D3 on why that split had no rule.
+import { callHaikuJson } from "./json.ts";
+import { buildSystemPrefix } from "./prompt.ts";
+import type { AnthropicUsage } from "./cost.ts";
+import { logUsage } from "./cost.ts";
+
+// 6.2 Quick text entry -> structured record.
+export interface TextResult {
+  merchant: string;
+  amount: number;
+  currency: string;
+  category_guess: number | null;
+  note: string | null;
+}
+
+export async function parseText(
+  env: Env,
+  input: string,
+): Promise<{ result: TextResult; usage: AnthropicUsage }> {
+  const system = await buildSystemPrefix(
+    env,
+    "розпарсити швидкий текстовий запис витрати у JSON {merchant, amount, currency, category_guess (id або null), note}",
+  );
+  return callHaikuJson<TextResult>(env, system, [{ type: "text", text: input }]);
+}
+
+// Enrich a single transaction from its raw bank fields — understand what it actually
+// is, pick a category, flag transfers/withdrawals, suggest secondary tags. Reuses the
+// cached taxonomy prefix, so a batch of enrichments is cheap.
+export interface EnrichResult {
+  clean_name: string;      // людська назва замість сирого опису
+  category_id: number | null;
+  kind: "expense" | "income" | "transfer" | "withdrawal";
+  tag_ids: number[];       // до 3 вторинних категорій-тегів (не сумуються)
+  note: string | null;     // короткий здогад, що це, для контексту
+}
+
+export async function enrichTransaction(
+  env: Env,
+  tx: {
+    merchant: string | null; comment: string | null; mcc: number | null;
+    amount: number; currency_code: number; history?: string | null;
+    user_note?: string | null; current_category?: string | null; profile?: string | null;
+    subscriptions?: string | null;
+  },
+): Promise<{ result: EnrichResult; usage: AnthropicUsage }> {
+  const system = await buildSystemPrefix(
+    env,
+    "визначити суть банківської транзакції за сирими полями і повернути JSON " +
+      "{clean_name (людська назва бренду), category_id (id основної категорії або null), " +
+      // Промт цілком українською, тож модель за інерцією «олюднювала» латиницю в кирилицю:
+      // «SILPO» приїжджало як «Силпо». Назва мерчанта — це ім'я власне й ключ, за яким
+      // сходяться merchant_alias/консенсус/сторінка мерчанта, тож транслітерація ще й дробить
+      // історію одного магазину на два різні написання.
+      "⚠️ clean_name — ІМʼЯ ВЛАСНЕ: зберігай написання бренду з raw_description, НЕ транслітеруй " +
+      "і НЕ перекладай (SILPO → «Silpo», НЕ «Силпо»; NOVUS → «Novus»). Якщо в описі назва вже " +
+      "кирилицею — лишай кирилицею. Прибирай лише банківський шум: номери терміналів, міста, коди. " +
+      "kind ('expense'|'income'|'transfer'|'withdrawal'; transfer=переказ між своїми рахунками/округлення, " +
+      "withdrawal=зняття готівки), tag_ids (масив 0-3 id вторинних категорій), note (короткий здогад або null)}. " +
+      "ПРІОРИТЕТ №1 — user_note: якщо користувач прямо написав, що це (напр. «це відпочинок», «подарунок», " +
+      "«це Розваги», «це моя зарплата»), став саме ту категорію, яку він має на увазі (враховуй синоніми: відпочинок/дозвілля→Розваги, " +
+      "їжа→Продукти тощо). ПРІОРИТЕТ №2 — current_category: якщо користувач уже вручну обрав категорію, НЕ перетирай " +
+      "її на «Інше» без вагомих підстав із полів; лишай як є або уточнюй у її межах. " +
+      "НАДХОДЖЕННЯ (sign=надходження): вхідний переказ від приватної особи (навіть без магазину/MCC 4829) — це НЕ " +
+      "автоматично «Подарунок». Якщо користувач каже (в user_note чи профілі), що це його зарплата / дохід / вивід " +
+      "власних коштів (напр. вивів криптозарплату через P2P) — став «Зарплата» або відповідний дохід, а не «Подарунок». " +
+      "«Подарунок» лише коли справді схоже на дарунок і немає інших вказівок. " +
+      "Якщо є user_profile — це опис користувача та його ситуації; використовуй для контексту (напр. фрилансер → " +
+      "деякі списання це податки/робочі витрати). Якщо є merchant_history — раніше користувач класифікував цього " +
+      "мерчанта; узгоджуйся, якщо не суперечить вище. Якщо є known_subscriptions — це оголошені користувачем " +
+      "регулярні підписки зі схожою назвою; коли операція скидається на списання такої підписки, став саме ту категорію.",
+    true, // §R6: вмикаємо детальний гайд (Spotify→Стрімінги тощо) + активує prompt-кеш для bulk-enrich.
+  );
+  const amountMajor = tx.amount / 100;
+  const payload = {
+    raw_description: tx.merchant,
+    bank_comment: tx.comment,
+    mcc: tx.mcc,
+    amount: amountMajor,
+    currency_code: tx.currency_code,
+    sign: tx.amount < 0 ? "витрата" : "надходження",
+    merchant_history: tx.history ?? null,
+    user_note: tx.user_note ?? null,
+    current_category: tx.current_category ?? null,
+    user_profile: tx.profile ?? null,
+    known_subscriptions: tx.subscriptions ?? null,
+  };
+  // Модель за задачею (рішення користувача 2026-07-14): коли користувач САМ описав операцію
+  // нотаткою (user_note) — беремо розумний Sonnet для розпізнання (він поважає пояснення й не
+  // плутає «зарплату/вивід» з «подарунком»). Масовий/авто-enrich без нотатки лишається на дешевому Haiku.
+  const model = tx.user_note?.trim() ? MODEL_SMART : MODEL_FAST;
+  return callHaikuJson<EnrichResult>(env, system, [
+    { type: "text", text: `Проаналізуй транзакцію і поверни лише JSON:\n${JSON.stringify(payload)}` },
+  ], 1024, model);
+}
+
+// §F2 крок 2: для операції у бакеті «Перекази і зняття» (зняття готівки, card-to-card)
+// AI здогадується про РЕАЛЬНУ категорію витрати — на що ці кошти пішли насправді.
+// Повертає real_category_id (id основної категорії) або null, якщо це справжній
+// внутрішній рух власних коштів / визначити неможливо. Вторинну класифікацію лишаємо.
+export interface TransferCategoryResult {
+  real_category_id: number | null;
+  note: string | null; // короткий здогад укр. або null
+  confidence: "high" | "low"; // low → рядок «потребує уваги» в рев'ю (§R2-ST4)
+}
+
+export async function proposeTransferCategory(
+  env: Env,
+  tx: { merchant: string | null; comment: string | null; mcc: number | null; amount: number; currency_code: number; history?: string | null; hint?: string | null },
+  model: string = MODEL_FAST,
+): Promise<{ result: TransferCategoryResult; usage: AnthropicUsage }> {
+  const system = await buildSystemPrefix(
+    env,
+    "це операція-переказ або зняття готівки. Визнач РЕАЛЬНУ категорію витрати — на що кошти " +
+      "пішли насправді (зняв готівку → найімовірніша побутова категорія на кшталт «Продукти» чи «Інше»; " +
+      "переказ конкретному сервісу/людині за товар/послугу → відповідна категорія). Поверни JSON " +
+      "{real_category_id (id основної категорії-витрати або null), note (короткий здогад укр. або null), " +
+      "confidence ('high' якщо впевнений; 'low' якщо це радше здогад і варто перепитати користувача)}. " +
+      "Якщо це справжній рух власних коштів між своїми рахунками/банками/округлення — real_category_id = null. " +
+      "Якщо є user_hint — це уточнення користувача саме про цю операцію; довіряй йому найбільше. " +
+      "Якщо є merchant_history — узгоджуйся з ним.",
+  );
+  const payload = {
+    raw_description: tx.merchant,
+    bank_comment: tx.comment,
+    mcc: tx.mcc,
+    amount: tx.amount / 100,
+    currency_code: tx.currency_code,
+    merchant_history: tx.history ?? null,
+    user_hint: tx.hint ?? null,
+  };
+  return callHaikuJson<TransferCategoryResult>(env, system, [
+    { type: "text", text: `Проаналізуй операцію і поверни лише JSON:\n${JSON.stringify(payload)}` },
+  ], 1024, model);
+}
+import { MODEL_SMART, MODEL_FAST } from "./models.ts";
 import { getState } from "../finance/repo.ts";
 import { relatedSubsHint, matchActiveSubscription } from "../finance/subscriptions.ts";
 

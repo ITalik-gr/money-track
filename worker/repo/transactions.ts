@@ -4,6 +4,20 @@ import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import { stLit } from "../lib/platform/i18n.ts";
 import { STATS_JOINS, SPEND_WHERE, amountSum } from "../lib/finance/stats.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
+// Contract types, imported rather than re-declared — a private twin of a response row is D2 one
+// layer down: two spellings, drifting quietly, with `tsc` unable to compare them.
+import type { TxRow, TxDetail, TagRow, ReceiptRow, ReceiptItemRow, TxSplit } from "../../shared/api/transactions.ts";
+import type { SearchResults } from "../../shared/api/platform.ts";
+import type { Transaction } from "../../shared/types.ts";
+
+/**
+ * What `byId` selects: the whole `transactions` row plus the joined labels.
+ *
+ * It is `TxDetail` minus the two things the ROUTE attaches afterwards — the receipt (a second
+ * query plus its items) and the tags (a join table). Saying so with `Omit` rather than by hand
+ * means adding a column to `TxDetail` cannot leave this row silently behind.
+ */
+export type TxDetailRow = Omit<TxDetail, "receipt" | "tags">;
 
 /**
  * Feed filter, already parsed and coerced by the route.
@@ -64,7 +78,7 @@ export async function listFeed(
   db: AppDb,
   locale: NotifLocale,
   filter: FeedFilter,
-): Promise<Record<string, unknown>[]> {
+): Promise<TxRow[]> {
   const { clause, binds } = buildWhere(filter);
   const r = await db.prepare(
     `SELECT t.*, ${catNameSql(locale, "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
@@ -80,7 +94,7 @@ export async function listFeed(
      ORDER BY t.time DESC LIMIT ? OFFSET ?`,
   )
     .bind(...binds, filter.limit, filter.offset)
-    .all();
+    .all<TxRow>();
   return r.results ?? [];
 }
 
@@ -95,7 +109,7 @@ export async function listFeed(
  */
 export async function byId(
   db: AppDb, locale: NotifLocale, id: string,
-): Promise<Record<string, unknown> | null> {
+): Promise<TxDetailRow | null> {
   return await db.prepare(
     `SELECT t.*, ${catNameSql(locale, "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
             ${catNameSql(locale, "rc.name")} AS real_category_name, rc.color AS real_category_color,
@@ -112,26 +126,29 @@ export async function byId(
      LEFT JOIN transactions tp ON tp.transfer_pair_id = t.transfer_pair_id AND tp.id <> t.id
      LEFT JOIN accounts ap ON ap.id = tp.account_id
      WHERE t.id = ?`,
-  ).bind(id).first();
+  ).bind(id).first<TxDetailRow>();
 }
 
 /** Tags attached to a transaction. Tags are rows in `categories`, reached through a join table. */
 export async function tagsFor(
   db: AppDb, locale: NotifLocale, txId: string,
-): Promise<Record<string, unknown>[]> {
+): Promise<TagRow[]> {
   const r = await db.prepare(
     `SELECT c.id, ${catNameSql(locale, "c.name")} AS name, c.color FROM transaction_tags tt JOIN categories c ON c.id = tt.category_id
      WHERE tt.transaction_id = ?`,
-  ).bind(txId).all();
+  ).bind(txId).all<TagRow>();
   return r.results ?? [];
 }
 
-export async function receiptById(db: AppDb, receiptId: number): Promise<Record<string, unknown> | null> {
-  return await db.prepare("SELECT * FROM receipts WHERE id = ?").bind(receiptId).first();
+/** The stored receipt row, WITHOUT its items — the caller assembles `ReceiptRow` from both. */
+export type ReceiptHead = Omit<ReceiptRow, "items">;
+
+export async function receiptById(db: AppDb, receiptId: number): Promise<ReceiptHead | null> {
+  return await db.prepare("SELECT * FROM receipts WHERE id = ?").bind(receiptId).first<ReceiptHead>();
 }
 
-export async function receiptItems(db: AppDb, receiptId: number): Promise<Record<string, unknown>[]> {
-  const r = await db.prepare("SELECT * FROM receipt_items WHERE receipt_id = ?").bind(receiptId).all();
+export async function receiptItems(db: AppDb, receiptId: number): Promise<ReceiptItemRow[]> {
+  const r = await db.prepare("SELECT * FROM receipt_items WHERE receipt_id = ?").bind(receiptId).all<ReceiptItemRow>();
   return r.results ?? [];
 }
 
@@ -174,12 +191,12 @@ export async function pendingEnrichCount(db: AppDb): Promise<number> {
 /** The parts of a split transaction, with their category labels. */
 export async function splitsFor(
   db: AppDb, locale: NotifLocale, txId: string,
-): Promise<Record<string, unknown>[]> {
+): Promise<TxSplit[]> {
   const r = await db.prepare(
     `SELECT s.id, s.category_id, s.amount, ${catNameSql(locale, "cat.name")} AS category_name, cat.color AS category_color
      FROM tx_splits s LEFT JOIN categories cat ON cat.id = s.category_id
      WHERE s.tx_id = ? ORDER BY s.id`,
-  ).bind(txId).all();
+  ).bind(txId).all<TxSplit>();
   return r.results ?? [];
 }
 
@@ -285,7 +302,7 @@ export async function reimbursementUsage(
 export interface SearchHits {
   merchants: { name: string; n: number; spent: number }[];
   categories: { id: number; name: string; color: string | null; parent_name: string | null }[];
-  transactions: Record<string, unknown>[];
+  transactions: SearchResults["transactions"];
 }
 
 /**
@@ -320,7 +337,7 @@ export async function search(
        FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
        WHERE ${orLike("t.merchant")} OR ${orLike("t.comment")} OR ${orLike("t.user_note")}
        ORDER BY t.time DESC LIMIT 6`,
-    ).bind(...likes, ...likes, ...likes).all(),
+    ).bind(...likes, ...likes, ...likes).all<SearchResults["transactions"][number]>(),
   ]);
   return {
     merchants: merchants.results ?? [],
@@ -340,9 +357,16 @@ export async function search(
 // STATEMENTS for the caller to `batch()`, instead of quietly choosing an ordering of their own.
 // ==============================================================================================
 
-/** The whole row, for handlers that need to compare against what is already stored. */
-export async function rawById(db: AppDb, id: string): Promise<Record<string, unknown> | null> {
-  return await db.prepare("SELECT * FROM transactions WHERE id = ?").bind(id).first();
+/**
+ * The whole stored row, for callers that must compare against what is ALREADY there.
+ *
+ * `Transaction` (shared/types.ts) is the table, not a response: no joined labels, no computed
+ * columns. That is the point — the edit scenario decides whether the user renamed a merchant by
+ * comparing with what the bank last wrote, and a joined display name would answer a different
+ * question.
+ */
+export async function rawById(db: AppDb, id: string): Promise<Transaction | null> {
+  return await db.prepare("SELECT * FROM transactions WHERE id = ?").bind(id).first<Transaction>();
 }
 
 export async function amountOf(db: AppDb, id: string): Promise<{ amount: number } | null> {

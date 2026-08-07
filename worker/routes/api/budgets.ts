@@ -7,13 +7,15 @@ import * as categoriesRepo from "../../repo/categories.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
+import type { Budget } from "../../../shared/types.ts";
+import type { AutoBudget } from "../../../shared/api/planning.ts";
 
 export const budgets = apiRoutes();
 
 // ---- budgets & planned ------------------------------------------------------
 
 budgets.get("/budgets", async (c) => {
-  return c.json(await budgetsRepo.listAll(c.env.DB));
+  return c.json(await budgetsRepo.listAll(c.env.DB) satisfies Budget[]);
 });
 
 // Idempotent set: one budget per category+period. amount<=0 clears it.
@@ -78,7 +80,7 @@ budgets.get("/budgets/auto", async (c) => {
     total_level: items.reduce((s, i) => s + i.level, 0),
     total_suggested: items.reduce((s, i) => s + i.suggested, 0),
     items,
-  });
+  } satisfies AutoBudget);
 });
 
 budgets.post("/budgets/auto", async (c) => {

@@ -541,6 +541,31 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 /* scaleX, не width — анімація layout-властивості = thrash (див. .bc-bar). */
 .env-bar span { display: block; width: 100%; height: 100%; border-radius: 999px;
   transform-origin: left center; transition: transform var(--dur-2, .25s) var(--ease-out, ease); }
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
+.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
+.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
+.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wd-label { font-size: 11px; }
+.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
+
 @media (prefers-reduced-motion: reduce) { .env-bar span { transition: none; } }
 .env-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--ink-2); }
 .env-remain { color: var(--muted); white-space: nowrap; }
@@ -1704,6 +1729,31 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   .ai-job-chip { padding: 0; width: 40px; justify-content: center; }
   .ai-job-chip .ajc-text { display: none; }
 }
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
+.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
+.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
+.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wd-label { font-size: 11px; }
+.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ai-job-chip svg { animation: none; }
 }
@@ -2189,6 +2239,31 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* Стовпчик росте scaleY від низу — height анімує layout. */
 .wd-bar { width: 100%; height: 100%; border-radius: 6px 6px 0 0;
   transform-origin: bottom center; transition: transform var(--dur-3, .3s) var(--ease-out, ease); }
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
+.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
+.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
+.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wd-label { font-size: 11px; }
+.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
+
 @media (prefers-reduced-motion: reduce) { .wd-bar { transition: none; } }
 .wd-lbl { font-size: 11px; color: var(--muted); }
 .deep-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 14px 0 0; }
@@ -2763,6 +2838,31 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* Заливка через transform:scaleX, НЕ width — width анімує layout (thrash), scaleX іде на GPU. */
 .bc-bar span { display: block; width: 100%; height: 100%; border-radius: 999px;
   transform-origin: left center; transition: transform var(--dur-2, 0.25s) var(--ease-out, ease); }
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
+.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
+.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
+.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wd-label { font-size: 11px; }
+.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
+
 @media (prefers-reduced-motion: reduce) { .bc-bar span { transition: none; } }
 /* Засічка базового ліміту — межа «свій місяць ∣ перенесене». */
 .bc-tick { position: absolute; top: -2px; bottom: -2px; width: 2px; border-radius: 1px;
@@ -3867,6 +3967,31 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .cur-split-legend .cs-cur { font-weight: 600; }
 .cur-split-legend .cs-val { font-variant-numeric: tabular-nums; }
 .cur-split-legend .cs-pct { font-size: 12px; }
+
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
+.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
+.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
+.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wd-label { font-size: 11px; }
+.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

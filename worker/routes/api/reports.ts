@@ -2,6 +2,7 @@
 import * as reportsRepo from "../../repo/reports.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { ReportListItem, ReportFull } from "../../../shared/api/ai.ts";
 
 export const reports = apiRoutes();
 
@@ -9,14 +10,14 @@ export const reports = apiRoutes();
 reports.get("/reports", async (c) => {
   const url = new URL(c.req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 24), 60);
-  return c.json(await reportsRepo.list(c.env.DB, url.searchParams.get("type"), limit));
+  return c.json(await reportsRepo.list(c.env.DB, url.searchParams.get("type"), limit) satisfies ReportListItem[]);
 });
 
 reports.get("/reports/:id", async (c) => {
   const row = await reportsRepo.find(c.env.DB, c.req.param("id"));
   if (!row) return c.json({ error: "not_found" }, 404);
   const { data_json, ...meta } = row;
-  return c.json({ ...meta, data: JSON.parse(data_json) });
+  return c.json({ ...meta, data: JSON.parse(data_json) } satisfies ReportFull);
 });
 
 // Видалити репорт (напр. тестові генерації). Ідемпотентно — 404 не критично.

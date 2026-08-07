@@ -1,7 +1,49 @@
 // §6.6 Weekly insight: aggregate the last 7 days (UAH), compare to the prior week,
 // pass the numbers + user notes to Haiku, and cache the text in app_state.
 import type { Env } from "../../env.ts";
-import { generateInsight, briefUsage, logUsage, type StructuredInsight, type AiUsageBrief } from "./ai.ts";
+// `generateInsight` lives HERE now (phase 5, L6): it used to sit in `ai.ts` while this file —
+// its own feature file — already existed. ARCHITECTURE.md §3 D3 called that the anomaly: no
+// rule decided which of the two files a feature went into, so features were smeared across both.
+import { callHaikuJson } from "./json.ts";
+import { replyLangDirective } from "./prompt.ts";
+import { getTaskModel } from "./models.ts";
+import type { AnthropicContentBlock } from "./ai.ts";
+import type { AiFact } from "./tasks.ts";
+import type { AnthropicUsage } from "./cost.ts";
+import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
+
+// Структурований інсайт для стилізованого рендеру (headline + факти + порада).
+export interface StructuredInsight {
+  headline: string;
+  facts: AiFact[];
+  note?: string | null;
+}
+
+// 6.6 Weekly insight → структурований JSON (щоб фронт стилізував суми/категорії/дельти).
+export async function generateInsight(
+  env: Env,
+  payload: unknown,
+): Promise<{ result: StructuredInsight; usage: AnthropicUsage }> {
+  const system: AnthropicContentBlock[] = [
+    {
+      type: "text",
+      text:
+        "Ти — фінансовий асистент. На основі агрегованих чисел за період (period_label) склади короткий інсайт " +
+        "українською. КОНТЕКСТ у payload: user_profile (реальна ситуація — поважай її, не радь «по книжці»), " +
+        "top_anomalies (найбільші зміни сум проти минулого періоду, delta_uah від'ємний = витрати зросли), " +
+        "by_importance (essential/discretionary/optional — де можна різати), recurring_vs_oneoff (розділяй звичний " +
+        "місячний ритм від разових викидів — top_oneoff це разові, як податки чи стоматолог; НЕ називай їх " +
+        "регулярними і НЕ проєктуй їх у майбутнє). Враховуй user_notes — якщо користувач пояснив разову витрату, " +
+        "не називай її регулярною. Не вигадуй порад, яких не підтверджують числа. " +
+        "Відповідай ВИКЛЮЧНО валідним JSON без markdown: {headline (1 речення — головне за період), " +
+        "facts:[{label, amount (грн число або null), category (назва або null), delta_pct (зміна проти минулого " +
+        "періоду, число +/- або null), tone ('pos'|'neg'|'neutral')}] (2-5 фактів — куди пішло найбільше, помітні " +
+        "зміни, аномалії, розподіл за вагомістю), note (1 коротка конкретна порада або null)}. Суми — у гривнях." +
+        (await replyLangDirective(env)),
+    },
+  ];
+  return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "insight"));
+}
 import { getState, setState } from "../finance/repo.ts";
 import { getRates } from "../finance/finance.ts";
 import { st } from "../platform/i18n.ts";

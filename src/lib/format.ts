@@ -40,6 +40,18 @@ export function monthShort(monthIndex0: number): string {
   return dateFmt({ month: "short" }).format(new Date(2021, monthIndex0, 1));
 }
 
+/**
+ * Localized short weekday name for a SQL `strftime('%w')` index (0 = Sunday), §WEEKDAY.
+ *
+ * Built from a known date rather than a hardcoded array for the same reason as `monthShort`: a
+ * literal list freezes one language, and `check-i18n.mjs` bans constructing `Intl` directly
+ * because a module-level formatter also freezes the locale at import time. 2021-08-01 was a
+ * Sunday, so adding the index lands on the wanted weekday.
+ */
+export function weekdayShort(dow: number): string {
+  return dateFmt({ weekday: "short" }).format(new Date(2021, 7, 1 + dow));
+}
+
 export function startOfMonthUnix(d = new Date()): number {
   return Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
 }

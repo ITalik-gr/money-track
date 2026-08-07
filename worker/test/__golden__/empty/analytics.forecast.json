@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "body": {
+    "monthStart": 1777582800,
+    "now": 1778749200,
+    "daysInMonth": 31,
+    "daysElapsed": 14,
+    "daysRemaining": 17,
+    "spend": 0,
+    "income": 0,
+    "pace": 0,
+    "projectedSpend": 0,
+    "projectedLow": 0,
+    "projectedHigh": 0,
+    "projectedNet": 0,
+    "upcomingPlanned": 0,
+    "upcomingItems": []
+  }
+}

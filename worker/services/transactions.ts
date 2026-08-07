@@ -23,9 +23,10 @@ export type TxEdit = {
  * Returns `null` when the transaction does not exist.
  */
 export async function editTransaction(db: AppDb, id: string, b: TxEdit): Promise<{ learned: boolean } | null> {
-  const tx = await txRepo.rawById(db, id) as {
-    source: string; raw_json: string | null; comment: string | null; mcc: number | null; merchant: string | null;
-  } | null;
+  // No cast any more: `rawById` returns the typed `Transaction` row (phase 2). The cast that used
+  // to be here re-declared five of its columns by hand — a private twin that `tsc` could not
+  // compare with the table, which is the same defect one layer down.
+  const tx = await txRepo.rawById(db, id);
   if (!tx) return null;
 
   // §R7: ручна назва авторитетна. Ставимо name_locked=1, коли користувач змінив назву на

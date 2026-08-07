@@ -2,6 +2,7 @@
 // Telegram-бот (routes/telegram.ts): створення готівкової транзакції, підсумок
 // власних коштів (§5, кредитний ліміт) і останні транзакції. Одне джерело правди.
 import type { Env } from "../../env.ts";
+import { ownFundsMinor, debtMinor } from "./own-funds.ts";
 import type { AppDb } from "../platform/db-shim.ts";
 import { getState } from "./repo.ts";
 
@@ -152,10 +153,10 @@ export async function computeSummary(env: Env): Promise<Summary> {
 
   for (const a of accounts.results ?? []) {
     const creditLimit = a.credit_limit ?? 0;
-    const own = (a.balance ?? 0) - creditLimit;
+    const own = ownFundsMinor(a.balance, creditLimit);
     byCurrency.set(a.currency_code, (byCurrency.get(a.currency_code) ?? 0) + own);
     if (creditLimit > 0 && a.type === "black") {
-      credit = { accountId: a.id, limit: creditLimit, own, debt: own < 0 ? -own : 0 };
+      credit = { accountId: a.id, limit: creditLimit, own, debt: debtMinor(a.balance, creditLimit) };
     }
   }
 

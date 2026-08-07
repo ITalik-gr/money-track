@@ -41,7 +41,7 @@ Rules:
 3. **Доробив задачу** → (а) видали пункт з `ROADMAP.md`; (б) якщо це змінює «як усе працює» (новий інваріант, нове канонічне визначення, новий ops-крок) — онови відповідний розділ `CLAUDE.md`.
 4. **Гроші/статистика** → будь-яка нова аналітика рахується ТІЛЬКИ через `worker/lib/finance/stats.ts` (єдине джерело). Не дублюй SQL-фільтри в ендпоінтах.
 5. **Green-бар перед «готово»:** `npm run check` (tsc app+worker **+ SQL-лінт + тести канону**) + `npm run build`. Канонічний SQL — валідуй на D1.
-   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/check-repo-layer.mjs` (C1: `.prepare()` лише в `repo/`) + `scripts/check-route-size.mjs` (C3: ≤400 рядків на файл у `routes/`+`services/`) + `scripts/gen-migrations.mjs --check` + `npm test`.
+   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/check-repo-layer.mjs` (C1: `.prepare()` лише в `repo/`) + `scripts/check-route-size.mjs` (C3: ≤400 рядків на файл у `routes/`+`services/`) + `scripts/check-api-contract.mjs` (C2/C4: форма відповіді оголошена ОДИН раз, у `shared/api/`) + `scripts/gen-migrations.mjs --check` + `npm test`.
    Остання (2026-07-24, платформа-фаза) падає, якщо `migrations/*.sql` змінились, а ембед для
    Durable Object (`worker/do/migrations.generated.ts`) не перегенеровано — інакше нова міграція
    мовчки не доїхала б у БД юзера. Перегенерувати: `node scripts/gen-migrations.mjs`.
@@ -108,8 +108,15 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 - `worker/repo/*` — ЄДИНИЙ шар, що пише SQL (лінт C1; `services/` теж під забороною, без бюджету).
 - `worker/lib/finance/` — **гроші й канон**: `stats.ts` (ЄДИНЕ джерело розрахунків), `finance`,
   `subscriptions`, `transfers`, `categorize`, `categories-i18n`, `repo`, `merchants`.
-- `worker/lib/ai/` — усе модельне: `ai.ts` (транспорт, ціни, demo-clamp), `advisor`, `enrich`,
-  `insight`, `report`, `receipt`, `knowledge/` (корпус).
+- `worker/lib/ai/` — усе модельне, ШАРАМИ (2026-08-07, було 1335 рядків в одному `ai.ts`):
+  `ai.ts` — ЛИШЕ транспорт (єдиний файл, що POST-ить в Anthropic) · `models.ts` — яка модель на
+  яку задачу · `cost.ts` — скільки коштував виклик і лічильник · **`json.ts` — ШОВ ПРОВАЙДЕРА**
+  (усе вище нього провайдер-агностичне) · `prompt.ts` — стабільний префікс + мовна директива ·
+  `tasks.ts` — розмовні виклики без власного фіча-файлу · `advisor`, `enrich`, `insight`,
+  `report`, `receipt` — фіча-логіка ЖИВЕ ТУТ, а не в транспорті · `knowledge/` (корпус).
+  ⚠️ **Новий AI-виклик кладеться у ФІЧА-файл, а не в `ai.ts`.** Саме так `generateFinancialReport`
+  опинився в транспорті, хоч поруч лежав 330-рядковий `report.ts`: правила не було — і фіча
+  розмазалась по двох файлах, а наступний дописував у той, який був відкритий.
 - `worker/lib/platform/` — мультиюзерність: `auth`, `directory`, `secrets`, `demo`, `forward`,
   `cron`, `db-shim`.
 - `worker/lib/bank/` — `mono`, `backfill`, `providers/` (реєстр банків).
@@ -125,8 +132,15 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   `accounts/` · `settings/` — доменні блоки відповідних екранів.
 - `src/store/` (RTK Query), `src/lib/` (`errors`, `format`, `brands`, `markdown`, `toast`),
   `src/i18n/`.
-- `migrations/*` (0001→0034) · `shared/*` (спільні типи, `notif-i18n`) · `wrangler.jsonc` ·
-  `.dev.vars` (локальні секрети, у .gitignore).
+- `migrations/*` (0001→0037) · `wrangler.jsonc` · `.dev.vars` (локальні секрети, у .gitignore).
+- **`shared/api/*`** (2026-08-07) — ЄДИНЕ оголошення форми КОЖНОЇ відповіді API; файли дзеркалять
+  `worker/routes/api/*`. Клієнт (`src/store/api.ts`) їх імпортує й ре-експортує і **власних типів
+  відповідей не оголошує**; воркер анотує ними свої ПОВЕРНЕННЯ (`satisfies`, а `repo/` повертає
+  прямо їх). Доти клієнт руками описував 86 форм «як він вважає, що сервер віддає», воркер —
+  свої inline (26 із них як `Record<string, unknown>`, тобто без обіцянок узагалі), і `tsc` не міг
+  зіставити дві правди: розходження вилазило в проді по одному полю. Тримається лінтом C2/C4.
+  ⚠️ **Новий ендпоінт → його форма їде у `shared/api/`, а не в компонент і не в хендлер.**
+- `shared/types.ts` — форми ТАБЛИЦЬ (`Account`, `Transaction`, `Category`…), `notif-i18n`.
 
 ## 🔒 Інваріанти (тримати ЗАВЖДИ)
 - Гроші — **INTEGER-копійки** скрізь; ділимо на 100 лише в показі.
@@ -235,6 +249,21 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   **Не рахувати «скільки з бюджету зʼїдено» деінде вручну.**
 - **Місячний BURN (знаменник runway) — `sumLevels(levels)` = сума рівнів категорій (ЄДИНЕ джерело, P1 2026-07-14).** Замінив «витрати_90д ÷ 3» у Пораднику (`buildAdvice`), AI-бюджет-плані (`proposeBudgets`) і бюджет-чаті (`budgetChatReply`). Тепер «Витрати/міс» = сумі `usual` Патернів → одна цифра всюди; не роздувається разовими лумпами (податок/лікар — рівень їх усереднює/виключає), ловить стрибок fixed-косту одразу. `runway = ліквідна_подушка ÷ burn`. **Виняток:** `/analytics/forecast.projectedSpend` — це ІНША цифра (проєкція саме поточного місяця, з його разовими), її свідомо НЕ чіпали.
 - **Прогноз темпу (`/analytics/patterns`) — `projectSpend()` (stats.ts):** прогноз кінця місяця = «вже витрачено + історичний залишок» (НЕ наївний `spent/elapsedFrac`, що роздував рано в місяці / лумпи). Лумпи (1-2 великі операції: податок/оренда/заправка — детект `n≤1 OR biggest≥55%`, або fixed-кост ще не сплачений) НЕ екстраполюємо; кеп 3× звичного. `usual` — з `categoryMonthlyLevels`. `mostly_oneoff`/lumpy — поза «Радаром аномалій». Агрегат `/analytics/forecast` — бленд поточного темпу з історією 3 міс. Стара логіка (elapsedFrac × регулярна частина) замінена.
+- **§WEEKDAY — витрати за днями тижня (2026-08-07): `lib/finance/weekday.ts`, ЄДИНЕ джерело.**
+  Дві речі, без яких графік бреше, і обидві живуть у домені, а не в роуті:
+  (а) **день тижня береться в `APP_TZ`** (`localDowSql`, не голий `strftime('%w')`) — у UTC кожна
+  покупка після 21:00 їде в НАСТУПНИЙ день тижня, а вечір пʼятниці і є найгустішим часом витрат,
+  тож помилка виглядала б не як помилка, а як «субота дорога»;
+  (б) **ділимо на кількість таких днів у вікні** (`weekdayCounts`) — у місяці пʼятниць 5, а субот
+  4, тож сирі суми порівнювати не можна. `typical = spent / days` рахує сервер, щоб екран і
+  AI-контекст не отримали двох різних чисел про одне й те саме.
+  ⚠️ **`busiest` рахується лише серед НЕ-лумпових днів** (той самий поріг 55%, що в
+  `projectSpend`): оренда, що впала на неділю, не робить неділі дорогими — вона робить неділю
+  днем, коли списується оренда.
+- **Реконструкція нетворту — `lib/finance/networth.ts`** (винесено з роуту 2026-08-07): рахунки
+  йдуть НАЗАД поокремо (знак вирішує, чи рахунок у подушці, чи в боргу, тож зводити до
+  реконструкції не можна), а cushion/debt/investment складаються ТИМ САМИМ правилом, що
+  `fundsBreakdown` (§R3) — інакше «зараз» на графіку не збіглося б із Порадником.
 - **Період:** `app_state.period_mode` (`calendar`|`rolling`), перемикач у Статистиці; Головна й Статистика рахують ОДИН період.
 
 ## 🧠 Категоризація (детермін.-first, AI-last)

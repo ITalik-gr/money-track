@@ -1,5 +1,6 @@
 // Stored AI reports. See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import type { ReportListItem } from "../../shared/api/ai.ts";
 
 /**
  * Report list, newest period first.
@@ -13,23 +14,23 @@ import type { AppDb } from "../lib/platform/db-shim.ts";
  */
 export async function list(
   db: AppDb, type: string | null, limit: number,
-): Promise<Record<string, unknown>[]> {
+): Promise<ReportListItem[]> {
   const where = type === "week" || type === "month" || type === "custom" ? "WHERE period_type = ?" : "";
   const binds = where ? [type, limit] : [limit];
   const r = await db.prepare(
     `SELECT id, period_type, period_from, period_to, created_at, model, cost_usd, summary
      FROM ai_reports ${where} ORDER BY period_to DESC, created_at DESC LIMIT ?`,
-  ).bind(...binds).all();
+  ).bind(...binds).all<ReportListItem>();
   return r.results ?? [];
 }
 
 /** One report WITH its payload — the only place `data_json` is read. */
 export async function find(
   db: AppDb, id: string,
-): Promise<({ data_json: string } & Record<string, unknown>) | null> {
+): Promise<(ReportListItem & { data_json: string }) | null> {
   return await db.prepare(
     "SELECT id, period_type, period_from, period_to, created_at, model, cost_usd, summary, data_json FROM ai_reports WHERE id = ?",
-  ).bind(id).first<{ data_json: string } & Record<string, unknown>>();
+  ).bind(id).first<ReportListItem & { data_json: string }>();
 }
 
 /** Hard delete, and idempotent: a report is a derived artefact and can always be regenerated. */

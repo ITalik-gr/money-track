@@ -81,6 +81,12 @@ export async function ownerLocale(db: AppDb): Promise<NotifLocale> {
 }
 
 /** JS-side: localize a single stored category name. Unknown (user) names pass through. */
+// Overloaded so a NOT NULL column stays NOT NULL through the call. `categories.name` is
+// `TEXT NOT NULL`, but the same helper also runs over nullable joins (`rc.name`), and a single
+// `string | null` signature made the non-null case look nullable to every caller — which is
+// exactly the sort of imprecision that makes a contract type say less than the database does.
+export function localizeCatName(locale: NotifLocale, name: string): string;
+export function localizeCatName(locale: NotifLocale, name: string | null): string | null;
 export function localizeCatName(locale: NotifLocale, name: string | null): string | null {
   if (locale !== "en" || name == null) return name;
   return CAT_EN[name] ?? name;

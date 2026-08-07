@@ -31,8 +31,8 @@
 |---|---|
 | Total code | **32 252 lines** (16 019 worker · 15 811 client · 422 shared) |
 | `worker/routes/api.ts` | **3 331 lines · 179 `.prepare()` · 129 routes · 26 domains** → **0 queries** (2026-08-05), then **deleted** (2026-08-07): 16 files under `routes/api/`, largest 769 |
-| `src/store/api.ts` | 1 287 lines · **86 hand-written response types** |
-| `shared/types.ts` | 142 lines · 13 types · **0 imports from the worker** |
+| `src/store/api.ts` | 1 287 lines · **86 hand-written response types** → **809 lines · 0** (2026-08-07) |
+| `shared/types.ts` | 142 lines · 13 types · **0 imports from the worker** → `shared/api/` added, imported by **17 worker files** (2026-08-07) |
 | `src/pages/Stats.tsx` | 1 375 lines |
 | `worker/lib/ai/ai.ts` | 1 335 lines · **6 distinct responsibilities** |
 | `worker/lib/ai/advisor.ts` | 1 088 lines · 38 `.prepare()` · 7 `getRates()` calls |
@@ -86,7 +86,17 @@ This is not a hypothesis. The mechanism has fired **four times**, all documented
 
 ## 3. Duplication register
 
-### 🔴 D1. "Own funds = balance − credit_limit" — **six implementations that disagree**
+### 🔴 D1. "Own funds = balance − credit_limit" — ✅ CLOSED 2026-08-07
+
+**The register was wrong about the sixth.** `notify.ts:316` computes `credit_limit − balance` and
+was recorded here as an *inverted copy*; it is not — the surrounding code labels it **debt**, which
+is a different question, correctly answered. So this was four server copies plus the client, not
+six, and they all agreed. Kept as a lesson: a duplication register is evidence, not a verdict, and
+the check before consolidating is "does this compute the same QUANTITY", not "does the expression
+look similar". `debtMinor()` now derives debt from `ownFundsMinor()`, so the relationship is
+stated in code instead of being re-argued.
+
+The original entry, for the record:
 
 `CLAUDE.md` calls this invariant unbreakable and names `fundsBreakdown()` the single source. In
 reality:
@@ -103,17 +113,41 @@ reality:
 The disagreement was real, not theoretical: the client clamped negative values to zero while the
 server did not, so **the Accounts page total did not match the cushion on the dashboard**.
 
-→ ✅ **Client half fixed 2026-08-03** (clamp removed, logged in `DESIGN.md`). The remaining five
-server-side copies collapse into one `ownFundsMinor()` in phase 4.
+→ ✅ **Client half fixed 2026-08-03** (clamp removed, logged in `DESIGN.md`).
+→ ✅ **Server halves collapsed 2026-08-07** into `lib/finance/own-funds.ts`. All four computed the
+same thing, so the goldens did not move — which is the proof, not a disappointment.
 
-### 🟠 D2. There is no client↔worker contract
+### 🟠 D2. There is no client↔worker contract — ✅ CLOSED 2026-08-07, with one honest limit
+
+**A contract type is a FLOOR, not a ceiling.** `satisfies` proves every declared field is produced;
+it does not prove the response carries nothing else, because the excess-property check only fires
+for object literals — and most handlers spread a row out of `repo/`. Found by measuring rather than
+by reading: `GET /transactions` puts **38 fields on the wire while `TxRow` names 28**, so a quarter
+of that response (`raw_json`, `ai_note`, `alerted`, …) is undeclared, unused by the list, and in
+production carries the bank's raw payload on every row. Filed in `ROADMAP.md`, noted in
+`shared/api/index.ts`. If "nothing else" ever needs proving, the check has to be a golden, not a type.
+
+The original entry:
 
 `shared/types.ts` is imported by **zero** worker files. The "shared" types are shared in name
 only: the client hand-declares 86 types describing what the server returns, the worker declares
 its own inline via `.all<{...}>()`, and `tsc` sees two independent truths it cannot reconcile.
 Drift surfaces only in production. Second in importance after the SQL.
 
-### 🟠 D3. `ai.ts` carries six responsibilities
+### 🟠 D3. `ai.ts` carries six responsibilities — ✅ CLOSED 2026-08-07
+
+**1 335 → 212 lines, transport only.** L2/L3/L4/L5 became `cost.ts` / `models.ts` / `json.ts` /
+`prompt.ts`; L6 went to the feature file that already existed (`report.ts`, `insight.ts`,
+`enrich.ts`, `receipt.ts`), and the conversational calls with no such file — the adviser, the
+per-transaction chat, the budget chat, the group verdict, the feed observations — went to a new
+`tasks.ts`. The provider seam is `json.ts`: everything from it upwards is provider-agnostic.
+
+⚠️ **`demoClamp` is still Anthropic-only** and stayed in transport deliberately — the rule it
+encodes ("clamp where the fetch happens, not at the call site") is what makes it unforgettable,
+and making it provider-aware needs a second provider to be aware OF. Recorded as the one piece of
+phase 5 not done.
+
+The original entry:
 
 | Layer | Contents | Provider-specific? |
 |---|---|---|
@@ -131,15 +165,30 @@ where, so features are smeared across two files.
 **The provider seam runs exactly between L3 and L4.** Everything above L4 is already
 provider-agnostic and needs no changes at all.
 
-### 🟡 D4. The `period_mode` default is written three times
+### 🟡 D4. The `period_mode` default is written three times — ✅ CLOSED 2026-08-07
 
-`api.ts:1376`, `:1707`, `:1927` each do `getState(...) || "calendar"`. A two-line
-`getPeriodMode(env)` removes it.
+Three handlers each did `getState(…) || "calendar"`. Now `getPeriodMode(db)` in `stats.ts` — it
+lives with the canon rather than in `repo/state.ts` because *reading the row* is storage, while
+*deciding that an absent row means calendar* is a domain decision.
 
-### 🟡 D5. `getRates()` is called 7 times inside `advisor.ts`
+Worth recording: the route split made this duplication **less** visible, not more — the three
+copies ended up in three different files. That is exactly when a fourth appears with a different
+default, and why the consolidation followed the split rather than preceding it.
 
-Lines 60, 90, 167, 591, 654, 802, 980 — seven separate reads. Beyond the waste, different parts of
-one response could in principle rest on different rate snapshots.
+### 🟡 D5. `getRates()` is called 7 times inside `advisor.ts` — ✅ CLOSED 2026-08-07
+
+The seven calls turned out to be seven separate ENTRY POINTS, so most of them are simply "one read
+per request" and are fine. The real defect was narrower and worse than the count suggested: three
+entry points read the rates and then, **in the same `Promise.all`**, called something that read
+them again — `collectFinanceSnapshot` → `fundsBreakdown`, `financeHealth` → `fundsBreakdown`,
+`budgetChatReply` → `ownFundsUAH`. Two reads of one row per request, and in principle two
+DIFFERENT snapshots inside one answer if the hourly cron landed between them.
+
+Fixed by letting `fundsBreakdown` / `collectFinanceSnapshot` / `ownFundsUAH` accept a snapshot the
+caller already has (optional, so the many one-shot callers stay one line). **A full
+`RequestContext` was deliberately NOT introduced**: it would have to be threaded through every
+`lib/` signature, which is a large behaviour-risking diff for a problem that turned out to be
+three call sites. If a second field ever needs the same treatment, revisit.
 
 ### 🟢 D6. What already works — leave alone
 
@@ -194,9 +243,9 @@ off twice (the SQL linter, `numbersAreGrounded`). Each rule in §4 gets a determ
 | # | Check | Catches | Status |
 |---|---|---|---|
 | C1 | `.prepare()` only in `repo/` | SQL creeping back into routes | ✅ `scripts/check-repo-layer.mjs` |
-| C2 | route response types imported from `shared/` | client↔server contract drift | phase 2 |
+| C2 | no shapeless row types in `repo/`/`services/` | a response quietly losing a column | ✅ `scripts/check-api-contract.mjs` |
 | C3 | line ceiling per route/service file | `api.ts` regrowing | ✅ `scripts/check-route-size.mjs` |
-| C4 | client declares no API response types of its own | working around C2 | phase 2 |
+| C4 | client declares no API response types of its own | working around C2 | ✅ `scripts/check-api-contract.mjs` |
 | C5 | golden `/analytics` responses match to the kopeck | silent money regressions | ✅ `worker/test/golden.test.ts` |
 | C6 | golden DATABASE STATE after every write endpoint | silent regressions in writes, where the response says nothing | ✅ `worker/test/writes.test.ts` |
 
@@ -368,9 +417,39 @@ per-file ceiling that may never rise, and *also* fails when the real count drops
 without the budget being lowered. That keeps a stale allowance from quietly permitting new debt.
 Verified to fail in both directions.
 
-### Phase 2 — the type contract + C2/C4
-`shared/` becomes the real source; the worker types its returns with it; the client's 86
-hand-written types become imports.
+### Phase 2 — the type contract + C2/C4 ✅ DONE 2026-08-07
+
+`shared/api/` is now the single declaration of every response shape, mirroring
+`worker/routes/api/*` file for file. The client's 86 hand-written types are gone (`src/store/api.ts`
+1 287 → 809 lines); it imports and **re-exports** them, because 66 files already import these names
+from `store/api.ts` and repointing all of them would be a large diff that proves nothing.
+
+**The half that actually closes the defect is the worker side.** A contract only the client imports
+is still one-sided. So `repo/` returns the contract types and handlers annotate with `satisfies`.
+That immediately turned up work the type system had been unable to see:
+
+- **26 `Record<string, unknown>` return types in `repo/`** — a row type that promises nothing. All
+  gone. This was the worker's half of D2: the client declared 86 shapes precisely *because* the
+  server declared none.
+- **Four hand-written "half twins"** — `AccountRow`, `CategoryRow`, `GoalRow`, `FactRow` — each
+  listing a subset of columns with an `[key: string]: unknown` escape hatch, while the query behind
+  them was `SELECT *`. So the client believed it received `provider`, `iban` and the credit-card
+  terms; the repo's type said those did not exist; neither side could see the other. They are now
+  the contract type (or `Omit<…>` of it, where the route adds a computed field afterwards).
+- **`localizeCatName` widened every category name to `string | null`** although
+  `categories.name` is `TEXT NOT NULL`. Fixed with an overload — a contract that says less than
+  the database does is the thing that makes callers write their own narrower copy.
+- **`periodTotals` was typed nullable and is not** (an aggregate with no `GROUP BY` always yields
+  one row) — while `n` inside it genuinely IS nullable, which nobody knew.
+
+**A real defect found, by a test written for this phase.** The golden suite ran only against the
+rich fixture, so the EMPTY account — the state of every new user, and of the demo sandbox for its
+first minutes — was covered by nothing. A second sweep over a migrations-only database (40 more
+tests, 169 → 209) shows `summary.n` arriving as **`null` rather than `0`**: `SPEND_COUNT` carries
+no `COALESCE` and SQL `SUM()` over an empty set is NULL. `Stats.tsx` renders it raw, so the card
+reads blank where it should read zero — exactly the "emptiness reads as breakage" failure
+`CLAUDE.md` warns about. Carried over unchanged with a card in `ROADMAP.md`; the contract type says
+`number | null` because that is what goes over the wire.
 
 ### Phase 3 — split `api.ts` + introduce `services/` + C3 ✅ DONE 2026-08-07
 
@@ -411,11 +490,29 @@ hand-written types become imports.
 Tests stayed at **169 green** throughout — the point of doing this after phase 1 was that with
 zero queries left in the route layer, moving a handler moves transport code only.
 
-### Phase 4 — consolidate the duplicates
-D1 (own funds), D4 (`period_mode`), D5 (`RequestContext`).
+### Phase 4 — consolidate the duplicates ✅ DONE 2026-08-07
 
-### Phase 5 — layer `ai.ts`
-Separate L1–L6, cut the provider seam between L3 and L4, make `demoClamp` provider-aware.
+D1, D4 and D5 all closed — see §3, where each entry now records what was actually found.
+
+**It changed no behaviour after all**, which was not the expectation going in: the phase was
+planned as "the one that changes numbers", and budgeted for deliberate golden re-recording. All
+four own-funds copies agreed, so the goldens stayed still. That is the useful outcome — the
+disagreement the register recorded was between the server and the CLIENT (fixed 2026-08-03), and
+the "sixth inverted copy" was a different quantity that merely resembled one.
+
+### Phase 5 — layer `ai.ts` ✅ DONE 2026-08-07
+
+See §3 D3. One correction to the plan, found while doing it: the seam is at **L4 (`json.ts`)**,
+not "between L3 and L4" as written — `json.ts` itself is already provider-agnostic, so it belongs
+on the far side of the line rather than on it.
+
+**A process note worth more than the refactor.** A cut was made with line numbers taken from the
+ORIGINAL file after three earlier cuts had already shifted them, so the wrong ranges moved. It was
+caught immediately (`tsc`), and the recovery is the point: `git checkout` on the one file, then
+each layer re-cut ONE at a time with the boundaries re-derived by `grep`, and each result `diff`ed
+against the file produced by the first attempt. All four matched byte for byte, which is what
+proves the redo was a redo. **Never pass several ranges from a stale numbering to a tool that
+rewrites the file between them.**
 
 ---
 
@@ -493,6 +590,11 @@ describe the *target*, this describes the *position*.
 | 2026-08-05 | 1 | **batch D, 30** | **19** queries | 108 → **141** ✅ | Planning surface: budgets, reports, planned, events. 28 write scenarios + 4 read goldens (`/budgets/auto` ×2, `/planned/detect`, `/reports`) recorded first. New `repo/{budgets,events,reports}.ts`. `npm run check` + `npm run build` green. |
 | 2026-08-05 | 1 | **batch E, 19** | **0** queries 🎉 | 141 → **169** ✅ | Accounts CRUD, knowledge corpus, both exports. New `repo/{knowledge,state}.ts`. **`api.ts` line deleted from the budget map — flat ban now.** `catNameSql` fell out of its imports (`tsc` said so unprompted). Second fixture defect found and fixed (below). |
 | 2026-08-07 | **3** | **138 routes** | **`api.ts` deleted** 🎉 | 169 ✅ | Split into 16 files under `routes/api/` (largest 769, was 3 331); `index.ts` is a 66-line mount table declaring no route. `services/` created for the three sequence handlers. C1 made recursive + extended to `services/`; **C3 landed** (`check-route-size.mjs`). `npm run check` + `npm run build` green. |
+| 2026-08-07 | **2** | **86 client types → `shared/api/`** | — | 169 → **209** ✅ | Contract closed on BOTH sides: `src/store/api.ts` 1 287 → 809 lines and declares nothing; `repo/` returns contract types (26 `Record<string, unknown>` gone, 4 half-twins folded in). **C2 + C4 landed** (`check-api-contract.mjs`), so all six checks C1–C6 are now green. New golden sweep over an EMPTY account (+40 tests) found `summary.n: null` — carried over, card filed. |
+| 2026-08-07 | tail | self-review · C3 over `lib/` · §WEEKDAY | — | 218 → **222** ✅ | Reviewed the session's own work: no runtime import cycles introduced (the one that exists is older, in `lib/finance/`), restored files byte-identical, and **a real gap found in phase 2's own guarantee** (below). C3 extended to `lib/` with 5 named exceptions. New `/analytics/weekday` — and the cap immediately forced `networth` out of the route into `lib/finance/networth.ts`, which is where reconstruction belonged anyway. |
+| 2026-08-07 | tail | webhook characterization | — | 209 → **218** ✅ | `worker/test/ingest.test.ts`: 8 scenarios over the mono webhook, the highest-traffic path with no coverage at all. Found that an event for an un-synced account is rejected by the FK and lost — filed, not fixed. `telegram`/`import`/`setup` still uncovered. |
+| 2026-08-07 | **5** | `ai.ts` **1 335 → 212** | — | 209 ✅ | Six responsibilities → one. New `models`/`cost`/`json`/`prompt`/`tasks`; feature calls moved to the feature files that already existed. Provider seam at `json.ts`. `demoClamp` left Anthropic-only, deliberately. |
+| 2026-08-07 | **4** | D1 · D4 · D5 | — | 209 ✅ | Own funds → `lib/finance/own-funds.ts` (4 copies, all agreeing — goldens did not move); `period_mode` default → `getPeriodMode()`; the three double rate-reads inside one response fixed by passing the snapshot. **The register was wrong about D1's "inverted sixth copy"** — it computes debt, a different quantity. Expected to change numbers; changed none. |
 
 ### Phase 0b — the write suite (2026-08-04)
 
@@ -592,54 +694,47 @@ transactions → **2**; the export not skipping `user_secrets` → **2**.
 > changed — a bug that needs the type contract first, a deploy that makes the ingest paths urgent —
 > switch, and write down what changed. The alternatives are listed at the bottom with their costs.
 
-**Phase 2 — the client↔worker type contract (D2), plus C2 and C4.**
+**All planned phases are done (0, 1, 2, 3, 4, 5).** What remains is a short, honest tail — none
+of it is the structural defect this document was opened for, and each item can be picked up on its
+own. In rough order of value:
 
-It is the highest-ranked defect still open, and the one argument for deferring it is now spent:
-phase 3 was postponing it only because both phases edit the same lines and the split would have
-moved the whole diff again. That is done. The lines have stopped moving.
+1. **Phase 1 tail — the last 10 inline queries** (`import.ts` 3, `telegram.ts` 3, `setup.ts` 2,
+   `webhook.ts` 2). This is the only thing keeping `check-repo-layer.mjs` from reporting "no
+   inline SQL in worker/routes". The reason it is last has not changed: these are the **least safe
+   queries in the project to move** — they sit on the ingest and integration paths, where a
+   mistake shows up not as a red snapshot but as a transaction that silently never arrives.
 
-Current state of the target: `shared/types.ts` — **142 lines, 13 types, imported by 0 worker
-files**. `src/store/api.ts` — **1 287 lines, 86 hand-written response types**. The client declares
-what it believes the server returns; the worker declares its own shapes inline via `.all<{…}>()`;
-`tsc` sees two independent truths and cannot reconcile them, so drift surfaces in production.
+   ✅ **The webhook now has coverage** (`worker/test/ingest.test.ts`, 8 scenarios, 209 → 218
+   tests): an item stored with the balance following it, a hold and its settlement collapsing into
+   ONE row, an income sign, a foreign-currency item keeping both amounts (§R2-CUR1), and the three
+   shapes that must be ACKed rather than rejected — monobank retries a 4xx forever. Not vacuous:
+   dropping the balance update fails 5 of 8, and taking the currency from the operation instead of
+   the account fails the foreign-currency case.
 
-#### How to do it
+   **It immediately found something nobody knew** — an event for an account not yet synced is
+   REJECTED by the foreign key and the row is lost until monobank retries. Recorded as a golden
+   (characterization, not endorsement) and filed in `ROADMAP.md`; it needs a decision, not a
+   reflex fix.
 
-1. **One domain per commit** — and the split is what makes that possible: each of the 16 route
-   modules is 70–180 lines (bar `analytics.ts`), so "type this domain's responses" is a diff a
-   person can read in full. Do the small ones first here, opposite to phase 3: the value is in
-   proving the pattern, not in covering volume.
-2. **The guarantee comes from the worker annotating its RETURN, not from generation** (decision 5
-   at the top of this file). `shared/` holds the type; the handler's return is typed with it; the
-   client imports the same one. Then `tsc` catches drift on its own, with no build step and no
-   opaque artefact in a public repo.
-3. **Start where the shape is already stable and already snapshotted** — `/analytics/*`. The 169
-   goldens pin those responses to the kopeck, so a type written against them cannot be wishful.
-4. **C2 and C4 land last** (route response types come from `shared/`; the client declares none of
-   its own). Same reason C3 landed last in phase 3: a check written while the thing is still
-   moving just gets edited every commit.
-5. ⚠️ **Do not "fix" a shape while typing it.** A field that is `number | null` in practice gets
-   typed that way, even if it looks like an oversight — API shapes are explicitly out of scope
-   (§7), and a type change that quietly narrows a response is the same class of silent break the
-   goldens exist to catch. File a card instead.
+   ⚠️ **Still uncovered: `telegram.ts` (3), `import.ts` (3), `setup.ts` (2).** Write a scenario per
+   entry point before moving any of them. The bot is the awkward one — its handlers are driven by
+   an update payload rather than an HTTP route, so the harness needs a small entry point of its own.
+2. **The two carried-over bugs**, both filed in `ROADMAP.md` and both found by tests written
+   during this refactor rather than by eye: `/analytics/income` percentages summing to 102%, and
+   `summary.n` arriving as `null` on an empty account. Each changes numbers, so each needs its own
+   commit with deliberate golden re-recording.
+3. ✅ **Done 2026-08-07** — C3 now covers `lib/` too, with five named exceptions (`advisor.ts`,
+   `notify.ts`, `stats.ts`, `enrich.ts`, `report.ts`). It paid for itself the same hour: adding
+   `/analytics/weekday` pushed `routes/api/analytics.ts` over its allowance, and instead of
+   raising the number the net-worth reconstruction moved to `lib/finance/networth.ts` — which is
+   where it belonged, since it is reconstruction rather than transport. **That is the check doing
+   the job it was written for: it did not catch a bug, it forced a decision that would otherwise
+   have been made by whoever had the file open.**
+4. **`src/pages/Stats.tsx` (1 375 lines)** — the largest file in the project, untouched
+   throughout: §7 kept the client out of scope beyond what the type contract required.
+5. **Re-run `/security-review`** (§8). The perimeter moved with the code, and the 2026-07-26 audit
+   closed holes in exactly the places that have now been relocated.
 
-#### If you want something else instead
+**When the tail is empty, this file is deleted**: the durable rules move into `CLAUDE.md`, the
+journal into `HISTORY.md`, and the queue stays in `ROADMAP.md` (see the Scope note at the top).
 
-- **Phase 1 tail (10 queries: `import.ts` 3, `telegram.ts` 3, `setup.ts` 2, `webhook.ts` 2).**
-  Empties the budget map so `check-repo-layer.mjs` reports "no inline SQL in worker/routes".
-  ⚠️ Deliberately deferred: these are the **least safe queries in the project to move** and deserve
-  more care than their count suggests. They sit on the ingest and integration paths — a mono
-  webhook, a bot update, the legacy import — with **no characterization coverage of any kind**.
-  Unlike batch E, where a mistake showed up as a red snapshot, a mistake here shows up as a
-  transaction that silently never arrives. Write a scenario per entry point first (the write suite
-  already drives any method and seeds its own rows). A stale allowance of 10 is honest meanwhile,
-  and the ratchet still blocks new debt.
-- **Phase 4 (D1 own funds, D4 `period_mode`, D5 `RequestContext`).** The only phase that **changes
-  behaviour**, so it needs deliberate golden re-recording and an explanation per changed number —
-  which is why it is not mixed into a movement phase. Note before starting: verify the register's
-  claim about `notify.ts:316` — `credit_limit − balance` there is labelled as computing **debt**,
-  which is a different quantity from own funds, not necessarily an inverted copy.
-- **Phase 5 (`ai.ts`, 1 335 lines, 6 responsibilities).** Independent of all of the above; the
-  provider seam sits between L3 and L4. Note that it is now the largest file in the worker by a
-  wide margin, and the only one of this size left outside `routes/`, so it is also the obvious
-  next target if the type work stalls.

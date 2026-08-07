@@ -10,7 +10,9 @@ import type { Env } from "../env.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
 import { computeSummary, createCashTx, recentTransactions, type Summary } from "../lib/finance/finance.ts";
 import { ingestReceipt } from "../lib/ai/receipt.ts";
-import { parseText, type AiFact, type ChatMsg } from "../lib/ai/ai.ts";
+import { parseText } from "../lib/ai/enrich.ts";
+import type { ChatMsg } from "../lib/ai/ai.ts";
+import type { AiFact } from "../lib/ai/tasks.ts";
 import { buildAndStoreInsight, getStoredInsight } from "../lib/ai/insight.ts";
 import { buildAdvice, chatReply, getStoredAdvice } from "../lib/ai/advisor.ts";
 import {

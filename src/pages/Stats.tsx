@@ -24,6 +24,7 @@ import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { Select } from "../components/ui/Select.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
+import { WeekdaySpend } from "../components/stats/WeekdaySpend.tsx";
 import { cardKind, cardKindLabel, cardLast4 } from "../lib/merchant.ts";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../lib/importance.ts";
 
@@ -284,6 +285,7 @@ export function Stats() {
                   </div>
                   <div className="card cashflow"><CumulativeChart rows={toCumulative(data.series, { mode, to, days, periodLen })} sign={sign} height={220} /></div>
                 </section>
+                <WeekdaySpend preset={range} currency={currency} />
                 <DeeperAnalytics series={data.series} sign={sign} from={from} to={to} currency={currency} />
                 <IncomeBreakdown preset={range} currency={currency} sign={sign} />
               </>

@@ -10,9 +10,15 @@ import {
   STATS_JOINS, SPEND_WHERE, SPEND_COUNT, INCOME_WHERE, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR,
   EFF_IMPORTANCE, spendSum, incomeSum, amountSum, localYmSql,
 } from "../lib/finance/stats.ts";
+import { localDowSql, type WeekdayRow } from "../lib/finance/weekday.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import { stLit } from "../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
+// The repo returns the CONTRACT types where a query maps one-to-one onto a response shape.
+// Declaring a private twin here would re-create D2 one layer down: two spellings of one row,
+// drifting quietly, with `tsc` unable to compare them.
+import type { CategorySpend, DrillTx, PeriodTotals } from "../../shared/api/analytics.ts";
+import type { TxRow } from "../../shared/api/transactions.ts";
 
 /**
  * How amounts are valued, straight from `valueMode(rates, currency)`.
@@ -28,17 +34,28 @@ export interface ValueScope {
 
 export interface Range { from: number; to: number }
 
-export interface PeriodTotals { spend: number; income: number; n: number }
-
-/** Canonical spend/income/count for a window. */
+/**
+ * Canonical spend/income/count for a window.
+ *
+ * Two things about the return type are load-bearing:
+ *
+ * 1. It is NOT nullable. An aggregate with no GROUP BY always yields exactly one row in SQLite,
+ *    even over an empty table — `.first()` types itself as `T | null` in general, but cannot be
+ *    null here. Proved on the wire by `__golden__/empty/analytics.overview.json`, which shows an
+ *    object rather than a null.
+ * 2. `n` IS nullable, and that is a defect the contract has to be honest about: `SUM()` over an
+ *    empty set is NULL, and `SPEND_COUNT` — unlike `spendSum`/`incomeSum` — carries no
+ *    `COALESCE`. So a brand-new account reads `n: null` where the UI expects a number. Card in
+ *    ROADMAP.md; not fixed here, because this pass is behaviour-preserving.
+ */
 export async function periodTotals(
   db: AppDb, v: ValueScope, r: Range,
-): Promise<PeriodTotals | null> {
-  return await db.prepare(
+): Promise<PeriodTotals> {
+  return (await db.prepare(
     `SELECT ${spendSum(v.mult)} AS spend, ${incomeSum(v.mult)} AS income, ${SPEND_COUNT} AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ?${v.curFilter}`,
-  ).bind(r.from, r.to).first<PeriodTotals>();
+  ).bind(r.from, r.to).first<PeriodTotals>())!;
 }
 
 /**
@@ -48,16 +65,18 @@ export async function periodTotals(
  * not bound — SQLite will not take a format string as a parameter. It never comes from user
  * input: the route maps a fixed bucket name onto one of three literals.
  */
+export type SeriesPoint = { bucket: string; spend: number; income: number };
+
 export async function series(
   db: AppDb, v: ValueScope, r: Range, fmt: string,
-): Promise<Record<string, unknown>[]> {
+): Promise<SeriesPoint[]> {
   const res = await db.prepare(
     `SELECT strftime('${fmt}', t.time, 'unixepoch') AS bucket,
             ${spendSum(v.mult)} AS spend, ${incomeSum(v.mult)} AS income
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ?${v.curFilter}
      GROUP BY bucket ORDER BY bucket`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<SeriesPoint>();
   return res.results ?? [];
 }
 
@@ -65,38 +84,42 @@ export async function series(
  *  up into the parent. */
 export async function spendByCategory(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<CategorySpend[]> {
   const res = await db.prepare(
     `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(locale, EFF_CAT_NAME)} AS category_name,
             ${EFF_CAT_COLOR} AS color, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<CategorySpend>();
   return res.results ?? [];
 }
 
+export type MerchantSpend = { merchant: string; spent: number; n: number };
+
 export async function spendByMerchant(
   db: AppDb, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<MerchantSpend[]> {
   const res = await db.prepare(
     `SELECT t.merchant AS merchant, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter} AND t.merchant IS NOT NULL
      GROUP BY t.merchant ORDER BY spent DESC LIMIT 10`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<MerchantSpend>();
   return res.results ?? [];
 }
 
+export type AccountSpend = { account_id: string | null; account_title: string | null; account_type: string | null; spent: number; n: number };
+
 export async function spendByAccount(
   db: AppDb, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<AccountSpend[]> {
   const res = await db.prepare(
     `SELECT t.account_id, a.title AS account_title, a.type AS account_type, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS} LEFT JOIN accounts a ON a.id = t.account_id
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY t.account_id ORDER BY spent DESC`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<AccountSpend>();
   return res.results ?? [];
 }
 
@@ -106,16 +129,18 @@ export async function spendByAccount(
  * Deliberately NOT `SPEND_WHERE`: a trip or a party legitimately contains transfers, so the
  * filter here is the looser "negative and not a transfer". Converted to ₴ either way.
  */
+export type EventSpend = { event_id: number; event_name: string; event_color: string | null; spent: number; n: number };
+
 export async function spendByEvent(
   db: AppDb, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<EventSpend[]> {
   const res = await db.prepare(
     `SELECT e.id AS event_id, e.name AS event_name, e.color AS event_color,
             ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS} JOIN event_groups e ON e.id = t.event_id
      WHERE t.time >= ? AND t.time <= ? AND ${EFF_AMOUNT} < 0 AND t.is_transfer = 0${v.curFilter}
      GROUP BY t.event_id ORDER BY spent DESC`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<EventSpend>();
   return res.results ?? [];
 }
 
@@ -143,16 +168,19 @@ export async function spendIncomeTotals(
   ).bind(r.from, r.to).first<{ spend: number; income: number }>();
 }
 
+/** Same rows as `spendByCategory` minus the count — see the note above about why both exist. */
+export type CategorySpendNoCount = Omit<CategorySpend, "n">;
+
 export async function compareByCategory(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<CategorySpendNoCount[]> {
   const res = await db.prepare(
     `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(locale, EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS color,
             ${amountSum(v.mult)} AS spent
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<CategorySpendNoCount>();
   return res.results ?? [];
 }
 
@@ -200,12 +228,12 @@ export async function merchantTopCategory(
  *  and transfers too, because hiding them would make the history look wrong to the reader. */
 export async function merchantTransactions(
   db: AppDb, locale: NotifLocale, name: string,
-): Promise<Record<string, unknown>[]> {
+): Promise<TxRow[]> {
   const res = await db.prepare(
     `SELECT t.*, ${catNameSql(locale, EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color,
             COALESCE(rc.icon, c.icon) AS category_icon
      FROM transactions t ${STATS_JOINS} WHERE t.merchant = ? ORDER BY t.time DESC LIMIT 40`,
-  ).bind(name).all();
+  ).bind(name).all<TxRow>();
   return res.results ?? [];
 }
 
@@ -397,15 +425,37 @@ export async function dailyNetChangeByAccount(
 }
 
 /** §6 — the essential / discretionary / optional split. */
+export type ImportanceSpend = { importance: string; spent: number; n: number };
+
 export async function spendByImportance(
   db: AppDb, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<ImportanceSpend[]> {
   const res = await db.prepare(
     `SELECT ${EFF_IMPORTANCE} AS importance, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY ${EFF_IMPORTANCE}`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<ImportanceSpend>();
+  return res.results ?? [];
+}
+
+/**
+ * §WEEKDAY — canonical spend grouped by LOCAL day of week.
+ *
+ * `localDowSql` rather than a bare `strftime('%w')`: the app's day runs on Europe/Kyiv, so in UTC
+ * every purchase after 21:00 lands on the next weekday — and Friday evening is the densest spend
+ * window there is. The bug would not look like a bug; it would look like Saturday being expensive.
+ */
+export async function spendByWeekday(
+  db: AppDb, v: ValueScope, r: Range, now: number,
+): Promise<WeekdayRow[]> {
+  const res = await db.prepare(
+    `SELECT ${localDowSql(now)} AS dow, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n,
+            CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${v.mult}), 0)) AS INTEGER) AS biggest
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
+     GROUP BY dow ORDER BY dow`,
+  ).bind(r.from, r.to).all<WeekdayRow>();
   return res.results ?? [];
 }
 
@@ -483,26 +533,29 @@ function transferBucketWhere(v: ValueScope): string {
   return `t.time >= ? AND t.time <= ? AND t.amount < 0 AND t.hold = 0 AND COALESCE(c.parent_id, t.category_id) = ${TRANSFER_BUCKET}` + v.curFilter;
 }
 
+/** A drill-down sub-row: the leaf category inside the requested parent (or inside bucket 13). */
+export type DrillSub = { category_id: number | null; name: string; color: string | null; spent: number; n: number };
+
 export async function transferBucketSubs(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<DrillSub[]> {
   const res = await db.prepare(
     `SELECT t.real_category_id AS category_id, COALESCE(${catNameSql(locale, "rc.name")}, ${stLit(locale, "unidentified")}) AS name, rc.color AS color,
             ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE ${transferBucketWhere(v)} GROUP BY t.real_category_id ORDER BY spent DESC`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<DrillSub>();
   return res.results ?? [];
 }
 
 export async function transferBucketMerchants(
   db: AppDb, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<MerchantSpend[]> {
   const res = await db.prepare(
     `SELECT t.merchant AS merchant, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE ${transferBucketWhere(v)} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<MerchantSpend>();
   return res.results ?? [];
 }
 
@@ -516,14 +569,14 @@ export async function transferBucketMerchants(
  */
 export async function transferBucketTransactions(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
-): Promise<Record<string, unknown>[]> {
+): Promise<DrillTx[]> {
   const res = await db.prepare(
     `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
             ${catNameSql(locale, "rc.name")} AS category_name, rc.color AS category_color
      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
                           LEFT JOIN categories rc ON rc.id = t.real_category_id
      WHERE ${transferBucketWhere(v)} ORDER BY t.amount ASC LIMIT 60`,
-  ).bind(r.from, r.to).all();
+  ).bind(r.from, r.to).all<DrillTx>();
   return res.results ?? [];
 }
 
@@ -538,37 +591,37 @@ function categoryDrillWhere(v: ValueScope): string {
 
 export async function categorySubs(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range, parent: number,
-): Promise<Record<string, unknown>[]> {
+): Promise<DrillSub[]> {
   const res = await db.prepare(
     `SELECT COALESCE(rc.id, c.id) AS category_id,
             COALESCE(${catNameSql(locale, "COALESCE(rc.name, c.name)")}, ${stLit(locale, "uncategorized")}) AS name,
             COALESCE(rc.color, c.color) AS color, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE ${categoryDrillWhere(v)} GROUP BY COALESCE(rc.id, c.id) ORDER BY spent DESC`,
-  ).bind(r.from, r.to, parent).all();
+  ).bind(r.from, r.to, parent).all<DrillSub>();
   return res.results ?? [];
 }
 
 export async function categoryMerchants(
   db: AppDb, v: ValueScope, r: Range, parent: number,
-): Promise<Record<string, unknown>[]> {
+): Promise<MerchantSpend[]> {
   const res = await db.prepare(
     `SELECT t.merchant AS merchant, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE ${categoryDrillWhere(v)} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
-  ).bind(r.from, r.to, parent).all();
+  ).bind(r.from, r.to, parent).all<MerchantSpend>();
   return res.results ?? [];
 }
 
 export async function categoryTransactions(
   db: AppDb, v: ValueScope, r: Range, parent: number,
-): Promise<Record<string, unknown>[]> {
+): Promise<DrillTx[]> {
   const res = await db.prepare(
     `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
             COALESCE(rc.name, c.name) AS category_name, COALESCE(rc.color, c.color) AS category_color
      FROM transactions t ${STATS_JOINS}
      WHERE ${categoryDrillWhere(v)} ORDER BY t.amount ASC LIMIT 60`,
-  ).bind(r.from, r.to, parent).all();
+  ).bind(r.from, r.to, parent).all<DrillTx>();
   return res.results ?? [];
 }
 
@@ -630,7 +683,7 @@ export async function sliceSummary(
 /** The slice's transactions: biggest expense / biggest income first. */
 export async function sliceTransactions(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range, q: SliceQuery,
-): Promise<Record<string, unknown>[]> {
+): Promise<DrillTx[]> {
   const { base, binds } = sliceParts(v, r, q);
   const order = q.type === "income" ? "DESC" : "ASC";
   const res = await db.prepare(
@@ -638,7 +691,7 @@ export async function sliceTransactions(
             ${catNameSql(locale, EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color
      FROM transactions t ${STATS_JOINS}
      WHERE ${base} ORDER BY t.amount ${order} LIMIT ?`,
-  ).bind(...binds, q.limit).all();
+  ).bind(...binds, q.limit).all<DrillTx>();
   return res.results ?? [];
 }
 

@@ -1,0 +1,19 @@
+{
+  "status": 200,
+  "body": {
+    "period": {
+      "from": 1777582800,
+      "to": 1778749200,
+      "preset": "month"
+    },
+    "total": 0,
+    "prev_total": 0,
+    "delta_pct": 0,
+    "sources": [],
+    "monthly": [],
+    "stability": {
+      "cv_pct": null,
+      "label": "мало даних"
+    }
+  }
+}

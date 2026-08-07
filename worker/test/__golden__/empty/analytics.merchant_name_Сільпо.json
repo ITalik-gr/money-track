@@ -1,0 +1,15 @@
+{
+  "status": 200,
+  "body": {
+    "name": "Сільпо",
+    "total": 0,
+    "n": 0,
+    "avg": 0,
+    "first_at": null,
+    "last_at": null,
+    "by_month": [],
+    "top_category": null,
+    "category_share": null,
+    "transactions": []
+  }
+}

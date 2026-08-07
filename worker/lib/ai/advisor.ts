@@ -1,13 +1,18 @@
 // AI-порадник (структурований): рахуємо runway із власних коштів і місячного burn,
 // подаємо разом із профілем ситуації в Haiku → поради-картки. Кешуємо в app_state.
 import type { Env } from "../../env.ts";
-import { type AdviceResult, type AiFact, type AiUsageBrief, type BudgetChatResult, type ChatMsg, type ChatTool, type StructuredInsight, briefUsage, budgetChat, chatAdvice, evaluateGroup, generateAdvice, logUsage, proposeBudgetLimits, txChat } from "./ai.ts";
+import type { ChatMsg, ChatTool } from "./ai.ts";
+import { type AdviceResult, type AiFact, type BudgetChatResult, budgetChat, chatAdvice, evaluateGroup, generateAdvice, proposeBudgetLimits, txChat } from "./tasks.ts";
+import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
+import type { StructuredInsight } from "./insight.ts";
 import { getState, setState } from "../finance/repo.ts";
-import { getRates, toUAHMinor } from "../finance/finance.ts";
+import { getRates, toUAHMinor, type Rates } from "../finance/finance.ts";
 import { nextChargeUnix, plannedUAH, monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, INCOME_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm } from "../finance/stats.ts";
 import { ownerLocale } from "../finance/categories-i18n.ts";
+import { ownFundsMinor } from "../finance/own-funds.ts";
 import { st, num } from "../platform/i18n.ts";
+import type { Fact, FactInput as SharedFactInput } from "../../../shared/api/ai.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -53,15 +58,24 @@ export interface AccountFunds { title: string | null; type: string | null; role:
 // investment — інвест-резерв (позитивні власні інвест-рахунків, напр. крипта): НЕ подушка,
 // але остання лінія; net = cushion − debt (без інвестицій — консервативний runway).
 export interface FundsBreakdown { cushion: number; debt: number; investment: number; net: number; accounts: AccountFunds[] }
-export async function fundsBreakdown(env: Env): Promise<FundsBreakdown> {
+/**
+ * §R3 — the canonical split of "where the money is", shared by the adviser, the chat and the
+ * Accounts overview.
+ *
+ * `ratesIn` (§D5): pass the snapshot you have already read. Two callers below load rates and then
+ * call this in the SAME `Promise.all`, which was two reads of one row per request — and, in
+ * principle, two DIFFERENT rate snapshots inside one answer if the hourly cron landed between
+ * them. Optional rather than required so the many one-shot callers stay one line.
+ */
+export async function fundsBreakdown(env: Env, ratesIn?: Rates): Promise<FundsBreakdown> {
   const accounts = await env.DB.prepare(
     "SELECT title, type, role, ai_note, balance, credit_limit, currency_code FROM accounts WHERE is_active = 1",
   ).all<{ title: string | null; type: string | null; role: string | null; ai_note: string | null; balance: number; credit_limit: number; currency_code: number }>();
-  const rates = await getRates(env.DB);
+  const rates = ratesIn ?? await getRates(env.DB);
   let cushion = 0, debt = 0, investment = 0;
   const list: AccountFunds[] = [];
   for (const a of accounts.results ?? []) {
-    const own = toUAHMinor((a.balance ?? 0) - (a.credit_limit ?? 0), a.currency_code, rates);
+    const own = toUAHMinor(ownFundsMinor(a.balance, a.credit_limit), a.currency_code, rates);
     const role: "liquid" | "investment" = a.role === "investment" ? "investment" : "liquid";
     if (role === "investment") { if (own > 0) investment += own; else debt += -own; }
     else { if (own >= 0) cushion += own; else debt += -own; }
@@ -73,8 +87,8 @@ export async function fundsBreakdown(env: Env): Promise<FundsBreakdown> {
   };
 }
 
-async function ownFundsUAH(env: Env): Promise<number> {
-  return (await fundsBreakdown(env)).net;
+async function ownFundsUAH(env: Env, ratesIn?: Rates): Promise<number> {
+  return (await fundsBreakdown(env, ratesIn)).net;
 }
 
 // §H (2026-07-19): детермінований «Індекс фінздоров'я» 0..100 — БЕЗ AI. Чотири складові з
@@ -87,9 +101,12 @@ export async function financeHealth(env: Env): Promise<FinanceHealth> {
 
   const from6 = localMonthStart(now, -6);
   const monthStart = localMonthStart(now);
-  const { mult } = valueMode(await getRates(env.DB), null);
+  // One snapshot for the whole answer (§D5) — health mixes funds with spending levels, and the
+  // two halves resting on different rates would be a disagreement nobody could see.
+  const rates = await getRates(env.DB);
+  const { mult } = valueMode(rates, null);
   const [funds, levels, incomeRows] = await Promise.all([
-    fundsBreakdown(env),
+    fundsBreakdown(env, rates),
     categoryMonthlyLevels(env, mult, { now }),
     // Дохід по ПОВНИХ місяцях (поточний частковий виключено) — для норми/стабільності.
     env.DB.prepare(
@@ -156,7 +173,7 @@ export interface FinanceSnapshot {
   context: Record<string, unknown>;        // спільний JSON-контекст для AI (без tx-блоків)
 }
 
-export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot> {
+export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise<FinanceSnapshot> {
   const now = Math.floor(Date.now() / 1000);
   const from90 = now - 90 * 86400;
 
@@ -164,10 +181,10 @@ export async function collectFinanceSnapshot(env: Env): Promise<FinanceSnapshot>
   const from6mo = localMonthStart(now, -5);
   const prevMonthStart = localMonthStart(now, -1);
 
-  const rates = await getRates(env.DB);
+  const rates = ratesIn ?? await getRates(env.DB); // §D5: приймаємо вже прочитаний знімок
   const { mult } = valueMode(rates, null); // канонічно, зведено в ₴
   const [funds, levels, cats, merchants, events, importance, trend, budgetRows, monthByCat, prevMonthByCat, subsAgg, split, upcomingRows] = await Promise.all([
-    fundsBreakdown(env),
+    fundsBreakdown(env, rates), // §D5: той самий знімок курсів, що й решта цього контексту
     // P1: канонічний місячний рівень категорій — джерело і для avg_month, і для burn (sumLevels).
     categoryMonthlyLevels(env, mult, { now }),
     env.DB.prepare(
@@ -591,7 +608,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
   const [ownFunds, spendRows, budgetRows] = await Promise.all([
-    ownFundsUAH(env),
+    ownFundsUAH(env, rates),
     env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS category_id, ${EFF_CAT_NAME} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
@@ -654,7 +671,7 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
   const [ownFunds, spendRows, budgetRows] = await Promise.all([
-    ownFundsUAH(env),
+    ownFundsUAH(env, rates),
     env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent, ${EFF_IMPORTANCE} AS importance
        FROM transactions t ${STATS_JOINS}
@@ -906,17 +923,17 @@ export async function runFinanceTool(env: Env, name: string, input: Record<strin
 }
 
 // ---- §A1: CRUD фактів для API (Порадник/Налаштування) ------------------------
-export interface FactRow {
-  id: number; text: string; effective_from: number; expires_at: number | null;
-  category_id: number | null; category_name: string | null;
-  adjust_kind: string | null; adjust_value: number | null;
-  confirmed_at: number | null; source: string; created_at: number;
-}
-export interface FactInput {
-  text: string; effective_from?: number; expires_at?: number | null;
-  category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
-  adjust_value?: number | null; confirm?: boolean; source?: string;
-}
+/**
+ * A stored fact, i.e. the CONTRACT type.
+ *
+ * `adjust_kind` is narrowed to the two literals rather than `string` even though the column is a
+ * plain `TEXT` with no CHECK: every write goes through `FactInput`, which already accepts only
+ * those two, so a third value cannot arrive. Declaring it wider here was the sort of imprecision
+ * that forced the client to hand-write its own narrower twin — defect D2 in one line.
+ */
+export type FactRow = Fact;
+/** Creation input. `source` is server-side only, which is why this is not `SharedFactInput`. */
+export interface FactInput extends SharedFactInput { source?: string }
 
 export async function listFacts(env: Env): Promise<FactRow[]> {
   const rows = await env.DB.prepare(

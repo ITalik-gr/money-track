@@ -13,7 +13,111 @@ import {
 } from "../finance/stats.ts";
 import { plannedActuals } from "../finance/subscriptions.ts";
 import { getState } from "../finance/repo.ts";
-import { generateFinancialReport, logUsage, getTaskModel, callCostUsd, type FinancialReport } from "./ai.ts";
+// `generateFinancialReport` and its shape live HERE now (phase 5, L6). They used to sit in
+// `ai.ts` while this 330-line feature file already existed — ARCHITECTURE.md §3 D3 named that
+// the anomaly: with no rule deciding which file a feature belongs to, it ends up in both.
+import { callHaikuJson } from "./json.ts";
+import { replyLangDirective } from "./prompt.ts";
+import type { AnthropicContentBlock } from "./ai.ts";
+import type { AdviceAction } from "./tasks.ts";
+import type { AnthropicUsage } from "./cost.ts";
+import { logUsage, callCostUsd } from "./cost.ts";
+
+// §Аналітика 2.0: розгорнутий періодичний репорт (Sonnet 5). Детальний розбір по
+// категоріях, аномалії, прогнози, дієві поради — на КАНОНІЧНИХ даних (₴), із порівнянням
+// до того самого попереднього періоду й урахуванням описів операцій (user_note).
+export interface FinancialReport {
+  headline: string;                 // 1 рядок — головне за період
+  summary: string;                  // 2-4 речення — стан і висновок
+  sections: { title: string; body: string }[];              // 2-4 наративні секції
+  category_breakdown: { name: string; amount_uah: number; delta_pct: number | null; note: string | null }[];
+  anomalies: { label: string; detail: string; severity: "info" | "warn" | "high" }[];
+  predictions: { next_period_spend_uah: number | null; runway_months: number | null; note: string | null };
+  advice: { title: string; detail: string; action?: AdviceAction | null }[];
+}
+
+export async function generateFinancialReport(
+  env: Env,
+  payload: unknown,
+): Promise<{ result: FinancialReport; usage: AnthropicUsage }> {
+  const system: AnthropicContentBlock[] = [
+    {
+      type: "text",
+      text:
+        "Ти — старший персональний фінансовий аналітик. Побудуй ДЕТАЛЬНИЙ періодичний звіт українською на " +
+        "основі поданих КАНОНІЧНИХ даних користувача (усі суми — у гривнях, уже зведені; period описує тип і межі). " +
+        "Дані вже коректно порахували (готівка за реальною категорією, перекази між своїми виключені, валюти зведені " +
+        "в ₴) — БЕРИ саме ці числа, не перераховуй і не вигадуй. У payload є: current (spend/income/net/savings_rate), " +
+        "previous (той самий попередній період — для чесного порівняння), categories (з delta_pct до минулого), " +
+        "top_merchants, notable (помітні операції з описами користувача user_note — враховуй їх, щоб не називати " +
+        "разове регулярним), anomalies_hint (підказки про подорожчання підписок/викиди), forecast (прогноз/runway), " +
+        "by_importance (частка витрат за вагомістю: essential=обов'язкові, discretionary=бажані, optional=необов'язкові — " +
+        "у порадах про скорочення цілься в optional/discretionary, а essential не радь різати). " +
+        "ВАЖЛИВО (не «по книжці»): поважай user_profile — це реальна ситуація людини; якщо нема активного доходу, " +
+        "НЕ рекомендуй загальники типу «наростіть дохід/інвестуйте» — фокус на runway та зрізанні optional/discretionary. " +
+        "recurring_vs_oneoff розділяє звичний місячний ритм (recurring) від разових викидів (oneoff: податки, стоматолог, " +
+        "велика покупка) — разові НЕ проєктуй у наступний період і НЕ називай трендом. Прогнози став на реальну ПОДУШКУ " +
+        "(forecast.cushion_uah — позитивні власні кошти), а НЕ на нетто з кредиткою; борг (forecast.debt_uah) згадуй окремо. " +
+        "forecast.investment_reserve_uah (крипта/брокер) — НЕ ліквідна подушка й НЕ входить у runway; це окрема остання лінія, " +
+        "не пропонуй продавати інвестиції без крайньої потреби. accounts — рахунки з роллю та ОПИСОМ (note): враховуй note як контекст. " +
+        // ⚠️ Явні мінімуми, бо без них модель вивалювала ВЕСЬ звіт в один абзац `summary`, а
+        // `sections`/`predictions`/`advice` лишала порожніми — валідний JSON і порожній екран.
+        // Перевірка в коді (`validate` нижче) ловить це й перепитує; тут — щоб не доводилось.
+        "🔴 ОБОВʼЯЗКОВО ЗАПОВНИ ВСІ ПОЛЯ. `summary` — це 2-4 речення огляду, НЕ місце для всього " +
+        "звіту: деталі йдуть у `sections` (2-4 секції), прогноз — у `predictions`, поради — у " +
+        "`advice` (3-5 штук), топ-категорії — у `category_breakdown`. Звіт із самим лише summary " +
+        "вважається помилковим і буде відхилений. " +
+        // §CADENCE — без цього блоку модель порівнювала МІСЯЧНІ платежі тиждень-до-тижня й видавала
+        // «підписки впали з 1300₴ до 99₴ (−92%)», хоча це той самий календар: одне списання потрапило
+        // у вікно, друге — ні. Прапорці рахує report.ts (детерміновано), тут — що з ними робити.
+        "🔴 РИТМ СПИСАНЬ. У categories є charges_n / prev_charges_n (скільки списань дало суму), " +
+        "monthly_usual_uah (канонічний МІСЯЧНИЙ рівень категорії) і billing: 'monthly_fixed' = списується " +
+        "раз на місяць (підписка, оренда, страховка), 'variable' = багато дрібних покупок. Якщо " +
+        "delta_meaningful=false — delta_pct показує ТАЙМІНГ списання, а не зміну поведінки, і подавати його " +
+        "як тренд ЗАБОРОНЕНО. Замість «підписки впали на 92%» пиши «цього тижня місячних списань не було; " +
+        "звичний рівень — monthly_usual_uah». Так само income_delta_meaningful=false означає, що зарплата чи " +
+        "інвойс прийшов іншого тижня, а НЕ що дохід зник — не будуй на цьому ні висновку, ні прогнозу. " +
+        "Для періодів, коротших за місяць, порівнюй витрати з monthly_usual_uah, а не лише з previous. " +
+        // §NOVELTY — модель повторювала ту саму думку щотижня («квартира забрала багато»), бо
+        // найбільша категорія найбільша завжди. Список тем рахує report.ts із попередніх звітів.
+        "🔴 НОВИЗНА. already_covered — спостереження, аномалії й поради з ТВОЇХ попередніх звітів. НЕ подавай " +
+        "їх як новину вдруге: якщо ситуація не змінилась, дай максимум одну фразу «без змін» і йди далі. " +
+        "Найбільша категорія сама по собі — НЕ спостереження («оренда найбільша» правда щомісяця й не додає " +
+        "нічого); спостереження — це те, що ЗМІНИЛОСЬ, або те, чого людина не бачить із самої таблиці. " +
+        "prior_reports — твої попередні звіти: звір траєкторію, відзнач що покращилось/погіршилось відтоді. " +
+        "notable та biggest_expenses мають поле tx_id — коли згадуєш КОНКРЕТНУ операцію в тексті (summary/sections/" +
+        "anomalies.detail/advice.detail), встав посилання на неї токеном [tx:ID] одразу після назви (напр. «Rozetka [tx:abc123]»), " +
+        "де ID — саме tx_id тієї операції. Використовуй ЛИШЕ наявні tx_id, не вигадуй. Не зловживай — 1-2 цитати там, де доречно. " +
+        "Пиши по суті, з конкретними числами й % змін. Відповідай ВИКЛЮЧНО валідним JSON без markdown: " +
+        "{headline, summary, sections:[{title, body}] (2-4 секції — куди пішли гроші, що змінилось і чому, ризики), " +
+        "category_breakdown:[{name, amount_uah, delta_pct (число або null), note}] (топ-8 категорій, note — 1 фраза), " +
+        "anomalies:[{label, detail, severity ('info'|'warn'|'high')}] (незвичні/разові витрати, подорожчання підписок; " +
+        "порожній масив якщо нема), predictions:{next_period_spend_uah (число або null), runway_months (число або null), " +
+        "note}, advice:[{title, detail, action}] (3-5 дієвих порад з ефектом у грн; action — null або " +
+        "{type:'create_budget', label, category_id, category_name, amount_uah})}. Суми — цілі числа гривень." +
+        (await replyLangDirective(env)),
+    },
+  ];
+  // 8000, а не 3000: повний звіт українською — це 2-4 секції, 8 категорій, аномалії та 3-5 порад,
+  // і кирилиця коштує ~2-3 токени на слово. На 3000 модель стабільно обривалась приблизно на
+  // `summary`, а ремонт JSON робив цей обрив невидимим (див. `callHaikuJson`).
+  //
+  // Валідатор — бо ліміту токенів виявилось мало: маючи 8000, модель однаково повертала лише
+  // headline+summary, і на екрані зникали Прогноз, Розбір і Поради. Промт просить — код перевіряє.
+  return callHaikuJson<FinancialReport>(
+    env, system, [{ type: "text", text: JSON.stringify(payload) }], 8000, await getTaskModel(env, "report"),
+    (r) => {
+      const missing: string[] = [];
+      if (!(r.sections?.length >= 2)) missing.push("розбір (sections, 2-4 секції)");
+      if (!(r.advice?.length >= 3)) missing.push("поради (advice, 3-5 штук)");
+      if (!r.predictions) missing.push("прогноз (predictions)");
+      // `category_breakdown` — єдине з чотирьох, що має детермінований дублікат (ми рахуємо
+      // категорії самі), тож його відсутність екран не ламає й на ретрай не тягне.
+      return missing.length ? `бракує обовʼязкових полів: ${missing.join(", ")}.` : null;
+    },
+  );
+}
+import { getTaskModel } from "./models.ts";
 
 // `custom` — довільний діапазон, заданий користувачем (кнопка «за свої дати»). Він НЕ має
 // пресетних меж, тож `scope` для нього не має сенсу — межі приходять явно в `range`.

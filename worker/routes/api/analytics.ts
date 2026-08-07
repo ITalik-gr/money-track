@@ -2,19 +2,25 @@
 // (`lib/finance/stats.ts` on the JS side, `repo/analytics.ts` on the SQL side); a handler that
 // starts computing its own total is the §CUR-PLAN mechanism restarting.
 import {
-  valueMode, uahMult, periodBounds,
+  getPeriodMode, valueMode, uahMult, periodBounds,
   recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localParts,
-  type PeriodMode, type Preset,
+  type Preset,
 } from "../../lib/finance/stats.ts";
-import { getState } from "../../lib/finance/repo.ts";
-import { computeSummary, getRates, toUAHMinor, ratesForDays, type Rates } from "../../lib/finance/finance.ts";
-import * as accountsRepo from "../../repo/accounts.ts";
+import { computeSummary, getRates } from "../../lib/finance/finance.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import * as receiptsRepo from "../../repo/receipts.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import { buildWeekdayAnalytics } from "../../lib/finance/weekday.ts";
+import { buildNetworth } from "../../lib/finance/networth.ts";
+import type {
+  Overview, MonthlyHistory, SafeToSpend, CapitalTrend, Networth, Compare, Forecast,
+  IncomeAnalytics, CashflowCalendar, ReceiptItemsAnalytics, PriceDrift, SpendPatterns,
+  CategoryDrill, SliceDrill, MerchantAnalytics, SparkData, FinanceHealth, CategorySpend,
+  CurrenciesList, WeekdayAnalytics,
+} from "../../../shared/api/index.ts";
 
 export const analytics = apiRoutes();
 
@@ -26,7 +32,7 @@ export const analytics = apiRoutes();
 analytics.get("/analytics/overview", async (c) => {
   const url = new URL(c.req.url);
   const rates = await getRates(c.env.DB);
-  const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
+  const mode = await getPeriodMode(c.env.DB);
   const presetParam = url.searchParams.get("preset") as Preset | null;
 
   // Пресет (week|month|quarter|year) → канонічні межі за режимом period_mode; інакше
@@ -66,7 +72,7 @@ analytics.get("/analytics/overview", async (c) => {
     summary, prev,
     range: { from, to, prevFrom, prevTo, bucket, mode, preset: presetParam ?? null },
     series, byCategory, byMerchant, byAccount, byEvent, byImportance,
-  });
+  } satisfies Overview);
 });
 
 // Довготривала історія по МІСЯЦЯХ (канонічно, зведено в ₴): spend/income за N останніх
@@ -88,7 +94,7 @@ analytics.get("/analytics/monthly-history", async (c) => {
     const r = map.get(key);
     out.push({ month: key, spend: r?.spend ?? 0, income: r?.income ?? 0 });
   }
-  return c.json({ months: out });
+  return c.json({ months: out } satisfies MonthlyHistory);
 });
 
 // §4 Safe-to-spend: скільки вільно до кінця календарного місяця.
@@ -123,7 +129,7 @@ analytics.get("/analytics/safe-to-spend", async (c) => {
   return c.json({
     safe, income, spend, essential, discretionary: Math.max(0, spend - essential),
     subs_monthly: subsMonthly, subs_remaining: subsRemaining, month_start: monthStart,
-  });
+  } satisfies SafeToSpend);
 });
 
 // Тренд капіталу: динаміка власних коштів (₴) за N місяців. Історія не зберігається,
@@ -156,7 +162,7 @@ analytics.get("/analytics/capital-trend", async (c) => {
     running -= netByDay.get(day) ?? 0; // прибираємо зміну цього дня → капітал на початок дня
   }
   points.reverse(); // хронологічно
-  return c.json({ now_uah: Math.round(summary.totalUAH / 100), points });
+  return c.json({ now_uah: Math.round(summary.totalUAH / 100), points } satisfies CapitalTrend);
 });
 
 /**
@@ -177,108 +183,7 @@ analytics.get("/analytics/capital-trend", async (c) => {
 analytics.get("/analytics/networth", async (c) => {
   const url = new URL(c.req.url);
   const months = Math.min(Math.max(Number(url.searchParams.get("months") ?? 12), 2), 24);
-  const rates = await getRates(c.env.DB);
-  const now = Math.floor(Date.now() / 1000);
-  const from = localMonthStart(now, -months + 1);
-
-  const accs = await accountsRepo.listForNetWorth(c.env.DB);
-  if (!accs.length) return c.json({ months, points: [], caveats: [], now: null });
-
-  // Денна зміна ПО РАХУНКУ, у валюті рахунку (конвертація — на етапі зведення).
-  const daily = await analyticsRepo.dailyNetChangeByAccount(c.env.DB, from);
-  const netByAccDay = new Map<string, number>();
-  for (const r of daily) netByAccDay.set(`${r.acc}:${r.day}`, r.net);
-
-  // Поточний власний залишок кожного рахунку (баланс − кредитний ліміт, §Інваріанти).
-  const own = new Map<string, number>(accs.map((a) => [a.id, (a.balance ?? 0) - (a.credit_limit ?? 0)]));
-  const roleOf = (a: typeof accs[number]): "liquid" | "investment" => (a.role === "investment" ? "investment" : "liquid");
-  const iso = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
-
-  // Історія ручних балансів (§Історія ручних балансів): ручні/крипто-рахунки не мають tx-дельт,
-  // тож без цього назад лишались би плоскими. Крокуємо по зафіксованих зрізах.
-  const histByAcc = new Map<string, { at: number; balance: number }[]>();
-  // `null` = таблиці ще нема на remote (0026) → деградуємо до плоского, як і раніше.
-  for (const r of (await accountsRepo.balanceHistory(c.env.DB)) ?? []) {
-    (histByAcc.get(r.acc) ?? histByAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
-  }
-  // Баланс ручного рахунку на момент t: останній зріз ≤ t; до першого зрізу — найраніший відомий
-  // (не сьогоднішній, щоб не малювати рух там, де його не знали). null = історії взагалі нема.
-  const manualBalanceAt = (accId: string, t: number): number | null => {
-    const h = histByAcc.get(accId);
-    if (!h || !h.length) return null;
-    let val = h[0].balance;
-    for (const p of h) { if (p.at <= t) val = p.balance; else break; }
-    return val;
-  };
-
-  // Дати всіх майбутніх точок рахуємо ЗАЗДАЛЕГІДЬ, щоб одним запитом узяти курси на ці дати
-  // (§Історія курсів). Інакше довелось би або бити по базі в циклі, або (як було) міряти
-  // минулі залишки сьогоднішнім курсом.
-  const todayDay = Math.floor(now / 86400);
-  const fromDay = Math.floor(from / 86400);
-  const pointDays: { day: number; t: number }[] = [];
-  for (let day = todayDay; day >= fromDay; day--) {
-    if (new Date(day * 86400 * 1000).getUTCDate() === 1 && day !== todayDay) {
-      pointDays.push({ day, t: day * 86400 - 1 });
-    }
-  }
-  // Рівно `months` точок: `months-1` кінців місяця + «зараз». Без обрізки в масив потрапляв
-  // ще й кінець місяця ПЕРЕД вікном (13 точок на запит «12 міс»).
-  pointDays.splice(months - 1);
-  const { byDay, covered } = await ratesForDays(c.env.DB, [...pointDays.map((p) => iso(p.t)), iso(now)].sort());
-
-  // Зводимо стан рахунків у cushion/debt/investment — правило `fundsBreakdown`.
-  const snapshot = (t: number, at: Rates) => {
-    let cushion = 0, debt = 0, investment = 0;
-    for (const a of accs) {
-      // Ручний рахунок з історією — беремо зріз на t; інакше tx-реконструйований `own`.
-      const hb = a.is_manual === 1 ? manualBalanceAt(a.id, t) : null;
-      const ownMinor = hb != null ? hb - (a.credit_limit ?? 0) : (own.get(a.id) ?? 0);
-      const uah = toUAHMinor(ownMinor, a.currency_code, at);
-      if (roleOf(a) === "investment") { if (uah > 0) investment += uah; else debt += -uah; }
-      else { if (uah >= 0) cushion += uah; else debt += -uah; }
-    }
-    return {
-      t,
-      // Місяць точки віддаємо ЯВНО (`YYYY-MM`), бо `t` для кінця місяця = 23:59:59 UTC, і клієнт,
-      // форматуючи його в Києві (+3), отримував 1-ше число НАСТУПНОГО місяця: підпис кінця червня
-      // ставав «лип.» і збігався з підписом точки «зараз» → дубль категорії на осі X, крива
-      // зсунута на місяць, а тултіп поточного місяця показував дані попереднього.
-      ym: new Date(t * 1000).toISOString().slice(0, 7),
-      cushion: Math.round(cushion), debt: Math.round(debt), investment: Math.round(investment),
-      assets: Math.round(cushion + investment),
-      net: Math.round(cushion + investment - debt),
-    };
-  };
-  const ratesAt = (t: number) => byDay.get(iso(t)) ?? rates;
-
-  // Ідемо від сьогодні назад, знімаючи денні зміни; точку фіксуємо на кінці кожного місяця.
-  const pointAtDay = new Map(pointDays.map((p) => [p.day, p.t]));
-  const points: ReturnType<typeof snapshot>[] = [snapshot(now, ratesAt(now))];
-  for (let day = todayDay; day >= fromDay; day--) {
-    for (const a of accs) {
-      const delta = netByAccDay.get(`${a.id}:${day}`);
-      if (delta) own.set(a.id, (own.get(a.id) ?? 0) - delta); // назад: прибираємо зміну дня
-    }
-    // Кінець попереднього місяця = день, перед яким починається новий календарний місяць.
-    const t = pointAtDay.get(day);
-    if (t != null) points.push(snapshot(t, ratesAt(t)));
-  }
-  points.reverse();
-
-  const caveats: string[] = [];
-  // Кажемо про курс лише коли це справді так: коли історія покриває весь період, попередження
-  // було б неправдою в інший бік — воно применшувало б точність, якої ми вже досягли.
-  if (!covered) {
-    caveats.push(st(c.get("locale"), "networthRatesCaveat"));
-  }
-  // Плоскі назад — лише ручні БЕЗ жодного зрізу історії. Ті, що мають історію, тепер крокують.
-  const flat = accs.filter((a) => a.is_manual === 1 && !(histByAcc.get(a.id)?.length)).map((a) => a.title ?? a.type ?? a.id);
-  if (flat.length) {
-    caveats.push(st(c.get("locale"), "networthFlatCaveat", { accounts: flat.join(", ") }));
-  }
-
-  return c.json({ months, points, now: points[points.length - 1] ?? null, caveats });
+  return c.json(await buildNetworth(c.env.DB, months, c.get("locale")) satisfies Networth);
 });
 
 // §P3: сторінка мерчанта — агрегати по одному мерчанту (уся історія + тренд 6 міс + частка
@@ -318,7 +223,7 @@ analytics.get("/analytics/merchant", async (c) => {
     top_category: topCat?.name ? { name: topCat.name, color: topCat.color, spent: topCat.spent } : null,
     category_share: categoryShare,
     transactions: txs,
-  });
+  } satisfies MerchantAnalytics);
 });
 
 // Порівняння двох періодів side-by-side (беклог): вибраний період A проти попереднього
@@ -345,7 +250,7 @@ analytics.get("/analytics/compare", async (c) => {
   return c.json({
     a: { from, to, spend: aTot?.spend ?? 0, income: aTot?.income ?? 0, byCategory: aCats },
     b: { from: bFrom, to: bTo, spend: bTot?.spend ?? 0, income: bTot?.income ?? 0, byCategory: bCats },
-  });
+  } satisfies Compare);
 });
 
 // Month-end forecast (§7): project this month's spend from the current daily pace
@@ -409,7 +314,7 @@ analytics.get("/analytics/forecast", async (c) => {
     spend, income, pace: Math.round(pace),
     projectedSpend, projectedLow, projectedHigh, projectedNet: income - projectedSpend,
     upcomingPlanned, upcomingItems,
-  });
+  } satisfies Forecast);
 });
 
 // §1 Аналітика доходу: джерела (по ефективній категорії за період), стабільність
@@ -418,7 +323,7 @@ analytics.get("/analytics/forecast", async (c) => {
 analytics.get("/analytics/income", async (c) => {
   const url = new URL(c.req.url);
   const rates = await getRates(c.env.DB);
-  const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
+  const mode = await getPeriodMode(c.env.DB);
   const presetParam = (url.searchParams.get("preset") as Preset | null) ?? "month";
   const preset: Preset = ["week", "month", "quarter", "year"].includes(presetParam) ? presetParam : "month";
   const { from, to, prevFrom, prevTo } = periodBounds(mode, preset);
@@ -464,7 +369,7 @@ analytics.get("/analytics/income", async (c) => {
     sources: srcRows,
     monthly: monthly.map((r) => ({ month: r.m, income: r.income })),
     stability: { cv_pct: cvPct, label },
-  });
+  } satisfies IncomeAnalytics);
 });
 
 // Cashflow-календар: ВСІ очікувані списання (підписки/розстрочки) по днях у вікні [from,to]
@@ -495,7 +400,7 @@ analytics.get("/analytics/cashflow-calendar", async (c) => {
     amount_orig: ch.plan.period_amount ?? 0, currency_code: ch.plan.currency_code ?? 980,
     category_id: ch.plan.category_id, kind: ch.plan.kind,
   }));
-  return c.json({ from, to, now, cushion: funds.cushion, items });
+  return c.json({ from, to, now, cushion: funds.cushion, items } satisfies CashflowCalendar);
 });
 
 // Аналітика позицій чека (receipt_items з OCR): топ товарів за сумою за період.
@@ -512,7 +417,7 @@ analytics.get("/analytics/receipt-items", async (c) => {
     receiptsRepo.windowMeta(c.env.DB, from, to),
   ]);
 
-  return c.json({ items: rows, receipts: meta?.receipts ?? 0, total_items: meta?.items ?? 0 });
+  return c.json({ items: rows, receipts: meta?.receipts ?? 0, total_items: meta?.items ?? 0 } satisfies ReceiptItemsAnalytics);
 });
 
 // §E4: дрейф цін / персональна інфляція. Для кожної позиції чека (нормалізована назва)
@@ -557,7 +462,7 @@ analytics.get("/analytics/price-drift", async (c) => {
   // Топ рухів (лишаємо лише помітні), за модулем зміни.
   const movers = items.filter((i) => Math.abs(i.change_pct) >= NOISE).sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 12);
 
-  return c.json({ window: { from, to }, basket_change_pct: basket != null ? Math.round(basket * 10) / 10 : null, tracked: items.length, items: movers });
+  return c.json({ window: { from, to }, basket_change_pct: basket != null ? Math.round(basket * 10) / 10 : null, tracked: items.length, items: movers } satisfies PriceDrift);
 });
 
 // §E1/E2/E3: патерни витрат ЦЬОГО МІСЯЦЯ — усе детерміновано, без AI.
@@ -638,7 +543,7 @@ analytics.get("/analytics/patterns", async (c) => {
     recurring: split,
     anomalies: anomalies.slice(0, 6),
     pace: pace.slice(0, 8),
-  });
+  } satisfies SpendPatterns);
 });
 
 // Drill-down однієї (батьківської) категорії за період: розбивка по підкатегоріях +
@@ -665,7 +570,7 @@ analytics.get("/analytics/category", async (c) => {
       analyticsRepo.transferBucketMerchants(c.env.DB, v, range),
       analyticsRepo.transferBucketTransactions(c.env.DB, loc, v, range),
     ]);
-    return c.json({ subs, merchants, transactions: txs });
+    return c.json({ subs, merchants, transactions: txs } satisfies CategoryDrill);
   }
 
   // Звичайна категорія: канонічні витрати, де ЕФЕКТИВНА категорія (рол-ап) = parent.
@@ -675,7 +580,7 @@ analytics.get("/analytics/category", async (c) => {
     analyticsRepo.categoryMerchants(c.env.DB, v, range, parent),
     analyticsRepo.categoryTransactions(c.env.DB, v, range, parent),
   ]);
-  return c.json({ subs, merchants, transactions: txs });
+  return c.json({ subs, merchants, transactions: txs } satisfies CategoryDrill);
 });
 
 // §R2-ST5(б): drill будь-якого зрізу (мерчант / картка / група) — підсумок + самі
@@ -702,12 +607,12 @@ analytics.get("/analytics/slice", async (c) => {
   ]);
   // Для доходу сума виходить від'ємною (amountSum рахує -amount) — віддаємо абсолют.
   const spent = Math.abs(summary?.spent ?? 0);
-  return c.json({ spent, n: summary?.n ?? 0, transactions: txs });
+  return c.json({ spent, n: summary?.n ?? 0, transactions: txs } satisfies SliceDrill);
 });
 
 // Which currencies actually have transactions (for the stats currency switch).
 analytics.get("/analytics/currencies", async (c) => {
-  return c.json(await analyticsRepo.distinctCurrencies(c.env.DB));
+  return c.json(await analyticsRepo.distinctCurrencies(c.env.DB) satisfies CurrenciesList);
 });
 
 // Spend by effective category for a period, зведено в ₴ (канонічно).
@@ -719,7 +624,37 @@ analytics.get("/analytics/by-category", async (c) => {
   const { mult } = valueMode(rates, null);
   // Той самий запит, що живить `byCategory` в /analytics/overview — без валютного фільтра.
   return c.json(await analyticsRepo.spendByCategory(
-    c.env.DB, c.get("locale"), { mult, curFilter: "" }, { from, to }));
+    c.env.DB, c.get("locale"), { mult, curFilter: "" }, { from, to }) satisfies CategorySpend[]);
+});
+
+
+// §WEEKDAY: куди йдуть гроші за днями тижня. Питання, на яке решта Статистики не відповідає:
+// вона показує СКІЛЬКИ і НА ЩО, але не КОЛИ — а «пʼятниця коштує як три вівторки» це те, що
+// людина може змінити поведінкою, не відмовляючись ні від чого.
+//
+// Ділимо на кількість таких днів у вікні (`weekdayCounts`) — інакше порівняння бреше: у місяці
+// пʼятниць 5, а субот 4. Саме тому `typical` рахує СЕРВЕР: якби ділив клієнт, AI-контекст і
+// екран отримали б два різні числа про одне й те саме.
+analytics.get("/analytics/weekday", async (c) => {
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env.DB);
+  const mode = await getPeriodMode(c.env.DB);
+  const presetParam = url.searchParams.get("preset") as Preset | null;
+  const now = Math.floor(Date.now() / 1000);
+
+  let from: number, to: number;
+  if (presetParam && ["week", "month", "quarter", "year"].includes(presetParam)) {
+    ({ from, to } = periodBounds(mode, presetParam, now));
+  } else {
+    to = Number(url.searchParams.get("to") ?? now);
+    from = Number(url.searchParams.get("from") ?? to - 90 * 86400);
+  }
+
+  const curParam = url.searchParams.get("currency");
+  const { mult, curFilter } = valueMode(rates, curParam ? Number(curParam) : null);
+  const rows = await analyticsRepo.spendByWeekday(c.env.DB, { mult, curFilter }, { from, to }, now);
+
+  return c.json(buildWeekdayAnalytics(rows, from, to) satisfies WeekdayAnalytics);
 });
 
 // Спарклайни: 6-міс місячні витрати на КАТЕГОРІЮ й на МЕРЧАНТА (канон stats.ts, зведено в ₴).
@@ -747,7 +682,7 @@ analytics.get("/analytics/spark", async (c) => {
     const arr = (merchants[r.name] ??= buckets.map(() => 0));
     const i = bIdx.get(r.m); if (i != null) arr[i] = Math.round(r.spent);
   }
-  return c.json({ buckets, categories, merchants });
+  return c.json({ buckets, categories, merchants } satisfies SparkData);
 });
 
 // §H: детермінований Індекс фінздоров'я (без AI) + запис скору за добу для тренду в часі.
@@ -762,8 +697,8 @@ analytics.get("/analytics/health", async (c) => {
   try {
     await analyticsRepo.recordHealthScore(c.env.DB, day, h.score, now);
     const trend = await analyticsRepo.healthTrend(c.env.DB, localYmd(now - 45 * 86400));
-    return c.json({ ...h, trend });
+    return c.json({ ...h, trend } satisfies FinanceHealth);
   } catch {
-    return c.json({ ...h, trend: [] }); // таблиця може лагати на remote до міграції
+    return c.json({ ...h, trend: [] } satisfies FinanceHealth); // таблиця може лагати на remote до міграції
   }
 });

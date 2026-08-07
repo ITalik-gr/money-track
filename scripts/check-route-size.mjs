@@ -11,8 +11,13 @@
  *
  * THE RULE
  *
- * Every `.ts` file under `worker/routes/` and `worker/services/` stays under CAP lines. Files
- * already above it are listed in EXCEPTIONS, and an exception may never RISE.
+ * Every `.ts` file under `worker/routes/`, `worker/services/` and `worker/lib/` stays under CAP
+ * lines. Files already above it are listed in EXCEPTIONS, and an exception may never RISE.
+ *
+ * `lib/` was added on 2026-08-07, after phase 5. It was left out at first on the theory that
+ * domain logic legitimately runs longer than transport — but that is exactly the theory under
+ * which `ai.ts` reached 1 335 lines carrying six unrelated jobs. The cap is the same everywhere;
+ * what differs is how many exceptions a directory needs, and each one is a debt with a name.
  *
  * WHY NOT A STRICT TWO-DIRECTIONAL RATCHET LIKE C1
  *
@@ -25,7 +30,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const DIRS = ["worker/routes", "worker/services"];
+const DIRS = ["worker/routes", "worker/services", "worker/lib"];
 const CAP = 400;
 const SLACK = 80; // tighten an exception once it is this far under its allowance
 
@@ -35,9 +40,21 @@ const SLACK = 80; // tighten an exception once it is this far under its allowanc
 const EXCEPTIONS = {
   // 19 dense reporting handlers over one prefix. Splitting it further means splitting `/analytics`
   // itself into sub-domains, which is a design decision and not a mechanical move.
-  "worker/routes/api/analytics.ts": 780,
+  "worker/routes/api/analytics.ts": 720,
   // Predates the split: the Telegram bot's command surface, still holding 3 inline queries too.
   "worker/routes/telegram.ts": 420,
+  // The AI adviser: the finance snapshot, the chat, budgets, facts, and the deterministic
+  // fallback advice. The snapshot alone is the single source every AI screen reads, so splitting
+  // it is a design decision — recorded rather than done.
+  "worker/lib/ai/advisor.ts": 1120,
+  // The notification centre: one drafting function per event kind, plus the Telegram push.
+  "worker/lib/messaging/notify.ts": 1000,
+  // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
+  // "one number, one home", and cutting it up would give that number two homes again.
+  "worker/lib/finance/stats.ts": 615,
+  // Categorisation, transfer review and text parsing — three model calls that share a taxonomy.
+  "worker/lib/ai/enrich.ts": 560,
+  "worker/lib/ai/report.ts": 450,
 };
 
 function tsFiles(dir, prefix = dir + "/") {

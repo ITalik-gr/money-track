@@ -6,6 +6,7 @@ import {
 import * as eventsRepo from "../../repo/events.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
+import type { EventWithAgg } from "../../../shared/api/platform.ts";
 
 export const events = apiRoutes();
 
@@ -18,7 +19,7 @@ events.get("/events", async (c) => {
   // НЕ рахувались. Для подорожі це найгірше можливе місце для такої дірки — саме там
   // валюта і трапляється, і бюджет поїздки виглядав би виконаним. Зводимо в ₴ як усюди.
   const rates = await getRates(c.env.DB);
-  return c.json(await eventsRepo.listWithTotals(c.env.DB, uahMult(rates)));
+  return c.json(await eventsRepo.listWithTotals(c.env.DB, uahMult(rates)) satisfies EventWithAgg[]);
 });
 
 // Бюджет події («скільки закладаю на цю подорож»). amount<=0 або null — прибрати ліміт.

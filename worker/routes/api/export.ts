@@ -9,6 +9,7 @@ import * as txRepo from "../../repo/transactions.ts";
 import * as stateRepo from "../../repo/state.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { SearchResults } from "../../../shared/api/platform.ts";
 
 export const dataExport = apiRoutes();
 
@@ -145,7 +146,7 @@ dataExport.get("/export/transactions.csv", async (c) => {
  */
 dataExport.get("/search", async (c) => {
   const q = (new URL(c.req.url).searchParams.get("q") ?? "").trim();
-  if (q.length < 2) return c.json({ merchants: [], categories: [], transactions: [] });
+  if (q.length < 2) return c.json({ merchants: [], categories: [], transactions: [] } satisfies SearchResults);
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
 
@@ -158,5 +159,5 @@ dataExport.get("/search", async (c) => {
   const variants = [...new Set([q, q.toLocaleLowerCase("uk"), q.toLocaleUpperCase("uk"),
     q.charAt(0).toLocaleUpperCase("uk") + q.slice(1).toLocaleLowerCase("uk")])];
 
-  return c.json(await txRepo.search(c.env.DB, c.get("locale"), mult, variants));
+  return c.json(await txRepo.search(c.env.DB, c.get("locale"), mult, variants) satisfies SearchResults);
 });

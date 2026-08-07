@@ -1,0 +1,24 @@
+{
+  "status": 200,
+  "body": {
+    "period": {
+      "from": 1777582800,
+      "to": 1778749200,
+      "elapsed_frac": 0.44
+    },
+    "recurring": {
+      "ref_from": 1764540000,
+      "recurring": {
+        "spent": 0,
+        "n": 0
+      },
+      "oneoff": {
+        "spent": 0,
+        "n": 0
+      },
+      "oneoff_items": []
+    },
+    "anomalies": [],
+    "pace": []
+  }
+}

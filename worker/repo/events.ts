@@ -8,9 +8,12 @@
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
+import type { EventWithAgg } from "../../shared/api/platform.ts";
+import type { TxRow } from "../../shared/api/transactions.ts";
+import type { EventGroup } from "../../shared/types.ts";
 
 /** Active events with their transaction count and ₴ totals. Holds are counted like anywhere else. */
-export async function listWithTotals(db: AppDb, mult: string): Promise<Record<string, unknown>[]> {
+export async function listWithTotals(db: AppDb, mult: string): Promise<EventWithAgg[]> {
   const r = await db.prepare(
     `SELECT e.*,
             COUNT(t.id) AS tx_count,
@@ -20,12 +23,12 @@ export async function listWithTotals(db: AppDb, mult: string): Promise<Record<st
      LEFT JOIN transactions t ON t.event_id = e.id
      WHERE e.is_active = 1
      GROUP BY e.id ORDER BY e.created_at DESC`,
-  ).all();
+  ).all<EventWithAgg>();
   return r.results ?? [];
 }
 
-export async function find(db: AppDb, id: number): Promise<Record<string, unknown> | null> {
-  return await db.prepare("SELECT * FROM event_groups WHERE id = ?").bind(id).first();
+export async function find(db: AppDb, id: number): Promise<EventGroup | null> {
+  return await db.prepare("SELECT * FROM event_groups WHERE id = ?").bind(id).first<EventGroup>();
 }
 
 export async function create(
@@ -74,14 +77,14 @@ export async function archive(db: AppDb, id: number): Promise<void> {
 
 export async function transactions(
   db: AppDb, locale: NotifLocale, id: number,
-): Promise<Record<string, unknown>[]> {
+): Promise<TxRow[]> {
   const r = await db.prepare(
     `SELECT t.*, ${catNameSql(locale, "c.name")} AS category_name, c.color AS category_color, a.title AS account_title
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN accounts a ON a.id = t.account_id
      WHERE t.event_id = ? ORDER BY t.time DESC`,
-  ).bind(id).all();
+  ).bind(id).all<TxRow>();
   return r.results ?? [];
 }
 

@@ -1,17 +1,11 @@
 // Category reads and writes. See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import type { Category } from "../../shared/types.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 
-export interface CategoryRow {
-  id: number;
-  name: string;
-  parent_id: number | null;
-  color: string | null;
-  is_income: number;
-  importance: string | null;
-  [key: string]: unknown;
-}
+/** A row of `categories` — `SELECT *`, so this IS the contract type (see `repo/accounts.ts`). */
+export type CategoryRow = Category;
 
 /**
  * All categories, income buckets last.

@@ -1,0 +1,13 @@
+{
+  "status": 200,
+  "body": {
+    "safe": 0,
+    "income": 0,
+    "spend": 0,
+    "essential": 0,
+    "discretionary": 0,
+    "subs_monthly": 0,
+    "subs_remaining": 0,
+    "month_start": 1777582800
+  }
+}

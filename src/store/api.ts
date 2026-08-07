@@ -1,502 +1,24 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { Account, Budget, Category, EventGroup, PlannedPayment, AiUsageStats, PlannedActual } from "../../shared/types.ts";
-import type { NotifTemplateKey } from "../../shared/notif-i18n.ts";
 
-// §A6 — фонова AI-генерація. Дзеркалить рядок `ai_jobs` у БД юзера.
-export interface GoalContribution { id: number; amount: number; at: number; note: string | null; source: string }
-
-export type AiJobKind = "advisor" | "report" | "budget";
-export interface AiJob {
-  id: number;
-  kind: AiJobKind;
-  status: "queued" | "running" | "done" | "failed";
-  result_json: string | null;
-  error: string | null;
-  created_at: number;
-  finished_at: number | null;
-  seen_at: number | null;
-}
-
-export interface EventWithAgg extends EventGroup {
-  tx_count: number;
-  spent: number;
-  income: number;
-}
-
-export interface TxRow {
-  id: string;
-  account_id: string;
-  source: string;
-  time: number;
-  amount: number;
-  currency_code: number;
-  original_amount?: number | null;
-  original_currency?: number | null;
-  mcc: number | null;
-  category_id: number | null;
-  merchant: string | null;
-  comment: string | null;
-  user_note: string | null;
-  hold: number;
-  category_name: string | null;
-  category_color: string | null;
-  category_icon?: string | null;
-  account_title: string | null;
-  is_transfer?: number;
-  real_category_id?: number | null;   // реальна суть зняття/переказу → лишає операцію витратою
-  transfer_pair_id?: string | null;   // пара-переказ між своїми: подача нейтральна (`lib/transfer.ts`)
-  pair_account_title?: string | null; // рахунок другої сторони пари → маршрут «звідки → куди»
-  planned_id?: number | null;   // прив'язано до підписки → бейдж «підписка» (§R6)
-  event_id?: number | null;
-  event_name?: string | null;
-  event_color?: string | null;
-  importance?: string | null;   // §6: override вагомості операції (essential|discretionary|optional)
-  reimbursed?: number | null;   // §COMPENSATION: скільки з цієї витрати компенсували (мінор)
-}
-
-export interface ReceiptItemRow { id: number; name: string | null; qty: number | null; price: number | null }
-export interface ReceiptRow {
-  id: number; image_key: string | null; store: string | null; total: number | null;
-  currency_code: number | null; purchased_at: number | null; items: ReceiptItemRow[];
-}
-export interface TagRow { id: number; name: string; color: string | null }
-export interface TxDetail extends TxRow {
-  mcc: number | null;
-  real_category_id: number | null;      // реальна категорія переказу/зняття (§F2 крок 2)
-  real_category_name: string | null;
-  real_category_color: string | null;
-  cashback: number | null;
-  comment: string | null;
-  balance_after: number | null;
-  receipt_id: number | null;
-  raw_json: string | null;
-  category_icon: string | null;
-  account_type: string | null;
-  is_transfer?: number;
-  ai_enriched?: number;
-  name_locked?: number;             // §R7: ручну назву зафіксовано — AI не перезаписує
-  reimbursed?: number | null;       // §COMPENSATION: скільки з цієї витрати компенсували
-  reimburses_id?: string | null;    // §COMPENSATION: ця операція — компенсація за витрату X
-  ai_note?: string | null;          // розуміння AI «що це» (§R5)
-  planned_id?: number | null;       // зв'язок із підпискою
-  planned_title?: string | null;    // назва підписки, якщо прив'язано
-  event_id?: number | null;
-  event_name?: string | null;
-  receipt: ReceiptRow | null;
-  tags: TagRow[];
-}
-
-export interface AiFact {
-  label: string;
-  amount?: number | null;    // грн (major)
-  category?: string | null;
-  delta_pct?: number | null;
-  tone?: "pos" | "neg" | "neutral" | null;
-}
-export interface AdviceAction {
-  type: "create_budget";
-  label: string;
-  category_id?: number | null;
-  category_name?: string | null;
-  amount_uah?: number | null;
-}
-export interface AiUsageBrief { in: number; out: number; cache_read: number }
-
-export interface Advice {
-  runway_comment: string;
-  summary: string;
-  facts?: AiFact[];
-  suggestions: { title: string; detail: string; action?: AdviceAction | null }[];
-  own_funds: number;
-  cushion: number;
-  debt: number;
-  investment?: number;
-  monthly_burn: number;
-  runway_months: number | null;
-  usage?: AiUsageBrief;
-  generated_at: number;
-  /** Порада зібрана детерміновано з чисел, без AI (ключ/ліміт/збій моделі). */
-  fallback?: boolean;
-  fallback_reason?: string;
-}
-export interface AdviceHistoryItem {
-  generated_at: number; summary: string; runway_months: number | null; monthly_burn: number; own_funds: number;
-  cushion?: number;
-}
-
-export interface Summary {
-  byCurrency: { currency_code: number; own: number }[];
-  totalUAH: number;
-  credit: { accountId: string; limit: number; own: number; debt: number } | null;
-}
-
-export interface SafeToSpend {
-  safe: number; income: number; spend: number; essential: number; discretionary: number;
-  subs_monthly: number; subs_remaining: number; month_start: number;
-}
-export interface CapitalTrend {
-  now_uah: number;
-  points: { t: number; capital_uah: number }[];
-}
-export interface CategorySpend {
-  category_id: number | null;
-  category_name: string | null;
-  color: string | null;
-  spent: number; // канонічно, зведено в ₴ (додатнє)
-  n: number;
-}
-
-export interface RecurringCandidate {
-  merchant: string;
-  amount: number; // minor units, positive
-  n: number;
-  first_time: number;
-  last_time: number;
-  months: number;
-  avg_interval_days: number;
-  currency_code?: number;
-  category_id?: number | null;
-}
-
-export interface Overview {
-  summary: { spend: number; income: number; n: number };
-  prev: { spend: number; income: number; n: number };
-  range: { from: number; to: number; prevFrom: number; prevTo: number; bucket: string; mode: "calendar" | "rolling"; preset: string | null };
-  series: { bucket: string; spend: number; income: number }[];
-  byCategory: { category_id: number | null; category_name: string | null; color: string | null; spent: number; n: number }[];
-  byMerchant: { merchant: string; spent: number; n: number }[];
-  byAccount: { account_id: string | null; account_title: string | null; account_type: string | null; spent: number; n: number }[];
-  byEvent: { event_id: number; event_name: string; event_color: string | null; spent: number; n: number }[];
-  byImportance: { importance: string; spent: number; n: number }[];
-}
-export interface MonthlyHistory { months: { month: string; spend: number; income: number }[] }
-// §R3: розбивка коштів (₴-мінор). cushion/debt/investment/net — канон fundsBreakdown (= Порадник).
-export interface AccountFunds { title: string | null; type: string | null; role: "liquid" | "investment"; own_uah: number; note: string | null }
-export interface FundsBreakdown { cushion: number; debt: number; investment: number; net: number; accounts: AccountFunds[] }
-export type PeriodMode = "calendar" | "rolling";
-export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group" | "notify";
-export type AiModelToken = "haiku" | "sonnet" | "opus";
-export type Preset = "week" | "month" | "quarter" | "year";
-
-export interface CompareBucket {
-  from: number; to: number; spend: number; income: number;
-  byCategory: { category_id: number | null; category_name: string | null; color: string | null; spent: number }[];
-}
-export interface Compare { a: CompareBucket; b: CompareBucket }
-
-export interface StructuredInsight {
-  headline: string;
-  facts: AiFact[];
-  note?: string | null;
-}
-export interface Insight {
-  text: string;
-  structured?: StructuredInsight;
-  usage?: AiUsageBrief;
-  generated_at: number;
-  period_from: number;
-  period_to: number;
-  period_days: number;
-  empty?: boolean;
-}
-
-export interface BudgetProposalRow {
-  category_id: number;
-  name: string;
-  color: string | null;
-  avg_month: number;
-  current_limit: number;
-  suggested: number;
-  reason: string;
-}
-export interface BudgetPlanResult {
-  rows: BudgetProposalRow[];
-  overall: string;
-  runway_months: number | null;
-  generated_at: number;
-}
-export interface BudgetChatReply {
-  reply: string;
-  proposals?: { category_id: number; limit_uah: number; reason: string }[];
-}
-
-export interface DrillTx { id: string; time: number; amount: number; currency_code: number; merchant: string | null; comment: string | null; user_note?: string | null; category_name?: string | null; category_color?: string | null }
-export interface CategoryDrill {
-  subs: { category_id: number | null; name: string; color: string | null; spent: number; n: number }[];
-  merchants: { merchant: string; spent: number; n: number }[];
-  transactions: DrillTx[];
-}
-export interface SliceDrill { spent: number; n: number; transactions: DrillTx[] }
-
-// §P3: сторінка мерчанта — агрегати по одному мерчанту.
-export interface MerchantAnalytics {
-  name: string;
-  total: number;                 // копійки, ₴ — уся історія витрат
-  n: number;
-  avg: number;                   // копійки, середній чек
-  first_at: number | null;
-  last_at: number | null;
-  by_month: { month: string; spent: number }[];
-  top_category: { name: string; color: string | null; spent: number } | null;
-  category_share: number | null; // % витрат категорії, що припадає на мерчанта
-  transactions: TxRow[];
-}
-
-// §Аналітика 2.0 — AI-репорти.
-export interface FinancialReport {
-  headline: string;
-  summary: string;
-  sections: { title: string; body: string }[];
-  category_breakdown: { name: string; amount_uah: number; delta_pct: number | null; note: string | null }[];
-  anomalies: { label: string; detail: string; severity: "info" | "warn" | "high" }[];
-  predictions: { next_period_spend_uah: number | null; runway_months: number | null; note: string | null };
-  advice: { title: string; detail: string; action?: AdviceAction | null }[];
-  trend?: { month: string; spend_uah: number; income_uah: number }[]; // §5: детерміновані дані для лінії
-  importance?: { level: string; amount_uah: number; pct: number }[]; // §6: детермінована розбивка вагомості
-  // §R6: детерміновані категорії (надійні суми + дельта + prev) з приклеєною AI-нотаткою.
-  categories?: { name: string; amount_uah: number; prev_uah: number; delta_pct: number | null; note?: string | null }[];
-}
-export type ReportPeriodType = "week" | "month" | "custom";
-export interface ReportListItem {
-  id: number; period_type: ReportPeriodType; period_from: number; period_to: number;
-  created_at: number; model: string | null; cost_usd: number | null; summary: string | null;
-}
-export interface ReportFull extends ReportListItem { data: FinancialReport }
-export interface TransferReviewRow {
-  id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number; time: number;
-  real_category_id: number | null; note: string | null; needs_attention: boolean;
-}
-
-export type GoalKind = "save_up" | "debt_payoff" | "sinking_fund";
-export type AutofillKind = "fixed" | "income_pct";
-
-/** Тіло створення/редагування цілі. Одна форма на обидві мутації — вони приймають те саме. */
-export interface GoalBody {
-  name: string; target_amount: number; current_amount?: number;
-  account_id?: string | null; deadline?: number | null; color?: string; note?: string;
-  kind?: GoalKind; autofill_kind?: AutofillKind | null; autofill_value?: number | null;
-}
-
-export interface SavingsGoal {
-  id: number;
-  name: string;
-  target_amount: number;
-  current_amount: number;
-  account_id: string | null;
-  account_balance?: number | null;
-  account_title?: string | null;
-  deadline: number | null;
-  color: string | null;
-  note: string | null;
-  // §P2.1 (міграція 0037). `kind` міняє суть прогресу: save_up накопичує, debt_payoff гасить
-  // борг, sinking_fund не «закінчується» на досягненні суми. `autofill_*` — правило
-  // щомісячного авто-внеску (NULL = вимкнено); `autofill_last_ym` — за який місяць уже нараховано.
-  kind?: GoalKind;
-  autofill_kind?: AutofillKind | null;
-  autofill_value?: number | null;
-  autofill_last_ym?: string | null;
-  current: number; // ефективний прогрес (баланс банки або ручний)
-}
-
-export interface Forecast {
-  monthStart: number; now: number; daysInMonth: number; daysElapsed: number; daysRemaining: number;
-  spend: number; income: number; pace: number;
-  projectedSpend: number; projectedLow?: number; projectedHigh?: number; projectedNet: number;
-  upcomingPlanned: number;
-  upcomingItems: { title: string; amount: number; at: number }[];
-}
-
-export interface IncomeAnalytics {
-  period: { from: number; to: number; preset: string };
-  total: number; prev_total: number; delta_pct: number | null;
-  sources: { category_id: number | null; name: string; color: string | null; amount: number; n: number; pct: number }[];
-  monthly: { month: string; income: number }[];
-  stability: { cv_pct: number | null; label: string };
-}
-
-export interface UpcomingSubs {
-  days: number; total: number;
-  // §CUR-PLAN: `amount` — у валюті плану (показуємо як є, «$5»), `amount_uah` — зведення
-  // для підсумків; `total` уже в ₴.
-  items: { id: number; title: string; amount: number; currency_code: number; amount_uah: number; at: number; days_until: number }[];
-}
-
-export interface ReceiptItemsAnalytics {
-  items: { name: string; total: number; qty: number; n: number }[];
-  receipts: number; total_items: number;
-}
-
-// §E4: дрейф цін / персональна інфляція по позиціях чеків.
-export interface PriceDrift {
-  window: { from: number; to: number };
-  basket_change_pct: number | null;
-  tracked: number;
-  items: { name: string; first_unit: number; last_unit: number; change_pct: number; n: number; first_at: number; last_at: number }[];
-}
-
-// §E1/E2/E3: детерміновані патерни витрат цього місяця.
-export interface SpendPatterns {
-  period: { from: number; to: number; elapsed_frac: number };
-  recurring: {
-    ref_from: number;
-    recurring: { spent: number; n: number };
-    oneoff: { spent: number; n: number };
-    oneoff_items: { merchant: string | null; category: string | null; amount: number; time: number }[];
-  };
-  anomalies: PaceItem[];
-  pace: PaceItem[];
-}
-export interface PaceItem {
-  category: string; color: string | null; spent: number;
-  oneoff: number; mostly_oneoff: boolean; lumpy: boolean;
-  projected: number; usual: number; pct: number | null;
-}
-
-/** Owner-only directory row (admin UI, D2). Carries identity only — never anything financial. */
-export interface AdminUser {
-  id: string;
-  email: string;
-  name: string | null;
-  picture: string | null;
-  status: "invited" | "active" | "disabled";
-  is_owner: boolean;
-  created_at: number;
-  last_login_at: number | null;
-  /** Last authenticated API call. Answers "is this in use?", which `last_login_at` cannot —
-   *  a 30-day session lets someone use the app daily without ever logging in again. */
-  last_seen_at: number | null;
-  // `null` = never reported yet (directory migration 0004 + one daily cron pass). Rendering a
-  // null as 0 would claim the account is empty, which is a different — and possibly false — fact.
-  tx_count: number | null;
-  accounts_count: number | null;
-  has_mono_key: boolean | null;
-  has_ai_key: boolean | null;
-  stats_at: number | null;
-}
-
-/** One-tap repeat of a cash operation the user enters often (`GET /transactions/frequent`). */
-export interface FrequentTx {
-  merchant: string;
-  category_id: number | null;
-  currency_code: number;
-  n: number;
-  /** Median of the recent amounts, POSITIVE minor units. */
-  amount: number;
-}
-
-/** `set` — the user stored their OWN key. `available` — a usable key exists at all (the owner's
- *  comes from deployment secrets, so `set` is false while AI works fine). Gate UI on `available`. */
-export interface CredentialStatus {
-  name: "mono_token" | "anthropic_api_key";
-  set: boolean;
-  available: boolean;
-  updated_at: number | null;
-  last_ok_at: number | null;
-}
-
-export interface SetupStatus {
-  webhookRegistered: boolean;
-  accounts: number;
-  transactions: number;
-  /** Cached foreign-currency rates. 0 = the rates step has never run. */
-  rates: number;
-  backfill: { progress: number; total: number; done: boolean } | null;
-}
-
-// ROADMAP L5: one planned merchant rename («Сільпо» → `Silpo`), previewed before it is applied.
-export interface TranslitFix {
-  from: string;
-  to: string;
-  n: number;
-  source: "sibling" | "description";
-}
-
-// §A1: факт про світ. adjust_* рухає числа лише коли confirmed_at != null (гейт підтвердження).
-export interface Fact {
-  id: number; text: string; effective_from: number; expires_at: number | null;
-  category_id: number | null; category_name: string | null;
-  adjust_kind: "multiplier" | "delta_minor" | null; adjust_value: number | null;
-  confirmed_at: number | null; source: string; created_at: number;
-}
-export interface FactInput {
-  text: string; effective_from?: number; expires_at?: number | null;
-  category_id?: number | null; adjust_kind?: "multiplier" | "delta_minor" | null;
-  adjust_value?: number | null; confirm?: boolean;
-}
-// §A5: документ корпусу знань. `builtin` — заводський (може бути переписаний або вимкнений,
-// крім `locked`); `user` — власна нотатка користувача.
-export interface KnowledgeMeta {
-  id: string; title: string; summary: string; chars: number;
-  kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean; updated_at: number | null;
-}
-export interface KnowledgeList { docs: KnowledgeMeta[]; user_chars: number; user_limit: number; doc_limit: number }
-export interface KnowledgeDocFull { id: string; title: string; summary: string; body: string; kind: "builtin" | "user"; locked: boolean; enabled: boolean; overridden: boolean }
-// §H: детермінований Індекс фінздоров'я (без AI) — 4 складові + зважений скор 0..100.
-export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
-export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[]; trend?: { day: string; score: number }[] }
-// Спарклайни: 6-міс місячні витрати (копійки) на категорію (ключ=id) і мерчанта (ключ=назва).
-export interface SparkData { buckets: string[]; categories: Record<string, number[]>; merchants: Record<string, number[]> }
-// Cashflow-календар: очікувані списання по днях + стартова подушка (для проєкції балансу).
-// §CUR-PLAN: `amount` — у ₴ (його сумують і віднімають від подушки), оригінал — у `amount_orig`.
-export interface CashflowItem { at: number; date: string; title: string; amount: number; amount_orig: number; currency_code: number; category_id: number | null; kind: string }
-export interface CashflowCalendar { from: number; to: number; now: number; cushion: number; items: CashflowItem[] }
-// Автобюджет: пропозиція лімітів із канонічного місячного рівня категорії. Копійки.
-export interface AutoBudgetItem {
-  category_id: number; name: string; color: string | null;
-  importance: string; essential: boolean;
-  level: number; suggested: number; current: number | null;
-}
-export interface AutoBudget { trim_pct: number; total_level: number; total_suggested: number; items: AutoBudgetItem[] }
-// Збережений фільтр Транзакцій: `query` — той самий рядок, що в URL сторінки.
-export interface SavedFilter { id: string; name: string; query: string }
-// Глобальний пошук (командна панель Ctrl-K). Сторінки/дії статичні на клієнті — тут лише дані.
-export interface SearchResults {
-  merchants: { name: string; n: number; spent: number }[];
-  categories: { id: number; name: string; color: string | null; parent_name: string | null }[];
-  transactions: { id: string; time: number; amount: number; currency_code: number; merchant: string | null; category_name: string | null }[];
-}
-// Нетворт у часі: активи (подушка + інвест) − борг, на кінець кожного місяця. Копійки.
-// `ym` (`YYYY-MM`) — канонічний місяць точки. Підпис осі рахуємо з нього, а НЕ з `t`:
-// `t` кінця місяця = 23:59:59 UTC, у Києві (+3) це вже 1-ше наступного місяця.
-export interface NetworthPoint { t: number; ym: string; cushion: number; debt: number; investment: number; assets: number; net: number }
-export interface Networth { months: number; points: NetworthPoint[]; now: NetworthPoint | null; caveats: string[] }
-// §SPLIT: частина розділеної транзакції (копійки, знак як у tx). Порожній список = не розділено.
-export interface TxSplit { id: number; category_id: number; amount: number; category_name: string | null; category_color: string | null }
-// §COMPENSATION: стан «мені скинули за це» + кандидати на привʼязку (надходження поруч у часі).
-// `label` збирає сервер (мерчант → коментар → нотатка → рахунок): у вхідних P2P мерчант часто
-// порожній, і рядок лишався б без назви.
-// `available` — скільки з надходження ще не роздано по витратах; `allocated_here` — скільки з
-// нього вже пішло саме на цю витрату. Одне надходження може покривати кілька витрат.
-export interface ReimbursementTx {
-  id: string; label: string; account_title: string | null;
-  amount: number; currency_code: number; time: number;
-  available: number; allocated_here: number;
-}
-export interface Reimbursement {
-  tx: { id: string; amount: number; currency_code: number; reimbursed: number };
-  linked: ReimbursementTx[];
-  candidates: ReimbursementTx[];
-}
-// Зворотний бік: куди пішло це надходження і скільки з нього ще вільно.
-export interface ReimbursementUsage {
-  used: { id: string; amount: number; label: string; time: number; expense_amount: number }[];
-  allocated: number; available: number; currency_code?: number;
-}
-// Центр сповіщень: стрічка того, що система «хоче сказати» (репорти/дедлайни/аномалії/…).
-export type NotifKind =
-  | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
-  | "big_tx" | "duplicate" | "health_drop" | "goal_risk" | "dead_sub" | "win" | "todo" | "ai";
-export interface Notification {
-  id: number; kind: NotifKind; title: string; body: string | null;
-  // Template key + JSON params for locale-aware re-rendering of the feed (P3.3). NULL for the
-  // free-text `ai` kind and legacy rows — those render the stored title/body verbatim.
-  notif_key: NotifTemplateKey | null; notif_params: string | null;
-  severity: "info" | "warn" | "urgent";
-  entity_type: string | null; entity_id: string | null;
-  created_at: number; read_at: number | null;
-}
-export interface NotificationFeed { items: Notification[]; unread: number }
-export type NotifPrefs = Record<NotifKind, boolean>
+// The API contract lives in `shared/api/` and is imported, not re-declared (phase 2, defect D2).
+// It is RE-EXPORTED from here because 66 files already import these names from `store/api.ts`;
+// pointing every one of them at `shared/` would be a large diff that proves nothing. What matters
+// is that this file no longer DECLARES a response shape — the worker annotates its returns with
+// the same types, so `tsc` is what notices drift now, instead of a user noticing it in production.
+export type * from "../../shared/api/index.ts";
+import type {
+  Advice, AdviceHistoryItem, AiJob, AiModelToken, AiTask, AutoBudget, BudgetChatReply,
+  BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
+  CredentialStatus, CurrenciesList, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
+  FrequentTx, FundsBreakdown, GoalBody, GoalContribution, IncomeAnalytics, Insight,
+  KnowledgeDocFull, KnowledgeList, MerchantAnalytics, MonthlyHistory, Networth,
+  NotifPrefs, NotificationFeed, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
+  RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
+  SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
+  Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
+  AccountHistory,
+} from "../../shared/api/index.ts";
 
 export const api = createApi({
   reducerPath: "api",
@@ -534,7 +56,7 @@ export const api = createApi({
     getAccounts: b.query<Account[], void>({ query: () => "/accounts", providesTags: ["Account"] }),
     getArchivedAccounts: b.query<Account[], void>({ query: () => "/accounts/archived", providesTags: ["Account"] }),
     getFunds: b.query<FundsBreakdown, void>({ query: () => "/accounts/funds", providesTags: ["Account", "Summary"] }),
-    getAccountsHistory: b.query<{ history: Record<string, number[]> }, void>({ query: () => "/accounts/history", providesTags: ["Account"] }),
+    getAccountsHistory: b.query<AccountHistory, void>({ query: () => "/accounts/history", providesTags: ["Account"] }),
     setAccountActive: b.mutation<unknown, { id: string; active: boolean }>({
       query: ({ id, active }) => ({ url: `/accounts/${id}/active`, method: "PATCH", body: { active } }),
       invalidatesTags: ["Account", "Summary"],
@@ -718,7 +240,7 @@ export const api = createApi({
       query: (body) => ({ url: "/settings/ai-models", method: "PUT", body }),
       invalidatesTags: ["Setup"],
     }),
-    getCurrencies: b.query<number[], void>({ query: () => "/analytics/currencies" }),
+    getCurrencies: b.query<CurrenciesList, void>({ query: () => "/analytics/currencies" }),
     getForecast: b.query<Forecast, void>({ query: () => "/analytics/forecast", providesTags: ["Tx"] }),
     getIncomeAnalytics: b.query<IncomeAnalytics, { preset?: string; currency?: number | null }>({
       query: ({ preset, currency }) => `/analytics/income?preset=${preset ?? "month"}${currency ? `&currency=${currency}` : ""}`,
@@ -988,6 +510,11 @@ export const api = createApi({
     getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
     // Спарклайни (6-міс тренд у списках категорій/мерчантів). Оновлюється з новими операціями.
     getSpark: b.query<SparkData, void>({ query: () => "/analytics/spark", providesTags: ["Summary"] }),
+    // §WEEKDAY: витрати за днями тижня. Тег `Tx` — правка операції може змінити і день, і суму.
+    getWeekday: b.query<WeekdayAnalytics, { preset?: Preset; currency?: number | null } | void>({
+      query: (a) => `/analytics/weekday?preset=${a?.preset ?? "month"}${a?.currency ? `&currency=${a.currency}` : ""}`,
+      providesTags: ["Tx"],
+    }),
     getMonthlyHistory: b.query<MonthlyHistory, { months?: number } | void>({
       query: (a) => `/analytics/monthly-history?months=${a?.months ?? 6}`,
       providesTags: ["Tx"],
@@ -1252,6 +779,7 @@ export const {
   useDeleteKnowledgeDocMutation,
   useGetHealthQuery,
   useGetSparkQuery,
+  useGetWeekdayQuery,
   useGetNetworthQuery,
   useLazySearchQuery,
   useLazyGetAutoBudgetQuery,

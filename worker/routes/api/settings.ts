@@ -1,18 +1,20 @@
 // `/settings/*` and `/profile` — per-owner preferences: period mode, UI locale, per-task AI
 // model, saved filters. `period_mode` decides the boundaries every other screen counts within.
 import { setState, getState } from "../../lib/finance/repo.ts";
-import {
-  type PeriodMode, } from "../../lib/finance/stats.ts";
+import { getPeriodMode } from "../../lib/finance/stats.ts";
+
 import type { AppDb } from "../../lib/platform/db-shim.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { PeriodMode } from "../../../shared/api/analytics.ts";
+import type { SavedFilter as SharedSavedFilter } from "../../../shared/api/platform.ts";
 
 export const settings = apiRoutes();
 
 // Режим періоду (календарний ⇄ ковзний) — єдине джерело для Головної/Статистики/AI.
 settings.get("/settings/period-mode", async (c) => {
-  const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
-  return c.json({ mode });
+  const mode = await getPeriodMode(c.env.DB);
+  return c.json({ mode } satisfies { mode: PeriodMode });
 });
 
 settings.put("/settings/period-mode", async (c) => {
@@ -42,7 +44,7 @@ settings.put("/settings/locale", async (c) => {
 // UI редагує три головні (report/advisor/insight); решта — дефолти. Enrich/OCR завжди Haiku.
 const AI_MODEL_TASKS = ["report", "advisor", "insight", "chat", "budget", "group", "notify"] as const;
 settings.get("/settings/ai-models", async (c) => {
-  const { AI_TASK_DEFAULTS, TOKEN_BY_MODEL, MODEL_BY_TOKEN } = await import("../../lib/ai/ai.ts");
+  const { AI_TASK_DEFAULTS, TOKEN_BY_MODEL, MODEL_BY_TOKEN } = await import("../../lib/ai/models.ts");
   const out: Record<string, string> = {};
   for (const t of AI_MODEL_TASKS) {
     const saved = await getState(c.env.DB, `ai_model_${t}`);
@@ -52,7 +54,7 @@ settings.get("/settings/ai-models", async (c) => {
 });
 
 settings.put("/settings/ai-models", async (c) => {
-  const { MODEL_BY_TOKEN } = await import("../../lib/ai/ai.ts");
+  const { MODEL_BY_TOKEN } = await import("../../lib/ai/models.ts");
   const { task, model } = await c.req.json<{ task: string; model: string }>();
   if (!AI_MODEL_TASKS.includes(task as typeof AI_MODEL_TASKS[number]) || !MODEL_BY_TOKEN[model]) {
     return c.json({ error: "invalid task or model" }, 400);
@@ -84,7 +86,8 @@ settings.put("/profile", async (c) => {
  * Ліміт 24 — це особистий список швидкого доступу, а не сховище.
  */
 const FILTERS_KEY = "saved_filters";
-interface SavedFilter { id: string; name: string; query: string }
+// The contract type, imported — the shape is a response, so it belongs in `shared/api/`.
+type SavedFilter = SharedSavedFilter;
 
 async function readFilters(db: AppDb): Promise<SavedFilter[]> {
   const raw = await getState(db, FILTERS_KEY);
@@ -111,7 +114,7 @@ settings.post("/settings/saved-filters", async (c) => {
   const item: SavedFilter = { id: idx >= 0 ? list[idx].id : crypto.randomUUID(), name, query };
   if (idx >= 0) list[idx] = item; else list.push(item);
   await setState(c.env.DB, FILTERS_KEY, JSON.stringify(list));
-  return c.json(list);
+  return c.json(list satisfies SavedFilter[]);
 });
 
 settings.delete("/settings/saved-filters/:id", async (c) => {

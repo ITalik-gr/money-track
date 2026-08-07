@@ -2,6 +2,7 @@
 import * as knowledgeRepo from "../../repo/knowledge.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { KnowledgeList, KnowledgeDocFull } from "../../../shared/api/ai.ts";
 
 export const knowledge = apiRoutes();
 
@@ -9,7 +10,7 @@ export const knowledge = apiRoutes();
 // Тут лише транспорт; злиття/ліміти/локи — у `worker/lib/knowledge/index.ts`.
 knowledge.get("/knowledge", async (c) => {
   const { knowledgeMeta } = await import("../../lib/ai/knowledge/index.ts");
-  return c.json(await knowledgeMeta(c.env.DB, c.get("locale")));
+  return c.json(await knowledgeMeta(c.env.DB, c.get("locale")) satisfies KnowledgeList);
 });
 
 // Повний текст документа — для редактора. Для вбудованого без заміни віддає вбудований текст,
@@ -18,7 +19,7 @@ knowledge.get("/knowledge/:id", async (c) => {
   const { knowledgeBody } = await import("../../lib/ai/knowledge/index.ts");
   const doc = await knowledgeBody(c.env.DB, c.req.param("id"), c.get("locale"));
   if (!doc) return c.json({ error: st(c.get("locale"), "errDocNotFound") }, 404);
-  return c.json(doc);
+  return c.json(doc satisfies KnowledgeDocFull);
 });
 
 // Створити власну нотатку. Ліміти — щоб корпус (він їде в КОЖЕН виклик чату) не розповзався.

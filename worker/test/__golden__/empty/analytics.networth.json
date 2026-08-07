@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "months": 12,
+    "points": [],
+    "caveats": [],
+    "now": null
+  }
+}

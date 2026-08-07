@@ -4,19 +4,19 @@
 // function callable straight from a test, and it keeps the layer honest — a repo function that
 // needed the whole environment would be doing more than fetching rows.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import type { Account } from "../../shared/types.ts";
 
-export interface AccountRow {
-  id: string;
-  type: string | null;
-  title: string | null;
-  currency_code: number;
-  balance: number;
-  credit_limit: number;
-  is_manual: number;
-  is_active: number;
-  role: string | null;
-  [key: string]: unknown;
-}
+/**
+ * A row of `accounts`, i.e. the CONTRACT type — these queries are `SELECT *`, so the response
+ * carries every column and there is nothing to narrow.
+ *
+ * It used to be a hand-written half-type here with an `[key: string]: unknown` escape hatch,
+ * listing 9 of the table's 16 columns. That is defect D2 one layer down: the client believed it
+ * received `provider`, `iban` and the credit-card terms, the repo's type said they did not exist,
+ * and `tsc` could not compare the two because neither side imported the other. The alias keeps
+ * the old name working for the ~20 call sites inside this module.
+ */
+export type AccountRow = Account;
 
 export async function listActive(db: AppDb): Promise<AccountRow[]> {
   const r = await db.prepare(

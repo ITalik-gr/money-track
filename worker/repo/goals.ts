@@ -1,16 +1,15 @@
 // Savings-goal reads and writes (§P2.1). See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import type { SavingsGoal } from "../../shared/api/planning.ts";
+import type { GoalContribution } from "../../shared/api/planning.ts";
 
-export interface GoalRow {
-  id: number;
-  name: string;
-  target_amount: number;
-  current_amount: number;
-  account_id: string | null;
-  account_balance: number | null;
-  account_title: string | null;
-  [key: string]: unknown;
-}
+/**
+ * A goal row plus the joined jar columns — `SELECT g.*`, so every stored column is present.
+ *
+ * `current` is NOT here: it is computed by the route (jar balance when linked, manual amount
+ * otherwise), which is why this is `SavingsGoal` minus that one field rather than a twin.
+ */
+export type GoalRow = Omit<SavingsGoal, "current">;
 
 /** Active goals with their linked jar's balance joined in, newest first. */
 export async function listActive(db: AppDb): Promise<GoalRow[]> {
@@ -101,10 +100,10 @@ export async function archive(db: AppDb, id: number): Promise<void> {
 // `recalcGoal` (`lib/finance/goals.ts`). Callers here write a contribution and then ask
 // `recalcGoal` for the new total; they never touch `current_amount` themselves.
 
-export async function listContributions(db: AppDb, goalId: number): Promise<Record<string, unknown>[]> {
+export async function listContributions(db: AppDb, goalId: number): Promise<GoalContribution[]> {
   const r = await db.prepare(
     "SELECT id, amount, at, note, source FROM goal_contributions WHERE goal_id = ? ORDER BY at DESC, id DESC LIMIT 100",
-  ).bind(goalId).all();
+  ).bind(goalId).all<GoalContribution>();
   return r.results ?? [];
 }
 

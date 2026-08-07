@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "trim_pct": 10,
+    "total_level": 0,
+    "total_suggested": 0,
+    "items": []
+  }
+}

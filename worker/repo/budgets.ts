@@ -5,9 +5,10 @@
 // Telegram push once had its own SQL for exactly that and reported different numbers than the
 // notification feed for the same budgets.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import type { Budget } from "../../shared/types.ts";
 
-export async function listAll(db: AppDb): Promise<Record<string, unknown>[]> {
-  const r = await db.prepare("SELECT * FROM budgets").all();
+export async function listAll(db: AppDb): Promise<Budget[]> {
+  const r = await db.prepare("SELECT * FROM budgets").all<Budget>();
   return r.results ?? [];
 }
 

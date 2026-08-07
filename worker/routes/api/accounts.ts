@@ -10,23 +10,25 @@ import * as accountsRepo from "../../repo/accounts.ts";
 import * as stateRepo from "../../repo/state.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { Summary, FundsBreakdown, AccountHistory } from "../../../shared/api/accounts.ts";
+import type { Account } from "../../../shared/types.ts";
 
 export const accounts = apiRoutes();
 
 accounts.get("/accounts", async (c) => {
-  return c.json(await accountsRepo.listActive(c.env.DB));
+  return c.json(await accountsRepo.listActive(c.env.DB) satisfies Account[]);
 });
 
 // Канонічна розбивка коштів (§R3) — ТА САМА, що бачить Порадник. Огляд на сторінці Рахунків
 // бере її, а не рахує композицію на клієнті, щоб «подушка/борг/інвестиції» тут = у Пораднику.
 accounts.get("/accounts/funds", async (c) => {
   const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
-  return c.json(await fundsBreakdown(c.env));
+  return c.json(await fundsBreakdown(c.env) satisfies FundsBreakdown);
 });
 
 // Архівовані рахунки (is_active=0) — для секції «Архів». Історія операцій лишається.
 accounts.get("/accounts/archived", async (c) => {
-  return c.json(await accountsRepo.listArchived(c.env.DB));
+  return c.json(await accountsRepo.listArchived(c.env.DB) satisfies Account[]);
 });
 
 // Історія балансу ручних рахунків по місяцях — для міні-спарклайнів на картках. Значення у
@@ -35,7 +37,7 @@ accounts.get("/accounts/history", async (c) => {
   const url = new URL(c.req.url);
   const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
   const rows = await accountsRepo.balanceHistory(c.env.DB);
-  if (rows === null) return c.json({ history: {} }); // таблиця може ще не бути на remote (0026)
+  if (rows === null) return c.json({ history: {} } satisfies AccountHistory); // таблиця може ще не бути на remote (0026)
   const byAcc = new Map<string, { at: number; balance: number }[]>();
   for (const r of rows) (byAcc.get(r.acc) ?? byAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
   const now = Math.floor(Date.now() / 1000);
@@ -53,13 +55,13 @@ accounts.get("/accounts/history", async (c) => {
       return Math.round(v / 100);
     });
   }
-  return c.json({ history: out });
+  return c.json({ history: out } satisfies AccountHistory);
 });
 
 // ---- net-worth summary (§5 credit-limit handling) ---------------------------
 
 accounts.get("/summary", async (c) => {
-  return c.json(await computeSummary(c.env));
+  return c.json(await computeSummary(c.env) satisfies Summary);
 });
 
 // ---- manual accounts (позамоно картка / крипта, §5) -------------------------

@@ -8,6 +8,8 @@
 //   • зведення валют у ₴ через курси (inline CASE), опційно — «чиста» валюта.
 import type { Rates } from "./finance.ts";
 import type { Env } from "../../env.ts";
+import type { AppDb } from "../platform/db-shim.ts";
+import { getState } from "./repo.ts";
 
 export const TRANSFER_CAT = 13; // «Перекази і зняття» (+ діти через рол-ап)
 
@@ -584,4 +586,22 @@ export function lastCompletePeriod(preset: "week" | "month", now = Math.floor(Da
     from: localMonthStart(now, -1), to: localMonthStart(now),
     prevFrom: localMonthStart(now, -2), prevTo: localMonthStart(now, -1),
   };
+}
+
+/**
+ * The owner's period mode, with its default applied ONCE (§D4).
+ *
+ * Three handlers used to write `getState(db, "period_mode") || "calendar"` by hand, and after the
+ * route split they sit in three different files — so the duplication became LESS visible, not
+ * more, which is precisely when a fourth copy appears with a different default. Which mode is in
+ * force decides the boundaries the Dashboard, Statistics and the AI adviser all count within: two
+ * of them disagreeing would show the same period under two different totals.
+ *
+ * `getPeriodMode` lives here rather than in `repo/state.ts` because the DEFAULT is a domain
+ * decision, not a storage detail — reading the row is what `getState` does; deciding that an
+ * absent row means "calendar" is canon.
+ */
+export async function getPeriodMode(db: AppDb): Promise<PeriodMode> {
+  const raw = await getState(db, "period_mode");
+  return raw === "rolling" ? "rolling" : "calendar";
 }

@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "cushion": 0,
+    "debt": 0,
+    "investment": 0,
+    "net": 0,
+    "accounts": []
+  }
+}

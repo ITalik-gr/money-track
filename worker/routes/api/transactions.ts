@@ -9,6 +9,9 @@ import * as categoriesRepo from "../../repo/categories.ts";
 import * as txRepo from "../../repo/transactions.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
+import type {
+  TxRow, TxDetail, TxSplit, FrequentTx, Reimbursement, ReimbursementUsage,
+} from "../../../shared/api/transactions.ts";
 import { editTransaction, type TxEdit } from "../../services/transactions.ts";
 import { setReimbursement, type ReimbursementBody } from "../../services/reimbursements.ts";
 
@@ -42,7 +45,7 @@ transactions.get("/transactions", async (c) => {
     // ₴ → копійки тут, бо це розбір ВВОДУ; порівняння по модулю — у репозиторії.
     aminMinor: amin ? Math.round(Number(amin) * 100) : undefined,
     amaxMinor: amax ? Math.round(Number(amax) * 100) : undefined,
-  }));
+  }) satisfies TxRow[]);
 });
 
 // Bulk-редагування виділених транзакцій (мультивибір на /tx): призначити групу,
@@ -103,7 +106,7 @@ transactions.get("/transactions/frequent", async (c) => {
     currency_code: r.currency_code,
     n: r.n,
     amount: Math.abs(median(r.amounts.split(",").map(Number).filter(Number.isFinite))),
-  })));
+  })) satisfies FrequentTx[]);
 });
 
 transactions.get("/transactions/:id", async (c) => {
@@ -119,7 +122,7 @@ transactions.get("/transactions/:id", async (c) => {
     if (r) receipt = { ...r, items: await txRepo.receiptItems(c.env.DB, receiptId) };
   }
   const tags = await txRepo.tagsFor(c.env.DB, loc, id);
-  return c.json({ ...tx, receipt, tags });
+  return c.json({ ...tx, receipt, tags } satisfies TxDetail);
 });
 
 // Manual / cash entry. For source='cash' we route to the cash account, not a card.
@@ -213,7 +216,7 @@ transactions.post("/transactions/:id/enrich", async (c) => {
 // масив = прибрати спліт). Валідація: лише витрата, ≥2 частини, кожна <0, сума частин = сумі tx.
 // Спліт міняє категорійну аналітику → інвалідуємо Tx/Summary/Advice на клієнті.
 transactions.get("/transactions/:id/splits", async (c) => {
-  return c.json(await txRepo.splitsFor(c.env.DB, c.get("locale"), c.req.param("id")));
+  return c.json(await txRepo.splitsFor(c.env.DB, c.get("locale"), c.req.param("id")) satisfies TxSplit[]);
 });
 
 transactions.put("/transactions/:id/splits", async (c) => {
@@ -266,7 +269,7 @@ transactions.get("/transactions/:id/reimbursement", async (c) => {
     tx: { id: tx.id, amount: tx.amount, currency_code: tx.currency_code, reimbursed: tx.reimbursed ?? 0 },
     linked,
     candidates,
-  });
+  } satisfies Reimbursement);
 });
 
 // Замінити стан цілком. `allocations` — скільки саме взяти з кожного надходження; якщо сума не
@@ -295,7 +298,7 @@ transactions.get("/transactions/:id/reimbursement-usage", async (c) => {
   const used = await txRepo.reimbursementUsage(c.env.DB, c.get("locale"), id);
 
   const allocated = tx.reimburses_total ?? 0;
-  return c.json({ used, allocated, available: tx.amount - allocated, currency_code: tx.currency_code });
+  return c.json({ used, allocated, available: tx.amount - allocated, currency_code: tx.currency_code } satisfies ReimbursementUsage);
 });
 
 // Інлайн-чат по конкретній операції: обговорити/уточнити з AI; він може оновити

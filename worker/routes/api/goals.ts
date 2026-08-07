@@ -5,6 +5,7 @@ import { recalcGoal, isGoalKind, isAutofillKind } from "../../lib/finance/goals.
 import { st } from "../../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { SavingsGoal, GoalContribution } from "../../../shared/api/planning.ts";
 
 export const goals = apiRoutes();
 
@@ -17,7 +18,7 @@ goals.get("/goals", async (c) => {
     ...g,
     current: g.account_id != null && g.account_balance != null ? g.account_balance : g.current_amount,
   }));
-  return c.json(goals);
+  return c.json(goals satisfies SavingsGoal[]);
 });
 
 /**
@@ -99,7 +100,7 @@ goals.delete("/goals/:id", async (c) => {
 // гроші двічі.
 
 goals.get("/goals/:id/contributions", async (c) => {
-  return c.json(await goalsRepo.listContributions(c.env.DB, Number(c.req.param("id"))));
+  return c.json(await goalsRepo.listContributions(c.env.DB, Number(c.req.param("id"))) satisfies GoalContribution[]);
 });
 
 goals.post("/goals/:id/contributions", async (c) => {

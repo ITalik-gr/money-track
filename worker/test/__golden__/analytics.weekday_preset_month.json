@@ -1,0 +1,67 @@
+{
+  "status": 200,
+  "body": {
+    "from": 1777582800,
+    "to": 1778749200,
+    "days": [
+      {
+        "dow": 0,
+        "spent": 200000,
+        "n": 1,
+        "days": 2,
+        "typical": 100000,
+        "lumpy": true
+      },
+      {
+        "dow": 1,
+        "spent": 268800,
+        "n": 3,
+        "days": 2,
+        "typical": 134400,
+        "lumpy": true
+      },
+      {
+        "dow": 2,
+        "spent": 1260000,
+        "n": 2,
+        "days": 2,
+        "typical": 630000,
+        "lumpy": true
+      },
+      {
+        "dow": 3,
+        "spent": 170000,
+        "n": 2,
+        "days": 2,
+        "typical": 85000,
+        "lumpy": true
+      },
+      {
+        "dow": 4,
+        "spent": 32800,
+        "n": 1,
+        "days": 2,
+        "typical": 16400,
+        "lumpy": true
+      },
+      {
+        "dow": 5,
+        "spent": 45000,
+        "n": 2,
+        "days": 2,
+        "typical": 22500,
+        "lumpy": true
+      },
+      {
+        "dow": 6,
+        "spent": 273800,
+        "n": 2,
+        "days": 2,
+        "typical": 136900,
+        "lumpy": true
+      }
+    ],
+    "busiest": null,
+    "weekend_share_pct": 21
+  }
+}

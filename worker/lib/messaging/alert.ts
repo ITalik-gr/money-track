@@ -8,7 +8,8 @@
 import type { Env } from "../../env.ts";
 import { sendMessage, type InlineKeyboard } from "./telegram.ts";
 import { tgTarget } from "./tg-target.ts";
-import { proposeTransferCategory, logUsage } from "../ai/ai.ts";
+import { proposeTransferCategory } from "../ai/enrich.ts";
+import { logUsage } from "../ai/cost.ts";
 import { TRANSFER_CAT } from "../ai/enrich.ts";
 import { localMonthStart } from "../finance/stats.ts";
 

@@ -1,0 +1,30 @@
+{
+  "status": 200,
+  "body": {
+    "summary": {
+      "spend": 0,
+      "income": 0,
+      "n": null
+    },
+    "prev": {
+      "spend": 0,
+      "income": 0,
+      "n": null
+    },
+    "range": {
+      "from": 1778446800,
+      "to": 1778749200,
+      "prevFrom": 1777842000,
+      "prevTo": 1778446800,
+      "bucket": "day",
+      "mode": "calendar",
+      "preset": "week"
+    },
+    "series": [],
+    "byCategory": [],
+    "byMerchant": [],
+    "byAccount": [],
+    "byEvent": [],
+    "byImportance": []
+  }
+}

@@ -70,6 +70,8 @@ const ENDPOINTS: string[] = [
   "/analytics/patterns",
   "/analytics/currencies",
   "/analytics/by-category",
+  "/analytics/weekday",
+  "/analytics/weekday?preset=month",
   "/analytics/spark",
   "/analytics/health",
   "/analytics/category?id=1",
@@ -113,6 +115,50 @@ test("golden: read-only API responses are unchanged", async (t) => {
         assert.equal(actual, readFileSync(file, "utf8").trimEnd(),
           `${path} changed. Either the refactor broke it, or the change was intended — ` +
           `if intended, re-record with UPDATE_GOLDEN=1.`);
+      });
+    }
+  } finally {
+    restore();
+  }
+});
+
+/**
+ * The SAME endpoints against an EMPTY database (migrations only, no fixture).
+ *
+ * Why this is worth a second sweep: an aggregate with no matching rows does not return zero, it
+ * returns NULL. `spendSum`/`incomeSum` wrap themselves in `COALESCE(…, 0)`; `SPEND_COUNT` does
+ * not, so on a period with no transactions at all the row count comes back `null` while the type
+ * contract (`shared/api/`) promises a number. Nothing here asserts that is RIGHT — this suite
+ * records what the empty account actually receives, so that a later fix is a visible diff rather
+ * than an invisible one.
+ *
+ * It is also the state every new user is in for their first minutes, and the state the demo
+ * sandbox starts from — so "what does an empty account see" is not a hypothetical edge.
+ */
+test("golden: read-only API responses on an EMPTY account", async (t) => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const dir = join(GOLDEN_DIR, "empty");
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const env = testEnv(migratedDb()); // no seed() — migrations only
+
+    for (const path of ENDPOINTS) {
+      await t.test(path, async () => {
+        const res = await api.request(path, {}, env);
+        const body = await res.text();
+        assert.equal(res.status, 200, `${path} → HTTP ${res.status}: ${body.slice(0, 300)}`);
+
+        const actual = JSON.stringify({ status: res.status, body: JSON.parse(body) }, null, 2);
+        const file = join(dir, `${slug(path)}.json`);
+
+        if (UPDATE || !existsSync(file)) {
+          writeFileSync(file, actual + "\n");
+          t.diagnostic(`recorded baseline: empty/${slug(path)}.json`);
+          return;
+        }
+        assert.equal(actual, readFileSync(file, "utf8").trimEnd(),
+          `${path} (empty account) changed. Either the refactor broke it, or the change was ` +
+          `intended — if intended, re-record with UPDATE_GOLDEN=1.`);
       });
     }
   } finally {

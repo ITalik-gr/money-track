@@ -10,6 +10,7 @@
 //    щоб подія все ж повторилась наступного разу, коли це справді нова новина.
 //  • Ліміт на прохід (`MAX_PER_RUN`) — стрічка не має перетворюватись на спам.
 import type { Env } from "../../env.ts";
+import { debtMinor } from "../finance/own-funds.ts";
 import { getRates } from "../finance/finance.ts";
 import { st } from "../platform/i18n.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
@@ -313,7 +314,10 @@ async function draftDeadlines(env: Env, now: number): Promise<Draft[]> {
     cards = r.results ?? [];
   } catch { /* колонки кредитки можуть ще не бути на remote (0027) — гілка мовчки пропускається */ }
   for (const a of cards) {
-    const used = (a.credit_limit ?? 0) - (a.balance ?? 0); // борг = ліміт − доступний баланс
+    // Борг — це відʼємні власні кошти, а не окрема формула (§Інваріанти, `own-funds.ts`).
+    // Писати тут `credit_limit − balance` вдруге означало б завести другий вираз для одного
+    // числа — саме це реєстр дублювання й прийняв був за «інвертовану копію».
+    const used = debtMinor(a.balance, a.credit_limit);
     if (used <= 0) continue;                                // нема боргу — нема про що нагадувати
     const at = nextMonthlyDay(a.payment_day!, now);
     const days = Math.round((at - now) / 86400);
@@ -810,7 +814,7 @@ async function draftAiObservations(env: Env, now: number): Promise<Draft[]> {
   if (await getState(env.DB, AI_LAST_DAY_KEY) === day) return [];
 
   const { collectFinanceSnapshot } = await import("../ai/advisor.ts");
-  const { generateNotifyObservations } = await import("../ai/ai.ts");
+  const { generateNotifyObservations } = await import("../ai/tasks.ts");
 
   // Теми останніх двох тижнів — і як підказка моделі («не переказуй це знову»), і як фільтр
   // нижче. Промт сам по собі не гарантія (§Правила: інструкція ≠ перевірка), тож обидва шари.

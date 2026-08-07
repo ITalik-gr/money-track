@@ -7,17 +7,19 @@ import { getRates } from "../../lib/finance/finance.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { PlannedPayment, PlannedActual } from "../../../shared/types.ts";
+import type { UpcomingSubs, RecurringCandidate } from "../../../shared/api/planning.ts";
 
 export const planned = apiRoutes();
 
 // §Хвіст: факт vs план по підписках — фактичні списання, лічильник, ознака подорожчання.
 planned.get("/planned/actuals", async (c) => {
   const { plannedActuals } = await import("../../lib/finance/subscriptions.ts");
-  return c.json(await plannedActuals(c.env.DB));
+  return c.json(await plannedActuals(c.env.DB) satisfies PlannedActual[]);
 });
 
 planned.get("/planned", async (c) => {
-  return c.json(await planningRepo.listActive(c.env.DB));
+  return c.json(await planningRepo.listActive(c.env.DB) satisfies PlannedPayment[]);
 });
 
 planned.post("/planned", async (c) => {
@@ -53,7 +55,8 @@ planned.post("/planned/ai-detect", async (c) => {
   const { description } = await c.req.json<{ description?: string }>();
   if (!description?.trim()) return c.json({ error: "description required" }, 400);
 
-  const { callHaikuJson, MODEL_SMART } = await import("../../lib/ai/ai.ts");
+  const { callHaikuJson } = await import("../../lib/ai/json.ts");
+  const { MODEL_SMART } = await import("../../lib/ai/models.ts");
   let query = "";
   try {
     // Sonnet 5 — точніше витягує ключове слово мерчанта з вільного опису підписки.
@@ -141,7 +144,7 @@ planned.get("/planned/detect", async (c) => {
     .filter((r) => !declaredSet.has(r.merchant.toLowerCase()))
     .filter((r) => !dismissedSet.has(r.merchant.toLowerCase()));
 
-  return c.json(candidates);
+  return c.json(candidates satisfies RecurringCandidate[]);
 });
 
 // §4 Прийдешні планові списання (підписки/розстрочки) у горизонті N днів — для віджета
@@ -172,5 +175,5 @@ planned.get("/planned/upcoming", async (c) => {
     .map((p) => ({ ...p, days_until: Math.max(0, Math.round((p.at - now) / 86400)) }))
     .sort((a, b) => a.at - b.at);
 
-  return c.json({ days, total: items.reduce((s, p) => s + p.amount_uah, 0), items });
+  return c.json({ days, total: items.reduce((s, p) => s + p.amount_uah, 0), items } satisfies UpcomingSubs);
 });

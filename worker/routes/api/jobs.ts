@@ -6,13 +6,15 @@
 import * as txRepo from "../../repo/transactions.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { AiJob } from "../../../shared/api/ai.ts";
+import type { AiUsageStats } from "../../../shared/types.ts";
 
 export const jobs = apiRoutes();
 
 // §Хвіст C: глобальний лічильник витрат AI — «$ за сьогодні / цей місяць / за весь час».
 jobs.get("/ai-usage", async (c) => {
-  const { readUsageStats } = await import("../../lib/ai/ai.ts");
-  return c.json(await readUsageStats(c.env));
+  const { readUsageStats } = await import("../../lib/ai/cost.ts");
+  return c.json(await readUsageStats(c.env) satisfies AiUsageStats);
 });
 
 // ---- §A6: фонові AI-генерації -----------------------------------------------
@@ -45,7 +47,7 @@ jobs.post("/jobs", async (c) => {
 
 jobs.get("/jobs", async (c) => {
   const { listJobs } = await import("../../lib/ai/jobs.ts");
-  return c.json({ items: await listJobs(c.env) });
+  return c.json({ items: await listJobs(c.env) satisfies AiJob[] });
 });
 
 // Клієнт підтверджує, що показав тост. Без цього «завершені й не показані» показувались би

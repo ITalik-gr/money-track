@@ -4,6 +4,7 @@ import * as categoriesRepo from "../../repo/categories.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
+import type { Category } from "../../../shared/types.ts";
 import { normImportance } from "../../lib/finance/importance.ts";
 import { deleteCategory } from "../../services/categories.ts";
 
@@ -15,7 +16,7 @@ categories.get("/categories", async (c) => {
   const rows = await categoriesRepo.listAll(c.env.DB);
   const loc = c.get("locale");
   // Localize seed names in JS (the row already carries `name`); user categories pass through.
-  return c.json(rows.map((r) => ({ ...r, name: localizeCatName(loc, r.name) })));
+  return c.json(rows.map((r) => ({ ...r, name: localizeCatName(loc, r.name) })) satisfies Category[]);
 });
 
 // ---- custom categories ------------------------------------------------------

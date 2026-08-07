@@ -1,5 +1,6 @@
 // Planned payments / subscriptions. See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import type { PlannedPayment } from "../../shared/types.ts";
 
 /**
  * The fields `chargesBetween()` and `monthlyPlannedUAH()` need to build a schedule.
@@ -55,8 +56,8 @@ export async function activeWithCategory(db: AppDb): Promise<CategorisedPlanRow[
 }
 
 /** Every column, for the plans screen. */
-export async function listActive(db: AppDb): Promise<Record<string, unknown>[]> {
-  const r = await db.prepare("SELECT * FROM planned_payments WHERE is_active = 1").all();
+export async function listActive(db: AppDb): Promise<PlannedPayment[]> {
+  const r = await db.prepare("SELECT * FROM planned_payments WHERE is_active = 1").all<PlannedPayment>();
   return r.results ?? [];
 }
 

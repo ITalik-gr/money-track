@@ -1486,5 +1486,11 @@
   "admin.statusDisabled": "disabled",
   "admin.disable": "Disable",
   "admin.enable": "Enable",
-  "tx.reimbursedBy": "{amount} reimbursed"
+  "tx.reimbursedBy": "{amount} reimbursed",
+  "wd.title": "By day of week",
+  "wd.subtitle": "when the money actually goes",
+  "wd.tip": "Shows a TYPICAL day: the total is divided by how many such days the period held — otherwise the comparison lies (a month has five Fridays and four Saturdays). A faded bar means one payment (rent, tax) is almost the whole day, so it is about the billing date, not about behaviour.",
+  "wd.barTitle": "{n} operations across {days} such days",
+  "wd.busiest": "Priciest steady day — {day}",
+  "wd.weekendShare": "weekend: {pct}% of spend"
 }

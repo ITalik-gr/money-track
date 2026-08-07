@@ -48,6 +48,12 @@ npm run build
 - **File size (C3)** — no file under `worker/routes/` or `worker/services/` exceeds 400 lines,
   bar two recorded exceptions that may never rise. `api.ts` reached 3 331 lines one small append
   at a time; splitting it once would not have kept it split.
+- **API contract (C2/C4)** — every response shape is declared ONCE, in `shared/api/`. The client
+  imports and re-exports it; the worker annotates its returns with it. `src/store/api.ts` may not
+  declare a type of its own, and `repo/`/`services/` may not describe a row as
+  `Record<string, unknown>` or with an `[key: string]: unknown` hatch. Before this, the client
+  hand-wrote 86 shapes describing what it *believed* the server sent, and `tsc` could not compare
+  them with anything.
 - **i18n lint** — `en`/`uk` key parity, and no hardcoded locale tags. Never construct `new Intl.*`
   directly; use `dateFmt()` / `numFmt()` from `src/i18n/locale.ts`, or a module-level formatter
   will freeze the locale at import time.
@@ -66,10 +72,12 @@ These exist because breaking them has already cost real money in wrong numbers:
    `lib/*` holds the domain logic and `repo/*` is the only layer that issues SQL. Route modules
    live in `routes/api/<first-path-segment>.ts`, so one file owns a whole prefix — that is what
    makes the literal-before-parameterised rule readable in one file. No SQL in components.
-4. **Verification beats instruction.** If correctness depends on a developer or a model
+4. **A response shape is declared once, in `shared/api/`**, and BOTH sides use that declaration.
+   A type that only the client imports is not a contract; it is a guess with syntax.
+5. **Verification beats instruction.** If correctness depends on a developer or a model
    remembering something, add a deterministic check instead. That is what the SQL lint and
    `numbersAreGrounded()` are.
-5. **Anything that looks like a global resource is actually the owner's** (bank token, AI key,
+6. **Anything that looks like a global resource is actually the owner's** (bank token, AI key,
    webhook secret, Telegram chat). Gate it on `env.IS_OWNER`. This has been the source of two
    cross-tenant leaks.
 
