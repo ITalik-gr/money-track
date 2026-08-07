@@ -1,0 +1,769 @@
+// `/analytics/*` — the read-only reporting surface. Every number here comes from the canon
+// (`lib/finance/stats.ts` on the JS side, `repo/analytics.ts` on the SQL side); a handler that
+// starts computing its own total is the §CUR-PLAN mechanism restarting.
+import {
+  valueMode, uahMult, periodBounds,
+  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localParts,
+  type PeriodMode, type Preset,
+} from "../../lib/finance/stats.ts";
+import { getState } from "../../lib/finance/repo.ts";
+import { computeSummary, getRates, toUAHMinor, ratesForDays, type Rates } from "../../lib/finance/finance.ts";
+import * as accountsRepo from "../../repo/accounts.ts";
+import * as analyticsRepo from "../../repo/analytics.ts";
+import * as planningRepo from "../../repo/planning.ts";
+import * as receiptsRepo from "../../repo/receipts.ts";
+import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
+import { st } from "../../lib/platform/i18n.ts";
+import { apiRoutes } from "./_shared.ts";
+
+export const analytics = apiRoutes();
+
+// ---- analytics --------------------------------------------------------------
+
+// Aggregated analytics for the stats page: totals + prev-period comparison, a time
+// series, and breakdowns by category / merchant / account. Per-currency (§5),
+// transfers excluded. One call to keep the page snappy.
+analytics.get("/analytics/overview", async (c) => {
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env.DB);
+  const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
+  const presetParam = url.searchParams.get("preset") as Preset | null;
+
+  // Пресет (week|month|quarter|year) → канонічні межі за режимом period_mode; інакше
+  // явні from/to (кастомні дрили). Так Головна і Статистика рахують ОДИН період.
+  let from: number, to: number, prevFrom: number, prevTo: number, bucket: string;
+  if (presetParam && ["week", "month", "quarter", "year"].includes(presetParam)) {
+    const b = periodBounds(mode, presetParam);
+    ({ from, to, prevFrom, prevTo, bucket } = b);
+  } else {
+    to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+    from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
+    const span = to - from;
+    prevFrom = from - span; prevTo = from;
+    bucket = url.searchParams.get("bucket") ?? "day";
+  }
+  // Валюта: за замовч. зведено в ₴; ?currency=NNN → «чиста» валюта.
+  const curParam = url.searchParams.get("currency");
+  const cur = curParam ? Number(curParam) : null;
+  const { mult, curFilter } = valueMode(rates, cur);
+  const fmt = bucket === "month" ? "%Y-%m" : bucket === "week" ? "%Y-W%W" : "%Y-%m-%d";
+
+  const db = c.env.DB, v = { mult, curFilter }, loc = c.get("locale");
+  const cur_ = { from, to }, prev_ = { from: prevFrom, to: prevTo };
+
+  const [summary, prev, series, byCategory, byMerchant, byAccount, byEvent, byImportance] = await Promise.all([
+    analyticsRepo.periodTotals(db, v, cur_),
+    analyticsRepo.periodTotals(db, v, prev_),
+    analyticsRepo.series(db, v, cur_, fmt),
+    analyticsRepo.spendByCategory(db, loc, v, cur_),
+    analyticsRepo.spendByMerchant(db, v, cur_),
+    analyticsRepo.spendByAccount(db, v, cur_),
+    analyticsRepo.spendByEvent(db, v, cur_),
+    analyticsRepo.spendByImportance(db, v, cur_),
+  ]);
+
+  return c.json({
+    summary, prev,
+    range: { from, to, prevFrom, prevTo, bucket, mode, preset: presetParam ?? null },
+    series, byCategory, byMerchant, byAccount, byEvent, byImportance,
+  });
+});
+
+// Довготривала історія по МІСЯЦЯХ (канонічно, зведено в ₴): spend/income за N останніх
+// місяців. Доповнює періодні вкладки Статистики довгим трендом (6-12 міс) для графіка
+// «витрати/надходження/чистий» і норми заощаджень. Останній місяць — поточний (частковий).
+analytics.get("/analytics/monthly-history", async (c) => {
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
+  const now = Math.floor(Date.now() / 1000);
+  const from = localMonthStart(now, -(months - 1));
+  const rows = await analyticsRepo.monthlyHistory(c.env.DB, { mult }, now, from);
+  // Пропущені місяці (без операцій) заповнюємо нулями — щоб вісь була рівна й безперервна.
+  const map = new Map(rows.map((r) => [r.month, r]));
+  const out: { month: string; spend: number; income: number }[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const key = localYm(localMonthStart(now, -i));
+    const r = map.get(key);
+    out.push({ month: key, spend: r?.spend ?? 0, income: r?.income ?? 0 });
+  }
+  return c.json({ months: out });
+});
+
+// §4 Safe-to-spend: скільки вільно до кінця календарного місяця.
+// = дохід(міс) − витрачено(міс) − прийдешні підписки(залишок міс). Розбивка по вагомості (§6).
+analytics.get("/analytics/safe-to-spend", async (c) => {
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const now = Math.floor(Date.now() / 1000);
+  const monthStart = localMonthStart(now);
+
+  const tot = await analyticsRepo.monthToDate(c.env.DB, { mult }, { from: monthStart, to: now });
+
+  // §SUB-MONTH: «залишок підписок» = РОЗКЛАД списань до кінця місяця, а не «місячна сума
+  // мінус уже сплачене». Стара формула сумувала `period_amount` усіх активних планів як
+  // місячні (квартальний платіж важив повну суму щомісяця, тижневий — лише один тиждень),
+  // і різницю з фактом зменшувала на все, що вже списалось, — тобто помилка розкладу
+  // просочувалась просто в safe-to-spend. Розклад відповідає на питання буквально: що ще
+  // спишеться між зараз і 1-м числом наступного місяця.
+  // §CUR-PLAN: суми в ₴ (`chargesBetween` зводить сам) — вони в одному ряду з витратами місяця.
+  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
+  const monthEnd = localMonthStart(now, 1);
+  const plans = await planningRepo.activeForSchedule(c.env.DB);
+  const sum = (from: number, to: number) =>
+    chargesBetween(plans, rates, from, to).reduce((s, ch) => s + ch.amount, 0);
+
+  const income = tot?.income ?? 0;
+  const spend = tot?.spend ?? 0;
+  const essential = tot?.essential ?? 0;
+  const subsMonthly = sum(monthStart, monthEnd - 1);
+  const subsRemaining = sum(now + 1, monthEnd - 1);
+  const safe = income - spend - subsRemaining;
+  return c.json({
+    safe, income, spend, essential, discretionary: Math.max(0, spend - essential),
+    subs_monthly: subsMonthly, subs_remaining: subsRemaining, month_start: monthStart,
+  });
+});
+
+// Тренд капіталу: динаміка власних коштів (₴) за N місяців. Історія не зберігається,
+// тож реконструюємо назад від поточного тоталу: капітал(кінець дня d) = капітал_зараз
+// − Σ(зміни балансу після дня d). Кожен рядок транзакції змінює баланс рахунку на amount
+// (перекази між своїми — обидві ноги в таблиці, взаємно гасяться). Курси — поточні (апрокс).
+analytics.get("/analytics/capital-trend", async (c) => {
+  const url = new URL(c.req.url);
+  const months = Math.min(Math.max(Number(url.searchParams.get("months") ?? 6), 1), 24);
+  const rates = await getRates(c.env.DB);
+  const mult = uahMult(rates);
+  const summary = await computeSummary(c.env);
+
+  const now = Math.floor(Date.now() / 1000);
+  const from = localMonthStart(now, -months + 1);
+
+  // Денна чиста зміна капіталу (₴-копійки, знак збережено) від початку періоду.
+  const daily = await analyticsRepo.dailyNetChange(c.env.DB, mult, from);
+  const netByDay = new Map<number, number>();
+  for (const r of daily) netByDay.set(r.day, r.net);
+
+  // Йдемо від сьогодні назад: фіксуємо капітал у кінці кожного тижня.
+  const todayDay = Math.floor(now / 86400);
+  const fromDay = Math.floor(from / 86400);
+  let running = summary.totalUAH; // капітал у кінці сьогоднішнього дня
+  const points: { t: number; capital_uah: number }[] = [];
+  for (let day = todayDay; day >= fromDay; day--) {
+    // Точка на кінець тижня (або останній день) — щоб лінія була не надто щільною.
+    if ((todayDay - day) % 7 === 0) points.push({ t: (day + 1) * 86400, capital_uah: Math.round(running / 100) });
+    running -= netByDay.get(day) ?? 0; // прибираємо зміну цього дня → капітал на початок дня
+  }
+  points.reverse(); // хронологічно
+  return c.json({ now_uah: Math.round(summary.totalUAH / 100), points });
+});
+
+/**
+ * Нетворт у часі: активи (ліквідні + інвест) мінус борги, по місяцях.
+ *
+ * Відрізняється від `capital-trend`: той дає ОДНУ лінію нетто-капіталу. Тут потрібен
+ * РОЗКЛАД, а він рахується лише поточкового: знак визначає, чи рахунок іде в подушку
+ * чи в борг, тож зводити рахунки перед реконструкцією не можна. Реконструюємо кожен
+ * рахунок назад окремо, а cushion/debt/investment складаємо ТИМ САМИМ правилом, що
+ * `fundsBreakdown` (§R3) — інакше «зараз» на графіку не збігся б із Порадником.
+ *
+ * ⚠️ Дві чесні межі точності, які віддаємо клієнту в `caveats` (без них графік бреше):
+ *  1) Курси — ПОТОЧНІ. Історичних не зберігаємо, тож валютний залишок минулих місяців
+ *     оцінено сьогоднішнім курсом (рух курсу виглядатиме як рух грошей).
+ *  2) Рахунки без історії операцій (крипта, ручні картки) назад лишаються ПЛОСКИМИ —
+ *     їхній баланс це ручний зріз «на зараз», а не ряд у часі.
+ */
+analytics.get("/analytics/networth", async (c) => {
+  const url = new URL(c.req.url);
+  const months = Math.min(Math.max(Number(url.searchParams.get("months") ?? 12), 2), 24);
+  const rates = await getRates(c.env.DB);
+  const now = Math.floor(Date.now() / 1000);
+  const from = localMonthStart(now, -months + 1);
+
+  const accs = await accountsRepo.listForNetWorth(c.env.DB);
+  if (!accs.length) return c.json({ months, points: [], caveats: [], now: null });
+
+  // Денна зміна ПО РАХУНКУ, у валюті рахунку (конвертація — на етапі зведення).
+  const daily = await analyticsRepo.dailyNetChangeByAccount(c.env.DB, from);
+  const netByAccDay = new Map<string, number>();
+  for (const r of daily) netByAccDay.set(`${r.acc}:${r.day}`, r.net);
+
+  // Поточний власний залишок кожного рахунку (баланс − кредитний ліміт, §Інваріанти).
+  const own = new Map<string, number>(accs.map((a) => [a.id, (a.balance ?? 0) - (a.credit_limit ?? 0)]));
+  const roleOf = (a: typeof accs[number]): "liquid" | "investment" => (a.role === "investment" ? "investment" : "liquid");
+  const iso = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+
+  // Історія ручних балансів (§Історія ручних балансів): ручні/крипто-рахунки не мають tx-дельт,
+  // тож без цього назад лишались би плоскими. Крокуємо по зафіксованих зрізах.
+  const histByAcc = new Map<string, { at: number; balance: number }[]>();
+  // `null` = таблиці ще нема на remote (0026) → деградуємо до плоского, як і раніше.
+  for (const r of (await accountsRepo.balanceHistory(c.env.DB)) ?? []) {
+    (histByAcc.get(r.acc) ?? histByAcc.set(r.acc, []).get(r.acc)!).push({ at: r.at, balance: r.balance });
+  }
+  // Баланс ручного рахунку на момент t: останній зріз ≤ t; до першого зрізу — найраніший відомий
+  // (не сьогоднішній, щоб не малювати рух там, де його не знали). null = історії взагалі нема.
+  const manualBalanceAt = (accId: string, t: number): number | null => {
+    const h = histByAcc.get(accId);
+    if (!h || !h.length) return null;
+    let val = h[0].balance;
+    for (const p of h) { if (p.at <= t) val = p.balance; else break; }
+    return val;
+  };
+
+  // Дати всіх майбутніх точок рахуємо ЗАЗДАЛЕГІДЬ, щоб одним запитом узяти курси на ці дати
+  // (§Історія курсів). Інакше довелось би або бити по базі в циклі, або (як було) міряти
+  // минулі залишки сьогоднішнім курсом.
+  const todayDay = Math.floor(now / 86400);
+  const fromDay = Math.floor(from / 86400);
+  const pointDays: { day: number; t: number }[] = [];
+  for (let day = todayDay; day >= fromDay; day--) {
+    if (new Date(day * 86400 * 1000).getUTCDate() === 1 && day !== todayDay) {
+      pointDays.push({ day, t: day * 86400 - 1 });
+    }
+  }
+  // Рівно `months` точок: `months-1` кінців місяця + «зараз». Без обрізки в масив потрапляв
+  // ще й кінець місяця ПЕРЕД вікном (13 точок на запит «12 міс»).
+  pointDays.splice(months - 1);
+  const { byDay, covered } = await ratesForDays(c.env.DB, [...pointDays.map((p) => iso(p.t)), iso(now)].sort());
+
+  // Зводимо стан рахунків у cushion/debt/investment — правило `fundsBreakdown`.
+  const snapshot = (t: number, at: Rates) => {
+    let cushion = 0, debt = 0, investment = 0;
+    for (const a of accs) {
+      // Ручний рахунок з історією — беремо зріз на t; інакше tx-реконструйований `own`.
+      const hb = a.is_manual === 1 ? manualBalanceAt(a.id, t) : null;
+      const ownMinor = hb != null ? hb - (a.credit_limit ?? 0) : (own.get(a.id) ?? 0);
+      const uah = toUAHMinor(ownMinor, a.currency_code, at);
+      if (roleOf(a) === "investment") { if (uah > 0) investment += uah; else debt += -uah; }
+      else { if (uah >= 0) cushion += uah; else debt += -uah; }
+    }
+    return {
+      t,
+      // Місяць точки віддаємо ЯВНО (`YYYY-MM`), бо `t` для кінця місяця = 23:59:59 UTC, і клієнт,
+      // форматуючи його в Києві (+3), отримував 1-ше число НАСТУПНОГО місяця: підпис кінця червня
+      // ставав «лип.» і збігався з підписом точки «зараз» → дубль категорії на осі X, крива
+      // зсунута на місяць, а тултіп поточного місяця показував дані попереднього.
+      ym: new Date(t * 1000).toISOString().slice(0, 7),
+      cushion: Math.round(cushion), debt: Math.round(debt), investment: Math.round(investment),
+      assets: Math.round(cushion + investment),
+      net: Math.round(cushion + investment - debt),
+    };
+  };
+  const ratesAt = (t: number) => byDay.get(iso(t)) ?? rates;
+
+  // Ідемо від сьогодні назад, знімаючи денні зміни; точку фіксуємо на кінці кожного місяця.
+  const pointAtDay = new Map(pointDays.map((p) => [p.day, p.t]));
+  const points: ReturnType<typeof snapshot>[] = [snapshot(now, ratesAt(now))];
+  for (let day = todayDay; day >= fromDay; day--) {
+    for (const a of accs) {
+      const delta = netByAccDay.get(`${a.id}:${day}`);
+      if (delta) own.set(a.id, (own.get(a.id) ?? 0) - delta); // назад: прибираємо зміну дня
+    }
+    // Кінець попереднього місяця = день, перед яким починається новий календарний місяць.
+    const t = pointAtDay.get(day);
+    if (t != null) points.push(snapshot(t, ratesAt(t)));
+  }
+  points.reverse();
+
+  const caveats: string[] = [];
+  // Кажемо про курс лише коли це справді так: коли історія покриває весь період, попередження
+  // було б неправдою в інший бік — воно применшувало б точність, якої ми вже досягли.
+  if (!covered) {
+    caveats.push(st(c.get("locale"), "networthRatesCaveat"));
+  }
+  // Плоскі назад — лише ручні БЕЗ жодного зрізу історії. Ті, що мають історію, тепер крокують.
+  const flat = accs.filter((a) => a.is_manual === 1 && !(histByAcc.get(a.id)?.length)).map((a) => a.title ?? a.type ?? a.id);
+  if (flat.length) {
+    caveats.push(st(c.get("locale"), "networthFlatCaveat", { accounts: flat.join(", ") }));
+  }
+
+  return c.json({ months, points, now: points[points.length - 1] ?? null, caveats });
+});
+
+// §P3: сторінка мерчанта — агрегати по одному мерчанту (уся історія + тренд 6 міс + частка
+// в категорії). Канон stats.ts (SPEND_WHERE/amountSum/EFF_*), зведено в ₴.
+analytics.get("/analytics/merchant", async (c) => {
+  const name = new URL(c.req.url).searchParams.get("name");
+  if (!name) return c.json({ error: "name required" }, 400);
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const now = Math.floor(Date.now() / 1000);
+  const from6 = localMonthStart(now, -5);
+
+  const db = c.env.DB, loc = c.get("locale");
+  const [agg, byMonth, topCat, txs] = await Promise.all([
+    analyticsRepo.merchantAggregate(db, mult, name),
+    analyticsRepo.merchantByMonth(db, mult, now, name, from6),
+    analyticsRepo.merchantTopCategory(db, loc, mult, name),
+    analyticsRepo.merchantTransactions(db, loc, name),
+  ]);
+
+  // Частка в категорії: витрати мерчанта / витрати всієї категорії (уся історія).
+  let categoryShare: number | null = null;
+  if (topCat?.id != null && topCat.spent > 0) {
+    const catTot = await analyticsRepo.categoryTotalAllTime(db, mult, topCat.id);
+    if (catTot && catTot.spent > 0) categoryShare = Math.round((topCat.spent / catTot.spent) * 100);
+  }
+
+  const total = agg?.total ?? 0;
+  const n = agg?.n ?? 0;
+  return c.json({
+    name,
+    total, n,
+    avg: n > 0 ? Math.round(total / n) : 0,
+    first_at: agg?.first_at ?? null,
+    last_at: agg?.last_at ?? null,
+    by_month: byMonth.map((r) => ({ month: r.m, spent: r.spent })),
+    top_category: topCat?.name ? { name: topCat.name, color: topCat.color, spent: topCat.spent } : null,
+    category_share: categoryShare,
+    transactions: txs,
+  });
+});
+
+// Порівняння двох періодів side-by-side (беклог): вибраний період A проти попереднього
+// рівного за довжиною B. Тотали + розбивка по категоріях (рол-ап підкатегорій), per-currency.
+analytics.get("/analytics/compare", async (c) => {
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env.DB);
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
+  const span = to - from;
+  const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
+  const { mult, curFilter } = valueMode(rates, cur);
+  // §D: фронт може передати явні межі попереднього періоду; інакше рівний відрізок перед.
+  const bpFrom = url.searchParams.get("bfrom");
+  const bpTo = url.searchParams.get("bto");
+  const bFrom = bpFrom != null ? Number(bpFrom) : from - span;
+  const bTo = bpTo != null ? Number(bpTo) : from;
+
+  const db = c.env.DB, v = { mult, curFilter }, loc = c.get("locale");
+  const totals = (f: number, t: number) => analyticsRepo.spendIncomeTotals(db, v, { from: f, to: t });
+  const cats = (f: number, t: number) => analyticsRepo.compareByCategory(db, loc, v, { from: f, to: t });
+
+  const [aTot, bTot, aCats, bCats] = await Promise.all([totals(from, to), totals(bFrom, bTo), cats(from, to), cats(bFrom, bTo)]);
+  return c.json({
+    a: { from, to, spend: aTot?.spend ?? 0, income: aTot?.income ?? 0, byCategory: aCats },
+    b: { from: bFrom, to: bTo, spend: bTot?.spend ?? 0, income: bTot?.income ?? 0, byCategory: bCats },
+  });
+});
+
+// Month-end forecast (§7): project this month's spend from the current daily pace
+// plus known upcoming planned payments. UAH only, transfers excluded. No migration.
+analytics.get("/analytics/forecast", async (c) => {
+  const now = Math.floor(Date.now() / 1000);
+  const monthStart = localMonthStart(now);
+  const daysInMonth = Math.round((localMonthStart(now, 1) - monthStart) / 86400);
+  const dayOfMonth = localParts(now).d; // 1..daysInMonth, у локальній зоні
+  const daysElapsed = dayOfMonth;
+  const daysRemaining = daysInMonth - dayOfMonth;
+
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null); // forecast завжди зведено в ₴
+  // Трейлінг: до 3 ПОВНИХ місяців перед поточним — для історичного якоря прогнозу.
+  const trailStart = localMonthStart(now, -3);
+  const [totals, trail] = await Promise.all([
+    analyticsRepo.spendIncomeTotals(c.env.DB, { mult, curFilter: "" }, { from: monthStart, to: now }),
+    analyticsRepo.monthlySpendBefore(c.env.DB, mult, now, trailStart, monthStart),
+  ]);
+
+  const spend = totals?.spend ?? 0;
+  const income = totals?.income ?? 0;
+  const pace = daysElapsed > 0 ? spend / daysElapsed : 0;
+  // Прогноз місяця = блендимо наївний темп (роздуває рано в місяці) з історичним якорем
+  // (факт + середньомісячна історія на дні, що лишились). Рано довіряємо історії, під кінець —
+  // фактичному темпу. Без історії — падаємо на чистий темп.
+  const trailMonths = trail.map((r) => r.spend);
+  const avgMonth = trailMonths.length ? trailMonths.reduce((s, v) => s + v, 0) / trailMonths.length : 0;
+  const elapsedFrac = Math.min(1, Math.max(0.05, daysElapsed / daysInMonth));
+  const paceProj = pace * daysInMonth;
+  const histProj = spend + avgMonth * (daysRemaining / daysInMonth);
+  const projectedSpend = avgMonth > 0
+    ? Math.round(paceProj * elapsedFrac + histProj * (1 - elapsedFrac))
+    : Math.round(paceProj);
+
+  // Діапазон довіри: розкид (σ) місячних витрат історії, звужений на решту місяця (вже витрачене
+  // — певне). Дає чесніший «12–15к» замість однієї цифри. Без історії — діапазон = точка.
+  const sd = trailMonths.length > 1
+    ? Math.sqrt(trailMonths.reduce((s, v) => s + (v - avgMonth) ** 2, 0) / trailMonths.length)
+    : avgMonth * 0.15;
+  const band = avgMonth > 0 ? Math.round(sd * (daysRemaining / daysInMonth) * 0.9) : 0;
+  const projectedLow = Math.max(spend, projectedSpend - band);
+  const projectedHigh = projectedSpend + band;
+
+  // Майбутні планові платежі, що спишуться до кінця місяця (інформативно).
+  // §SUB-MONTH: розклад дає канонічний `chargesBetween` — тижневий план у залишку місяця
+  // спишеться кілька разів, а власний однопрохідний цикл рахував рівно одне списання на план.
+  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
+  const fxRates = await getRates(c.env.DB);
+  const planned = await planningRepo.activeWithTitles(c.env.DB);
+
+  // §CUR-PLAN: суми зводимо в ₴ — вони йдуть в один ряд із витратами місяця (теж ₴).
+  const monthEnd = localMonthStart(now, 1);
+  const upcomingItems = chargesBetween(planned, fxRates, now + 1, monthEnd - 1)
+    .map((ch) => ({ title: ch.plan.title, amount: ch.amount, at: ch.at }));
+  const upcomingPlanned = upcomingItems.reduce((s, p) => s + p.amount, 0);
+
+  return c.json({
+    monthStart, now, daysInMonth, daysElapsed, daysRemaining,
+    spend, income, pace: Math.round(pace),
+    projectedSpend, projectedLow, projectedHigh, projectedNet: income - projectedSpend,
+    upcomingPlanned, upcomingItems,
+  });
+});
+
+// §1 Аналітика доходу: джерела (по ефективній категорії за період), стабільність
+// (варіативність місячного доходу за 6 повних місяців) і дельта проти минулого періоду.
+// Канонічно (INCOME_WHERE), зведено в ₴. Дзеркалить визначення Статистики.
+analytics.get("/analytics/income", async (c) => {
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env.DB);
+  const mode = ((await getState(c.env.DB, "period_mode")) as PeriodMode) || "calendar";
+  const presetParam = (url.searchParams.get("preset") as Preset | null) ?? "month";
+  const preset: Preset = ["week", "month", "quarter", "year"].includes(presetParam) ? presetParam : "month";
+  const { from, to, prevFrom, prevTo } = periodBounds(mode, preset);
+  const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
+  const { mult, curFilter } = valueMode(rates, cur);
+
+  const db = c.env.DB, v = { mult, curFilter };
+  const nowS = Math.floor(Date.now() / 1000);
+
+  const [sources, curTot, prevTot, monthly] = await Promise.all([
+    analyticsRepo.incomeBySource(db, c.get("locale"), v, { from, to }),
+    analyticsRepo.incomeTotal(db, v, { from, to }),
+    analyticsRepo.incomeTotal(db, v, { from: prevFrom, to: prevTo }),
+    // 6 календарних місяців для оцінки стабільності (по місяцях).
+    analyticsRepo.monthlyIncome(db, v, nowS, { from: localMonthStart(nowS, -5), to: nowS }),
+  ]);
+
+  const total = curTot?.income ?? 0;
+  const prevTotal = prevTot?.income ?? 0;
+  const deltaPct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : (total > 0 ? null : 0);
+
+  const srcRows = sources.map((s) => ({
+    category_id: s.category_id, name: s.name ?? st(c.get("locale"), "other"), color: s.color,
+    amount: s.amount, n: s.n, pct: total > 0 ? Math.round((s.amount / total) * 100) : 0,
+  }));
+
+  // Стабільність: коеф. варіації (stddev/mean) по ПОВНИХ місяцях (без поточного часткового).
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const complete = monthly.filter((r) => r.m !== nowMonth).map((r) => r.income);
+  let cvPct: number | null = null, label = st(c.get("locale"), "stabilityUnknown");
+  if (complete.length >= 2) {
+    const mean = complete.reduce((a, b) => a + b, 0) / complete.length;
+    if (mean > 0) {
+      const variance = complete.reduce((a, b) => a + (b - mean) ** 2, 0) / complete.length;
+      cvPct = Math.round((Math.sqrt(variance) / mean) * 100);
+      label = st(c.get("locale"), cvPct <= 15 ? "stabilityStable" : cvPct <= 40 ? "stabilityModerate" : "stabilityVolatile");
+    }
+  }
+
+  return c.json({
+    period: { from, to, preset },
+    total, prev_total: prevTotal, delta_pct: deltaPct,
+    sources: srcRows,
+    monthly: monthly.map((r) => ({ month: r.m, income: r.income })),
+    stability: { cv_pct: cvPct, label },
+  });
+});
+
+// Cashflow-календар: ВСІ очікувані списання (підписки/розстрочки) по днях у вікні [from,to]
+// (на відміну від /planned/upcoming — той дає лише наступне списання на план). + стартова
+// ліквідна подушка для проєкції балансу «наперед» → видно провали ліквідності. Аутфлоу-only
+// (планового доходу в моделі нема; регулярна зарплата — майбутнє покращення).
+analytics.get("/analytics/cashflow-calendar", async (c) => {
+  const url = new URL(c.req.url);
+  const now = Math.floor(Date.now() / 1000);
+  const defFrom = localMonthStart(now);
+  const defTo = localMonthStart(now, 2) - 1;
+  const from = Number(url.searchParams.get("from") ?? defFrom);
+  const to = Number(url.searchParams.get("to") ?? defTo);
+
+  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
+  const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
+  const [planned, funds, rates] = await Promise.all([
+    planningRepo.activeWithCategory(c.env.DB),
+    fundsBreakdown(c.env),
+    getRates(c.env.DB),
+  ]);
+
+  // §CUR-PLAN: `amount` — у ₴, бо його сумують по днях і віднімають від подушки (теж ₴).
+  // Оригінал лишаємо в `amount_orig`/`currency_code`, щоб UI показав «$5» поряд.
+  // Розгортання плану в дати — канонічний `chargesBetween` (§SUB-MONTH), а не власний цикл.
+  const items = chargesBetween(planned, rates, from, to).map((ch) => ({
+    at: ch.at, date: localYmd(ch.at), title: ch.plan.title, amount: ch.amount,
+    amount_orig: ch.plan.period_amount ?? 0, currency_code: ch.plan.currency_code ?? 980,
+    category_id: ch.plan.category_id, kind: ch.plan.kind,
+  }));
+  return c.json({ from, to, now, cushion: funds.cushion, items });
+});
+
+// Аналітика позицій чека (receipt_items з OCR): топ товарів за сумою за період.
+// price — копійки за рядок; групуємо за нормалізованою назвою. Показуємо, лише якщо є чеки.
+analytics.get("/analytics/receipt-items", async (c) => {
+  const url = new URL(c.req.url);
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const from = Number(url.searchParams.get("from") ?? to - 90 * 86400);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 15), 1), 50);
+
+  // Дата позиції = purchased_at чека (fallback created_at). Тільки чеки в періоді.
+  const [rows, meta] = await Promise.all([
+    receiptsRepo.topItems(c.env.DB, from, to, limit),
+    receiptsRepo.windowMeta(c.env.DB, from, to),
+  ]);
+
+  return c.json({ items: rows, receipts: meta?.receipts ?? 0, total_items: meta?.items ?? 0 });
+});
+
+// §E4: дрейф цін / персональна інфляція. Для кожної позиції чека (нормалізована назва)
+// беремо ЮНІТ-ціну (price/qty) в кожній покупці; якщо позиція трапилась ≥3 разів із
+// достатнім розкидом у часі — порівнюємо середню юніт-ціну ранньої половини покупок із
+// пізньою → % зміни. Індекс кошика = медіана змін по позиціях. Детерміновано, без AI.
+analytics.get("/analytics/price-drift", async (c) => {
+  const url = new URL(c.req.url);
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const from = Number(url.searchParams.get("from") ?? to - 180 * 86400);
+  const MIN_N = 3, MIN_SPAN = 21 * 86400, NOISE = 5;
+
+  const rows = await receiptsRepo.pricePoints(c.env.DB, from, to);
+
+  const byName = new Map<string, { at: number; unit: number }[]>();
+  for (const r of rows) {
+    const unit = r.price / r.qty;
+    (byName.get(r.name) ?? byName.set(r.name, []).get(r.name)!).push({ at: r.at, unit });
+  }
+
+  const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
+  const items: { name: string; first_unit: number; last_unit: number; change_pct: number; n: number; first_at: number; last_at: number }[] = [];
+  for (const [name, occ] of byName) {
+    if (occ.length < MIN_N) continue;
+    const span = occ[occ.length - 1].at - occ[0].at;
+    if (span < MIN_SPAN) continue;
+    const half = Math.ceil(occ.length / 2);
+    const early = mean(occ.slice(0, half).map((o) => o.unit));
+    const late = mean(occ.slice(half).map((o) => o.unit));
+    if (early <= 0) continue;
+    const change = ((late - early) / early) * 100;
+    items.push({
+      name, first_unit: Math.round(early), last_unit: Math.round(occ[occ.length - 1].unit),
+      change_pct: Math.round(change * 10) / 10, n: occ.length, first_at: occ[0].at, last_at: occ[occ.length - 1].at,
+    });
+  }
+
+  // Індекс кошика — медіана змін (стійка до викидів).
+  const changes = items.map((i) => i.change_pct).sort((a, b) => a - b);
+  const basket = changes.length ? (changes.length % 2 ? changes[(changes.length - 1) / 2] : (changes[changes.length / 2 - 1] + changes[changes.length / 2]) / 2) : null;
+
+  // Топ рухів (лишаємо лише помітні), за модулем зміни.
+  const movers = items.filter((i) => Math.abs(i.change_pct) >= NOISE).sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 12);
+
+  return c.json({ window: { from, to }, basket_change_pct: basket != null ? Math.round(basket * 10) / 10 : null, tracked: items.length, items: movers });
+});
+
+// §E1/E2/E3: патерни витрат ЦЬОГО МІСЯЦЯ — усе детерміновано, без AI.
+//  • recurring: разові vs регулярні (канон stats.ts) + топ разових;
+//  • anomalies: категорії, чий прогноз на кінець місяця значно вищий за звичний (трейлінг 6 міс);
+//  • pace: темп по топ-категоріях — факт (MTD) vs звичний місяць vs лінійний прогноз.
+analytics.get("/analytics/patterns", async (c) => {
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const now = Math.floor(Date.now() / 1000);
+  const monthStart = localMonthStart(now);
+  const nextMonthStart = localMonthStart(now, 1);
+  const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
+  const curKey = new Date(now * 1000).toISOString().slice(0, 7);
+  // Трейлінг-вікно: 6 повних місяців перед поточним.
+  const refStart = localMonthStart(now, -6);
+  const trailingKeys: string[] = [];
+  for (let i = 6; i >= 1; i--) trailingKeys.push(localYm(localMonthStart(now, -i)));
+
+  const recurExpr = isRecurringExpr(defaultRefFrom(now), now);
+  const levels = await categoryMonthlyLevels(c.env, mult, { now }); // канонічний «місячний рівень»
+  const [matrix, split, curSplit] = await Promise.all([
+    analyticsRepo.categoryMonthMatrix(c.env.DB, c.get("locale"), mult, now, { from: refStart, to: now }),
+    recurringOneoffSplit(c.env, monthStart, now, mult, defaultRefFrom(now)),
+    // Поточний місяць по категоріях, розділений на регулярне/разове + сигнали лумпності
+    // (n — к-ть операцій, biggest — найбільша одна) для чесного прогнозу.
+    analyticsRepo.currentMonthSplitByCategory(c.env.DB, mult, recurExpr, { from: monthStart, to: now }),
+  ]);
+  // `recurringOneoffSplit` builds category names in stats.ts (no locale there); localize the
+  // displayed one-off items here instead of threading locale through the canon.
+  const loc = c.get("locale");
+  split.oneoff_items = split.oneoff_items.map((it) => ({ ...it, category: localizeCatName(loc, it.category) ?? it.category }));
+
+  const curSplitMap = new Map<string, { recurring: number; oneoff: number; n: number; biggest: number }>();
+  for (const r of curSplit) curSplitMap.set(String(r.id ?? "null"), { recurring: r.recurring, oneoff: r.oneoff, n: r.n, biggest: r.biggest });
+
+  interface Cat { id: number | null; name: string; color: string | null; months: Map<string, number> }
+  const cats = new Map<string, Cat>();
+  for (const r of matrix) {
+    const key = String(r.id ?? "null");
+    let cat = cats.get(key);
+    if (!cat) { cat = { id: r.id, name: r.name ?? st(c.get("locale"), "uncategorized"), color: r.color, months: new Map() }; cats.set(key, cat); }
+    cat.months.set(r.m, r.spent);
+  }
+
+  const MIN_DELTA = 20000; // 200₴ — нижче не шумимо
+  interface PaceItem { category: string; color: string | null; spent: number; oneoff: number; mostly_oneoff: boolean; lumpy: boolean; projected: number; usual: number; pct: number | null }
+  const anomalies: PaceItem[] = [];
+  const pace: PaceItem[] = [];
+  for (const cat of cats.values()) {
+    const cur = cat.months.get(curKey) ?? 0;
+    const trailing = trailingKeys.map((k) => cat.months.get(k) ?? 0);
+    const cs = curSplitMap.get(String(cat.id ?? "null")) ?? { recurring: cur, oneoff: 0, n: 0, biggest: cur };
+    const mostlyOneoff = cs.oneoff > cs.recurring;
+    // «Звичний місячний рівень» — з ЄДИНОГО канонічного джерела (stats.categoryMonthlyLevels):
+    // fixed-кости (рента/підписка) = останній платіж (ловить стрибок), змінні = середнє.
+    const lv = cat.id != null ? levels.get(cat.id) : undefined;
+    const usual = lv?.level ?? Math.round(trailing.reduce((s, v) => s + v, 0) / trailingKeys.length);
+    // Лумп для ПРОЄКЦІЇ поточного місяця: цьогомісячна витрата в 1-2 великих операціях (податок/
+    // заправка) АБО fixed-кост, ще не сплачений цього місяця (рента) — не екстраполюємо по днях.
+    const lumpy = (cur > 0 && (cs.n <= 1 || cs.biggest >= cur * 0.55)) || (cur === 0 && !!lv?.fixed);
+    // Прогноз зі здоровим глуздом (stats.projectSpend): факт + історичний залишок; лумпи
+    // не екстраполюємо; кеп 3× звичного. Прибирає «2500 на транспорт» / «10к податків».
+    const projected = projectSpend(cur, usual, elapsedFrac, lumpy);
+    const item: PaceItem = { category: cat.name, color: cat.color, spent: cur, oneoff: cs.oneoff, mostly_oneoff: mostlyOneoff, lumpy, projected, usual, pct: usual > 0 ? Math.round((projected / usual) * 100) : null };
+    if (cur > 0 || usual > 0) pace.push(item);
+    // Аномалія темпу: прогноз ≥1.5× звичного і різниця вагома. Не флагуємо разові/лумпи —
+    // вони вже сталися (це не «розганяється темп», а разовий факт).
+    if (cur > 0 && !mostlyOneoff && !lumpy && projected >= usual * 1.5 && projected - usual >= MIN_DELTA) {
+      anomalies.push(item);
+    }
+  }
+  anomalies.sort((a, b) => (b.projected - b.usual) - (a.projected - a.usual));
+  pace.sort((a, b) => b.projected - a.projected);
+
+  return c.json({
+    period: { from: monthStart, to: now, elapsed_frac: Math.round(elapsedFrac * 100) / 100 },
+    recurring: split,
+    anomalies: anomalies.slice(0, 6),
+    pace: pace.slice(0, 8),
+  });
+});
+
+// Drill-down однієї (батьківської) категорії за період: розбивка по підкатегоріях +
+// топ-мерчанти всередині. Для «відкрити велику категорію й глянути детальніше» (§F5).
+analytics.get("/analytics/category", async (c) => {
+  const url = new URL(c.req.url);
+  const parent = Number(url.searchParams.get("category"));
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
+  const rates = await getRates(c.env.DB);
+  const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
+  const { mult, curFilter } = valueMode(rates, cur);
+
+  const v = { mult, curFilter };
+  const range = { from, to };
+  const loc = c.get("locale");
+
+  const TRANSFER_CAT = 13;
+  if (parent === TRANSFER_CAT) {
+    // Спец-бакет «Перекази і зняття»: незакриті рухи (готівка/зняття без реальної категорії)
+    // + справжні перекази. Інформативно, ПОЗА канонічними витратами. Групуємо за реальною суттю.
+    const [subs, merchants, txs] = await Promise.all([
+      analyticsRepo.transferBucketSubs(c.env.DB, loc, v, range),
+      analyticsRepo.transferBucketMerchants(c.env.DB, v, range),
+      analyticsRepo.transferBucketTransactions(c.env.DB, loc, v, range),
+    ]);
+    return c.json({ subs, merchants, transactions: txs });
+  }
+
+  // Звичайна категорія: канонічні витрати, де ЕФЕКТИВНА категорія (рол-ап) = parent.
+  // Розбивка — по фактичній листовій категорії (реальна для готівки, інакше звичайна).
+  const [subs, merchants, txs] = await Promise.all([
+    analyticsRepo.categorySubs(c.env.DB, loc, v, range, parent),
+    analyticsRepo.categoryMerchants(c.env.DB, v, range, parent),
+    analyticsRepo.categoryTransactions(c.env.DB, v, range, parent),
+  ]);
+  return c.json({ subs, merchants, transactions: txs });
+});
+
+// §R2-ST5(б): drill будь-якого зрізу (мерчант / картка / група) — підсумок + самі
+// операції з переходом на /tx/:id. dim = merchant | account | event.
+analytics.get("/analytics/slice", async (c) => {
+  const url = new URL(c.req.url);
+  const dim = url.searchParams.get("dim") ?? "merchant"; // merchant|account|event|weekday|day|all
+  const type = url.searchParams.get("type") === "income" ? "income" : "expense";
+  const value = url.searchParams.get("value") ?? "";
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
+  const rates = await getRates(c.env.DB);
+  const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
+  const { mult, curFilter } = valueMode(rates, cur);
+  const limit = Math.min(Number(url.searchParams.get("limit") ?? 60), 300);
+
+  const v = { mult, curFilter };
+  const range = { from, to };
+  const q = { dim, type, value, limit } as const;
+
+  const [summary, txs] = await Promise.all([
+    analyticsRepo.sliceSummary(c.env.DB, v, range, q),
+    analyticsRepo.sliceTransactions(c.env.DB, c.get("locale"), v, range, q),
+  ]);
+  // Для доходу сума виходить від'ємною (amountSum рахує -amount) — віддаємо абсолют.
+  const spent = Math.abs(summary?.spent ?? 0);
+  return c.json({ spent, n: summary?.n ?? 0, transactions: txs });
+});
+
+// Which currencies actually have transactions (for the stats currency switch).
+analytics.get("/analytics/currencies", async (c) => {
+  return c.json(await analyticsRepo.distinctCurrencies(c.env.DB));
+});
+
+// Spend by effective category for a period, зведено в ₴ (канонічно).
+analytics.get("/analytics/by-category", async (c) => {
+  const url = new URL(c.req.url);
+  const from = Number(url.searchParams.get("from") ?? 0);
+  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  // Той самий запит, що живить `byCategory` в /analytics/overview — без валютного фільтра.
+  return c.json(await analyticsRepo.spendByCategory(
+    c.env.DB, c.get("locale"), { mult, curFilter: "" }, { from, to }));
+});
+
+// Спарклайни: 6-міс місячні витрати на КАТЕГОРІЮ й на МЕРЧАНТА (канон stats.ts, зведено в ₴).
+// Мапа {ключ: [6 значень копійок]} + буксети-місяці. Клієнт малює міні-тренд у рядках списків.
+analytics.get("/analytics/spark", async (c) => {
+  const N = 6;
+  const now = Math.floor(Date.now() / 1000);
+  const from = localMonthStart(now, -(N - 1));
+  const buckets: string[] = [];
+  for (let i = N - 1; i >= 0; i--) buckets.push(localYm(localMonthStart(now, -i)));
+  const bIdx = new Map(buckets.map((b, i) => [b, i]));
+  const { mult } = valueMode(await getRates(c.env.DB), null);
+  const [cat, mer] = await Promise.all([
+    analyticsRepo.categoryMonthSeries(c.env.DB, mult, now, from),
+    analyticsRepo.merchantMonthSeries(c.env.DB, mult, now, from),
+  ]);
+  const categories: Record<string, number[]> = {};
+  for (const r of cat) {
+    if (r.id == null) continue;
+    const arr = (categories[String(r.id)] ??= buckets.map(() => 0));
+    const i = bIdx.get(r.m); if (i != null) arr[i] = Math.round(r.spent);
+  }
+  const merchants: Record<string, number[]> = {};
+  for (const r of mer) {
+    const arr = (merchants[r.name] ??= buckets.map(() => 0));
+    const i = bIdx.get(r.m); if (i != null) arr[i] = Math.round(r.spent);
+  }
+  return c.json({ buckets, categories, merchants });
+});
+
+// §H: детермінований Індекс фінздоров'я (без AI) + запис скору за добу для тренду в часі.
+analytics.get("/analytics/health", async (c) => {
+  const { financeHealth } = await import("../../lib/ai/advisor.ts");
+  const h = await financeHealth(c.env);
+  const now = Math.floor(Date.now() / 1000);
+  // §APP_TZ: доба — київська. Скор пишеться при кожному відкритті сторінки, тож із UTC-ключем
+  // вечірній перегляд і нічний писали В ОДИН рядок, а `draftHealthDrop` (стрічка сповіщень)
+  // порівнює саме ці рядки — просідання «за 5 днів» рахувалось по зсунутій сітці днів.
+  const day = localYmd(now);
+  try {
+    await analyticsRepo.recordHealthScore(c.env.DB, day, h.score, now);
+    const trend = await analyticsRepo.healthTrend(c.env.DB, localYmd(now - 45 * 86400));
+    return c.json({ ...h, trend });
+  } catch {
+    return c.json({ ...h, trend: [] }); // таблиця може лагати на remote до міграції
+  }
+});
