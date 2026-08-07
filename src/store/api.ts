@@ -17,7 +17,7 @@ import type {
   RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
-  AccountHistory,
+  AccountHistory, Habits,
 } from "../../shared/api/index.ts";
 
 export const api = createApi({
@@ -510,6 +510,9 @@ export const api = createApi({
     getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
     // Спарклайни (6-міс тренд у списках категорій/мерчантів). Оновлюється з новими операціями.
     getSpark: b.query<SparkData, void>({ query: () => "/analytics/spark", providesTags: ["Summary"] }),
+    // §HABITS: що зʼявилось у регулярних витратах і що замовкло. Вікно фіксоване (9 міс) —
+    // параметрів нема, тож і кешується один раз на зміну операцій.
+    getHabits: b.query<Habits, void>({ query: () => "/analytics/habits", providesTags: ["Tx"] }),
     // §WEEKDAY: витрати за днями тижня. Тег `Tx` — правка операції може змінити і день, і суму.
     getWeekday: b.query<WeekdayAnalytics, { preset?: Preset; currency?: number | null } | void>({
       query: (a) => `/analytics/weekday?preset=${a?.preset ?? "month"}${a?.currency ? `&currency=${a.currency}` : ""}`,
@@ -780,6 +783,7 @@ export const {
   useGetHealthQuery,
   useGetSparkQuery,
   useGetWeekdayQuery,
+  useGetHabitsQuery,
   useGetNetworthQuery,
   useLazySearchQuery,
   useLazyGetAutoBudgetQuery,

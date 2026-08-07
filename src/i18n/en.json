@@ -1492,5 +1492,13 @@
   "wd.tip": "Shows a TYPICAL day: the total is divided by how many such days the period held — otherwise the comparison lies (a month has five Fridays and four Saturdays). A faded bar means one payment (rent, tax) is almost the whole day, so it is about the billing date, not about behaviour.",
   "wd.barTitle": "{n} operations across {days} such days",
   "wd.busiest": "Priciest steady day — {day}",
-  "wd.weekendShare": "weekend: {pct}% of spend"
+  "wd.weekendShare": "weekend: {pct}% of spend",
+  "hb.title": "What changed in your regulars",
+  "hb.subtitle": "started and gone quiet",
+  "hb.tip": "Based on what the bank actually charged, not on declared subscriptions — so it catches the ones you never set up. NEW: charged in 2 of the last 3 complete months and in none of the 3 before them. GONE QUIET: regular for 3+ months, then silent for 2 complete ones — either cancelled or a payment that failed. The current month is excluded: half a month of data looks exactly like a merchant disappearing.",
+  "hb.startedTitle": "Newly regular",
+  "hb.stoppedTitle": "Gone quiet",
+  "hb.since": "since {month}",
+  "hb.lastSeen": "last seen {month}",
+  "hb.perMonth": "/mo"
 }

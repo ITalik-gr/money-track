@@ -70,6 +70,7 @@ const ENDPOINTS: string[] = [
   "/analytics/patterns",
   "/analytics/currencies",
   "/analytics/by-category",
+  "/analytics/habits",
   "/analytics/weekday",
   "/analytics/weekday?preset=month",
   "/analytics/spark",

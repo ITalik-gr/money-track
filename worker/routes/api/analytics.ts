@@ -15,11 +15,12 @@ import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
 import { buildWeekdayAnalytics } from "../../lib/finance/weekday.ts";
 import { buildNetworth } from "../../lib/finance/networth.ts";
+import { buildHabits } from "../../lib/finance/habits.ts";
 import type {
   Overview, MonthlyHistory, SafeToSpend, CapitalTrend, Networth, Compare, Forecast,
   IncomeAnalytics, CashflowCalendar, ReceiptItemsAnalytics, PriceDrift, SpendPatterns,
   CategoryDrill, SliceDrill, MerchantAnalytics, SparkData, FinanceHealth, CategorySpend,
-  CurrenciesList, WeekdayAnalytics,
+  CurrenciesList, WeekdayAnalytics, Habits,
 } from "../../../shared/api/index.ts";
 
 export const analytics = apiRoutes();
@@ -655,6 +656,17 @@ analytics.get("/analytics/weekday", async (c) => {
   const rows = await analyticsRepo.spendByWeekday(c.env.DB, { mult, curFilter }, { from, to }, now);
 
   return c.json(buildWeekdayAnalytics(rows, from, to) satisfies WeekdayAnalytics);
+});
+
+// §HABITS: що зʼявилось у регулярних витратах і що замовкло. Вікно — 9 ПОВНИХ місяців:
+// поточний свідомо виключено, бо півмісяця даних виглядає точнісінько як «мерчант зник».
+analytics.get("/analytics/habits", async (c) => {
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  const now = Math.floor(Date.now() / 1000);
+  const from = localMonthStart(now, -9);
+  const rows = await analyticsRepo.merchantMonths(c.env.DB, { mult, curFilter: "" }, { from, to: now }, now);
+  return c.json(buildHabits(rows, now) satisfies Habits);
 });
 
 // Спарклайни: 6-міс місячні витрати на КАТЕГОРІЮ й на МЕРЧАНТА (канон stats.ts, зведено в ₴).

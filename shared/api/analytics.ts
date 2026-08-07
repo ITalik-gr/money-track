@@ -169,6 +169,27 @@ export interface WeekdayAnalytics {
   weekend_share_pct: number | null; // частка сб+нд у витратах вікна
 }
 
+/**
+ * §HABITS — a merchant that joined your regular spending, or that went quiet.
+ *
+ * `monthly` is the average over the months it was ACTUALLY charged, not over the window: a
+ * merchant that started two months ago would otherwise look three times cheaper than it is.
+ * `since`/`last` are `YYYY-MM` so the UI can say "since March" without re-deriving a month from
+ * a timestamp — the mistake CLAUDE.md records as making charts label the wrong month.
+ */
+export interface HabitChange {
+  merchant: string;
+  months: number;   // скільки місяців вікна він реально списувався
+  monthly: number;  // ₴-копійки, середнє за ті місяці
+  since: string;    // YYYY-MM
+  last: string;     // YYYY-MM
+}
+export interface Habits {
+  started: HabitChange[];
+  stopped: HabitChange[];
+  started_monthly_total: number; // ₴-копійки/міс, скільки додали НОВІ регулярні разом
+}
+
 /** `GET /analytics/currencies` — ISO codes present in the data, ascending. Bare numbers, no rows. */
 export type CurrenciesList = number[];
 

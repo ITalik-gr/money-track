@@ -11,6 +11,7 @@ import {
   EFF_IMPORTANCE, spendSum, incomeSum, amountSum, localYmSql,
 } from "../lib/finance/stats.ts";
 import { localDowSql, type WeekdayRow } from "../lib/finance/weekday.ts";
+import type { MerchantMonthRow } from "../lib/finance/habits.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import { stLit } from "../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
@@ -455,6 +456,27 @@ export async function spendByWeekday(
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY dow ORDER BY dow`,
   ).bind(r.from, r.to).all<WeekdayRow>();
+  return res.results ?? [];
+}
+
+/**
+ * §HABITS — spend per merchant per calendar month, for the habit diff.
+ *
+ * Grouped in SQL but classified in JS (`lib/finance/habits.ts`): the thresholds are a judgement
+ * about what counts as a habit, and judgements belong where they can be read, not inside a
+ * string the type system cannot see into.
+ */
+export async function merchantMonths(
+  db: AppDb, v: ValueScope, r: Range, now: number,
+): Promise<MerchantMonthRow[]> {
+  const res = await db.prepare(
+    `SELECT t.merchant AS merchant, ${localYmSql(now)} AS ym,
+            ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
+       AND t.merchant IS NOT NULL AND t.merchant <> ''
+     GROUP BY t.merchant, ym HAVING spent > 0`,
+  ).bind(r.from, r.to).all<MerchantMonthRow>();
   return res.results ?? [];
 }
 
