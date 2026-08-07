@@ -25,7 +25,11 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+// `services/` is under the same ban as `routes/`. It holds the scenarios — the sequences over
+// several tables — and a scenario is exactly where "I need one more column, I'll just write the
+// query here" is most tempting and least visible.
 const ROUTES = "worker/routes";
+const SERVICES = "worker/services";
 
 /**
  * Remaining inline queries per route file, keyed by path RELATIVE to `worker/routes`
@@ -54,10 +58,10 @@ function countPrepares(src) {
  * (phase 3), and a non-recursive scan would have let every one of those files carry SQL
  * again — the check would still have printed a tick while the rule silently stopped applying.
  */
-function routeFiles(dir = ROUTES, prefix = "") {
+function tsFiles(dir, prefix = "") {
   const out = [];
   for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (e.isDirectory()) out.push(...routeFiles(join(dir, e.name), prefix + e.name + "/"));
+    if (e.isDirectory()) out.push(...tsFiles(join(dir, e.name), prefix + e.name + "/"));
     else if (e.name.endsWith(".ts")) out.push(prefix + e.name);
   }
   return out;
@@ -66,7 +70,19 @@ function routeFiles(dir = ROUTES, prefix = "") {
 const problems = [];
 let total = 0;
 
-for (const file of routeFiles()) {
+// `services/` has no budget and never will: it was created after the ban, so it has no debt to
+// ratchet down. A file there with a query in it is a new violation, full stop.
+for (const file of tsFiles(SERVICES)) {
+  const actual = countPrepares(readFileSync(join(SERVICES, file), "utf8"));
+  if (actual > 0) {
+    problems.push(
+      `${SERVICES}/${file}: ${actual} inline queries, and services get no budget.\n` +
+      `    A scenario orchestrates repo calls; it does not write SQL.`,
+    );
+  }
+}
+
+for (const file of tsFiles(ROUTES)) {
   const actual = countPrepares(readFileSync(join(ROUTES, file), "utf8"));
   const allowed = BUDGET[file] ?? 0;
   total += actual;
@@ -85,7 +101,7 @@ for (const file of routeFiles()) {
 }
 
 if (problems.length) {
-  console.error("✗ C1 route layer:\n\n" + problems.map((p) => "  " + p).join("\n\n") + "\n");
+  console.error("✗ C1 route/service layer:\n\n" + problems.map((p) => "  " + p).join("\n\n") + "\n");
   process.exit(1);
 }
 

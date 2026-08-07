@@ -3,7 +3,9 @@
 import * as categoriesRepo from "../../repo/categories.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, normImportance } from "./_shared.ts";
+import { apiRoutes } from "./_shared.ts";
+import { normImportance } from "../../lib/finance/importance.ts";
+import { deleteCategory } from "../../services/categories.ts";
 
 export const categories = apiRoutes();
 
@@ -67,20 +69,7 @@ categories.delete("/categories/:id", async (c) => {
   const target = raw && raw !== "none" && Number(raw) !== id ? Number(raw) : null;
 
   try {
-    // ORDER IS THE BEHAVIOUR: every table referencing the category is dealt with first, and the
-    // row itself goes last — the schema enforces those foreign keys, so a step moved after the
-    // delete fails. Each call is one table; what "no target" means differs per table and is
-    // documented at each function.
-    const db = c.env.DB;
-    await categoriesRepo.reassignTransactions(db, id, target);
-    await categoriesRepo.reassignTags(db, id, target);
-    await categoriesRepo.reassignAliases(db, id, target);
-    await categoriesRepo.reassignReceiptItems(db, id, target);
-    await categoriesRepo.reassignRules(db, id, target);
-    await categoriesRepo.reassignPlanned(db, id, target);
-    await categoriesRepo.reassignBudgets(db, id, target);
-    await categoriesRepo.reassignChildren(db, id, target);
-    await categoriesRepo.remove(db, id);
+    await deleteCategory(c.env.DB, id, target);
     return c.json({ ok: true });
   } catch (e) {
     return c.json({ error: String(e instanceof Error ? e.message : e) }, 500);

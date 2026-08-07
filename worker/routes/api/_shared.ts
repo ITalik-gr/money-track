@@ -14,12 +14,6 @@ export type ApiEnv = { Bindings: Env; Variables: { locale: NotifLocale } };
 /** A sub-app with the parent's bindings and variables already in its type. */
 export const apiRoutes = () => new Hono<ApiEnv>();
 
-// §6 Вагомість: приймаємо лише валідні рівні; будь-що інше (вкл. "" / null) → NULL (скидання).
-const IMPORTANCE = new Set(["essential", "discretionary", "optional"]);
-export function normImportance(v: string | null | undefined): string | null {
-  return v && IMPORTANCE.has(v) ? v : null;
-}
-
 // Chat history sanitiser, shared by all four chat endpoints (advisor / tx / group / budget).
 //
 // The per-message LENGTH cap is the point: the AI spend guards count CALLS, and one call with a
