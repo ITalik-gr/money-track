@@ -74,6 +74,8 @@ export interface SetupStatus {
   transactions: number;
   /** Cached foreign-currency rates. 0 = the rates step has never run. */
   rates: number;
+  /** The "about me" text the adviser reads. Empty until the user writes one. */
+  profileSet: boolean;
   backfill: { progress: number; total: number; done: boolean } | null;
 }
 

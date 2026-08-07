@@ -7,6 +7,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { deleteUser, findUserById, inviteUser, listUsers, setUserStatus, type UserStatus } from "../lib/platform/directory.ts";
+import type { AdminFeedback } from "../../shared/api/feedback.ts";
 
 export const admin = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
@@ -125,7 +126,39 @@ admin.delete("/users/:id", async (c) => {
   // than a live account whose data silently vanished.
   const ns = c.env.USER_DO;
   await ns.get(ns.idFromName(id)).reset();
+  // Same rule as self-erasure: the R2 copies are part of "this person's data".
+  try {
+    const { deleteAllBackups } = await import("../lib/platform/backup.ts");
+    await deleteAllBackups(c.env.RECEIPTS, id);
+  } catch (e) {
+    console.error("[admin] backup cleanup failed:", e instanceof Error ? e.message : e);
+  }
   await deleteUser(c.env.DIRECTORY, id);
+  return c.json({ ok: true });
+});
+
+/**
+ * The feedback inbox, and how many people opened the demo per day.
+ *
+ * Both are owner-only for the same reason the user list is: they are about OTHER people. Feedback
+ * carries the sender's address and whatever they chose to type, and the demo tally is a fact about
+ * strangers — neither belongs on any screen but this one.
+ *
+ * They ride together in one response because they are read together, on one card: "is anyone
+ * looking at this, and did they have anything to say".
+ */
+admin.get("/feedback", async (c) => {
+  const { listFeedback, demoVisits } = await import("../lib/platform/feedback.ts");
+  return c.json({
+    feedback: await listFeedback(c.env.DIRECTORY),
+    demo_days: await demoVisits(c.env.DIRECTORY),
+  } satisfies AdminFeedback);
+});
+
+admin.post("/feedback/:id/handled", async (c) => {
+  const { markFeedbackHandled } = await import("../lib/platform/feedback.ts");
+  const on = (await c.req.json<{ on?: boolean }>().catch(() => ({ on: true }))).on !== false;
+  await markFeedbackHandled(c.env.DIRECTORY, Number(c.req.param("id")), on);
   return c.json({ ok: true });
 });
 

@@ -4,6 +4,7 @@
 // spacing and shows progress. Cursor lives in app_state so it survives interruption.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
+import type { SetupStatus } from "../../shared/api/platform.ts";
 import { MonoRateLimit } from "../lib/bank/mono.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
 import { rowCounts } from "../repo/state.ts";
@@ -168,11 +169,17 @@ setup.get("/status", async (c) => {
   const ratesRaw = await getState(c.env.DB, "rates");
   let rates = 0;
   try { rates = ratesRaw ? Object.keys(JSON.parse(ratesRaw) as Record<string, number>).length : 0; } catch { rates = 0; }
+  // Whether the user has told the app who they are. It is the one setup step that improves what
+  // the ADVISER says rather than what the app holds — «фрилансер, орендую житло» is the difference
+  // between generic advice and advice about this person — and it was the only first-run step with
+  // nothing anywhere saying it existed.
+  const profile = (await getState(c.env.DB, "finance_profile")) ?? "";
   return c.json({
     webhookRegistered: !!webhook,
     accounts: counts.accounts,
     transactions: counts.transactions,
     rates,
+    profileSet: profile.trim().length > 0,
     backfill: cursor ? { progress: cursor.idx, total: cursor.total, done: cursor.idx >= cursor.total } : null,
-  });
+  } satisfies SetupStatus);
 });

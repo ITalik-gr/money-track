@@ -2773,17 +2773,10 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .chat-log2 .chat-typing span:nth-child(3) { animation-delay: 0.3s; }
 @keyframes chat-dot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 
-/* Відповідь, що ще пишеться: курсор у кінці останнього рядка.
-   Це ТРЕТІЙ стан, а не варіант крапок — крапки означають «ще нічого не сказано», курсор означає
-   «текст іде далі». Показувати обидва разом = обіцяти другу відповідь, якої не буде.
-   `::after` на самому блоці, а не окремий елемент: markdown усередині перемальовується на КОЖНІЙ
-   дельті, і будь-яка вставлена нода мигала б разом із ним. */
-.chat-msg.assistant.streaming::after {
-  content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 2px;
-  vertical-align: text-bottom; background: var(--ink-2); animation: chat-caret 1s steps(2) infinite;
-}
-@keyframes chat-caret { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .chat-msg.assistant.streaming::after { animation: none; } }
+/* Курсора в кінці відповіді, що пишеться, тут свідомо НЕМА (прибрано 2026-08-07 за скаргою).
+   Ідея була позначити третій стан («текст іде далі»), але сам текст, що прибуває, і є цією
+   ознакою — а миготлива смужка стрибала разом із перерозміткою markdown і тягнула око на себе
+   рівно там, де людина читає. Стан «ще нічого не сказано» лишається за крапками (.chat-typing). */
 .chat-retry { align-self: flex-start; margin-top: 2px; font-size: 12.5px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 2px; }
 .chat-retry:hover { text-decoration: underline; }
 .chat-empty { margin: auto; text-align: center; color: var(--muted); max-width: 460px; }
@@ -3139,19 +3132,21 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .rep-custom { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
 .rep-custom .label { margin-bottom: var(--sp-2); }
 /* Діапазон дат у Репортах — ВЛАСНА смуга, а не переозначений `.filt-range` (той належить
-   вузькій панелі фільтрів і має `flex: 1` на полях). Тут смуга на всю ширину картки, тож поля
-   беруть природну ширину свого формату й тримаються купкою: інакше вони роз'їжджаються в різні
-   кінці, а тире висить посеред порожнечі — око читає це як зламану верстку, а не як діапазон.
-   Група не розтягується (`justify-content: flex-start`), переноситься на вузькому. */
-.rep-range { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-start; gap: var(--sp-2); }
-.rep-range input { flex: 0 0 auto; width: 168px; min-width: 0; padding: 8px 10px; font-size: 13px; }
-.rep-range .dash { flex: none; color: var(--muted); }
-.rep-range .btn { flex: none; margin-left: var(--sp-2); }
-/* На телефоні 168+168+тире+кнопка не влазять у рядок: поля стають половинками, кнопка — окремим
-   рядком на всю ширину (кнопка-обрізок збоку — найгірший варіант із трьох). */
+   вузькій панелі фільтрів і має `flex: 1` на полях). Кожне поле — самостійна пара «підпис +
+   ввід» фіксованої ширини, тож смуга однаково читається і в рядок, і перенесеною: поля не
+   розтягуються на всю картку й не залежать від тире між ними (його тут нема — див. Reports.tsx).
+   Кнопка притиснута до низу групи, бо поля вищі за неї на висоту свого підпису. */
+.rep-range { display: flex; align-items: flex-end; flex-wrap: wrap; justify-content: flex-start; gap: var(--sp-2) var(--sp-3); }
+.rep-field { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; min-width: 0; }
+.rep-field > span { font-size: 11.5px; color: var(--muted); }
+.rep-field input { width: 168px; min-width: 0; padding: 8px 10px; font-size: 13px; }
+.rep-range .btn { flex: none; }
+/* На телефоні два поля по 168 + кнопка не влазять у рядок: поля стають половинками, кнопка —
+   окремим рядком на всю ширину (кнопка-обрізок збоку — найгірший варіант із трьох). */
 @media (max-width: 560px) {
-  .rep-range input { flex: 1 1 40%; width: auto; }
-  .rep-range .btn { flex: 1 0 100%; margin-left: 0; }
+  .rep-field { flex: 1 1 40%; }
+  .rep-field input { width: 100%; }
+  .rep-range .btn { flex: 1 0 100%; }
 }
 .rc-date { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); }
 .rc-summary { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -3344,6 +3339,66 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .set-card .stack { gap: 8px; }
 .set-card .stack .btn { justify-content: flex-start; text-align: left; }
 
+/* ---- Backups ------------------------------------------------------------ */
+.bk-list { display: flex; flex-direction: column; gap: 2px; }
+.bk-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+.bk-row:last-child { border-bottom: none; }
+/* Копія «перед відновленням» — не рядовий елемент ротації, і має читатись інакше ДО того, як у
+   неї вчитуються: саме її шукають, коли відновили не той файл. */
+.bk-row.safety { background: var(--accent-soft); border-radius: var(--radius-sm); padding-inline: 8px; }
+.bk-when { flex: 1 1 auto; min-width: 0; display: inline-flex; align-items: baseline; gap: 6px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.bk-tag { font-family: var(--font-sans); font-size: 11px; color: var(--accent); }
+/* Не стискається: переламаний розмір читається як інше число (те саме правило, що для осі Y). */
+.bk-size { flex: 0 0 auto; color: var(--muted); font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.bk-act { flex: none; background: none; border: none; padding: 2px 4px; font: inherit; font-size: 12px; color: var(--accent); cursor: pointer; }
+.bk-act:hover { text-decoration: underline; }
+.bk-act.danger { color: var(--neg); }
+.bk-confirm { margin-top: 12px; padding: 12px; border: 1px solid var(--neg); border-radius: var(--radius); display: flex; flex-direction: column; gap: 8px; }
+.bk-warn { font-size: 12.5px; line-height: 1.45; color: var(--neg); }
+.bk-confirm input { padding: 8px 10px; font-size: 13px; }
+.bk-upload { margin-top: 12px; }
+.bk-report { margin-top: 12px; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); font-size: 12.5px; line-height: 1.5; display: flex; flex-direction: column; gap: 4px; }
+.bk-report .muted { overflow-wrap: anywhere; }
+
+/* ---- Feedback: the form, and the owner's inbox -------------------------- */
+.fb-text {
+  width: 100%; resize: vertical; min-height: 88px; font: inherit; line-height: 1.5;
+  padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface); color: var(--ink);
+}
+.fb-email { width: 100%; padding: 9px 12px; font-size: 13px; }
+.fb-text:focus, .fb-email:focus { outline: none; border-color: var(--accent); }
+/* Кнопка «Надіслати» — єдина дія картки, тож вона центрована, а не притиснута ліворуч, як
+   кнопки-пункти в решті карток налаштувань (`.set-card .stack .btn`). */
+.set-card .stack .btn.primary { justify-content: center; text-align: center; }
+
+.fb-demo { margin: 4px 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+.fb-demo-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.fb-demo-h .muted { font-weight: 400; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.fb-demo-rows { display: flex; flex-direction: column; gap: 3px; max-height: 220px; overflow-y: auto; }
+.fb-demo-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+/* Обидві колонки не стискаються: підпис дати й число — це не місце, де верстка може «зекономити»,
+   а переламане на два рядки число читається як інше число (те саме правило, що для осі Y). */
+.fb-demo-day { flex: 0 0 58px; color: var(--muted); }
+.fb-demo-n { flex: 0 0 28px; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.fb-demo-bar { flex: 1 1 auto; min-width: 0; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.fb-demo-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+
+.fb-list { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; }
+.fb-item { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; }
+/* Опрацьоване не зникає — воно стишується: видалене повідомлення неможливо перечитати, коли
+   виявиться, що скарга повторюється. */
+.fb-item.handled { opacity: 0.55; }
+.fb-item-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 11.5px; margin-bottom: 6px; }
+.fb-kind { font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.fb-kind.bug { background: color-mix(in srgb, var(--neg) 14%, transparent); color: var(--neg); }
+.fb-kind.idea { background: var(--accent-soft); color: var(--accent); }
+.fb-from { color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fb-when { margin-left: auto; color: var(--muted); font-family: var(--font-num); }
+.fb-msg { font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.fb-item-f { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; font-size: 11.5px; }
+.fb-item-f .muted { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ---- Unfinished-setup banner on the dashboard (D0) ---------------------- */
 /* Accent, not warn: an unfinished setup is the normal state of a new account, not a fault. Warn
    colours here would greet every new user with an alarm about something they have not done yet. */
@@ -3435,6 +3490,20 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .fr-step.done .fr-title { color: var(--ink-2); }
 .fr-desc { font-size: 12px; line-height: 1.45; color: var(--muted); }
 .fr-action { align-self: center; }
+/* Крок, який зараз неможливий (нема токена банку), і крок, який цій людині не потрібен узагалі —
+   ДВА різні стани, і жоден не є «ще не зроблено». Блокований лишається читабельним і несе
+   причину; незастосовний стишується й викреслюється, бо він уже нікуди не веде. */
+.fr-step.blocked { border-style: dashed; }
+.fr-step.skipped { opacity: 0.55; }
+.fr-step.skipped .fr-title { text-decoration: line-through; }
+.fr-note { font-size: 11.5px; line-height: 1.4; color: var(--warn, var(--ink-2)); }
+.fr-step.skipped .fr-note { color: var(--muted); }
+/* Смуга прогресу — над списком: «скільки ще» має читатись до того, як око почне рахувати галочки. */
+.fr-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.fr-progress-bar { flex: 1 1 auto; min-width: 0; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.fr-progress-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--pos); transition: width var(--dur-2, 0.3s) var(--ease-out, ease); }
+.fr-progress-n { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .fr-progress-bar > span { transition: none; } }
 @media (max-width: 560px) {
   .fr-step { grid-template-columns: auto minmax(0, 1fr); }
   .fr-action { grid-column: 2; justify-self: start; }

@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "body": {
+    "webhookRegistered": false,
+    "accounts": 5,
+    "transactions": 78,
+    "rates": 2,
+    "profileSet": true,
+    "backfill": null
+  },
+  "db": {
+    "imported": []
+  }
+}

@@ -107,6 +107,13 @@ const EXTRA_PROBES = {
     rows(db, "SELECT account_id, balance, recorded_at FROM account_balance_history ORDER BY id"),
   knowledge_docs: (db: MemDb) =>
     rows(db, "SELECT id, kind, title, summary, body, enabled FROM knowledge_docs ORDER BY id"),
+  // §CHAT-SYNC. Both tables together, always: the whole point of moving conversations off the
+  // device is that a chat and its turns stay one thing, and the failure worth catching is a
+  // conversation whose messages outlive it (or the reverse).
+  chats: (db: MemDb) => ({
+    chats: rows(db, "SELECT id, title, created_at, updated_at FROM chats ORDER BY id"),
+    messages: rows(db, "SELECT chat_id, role, content FROM chat_messages ORDER BY chat_id, id"),
+  }),
 } satisfies Record<string, (db: MemDb) => unknown>;
 
 interface Scenario {
@@ -896,6 +903,59 @@ const SCENARIOS: Scenario[] = [
     method: "GET",
     path: () => "/export/transactions.csv?from=1778000000",
     raw: true,
+  },
+  // §CHAT-SYNC — conversations moved from `localStorage` into the user's own database, so the
+  // write paths that used to be `JSON.stringify` into a browser now need the same guard as any
+  // other write. Each of these covers a case that was free when the data lived on one device and
+  // is not free now: the first message having to CREATE the row it appends to, regenerate having
+  // to forget the old answer on the server too (otherwise the other device syncs it back as if it
+  // were current), deletion taking the turns with it, and the one-time import running twice.
+  {
+    name: "chats: the first message creates the conversation and names it",
+    method: "POST",
+    path: () => "/chats/cnew1/messages",
+    body: () => ({ content: "Скільки я витратив на таксі?", title: "Скільки я витратив на таксі?" }),
+    extraProbes: ["chats"],
+  },
+  {
+    name: "chats: regenerate drops the answer on the server, not only on screen",
+    method: "POST",
+    path: () => "/chats/cold1/truncate",
+    body: () => ({ keep: 1 }),
+    setup: (db) => {
+      db.raw.prepare("INSERT INTO chats (id, title, created_at, updated_at) VALUES ('cold1', 'Оренда', 1778700000, 1778700000)").run();
+      db.raw.prepare(`INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES
+        ('cold1', 'user', 'Скільки коштує оренда?', 1778700000),
+        ('cold1', 'assistant', 'Перша відповідь', 1778700001),
+        ('cold1', 'user', 'А підписки?', 1778700002)`).run();
+    },
+    extraProbes: ["chats"],
+  },
+  {
+    name: "chats: deleting a conversation takes its messages with it",
+    method: "DELETE",
+    path: () => "/chats/cdel1",
+    setup: (db) => {
+      db.raw.prepare("INSERT INTO chats (id, title, created_at, updated_at) VALUES ('cdel1', 'Зайва', 1778700000, 1778700000)").run();
+      db.raw.prepare("INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES ('cdel1', 'user', 'Питання', 1778700000)").run();
+    },
+    extraProbes: ["chats"],
+  },
+  {
+    name: "chats: importing the same conversation twice adds nothing",
+    method: "POST",
+    path: () => "/chats/import",
+    body: () => ({
+      chats: [
+        { id: "cimp1", title: "Вже тут", updated_at: 1778700000000, messages: [{ role: "user", content: "Друга спроба" }] },
+        { id: "cimp2", title: "Ще ні", updated_at: 1778700000000, messages: [{ role: "user", content: "Нова" }, { role: "assistant", content: "Відповідь" }] },
+      ],
+    }),
+    setup: (db) => {
+      db.raw.prepare("INSERT INTO chats (id, title, created_at, updated_at) VALUES ('cimp1', 'Вже тут', 1778600000, 1778600000)").run();
+      db.raw.prepare("INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES ('cimp1', 'user', 'Перша спроба', 1778600000)").run();
+    },
+    extraProbes: ["chats"],
   },
   {
     name: "export: transactions as strict RFC CSV",

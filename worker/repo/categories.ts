@@ -205,3 +205,30 @@ export async function reassignChildren(db: AppDb, from: number, to: number | nul
 export async function remove(db: AppDb, id: number): Promise<void> {
   await db.prepare("DELETE FROM categories WHERE id = ?").bind(id).run();
 }
+
+/**
+ * Top-level EXPENSE categories, for the Telegram bot's inline keyboards.
+ *
+ * A keyboard has room for about twenty buttons, so this is a LIMITed list rather than the whole
+ * tree — and both constraints matter: income buckets on an expense keyboard, or sub-categories
+ * mixed in with their parents, produce buttons that all "work" while filing money in the wrong
+ * place. `excludeId` drops bucket 13 («Перекази і зняття») for the alert flow, where the question
+ * is what the transfer REALLY was and answering "a transfer" is not an answer.
+ *
+ * Names come back raw, like `listAll` — the bot writes in the owner's language and does not
+ * localise (see the i18n note in CLAUDE.md).
+ */
+export async function topLevelExpense(db: AppDb, excludeId?: number): Promise<{ id: number; name: string }[]> {
+  const r = await db.prepare(
+    `SELECT id, name FROM categories
+      WHERE is_income = 0 AND parent_id IS NULL${excludeId != null ? " AND id != ?" : ""}
+      ORDER BY id LIMIT 20`,
+  ).bind(...(excludeId != null ? [excludeId] : [])).all<{ id: number; name: string }>();
+  return r.results ?? [];
+}
+
+/** One category's display name, or null when the id points at nothing (a deleted row). */
+export async function nameById(db: AppDb, id: number): Promise<string | null> {
+  const r = await db.prepare("SELECT name FROM categories WHERE id = ?").bind(id).first<{ name: string }>();
+  return r?.name ?? null;
+}

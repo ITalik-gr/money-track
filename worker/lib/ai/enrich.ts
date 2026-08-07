@@ -6,7 +6,7 @@ import type { Env } from "../../env.ts";
 // transaction, guessing the real category behind a withdrawal, and parsing free text into a
 // record. They used to sit in `ai.ts` — see ARCHITECTURE.md §3 D3 on why that split had no rule.
 import { callHaikuJson } from "./json.ts";
-import { buildSystemPrefix } from "./prompt.ts";
+import { buildSystemPrefix, langNoteDirective } from "./prompt.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import { logUsage } from "./cost.ts";
 
@@ -74,7 +74,15 @@ export async function enrichTransaction(
       "Якщо є user_profile — це опис користувача та його ситуації; використовуй для контексту (напр. фрилансер → " +
       "деякі списання це податки/робочі витрати). Якщо є merchant_history — раніше користувач класифікував цього " +
       "мерчанта; узгоджуйся, якщо не суперечить вище. Якщо є known_subscriptions — це оголошені користувачем " +
-      "регулярні підписки зі схожою назвою; коли операція скидається на списання такої підписки, став саме ту категорію.",
+      "регулярні підписки зі схожою назвою; коли операція скидається на списання такої підписки, став саме ту категорію." +
+      // §LANG (2026-08-08): `note` — ЄДИНЕ поле цього виводу, яке читає людина (воно лягає в
+      // `transactions.ai_note` і показується в деталях операції). Решта — структура: id категорій,
+      // `kind`, і `clean_name`, що є ІМЕНЕМ ВЛАСНИМ і не перекладається ніколи. Тому директива тут
+      // адресна: без неї англомовний користувач бачив український коментар під кожною своєю
+      // покупкою, тобто «застосунок англійською, а AI — ні».
+      // ⚠️ Enrich іде з вебхука, де запиту (і заголовка мови) немає, тож він спирається на
+      // збережену `app_state.locale` — саме її тепер проставляє клієнт при першому вході.
+      (await langNoteDirective(env)),
     true, // §R6: вмикаємо детальний гайд (Spotify→Стрімінги тощо) + активує prompt-кеш для bulk-enrich.
   );
   const amountMajor = tx.amount / 100;

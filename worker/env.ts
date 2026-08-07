@@ -44,6 +44,16 @@ export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
   // unset, demo AI falls back to the regular key (still capped + forced to Haiku).
   DEMO_ANTHROPIC_KEY?: string;
   /**
+   * VAPID keypair for Web Push (§PUSH). Deployment secrets, generated once by
+   * `node scripts/gen-vapid.mjs` — see `lib/messaging/webpush.ts`.
+   *
+   * Public: base64url of the uncompressed P-256 point (`0x04 || X || Y`), which is also exactly
+   * what the browser wants in `applicationServerKey`. Private: base64url of the raw scalar.
+   * ⚠️ Rotating them invalidates every existing subscription — browsers silently stop receiving.
+   */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
+  /**
    * Id of the user this request belongs to. NOT a Cloudflare binding: set by `UserDO.fetch`
    * from the header the Worker attaches after authenticating. Needed because a Durable Object
    * cannot recover its own name (`idFromName` is one-way), yet has to address the user from
@@ -60,6 +70,15 @@ export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
    * data ends up in the owner's hands (see CLAUDE.md §Безпека).
    */
   IS_OWNER?: boolean;
+  /**
+   * Language the reader is looking at on THIS request (`x-mt-locale`). NOT a Cloudflare binding:
+   * set by `UserDO.appEnv` from the header the client sends.
+   *
+   * Beats the stored `app_state.locale` wherever it is present, and is absent exactly where there
+   * is no reader — cron, Telegram pushes, the alarm — which is why those keep using the stored
+   * preference. See `lib/platform/forward.ts` for the bug this closed.
+   */
+  UI_LOCALE?: "uk" | "en";
   /**
    * Internal wiring, NOT a Cloudflare binding: set by `UserDO.fetch` so a handler that
    * rewrites this user's credentials can drop the object's in-memory copy. Optional, because

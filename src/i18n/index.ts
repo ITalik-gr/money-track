@@ -92,6 +92,14 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
         // English for the portfolio audience), not a preference the visitor carried in from
         // another account in the same browser. The server value therefore wins outright — the
         // visitor can still switch inside the demo, which writes back to the sandbox.
+        // The server has no opinion yet → give it the one the reader is actually looking at.
+        //
+        // This is the case that made every new account's AI answer in the wrong language: the
+        // column is unset until someone opens Settings and switches, and unset was read as
+        // Ukrainian while the client's default is English. The request header (`x-mt-locale`)
+        // fixes anything with a reader attached; this fixes the rest — cron reports, Telegram
+        // pushes and the notification feed have no request to read a header from.
+        if (!server) { pushLocale(local); return; }
         if (hasStoredLocale() && !me?.demo) {
           // Explicit local choice still wins — but push it so the server agrees.
           if (server !== local) pushLocale(local);

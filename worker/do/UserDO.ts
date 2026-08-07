@@ -9,8 +9,9 @@ import { DoDatabase, type AppDb } from "../lib/platform/db-shim.ts";
 import { runMigrations } from "./migrate.ts";
 import { userApp } from "../user-app.ts";
 import { getSecret } from "../lib/platform/secrets.ts";
-import { OWNER_HEADER, USER_HEADER } from "../lib/platform/forward.ts";
+import { OWNER_HEADER, USER_HEADER, localeFromHeader } from "../lib/platform/forward.ts";
 import type { ImportReport } from "./import-legacy.ts";
+import type { RestoreReport } from "./restore.ts";
 import type { Env } from "../env.ts";
 
 export class UserDO extends DurableObject<Env> {
@@ -55,7 +56,9 @@ export class UserDO extends DurableObject<Env> {
     // but it needs the same credentials the request that started it had. Only this
     // Worker-authenticated path ever writes the flag.
     if (isOwner) await this.rememberOwner();
-    const env = await this.appEnv(request.headers.get(USER_HEADER) ?? undefined, isOwner);
+    // The reader's language rides along per request (see `forward.ts`): the stored preference is
+    // the fallback, not the answer, because it is unset for everyone who never opened Settings.
+    const env = await this.appEnv(request.headers.get(USER_HEADER) ?? undefined, isOwner, localeFromHeader(request));
     return userApp.fetch(request, env, execCtx);
   }
 
@@ -67,7 +70,7 @@ export class UserDO extends DurableObject<Env> {
    * API-key checks is what keeps the whole multi-user migration mechanical: not one handler
    * and not one SQL string had to be edited.
    */
-  private async appEnv(userId?: string, isOwner = false): Promise<Env> {
+  private async appEnv(userId?: string, isOwner = false, uiLocale?: "uk" | "en"): Promise<Env> {
     const creds = await this.userCredentials(isOwner);
     // Demo sandbox: run AI on the dedicated demo key (P4.3), and null out the mono token so a
     // sandbox can never reach the real bank even if a guard were ever missed (it also never has a
@@ -93,6 +96,7 @@ export class UserDO extends DurableObject<Env> {
       ...demoOverride,
       USER_ID: userId,
       IS_OWNER: isOwner,
+      UI_LOCALE: uiLocale,
       onSecretsChanged: () => this.invalidateCredentials(),
       // Both of these used to be `setAlarm` calls at the call site. They now record WHEN the
       // work is owed and let `armAlarm` pick the earliest — the object has one alarm and more
@@ -448,6 +452,39 @@ export class UserDO extends DurableObject<Env> {
     );
   }
 
+
+  /**
+   * The whole database as one JSON document, for the Worker-side backup routes.
+   *
+   * An RPC method rather than an HTTP handler inside the object: the backup lives in R2, which the
+   * Worker addresses, and the restore needs `ctx.storage` (see below) — so both halves of the
+   * feature belong on the outside, and only the data comes from in here.
+   */
+  async exportDump(): Promise<string> {
+    const { buildDump } = await import("../lib/platform/backup.ts");
+    return (await buildDump(this.db)).json;
+  }
+
+  /**
+   * Replace this object's contents with a backup. See `do/restore.ts` for the rules.
+   *
+   * Same shape as `importLegacyData`: the raw `SqlStorage` and `transactionSync` are handed in
+   * rather than reached for, so the destructive part is one testable function that knows nothing
+   * about Durable Objects.
+   */
+  async restoreBackup(json: string): Promise<RestoreReport> {
+    const { restoreDump } = await import("./restore.ts");
+    const report = restoreDump(
+      this.ctx.storage.sql,
+      (fn) => this.ctx.storage.transactionSync(fn),
+      json,
+    );
+    // Anything the object cached about the old contents is now about a database that no longer
+    // exists. The credentials cache is the one that would be actively wrong — the backup does not
+    // carry `user_secrets`, so after a restore the keys in memory belong to rows that are gone.
+    this.credentials = null;
+    return report;
+  }
 
   /**
    * Wipes the object back to an empty schema (freshly migrated). Used by the demo lifecycle

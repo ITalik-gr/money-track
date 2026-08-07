@@ -6,8 +6,8 @@ import { getRates } from "../../lib/finance/finance.ts";
 import {
   valueMode, } from "../../lib/finance/stats.ts";
 import * as txRepo from "../../repo/transactions.ts";
-import * as stateRepo from "../../repo/state.ts";
 import { st } from "../../lib/platform/i18n.ts";
+import { buildDump } from "../../lib/platform/backup.ts";
 import { apiRoutes } from "./_shared.ts";
 import type { SearchResults } from "../../../shared/api/platform.ts";
 
@@ -23,40 +23,20 @@ export const dataExport = apiRoutes();
 // **Таблиці читаються з `sqlite_master`, а не зі списку в коді.** Бекап, який мовчки не бере
 // таблицю з наступної міграції, гірший за відсутність бекапу: він виглядає як бекап. Тому
 // сюди автоматично потрапляє все, що не в денилисті нижче.
-const EXPORT_SKIP = new Set([
-  // Шифротекст ключів. Майстер-ключ — Worker-секрет, тож у файлі це мертвий вантаж, який усе
-  // одно не розшифрувати; класти його у файл, що йде на диск користувача, — зайва поверхня.
-  "user_secrets",
-]);
-
+// ⚠️ Формат файлу тут БІЛЬШЕ НЕ БУДУЄТЬСЯ (2026-08-08). Дамп робить `lib/platform/backup.ts`
+// `buildDump`, і той самий байт-у-байт файл пише нічний бекап у R2 та приймає відновлення.
+// Доти формат жив тут, а бекапів не існувало взагалі — щойно вони зʼявились, дві реалізації
+// одного файлу означали б, що ручний експорт і автоматичний бекап можуть розійтись, і виявилось
+// би це рівно в той день, коли когось із них треба відновити.
 dataExport.get("/export/all.json", async (c) => {
-  const tables = await stateRepo.exportableTables(c.env.DB);
-
-  // Порожній список означає, що схему не вдалося прочитати — а не що даних нема. Віддати за
-  // цієї умови «успішний» файл на кілька байт було б найгіршим із можливих результатів: людина
-  // вважала б, що бекап у неї є.
-  if (!tables.length) return c.json({ error: "export_schema_unreadable" }, 500);
-
-  const data: Record<string, unknown[]> = {};
-  const counts: Record<string, number> = {};
-  for (const name of tables) {
-    if (EXPORT_SKIP.has(name)) continue;
-    data[name] = await stateRepo.dumpTable(c.env.DB, name);
-    counts[name] = data[name].length;
+  let body: string;
+  try {
+    body = (await buildDump(c.env.DB)).json;
+  } catch {
+    // Схему не вдалося прочитати — це НЕ «даних немає». Віддати за цієї умови «успішний» файл
+    // на кілька байт було б найгіршим результатом: людина вважала б, що бекап у неї є.
+    return c.json({ error: "export_schema_unreadable" }, 500);
   }
-
-  const body = JSON.stringify({
-    meta: {
-      app: "money-track",
-      format: 1,
-      exported_at: Math.floor(Date.now() / 1000),
-      schema_version: await stateRepo.schemaVersion(c.env.DB),
-      // Кількості поруч із даними — щоб урізаний або побитий файл було видно без парсингу всього.
-      rows: counts,
-      note: "Full dump of this account's Durable Object. Encrypted API keys (user_secrets) are excluded.",
-    },
-    data,
-  });
   const day = new Date().toISOString().slice(0, 10);
   return new Response(body, {
     headers: {

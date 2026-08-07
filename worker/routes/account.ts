@@ -64,6 +64,14 @@ account.post("/delete", async (c) => {
   // order would leave orphaned finance data nobody can reach or erase.
   const ns = c.env.USER_DO;
   await ns.get(ns.idFromName(userId)).reset();
+  // The R2 copies go too. A "delete my data" that leaves a fortnight of full dumps in a bucket
+  // is not a deletion — and this is the only place that knows the account is going away.
+  try {
+    const { deleteAllBackups } = await import("../lib/platform/backup.ts");
+    await deleteAllBackups(c.env.RECEIPTS, userId);
+  } catch (e) {
+    console.error("[account] backup cleanup failed:", e instanceof Error ? e.message : e);
+  }
   await deleteUser(c.env.DIRECTORY, userId);
 
   setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);

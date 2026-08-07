@@ -32,3 +32,24 @@ export function withUserHeader(req: Request, userId: string, isOwner = false): R
   headers.set(OWNER_HEADER, isOwner ? "1" : "0");
   return new Request(req, { headers });
 }
+
+/**
+ * The language the READER is looking at, right now.
+ *
+ * Sent by the client on every API request, and unlike the two headers above it is NOT
+ * authenticated — it says which language to answer in, which is the sender's own business.
+ *
+ * WHY A HEADER AND NOT THE STORED PREFERENCE. The server used to resolve language from
+ * `app_state.locale` alone, and that column defaults to unset → Ukrainian, while the client
+ * defaults to English. So every screen a stranger saw was English and every sentence the model
+ * wrote back was Ukrainian — most visibly in the demo, where nothing ever writes that column.
+ * The stored preference is still the fallback (cron, Telegram and the alarm have no request to
+ * read a header from); it is no longer the only answer.
+ */
+export const LOCALE_HEADER = "x-mt-locale";
+
+/** Narrow the header to the two locales we have, so an odd value cannot become a third one. */
+export function localeFromHeader(req: Request): "uk" | "en" | undefined {
+  const v = req.headers.get(LOCALE_HEADER);
+  return v === "uk" || v === "en" ? v : undefined;
+}

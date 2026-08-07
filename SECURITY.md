@@ -46,8 +46,12 @@ These are deliberate trade-offs, documented so you don't spend time reporting th
   the detail should move behind an owner flag.
 - **Rate limiting is per-isolate**, not global — the counter window lives in isolate memory. A WAF
   rule in front of `/api/*` is the appropriate complement for a real deployment.
-- **There are no backups.** Data lives in a single Durable Object per user; only manual CSV export
-  exists. Do not run this as the sole record of anything you cannot afford to lose.
+- **Backups are row copies, not point-in-time recovery.** A nightly job writes each account's full
+  dump to R2 (`backups/<user>/<day>.json.gz`, 14 kept) and a user can restore one or upload their
+  own file. That is a second copy of the rows — it does not recover the moment before a mistake,
+  and deleting an account deletes its backups with it. Restoring replaces every row in the account
+  and asks for a typed confirmation; the state immediately before a restore is itself saved as
+  `pre-restore.json.gz`.
 
 ## If you self-host
 

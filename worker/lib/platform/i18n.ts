@@ -194,6 +194,11 @@ const S = {
     en: "AI features need your own Anthropic key — add it in Settings → “Keys & data”.",
   },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
+  errFeedbackEmpty: { uk: "Напиши кілька слів — інакше нема з чим працювати", en: "Write a few words — there is nothing to act on otherwise" },
+  errFeedbackTooMany: {
+    uk: "Забагато повідомлень за добу. Напиши на пошту — вона під формою.",
+    en: "Too many messages in one day. Use the email address under the form instead.",
+  },
   // Says the number and when it resets: "limit reached" without either forces the reader to guess
   // whether to wait a minute or give up on the feature.
   errReceiptQuota: {

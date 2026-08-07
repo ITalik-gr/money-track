@@ -1,9 +1,13 @@
 // Device-side leftovers of a signed-in account.
 //
-// The chat pages keep whole conversations in `localStorage` (`mt-chats:<user_id>`) — and those
-// conversations are about salaries, debts and balances. Logging out cleared the cookie and left
-// every word of that on the disk, readable by anyone who opens devtools on that machine
+// The chat pages used to keep whole conversations in `localStorage` (`mt-chats:<user_id>`) — and
+// those conversations are about salaries, debts and balances. Logging out cleared the cookie and
+// left every word of that on the disk, readable by anyone who opens devtools on that machine
 // afterwards. Signing out has to mean the device forgets too (security review 2026-07-26).
+//
+// Since §CHAT-SYNC (2026-08-07) conversations live on the server and the chat page deletes these
+// keys as soon as it has imported them. This stays, and must: the keys are still on every device
+// that has not opened the chat page since, and that is exactly the device someone signs out of.
 //
 // Deliberately NOT clearing `mt-theme`: it is a display preference with no account in it, and
 // wiping it makes the next visit flash the wrong theme for no privacy gain.

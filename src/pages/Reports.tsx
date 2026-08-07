@@ -130,18 +130,22 @@ export function Reports() {
 
         <div className="rep-custom">
           <div className="label">{t("report.customRange")}</div>
-          {/* ⚠️ Власний клас, а НЕ `.filt-range`. Той створювався для вузької панелі фільтрів,
-              де полям дати доречний `flex: 1`; тут смуга живе на всю ширину картки, і поля
-              роз'їжджались у різні кінці з прогалиною на пів-екрана між ними та тире — читалось
-              як зламана верстка, а не як діапазон. Правило-надбудова `.rep-custom .filt-range`
-              це вже лікувало, але лікувати чужий клас переозначенням — рівно те, що ламається
-              наступного разу; поле дати має природну ширину свого формату, тож вона тут своя. */}
+          {/* ⚠️ Тире між полями тут БІЛЬШЕ НЕМА, і це головне в цьому блоці.
+              Воно було єдиним у проєкті елементом, чия єдина робота — стояти між двома іншими:
+              ширину діапазону тримала порожнеча навколо нього, тож будь-яка зміна розкладки
+              перетворювала «12.05 – 18.05» на два поля в різних кінцях картки з рискою, що
+              висить посеред нічого. Замість зв'язку через сусідство кожне поле тепер САМЕ каже,
+              що воно таке (підпис «Дата початку» / «Дата кінця») — і воно читається однаково,
+              хоч поруч, хоч перенесене на два рядки на телефоні. */}
           <div className="rep-range">
-            <input type="date" aria-label={t("report.customFrom")} value={from} max={to || today}
-              onChange={(e) => setFrom(e.target.value)} />
-            <span className="dash">–</span>
-            <input type="date" aria-label={t("report.customTo")} value={to} min={from || undefined} max={today}
-              onChange={(e) => setTo(e.target.value)} />
+            <label className="rep-field">
+              <span>{t("report.customFrom")}</span>
+              <input type="date" value={from} max={to || today} onChange={(e) => setFrom(e.target.value)} />
+            </label>
+            <label className="rep-field">
+              <span>{t("report.customTo")}</span>
+              <input type="date" value={to} min={from || undefined} max={today} onChange={(e) => setTo(e.target.value)} />
+            </label>
             <button className="btn" disabled={isLoading || !customValid} onClick={runCustom}>
               {busy === "custom" ? t("report.generating") : t("report.customGo")}
             </button>

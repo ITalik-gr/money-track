@@ -91,10 +91,20 @@ runs all of them.
 
 Two things learned about the checks themselves:
 
-- **C1 is a two-directional ratchet**; C3 deliberately is not. A query count moves in whole steps
-  and rarely, so a drop means someone forgot to tighten the budget. Line counts move on every edit,
-  and a check that goes red because a file got three lines shorter trains people to edit the budget
-  without reading it. C3 fails only when the slack exceeds 80 lines.
+- **C1 reached zero and is now a flat ban** (2026-08-08). It spent its life as a two-directional
+  ratchet — a budget per file that could only fall, failing the build if a drop was not written
+  down — because the alternative was one enormous commit moving 179 queries, which is the shape of
+  change that hides a regression. The ratchet was the migration mechanism, not the goal; with the
+  budget map empty, a route that wants SQL now has to ADD a line to it, and adding one is the
+  review conversation the map existed to force.
+  The rule that governed every step of it, and the reason `telegram.ts` was last: **no query moves
+  before something can catch a mistake.** Its handlers are driven by an update payload rather than
+  an HTTP route and they answer over `fetch`, so nothing could observe them until
+  `worker/test/telegram.test.ts` began recording the bot's outgoing calls.
+- C3 deliberately is NOT a ratchet. A query count moves in whole steps and rarely, so a drop means
+  someone forgot to tighten the budget. Line counts move on every edit, and a check that goes red
+  because a file got three lines shorter trains people to edit the budget without reading it. C3
+  fails only when the slack exceeds 80 lines.
 - **A check earns its keep by forcing a DECISION, not by catching a bug.** C3 paid for itself the
   hour it landed: adding `/analytics/weekday` pushed `routes/api/analytics.ts` over its allowance,
   and instead of raising the number the net-worth reconstruction moved to `lib/finance/networth.ts`

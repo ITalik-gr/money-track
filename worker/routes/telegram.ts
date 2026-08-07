@@ -8,6 +8,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
+import * as catRepo from "../repo/categories.ts";
 import { computeSummary, createCashTx, recentTransactions, type Summary } from "../lib/finance/finance.ts";
 import { ingestReceipt } from "../lib/ai/receipt.ts";
 import { parseText } from "../lib/ai/enrich.ts";
@@ -83,17 +84,13 @@ function escapeHtml(s: string): string {
 
 async function categoryName(env: Env, id: number | null): Promise<string | null> {
   if (id == null) return null;
-  const r = await env.DB.prepare("SELECT name FROM categories WHERE id = ?").bind(id).first<{ name: string }>();
-  return r?.name ?? null;
+  return catRepo.nameById(env.DB, id);
 }
 
 // Клавіатура вибору категорії: верхньорівневі витратні, по 2 в ряд + «без категорії».
 async function categoryKeyboard(env: Env): Promise<InlineKeyboard> {
-  const rows = await env.DB.prepare(
-    "SELECT id, name FROM categories WHERE is_income = 0 AND parent_id IS NULL ORDER BY id LIMIT 20",
-  ).all<{ id: number; name: string }>();
   const kb: InlineKeyboard = [];
-  const cats = rows.results ?? [];
+  const cats = await catRepo.topLevelExpense(env.DB);
   for (let i = 0; i < cats.length; i += 2) {
     kb.push(cats.slice(i, i + 2).map((c) => ({ text: c.name, callback_data: `tgsetcat:${c.id}` })));
   }
@@ -250,12 +247,11 @@ async function handlePhoto(env: Env, chatId: number, fileId: string): Promise<vo
 // Клавіатура вибору категорії для алерту: верхньорівневі витратні + «— пропустити».
 // mode='real' → задаємо реальну категорію переказу; mode='cat' → основну категорію.
 async function alertCategoryKeyboard(env: Env, txId: string, mode: "real" | "cat"): Promise<InlineKeyboard> {
-  const rows = await env.DB.prepare(
-    "SELECT id, name FROM categories WHERE is_income = 0 AND parent_id IS NULL AND id != 13 ORDER BY id LIMIT 20",
-  ).all<{ id: number; name: string }>();
+  // 13 = «Перекази і зняття»: the question this keyboard asks is what the transfer really WAS,
+  // and «a transfer» is the one answer that carries no information.
+  const cats = await catRepo.topLevelExpense(env.DB, 13);
   const set = mode === "real" ? "al_setreal" : "al_setcat";
   const kb: InlineKeyboard = [];
-  const cats = rows.results ?? [];
   for (let i = 0; i < cats.length; i += 2) {
     kb.push(cats.slice(i, i + 2).map((c) => ({ text: c.name, callback_data: `${set}:${txId}:${c.id}` })));
   }

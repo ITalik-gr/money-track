@@ -289,6 +289,14 @@ export async function callMessagesRaw(
   return { content: data.content ?? [], usage: data.usage, stop: data.stop_reason ?? null };
 }
 
+// What we send back when the model ran out of output budget mid-sentence. Deliberately terse and
+// deliberately not a summary request: a "wrap it up" instruction makes the model restart with a
+// conclusion, which reads as the answer repeating itself.
+const MAX_CONTINUATIONS = 1;
+const CONTINUE_PROMPT =
+  "Твоя попередня відповідь обірвалась на межі ліміту токенів. Продовж РІВНО з місця обриву: " +
+  "без вступу, без повторення вже написаного, без «отже» на початку — просто дописуй речення далі.";
+
 // Веде діалог з інструментами до фінальної текстової відповіді (кеп ходів — межа вартості).
 export async function runToolConversation(
   env: Env,
@@ -315,12 +323,36 @@ export async function runToolConversation(
     total.cache_creation_input_tokens = (total.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
   };
   const textOf = (content: RawBlock[]) => content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  // Text already produced by turns that were cut off at `max_tokens` and asked to continue.
+  // The reader has seen it (it streamed), so the final answer must carry it too — otherwise the
+  // `{done, reply}` frame would replace a complete answer on screen with only its last third.
+  let carried = "";
+  let continuations = 0;
 
   for (let turn = 0; turn < maxTurns; turn++) {
     const { content, usage, stop } = await callMessagesRaw(env, system, messages, maxTokens, model, reqTools, onText);
     add(usage);
     // §A3: серверний цикл (web_search) міг паузитись — дослати ту саму розмову, щоб він завершив.
     if (stop === "pause_turn") { messages.push({ role: "assistant", content }); continue; }
+    /**
+     * Ran out of output budget mid-sentence → ask for the rest, once.
+     *
+     * A `max_tokens` cut is an ERROR, not a short answer (the same rule that `repairTruncatedJson`
+     * broke once: parsing successfully is not the same as being complete). Here it is visible to
+     * the reader as a reply that stops mid-word — which is exactly what streaming made obvious,
+     * because a half-answer arriving live reads as the app dying rather than as a long answer.
+     *
+     * ⚠️ NOT in demo: `demoClamp` pins the ceiling at 900 tokens, so the continuation hits the same
+     * wall and buys a second charge against a shared budget for the same cut answer.
+     */
+    if (stop === "max_tokens" && continuations < MAX_CONTINUATIONS && !isDemoEnv(env)) {
+      continuations++;
+      const partial = textOf(content);
+      carried += partial;
+      messages.push({ role: "assistant", content: partial });
+      messages.push({ role: "user", content: CONTINUE_PROMPT });
+      continue;
+    }
     if (stop === "tool_use") {
       const uses = content.filter((b) => b.type === "tool_use");
       messages.push({ role: "assistant", content });
@@ -334,12 +366,12 @@ export async function runToolConversation(
       messages.push({ role: "user", content: results });
       continue;
     }
-    return { text: textOf(content), usage: total };
+    return { text: carried + textOf(content), usage: total };
   }
   // Вичерпали ходи → фінальний виклик БЕЗ client-інструментів (примус тексту), але серверні
   // лишаємо: історія може містити незавершений server_tool_use, і виклик без нього дав би 400.
   const final = await callMessagesRaw(env, system, messages, maxTokens, model, serverTools.length ? serverTools : undefined, onText);
   add(final.usage);
-  return { text: textOf(final.content), usage: total };
+  return { text: carried + textOf(final.content), usage: total };
 }
 

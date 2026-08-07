@@ -1,5 +1,6 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { Account, Budget, Category, EventGroup, PlannedPayment, AiUsageStats, PlannedActual } from "../../shared/types.ts";
+import { getLocale } from "../i18n/locale.ts";
 
 // The API contract lives in `shared/api/` and is imported, not re-declared (phase 2, defect D2).
 // It is RE-EXPORTED from here because 66 files already import these names from `store/api.ts`;
@@ -17,13 +18,24 @@ import type {
   RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
-  AccountHistory, Habits,
+  AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
+  BackupList, RestoreResult, PushStatus, PushSendResult,
 } from "../../shared/api/index.ts";
 
 export const api = createApi({
   reducerPath: "api",
-  baseQuery: fetchBaseQuery({ baseUrl: "/api" }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram"],
+  // Кожен запит несе МОВУ, якою людина зараз дивиться на застосунок.
+  //
+  // Доти сервер брав її лише з `app_state.locale`, а та колонка порожня в кожного, хто не
+  // відкривав Налаштування, і порожнє означало «українська». Тобто демо-візитер бачив
+  // англійський екран і отримував українські відповіді AI, назви категорій і тексти помилок —
+  // це читалось як зламаний продукт, а не як брак перекладу. Заголовок ще й робить перемикач
+  // мови МИТТЄВИМ: не треба зберігати профіль, щоб модель почала відповідати інакше.
+  baseQuery: fetchBaseQuery({
+    baseUrl: "/api",
+    prepareHeaders: (headers) => { headers.set("x-mt-locale", getLocale()); return headers; },
+  }),
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -493,6 +505,80 @@ export const api = createApi({
     // §A1: шар фактів. Підтвердження/видалення факту з коригуванням рухає burn/runway →
     // інвалідуємо Tx/Summary/Advice, щоб цифри всюди перерахувались.
     getFacts: b.query<Fact[], void>({ query: () => "/facts", providesTags: ["Fact"] }),
+    // §CHAT-SYNC: розмови з порадником живуть на сервері, а не в localStorage — тому телефон і
+    // ноутбук бачать одну й ту саму стрічку. Відповідь моделі сюди НЕ ходить: вона стрімиться
+    // через `lib/aiStream.ts` (у RTK Query немає стану «відповідь ще пишеться»).
+    getChats: b.query<ChatSummary[], void>({ query: () => "/chats", providesTags: ["Chat"] }),
+    getChat: b.query<ChatDetail, string>({
+      query: (id) => `/chats/${encodeURIComponent(id)}`, providesTags: ["Chat"],
+    }),
+    createChat: b.mutation<{ ok: boolean }, { id: string; title?: string }>({
+      query: (body) => ({ url: "/chats", method: "POST", body }), invalidatesTags: ["Chat"],
+    }),
+    renameChat: b.mutation<{ ok: boolean }, { id: string; title: string }>({
+      query: ({ id, title }) => ({ url: `/chats/${encodeURIComponent(id)}`, method: "PATCH", body: { title } }),
+      invalidatesTags: ["Chat"],
+    }),
+    deleteChat: b.mutation<{ ok: boolean }, string>({
+      query: (id) => ({ url: `/chats/${encodeURIComponent(id)}`, method: "DELETE" }), invalidatesTags: ["Chat"],
+    }),
+    // Хід КОРИСТУВАЧА. Хід асистента пише сервер, коли відповідь готова (див. роут стріму).
+    appendChatMessage: b.mutation<{ ok: boolean }, { id: string; content: string; title?: string }>({
+      query: ({ id, ...body }) => ({ url: `/chats/${encodeURIComponent(id)}/messages`, method: "POST", body }),
+      invalidatesTags: ["Chat"],
+    }),
+    truncateChat: b.mutation<{ ok: boolean }, { id: string; keep: number }>({
+      query: ({ id, keep }) => ({ url: `/chats/${encodeURIComponent(id)}/truncate`, method: "POST", body: { keep } }),
+      invalidatesTags: ["Chat"],
+    }),
+    importChats: b.mutation<{ imported: number }, { chats: unknown[] }>({
+      query: (body) => ({ url: "/chats/import", method: "POST", body }), invalidatesTags: ["Chat"],
+    }),
+    // §PUSH: браузерні сповіщення. Сам пуш порожній — текст сервіс-воркер забирає вже по сесії
+    // (див. `worker/lib/messaging/webpush.ts`), тож підписка це лише endpoint.
+    getPushStatus: b.query<PushStatus, void>({ query: () => "/push/key", providesTags: ["Push"] }),
+    subscribePush: b.mutation<{ ok: boolean }, string>({
+      query: (endpoint) => ({ url: "/push/subscribe", method: "POST", body: { endpoint } }),
+      invalidatesTags: ["Push"],
+    }),
+    unsubscribePush: b.mutation<{ ok: boolean }, string>({
+      query: (endpoint) => ({ url: "/push/unsubscribe", method: "POST", body: { endpoint } }),
+      invalidatesTags: ["Push"],
+    }),
+    testPush: b.mutation<PushSendResult, void>({ query: () => ({ url: "/push/test", method: "POST" }) }),
+    // §BACKUP: копії даних поза Durable Object. Список і видалення — звичайні запити; сам файл
+    // качається прямим посиланням (браузер має зберегти його на диск, а не покласти в стор).
+    getBackups: b.query<BackupList, void>({ query: () => "/backups", providesTags: ["Backup"] }),
+    runBackup: b.mutation<{ ok: boolean; size: number }, void>({
+      query: () => ({ url: "/backups/run", method: "POST" }), invalidatesTags: ["Backup"],
+    }),
+    deleteBackup: b.mutation<{ ok: boolean }, string>({
+      query: (name) => ({ url: `/backups/${encodeURIComponent(name)}`, method: "DELETE" }),
+      invalidatesTags: ["Backup"],
+    }),
+    // Відновлення інвалідує ВСЕ: після нього в базі інші рядки, ніж ті, що зараз на екранах.
+    restoreBackup: b.mutation<RestoreResult, { name?: string; file?: string }>({
+      query: ({ name, file }) => ({
+        url: `/backups/restore?confirm=RESTORE${name ? `&name=${encodeURIComponent(name)}` : ""}`,
+        method: "POST",
+        ...(file ? { body: file, headers: { "content-type": "application/json" } } : {}),
+      }),
+      invalidatesTags: (_r, _e) => ["Backup", "Tx", "Account", "Summary", "Budget", "Planned",
+        "Setup", "Insight", "Advice", "Event", "Category", "Goal", "Report", "Fact",
+        "Notification", "SavedFilter", "Knowledge", "Frequent", "Job", "Chat"],
+    }),
+    // Канал зворотного зв'язку. Відкритий і для демо: людина, яка вперше бачить застосунок, —
+    // саме та, хто помітить незрозуміле, і форма, доступна лише після реєстрації, збирає відгуки
+    // від тих, хто вже проминув зламане місце.
+    getFeedbackContact: b.query<FeedbackContact, void>({ query: () => "/feedback/contact" }),
+    sendFeedback: b.mutation<{ ok: boolean }, { kind: FeedbackKind; message: string; email?: string; page?: string }>({
+      query: (body) => ({ url: "/feedback", method: "POST", body }), invalidatesTags: ["Feedback"],
+    }),
+    getAdminFeedback: b.query<AdminFeedback, void>({ query: () => "/admin/feedback", providesTags: ["Feedback"] }),
+    markFeedbackHandled: b.mutation<{ ok: boolean }, { id: number; on: boolean }>({
+      query: ({ id, on }) => ({ url: `/admin/feedback/${id}/handled`, method: "POST", body: { on } }),
+      invalidatesTags: ["Feedback"],
+    }),
     // §A5: корпус знань — заводські доки + власні нотатки користувача.
     getKnowledge: b.query<KnowledgeList, void>({ query: () => "/knowledge", providesTags: ["Knowledge"] }),
     getKnowledgeDoc: b.query<KnowledgeDocFull, string>({ query: (id) => `/knowledge/${encodeURIComponent(id)}`, providesTags: ["Knowledge"] }),
@@ -775,6 +861,26 @@ export const {
   useChatGroupMutation,
   useChatTxMutation,
   useGetFactsQuery,
+  useGetPushStatusQuery,
+  useSubscribePushMutation,
+  useUnsubscribePushMutation,
+  useTestPushMutation,
+  useGetBackupsQuery,
+  useRunBackupMutation,
+  useDeleteBackupMutation,
+  useRestoreBackupMutation,
+  useGetFeedbackContactQuery,
+  useSendFeedbackMutation,
+  useGetAdminFeedbackQuery,
+  useMarkFeedbackHandledMutation,
+  useGetChatsQuery,
+  useGetChatQuery,
+  useCreateChatMutation,
+  useRenameChatMutation,
+  useDeleteChatMutation,
+  useAppendChatMessageMutation,
+  useTruncateChatMutation,
+  useImportChatsMutation,
   useGetKnowledgeQuery,
   useLazyGetKnowledgeDocQuery,
   useCreateKnowledgeDocMutation,

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router";
+import { takeSharedReceipt } from "../lib/push.ts";
 import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useDispatch } from "react-redux";
 import {
@@ -334,6 +336,7 @@ function AiPanel({ hasAiKey, accounts, cats, onWrote }: {
   }, []);
   const [account, setAccount] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const [params, setParams] = useSearchParams();
   const [uploading, setUploading] = useState(false);
   const [receipt, setReceipt] = useState<ReceiptResponse | null>(null);
 
@@ -356,6 +359,27 @@ function AiPanel({ hasAiKey, accounts, cats, onWrote }: {
       if (fileRef.current) fileRef.current.value = "";
     }
   }
+
+  /**
+   * A receipt photo shared into the app from the system share sheet.
+   *
+   * The service worker parked the file and redirected here with `?shared=receipt` (a POST share
+   * target is delivered to the SW, never to the server — see `src/sw.ts`). This picks it up and
+   * runs the ordinary upload, so the shared path and the camera button produce the same result.
+   *
+   * The marker is removed from the URL first: a reload with `?shared=receipt` still in it would
+   * look like a second share, and the cache entry is already gone by then.
+   */
+  useEffect(() => {
+    if (params.get("shared") !== "receipt") return;
+    setParams((p) => { p.delete("shared"); return p; }, { replace: true });
+    void takeSharedReceipt().then((file) => {
+      if (!file) return;
+      toast.success(t("add.sharedReceipt"));
+      void uploadReceipt(file);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for the share that opened this page
+  }, []);
 
   async function parse() {
     setParsing(true);

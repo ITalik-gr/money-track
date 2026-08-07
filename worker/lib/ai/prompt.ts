@@ -174,7 +174,9 @@ const NEVER_RUSSIAN =
   "the user writes to you in Russian (in that case answer in Ukrainian).";
 
 export async function replyLangDirective(env: Env, mode: "content" | "conversation" = "content"): Promise<string> {
-  const en = (await getState(env.DB, "locale")) === "en";
+  // Same order as `c.get("locale")`: the reader's current language beats the stored preference,
+  // and the stored preference is what cron/Telegram (no request, no header) fall back to.
+  const en = (env.UI_LOCALE ?? (await getState(env.DB, "locale"))) === "en";
 
   if (mode === "conversation") {
     return " 🌐 RESPONSE LANGUAGE (overrides any language wording above): reply in the SAME language " +
@@ -189,4 +191,23 @@ export async function replyLangDirective(env: Env, mode: "content" | "conversati
       "keys and enum values (e.g. 'pos'/'neg', 'info'/'warn') exactly as specified; translate only " +
       "human-readable text. Do NOT reply in Ukrainian."
     : " 🌐 RESPONSE LANGUAGE: write everything the user reads in natural Ukrainian.") + NEVER_RUSSIAN;
+}
+
+/**
+ * Language for a structured answer where exactly ONE field is prose.
+ *
+ * `replyLangDirective("content")` is too broad for the enrichment calls: their output is data —
+ * category ids, `kind`, and `clean_name`, which is a PROPER NOUN and must never be translated
+ * («SILPO» stays «Silpo»). But one field, `note`, becomes `transactions.ai_note` and is shown
+ * under the operation, so an English-speaking user was reading a Ukrainian sentence on every
+ * purchase. Naming the field is what keeps the rest untouched.
+ */
+export async function langNoteDirective(env: Env): Promise<string> {
+  const en = (env.UI_LOCALE ?? (await getState(env.DB, "locale"))) === "en";
+  return en
+    ? " 🌐 LANGUAGE: `note` is the only field a human reads — write it in natural English. " +
+      "Everything else (ids, `kind`, `clean_name`) is data: leave it exactly as specified, and " +
+      "never translate or transliterate a brand name." + NEVER_RUSSIAN
+    : " 🌐 МОВА: поле `note` читає людина — пиши його українською. Решта полів — дані: " +
+      "ids, `kind` і `clean_name` лишай як є, назву бренду не перекладай." + NEVER_RUSSIAN;
 }

@@ -75,6 +75,8 @@ interface Scenario {
   before?: { path: string; body: unknown }[];
   /** Skip the fixture: the empty account is a state of its own (every new user starts there). */
   empty?: boolean;
+  /** Rows this scenario needs beyond the fixture. */
+  setupDb?: (db: MemDb) => void;
 }
 
 const SCENARIOS: Scenario[] = [
@@ -87,6 +89,17 @@ const SCENARIOS: Scenario[] = [
     // decide which step is done, so zero must mean zero rather than null.
     name: "setup status: an empty account reports zeros",
     app: "setup", path: "/status", method: "GET", empty: true,
+  },
+  {
+    // `profileSet` decides the last step of the checklist, and it is derived from a text column
+    // rather than from a flag — so it has to be pinned in BOTH states, or "always false" would
+    // pass just as well and the step would never tick.
+    name: "setup status: a written profile finishes the last step",
+    app: "setup", path: "/status", method: "GET",
+    setupDb: (db) => {
+      db.raw.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('finance_profile', ?)")
+        .run("Фрилансер, орендую житло.");
+    },
   },
   {
     name: "import preview: unmappable headers ask instead of guessing",
@@ -142,6 +155,7 @@ test("golden: CSV import and setup status", async (t) => {
       await t.test(sc.name, async () => {
         const db = migratedDb();
         if (!sc.empty) seed(db);
+        sc.setupDb?.(db);
         const env = testEnv(db);
         const app = sc.app === "import" ? importRoutes : setup;
 

@@ -5,6 +5,7 @@
     "accounts": 5,
     "transactions": 78,
     "rates": 2,
+    "profileSet": false,
     "backfill": null
   },
   "db": {

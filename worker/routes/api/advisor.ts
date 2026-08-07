@@ -102,10 +102,13 @@ advisor.post("/advisor/chat", async (c) => {
  */
 advisor.post("/advisor/chat/stream", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const body = await c.req.json<{ messages?: { role: string; content: string }[]; attachedTxIds?: string[] }>();
+  const body = await c.req.json<{ messages?: { role: string; content: string }[]; attachedTxIds?: string[]; chat_id?: string }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
   const attached = Array.isArray(body.attachedTxIds) ? body.attachedTxIds.filter((x) => typeof x === "string").slice(0, 10) : [];
+  // Which conversation to file the answer under (§CHAT-SYNC). Optional: the Telegram bot and the
+  // non-streaming form have no rail to file anything into.
+  const chatId = typeof body.chat_id === "string" && /^[A-Za-z0-9_-]{1,40}$/.test(body.chat_id) ? body.chat_id : null;
 
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
@@ -116,6 +119,20 @@ advisor.post("/advisor/chat/stream", async (c) => {
     try {
       const { chatReply } = await import("../../lib/ai/advisor.ts");
       const { reply } = await chatReply(c.env, msgs, attached, (t) => { void send({ delta: t }); });
+      /**
+       * The answer is filed by the SERVER, before the client is told it is finished.
+       *
+       * That ordering is the feature: the reply survives the reader closing the tab, losing the
+       * connection or switching to their phone half way through — the three moments a thirty-second
+       * answer is most likely to be lost, and the ones that used to lose it, because the transcript
+       * only existed in the sender's browser.
+       */
+      if (chatId) {
+        const chats = await import("../../repo/chats.ts");
+        if (await chats.exists(c.env.DB, chatId)) {
+          await chats.append(c.env.DB, chatId, "assistant", reply, Math.floor(Date.now() / 1000));
+        }
+      }
       // The whole text is sent again at the end, and deliberately: a client that joined late, or
       // dropped a chunk, must not be left holding a half-sentence it cannot tell from a finished
       // one. The client replaces what it accumulated with this.

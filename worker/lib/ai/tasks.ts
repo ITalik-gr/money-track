@@ -21,6 +21,18 @@ import { getTaskModel } from "./models.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
 
+/**
+ * Output ceiling for a chat answer.
+ *
+ * 1500 was set when the answer appeared all at once, and a cut one simply looked short. The prompt
+ * asks for a structured answer (висновок → числа → 2-4 кроки), and in Ukrainian a token is worth
+ * roughly two characters, so a normal detailed reply overran the ceiling and stopped mid-word —
+ * which streaming turned from "short" into "the app broke". `max_tokens` is a ceiling, not a
+ * charge: raising it costs nothing on answers that were already finishing on their own.
+ * `runToolConversation` still asks for a continuation if even this is not enough.
+ */
+const CHAT_MAX_OUTPUT = 4000;
+
 export async function chatAdvice(
   env: Env,
   context: unknown,
@@ -96,11 +108,11 @@ export async function chatAdvice(
     // Each turn is a separate billed request AND a separate `demoAiGate` hit, so a demo sandbox
     // gets a shorter loop: 6 turns of one question could eat half its whole session allowance.
     const maxTurns = demo ? 3 : 6;
-    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, 1500, model, maxTurns, serverTools, opts.onText);
+    const { text, usage } = await runToolConversation(env, system, messages, opts.tools, opts.executor, CHAT_MAX_OUTPUT, model, maxTurns, serverTools, opts.onText);
     return { text: text.trim(), usage };
   }
   // §R6/§CTX: детальні відповіді менеджера — більший ліміт виводу.
-  const { text, usage } = await callHaikuMessages(env, system, messages, 1500, model, opts?.onText);
+  const { text, usage } = await callHaikuMessages(env, system, messages, CHAT_MAX_OUTPUT, model, opts?.onText);
   return { text: text.trim(), usage };
 }
 
@@ -169,7 +181,10 @@ export async function proposeBudgetLimits(
         "скорочення дискреційних витрат (розваги, кафе, підписки, одяг), але не ріж надмірно базові (продукти, " +
         "комуналка, здоровʼя). Ліміти — цілі числа в гривнях, не завищені й не нульові. Відповідай ВИКЛЮЧНО " +
         "валідним JSON: {proposals:[{category_id, limit_uah, reason}], overall} — reason 1 короткою фразою " +
-        "(укр.), overall — 1-2 речення про логіку плану. Без markdown.",
+        "(укр.), overall — 1-2 речення про логіку плану. Без markdown." +
+        // Без цієї директиви план бюджетів приходив українською навіть на англійському екрані:
+        // `reason`/`overall` — це текст, який читає користувач, а не ключі JSON.
+        (await replyLangDirective(env)),
     },
   ];
   return callHaikuJson<BudgetPlan>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 2200, await getTaskModel(env, "budget"));
@@ -338,7 +353,9 @@ export async function evaluateGroup(
         "помітну операцію у facts.label чи note як [tx:ID|короткий підпис] (напр. [tx:abc|MrGrill 150₴]). " +
         "Відповідай ВИКЛЮЧНО валідним JSON без markdown: {headline (1 речення — головний висновок про групу), " +
         "facts:[{label, amount (грн число або null), category (назва або null), delta_pct (null зазвичай), " +
-        "tone ('pos'|'neg'|'neutral')}] (2-5), note (1 коротка порада або висновок «дорого/норм» або null)}.",
+        "tone ('pos'|'neg'|'neutral')}] (2-5), note (1 коротка порада або висновок «дорого/норм» або null)}." +
+        // `headline`/`facts.label`/`note` читає людина — див. сусідні задачі.
+        (await replyLangDirective(env)),
     },
   ];
   return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 800, await getTaskModel(env, "group"));

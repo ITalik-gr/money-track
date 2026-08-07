@@ -55,37 +55,39 @@ export default defineConfig({
           { name: "Statistics", short_name: "Stats", url: "/stats", icons: [{ src: "icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
           { name: "Ask the advisor", short_name: "Advisor", url: "/chat", icons: [{ src: "icons/icon-192.png", sizes: "192x192", type: "image/png" }] },
         ],
-        // Share text INTO the app — it lands in the AI parse box on /add ("кава 85").
+        // Share INTO the app: a photo of a receipt, or text ("кава 85") for the AI parse box.
         //
-        // ⚠️ GET on purpose. A share target that accepts FILES (a receipt photo — the obvious
-        // next want) must be `method: "POST"`, and a POST share target is delivered to the
-        // service worker's fetch handler, which means leaving `generateSW` for `injectManifest`
-        // and hand-writing the SW. That is the same trade already deferred for Web-Push, and
-        // this SW is deliberately minimal after `navigateFallback` broke /demo and /auth twice.
-        // A GET target is a plain navigation and needs none of it.
+        // ⚠️ POST + multipart is the ONLY form that can accept files, and such a share is
+        // delivered to the service worker's fetch handler rather than to the server — which is
+        // why `src/sw.ts` is hand-written (§PUSH, 2026-08-08). The SW parks the file and
+        // redirects to `/add?shared=receipt`, where the page picks it up.
+        //
+        // Text is listed alongside `files` in the same target: a share sheet offers ONE entry per
+        // app, and having "Money Track" appear only for images would make sharing a text snippet
+        // silently impossible.
         share_target: {
-          action: "/add",
-          method: "GET",
-          params: { title: "title", text: "text", url: "url" },
+          action: "/share-receipt",
+          method: "POST",
+          enctype: "multipart/form-data",
+          params: {
+            title: "title",
+            text: "text",
+            url: "url",
+            files: [{ name: "photo", accept: ["image/*"] }],
+          },
         },
       },
-      workbox: {
-        // ⚠️ NO navigation fallback. The service worker precaches static assets and nothing else;
-        // every navigation goes to the network, where the Worker decides (and falls back to the
-        // SPA shell itself via `assets.not_found_handling`).
-        //
-        // Why not the denylist: with `navigateFallback: "index.html"` the SW answers navigations
-        // from cache IN THE BROWSER, before the request reaches Cloudflare, and correctness then
-        // depends on a hand-maintained list of every Worker route. `/auth` and `/demo` were
-        // missing from it, which silently broke "Sign in with Google" and "Try the demo" — the
-        // demo only worked right after a hard reload (which bypasses the SW) and broke again the
-        // moment the SW took control. A list that must be updated in lockstep with the router,
-        // in a layer curl cannot observe, is a trap; deleting the fallback deletes the class.
-        //
-        // Cost, stated plainly: no offline deep-linking. Acceptable — this app is useless
-        // offline anyway (every screen reads live bank data through the Worker).
-        navigateFallback: null,
-        cleanupOutdatedCaches: true,
+      // `injectManifest`, not `generateSW` (2026-08-08). A generated worker cannot carry a `push`
+      // handler or a POST share target, and both were deferred for exactly that reason. The
+      // trade is that the SW is now ours to get right — see the warning at the top of `src/sw.ts`
+      // about the navigation fallback that must never come back.
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+      injectManifest: {
+        // Precache the shell and the build's assets — nothing else. Everything dynamic goes to
+        // the network, which is where the Worker decides what a URL means.
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
       },
     }),
   ],

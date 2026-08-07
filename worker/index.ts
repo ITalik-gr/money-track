@@ -5,6 +5,7 @@ import { createMiddleware } from "hono/factory";
 import type { Env } from "./env.ts";
 import { auth } from "./routes/auth.ts";
 import { admin } from "./routes/admin.ts";
+import { backups } from "./routes/backups.ts";
 import { account } from "./routes/account.ts";
 import {
   SESSION_COOKIE, CLEAR_COOKIE_OPTS, verifySession, verifyWebhookToken,
@@ -224,6 +225,12 @@ app.get("/demo", async (c) => {
     console.error("[demo] registerDemoSession failed:", e instanceof Error ? e.message : e);
   }
 
+  // One line in the daily tally (migrations-directory/0007). Here, and not at the gate above:
+  // the gate counts attempts including refused ones, and it runs before the seed that can fail.
+  // A visitor who never saw the demo is not a visit.
+  const { recordDemoVisit } = await import("./lib/platform/feedback.ts");
+  await recordDemoVisit(c.env);
+
   setCookie(c, DEMO_COOKIE, await createDemoToken(c.env, demoId), {
     httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 60 * 60 * 24,
   });
@@ -408,6 +415,9 @@ app.route("/api/admin", admin);
 // Self-service account actions (erasure). Worker-side because deleting an account spans BOTH
 // databases — the user's Durable Object and the shared directory.
 app.route("/api/account", account);
+// Backups: Worker-side because a copy spans the user's object AND R2, and only the Worker sees
+// both (same reason as `/api/account`). Registered before the catch-all forward below.
+app.route("/api/backups", backups);
 
 // ---- everything that touches finances runs INSIDE the user's Durable Object -------------
 // Registered last among the /api routes, so the Worker-local ones above (health, login,
@@ -424,6 +434,17 @@ const toUserDo = createMiddleware<{ Bindings: Env; Variables: { userId: string; 
 });
 app.all("/api/*", toUserDo);
 app.all("/ingest/*", toUserDo);
+
+/**
+ * Share-target fallback (§PUSH).
+ *
+ * `POST /share-receipt` is meant to be handled by the SERVICE WORKER, which parks the file and
+ * redirects to `/add?shared=receipt` — a POST share target is delivered there and nowhere else.
+ * This exists for the window where the SW is updating or has been unregistered: without it the
+ * POST reaches the static-asset router, which answers 405, and the photo someone just shared is
+ * gone with no explanation. A redirect at least lands them on the screen that takes receipts.
+ */
+app.post("/share-receipt", (c) => c.redirect("/add", 303));
 
 // Everything else -> static SPA assets (index.html fallback via not_found_handling).
 app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
@@ -496,6 +517,26 @@ export default {
                 await saveUserStats(env.DIRECTORY, u.id, await stub.selfStats());
               } catch (e) {
                 console.error(`[cron] stats ${u.id}:`, e instanceof Error ? e.message : e);
+              }
+              /**
+               * The nightly copy into R2 (`lib/platform/backup.ts`).
+               *
+               * Here rather than inside `runCron`, because a backup needs three things and the
+               * object only has one of them: the rows are in the object, but the bucket and — the
+               * part that decides the key — the USER ID are the Worker's. A Durable Object cannot
+               * recover its own name (`idFromName` is one-way), so a backup written from inside
+               * would have to be told where to put itself anyway.
+               *
+               * Best-effort, and logged loudly: a bucket that will not take a copy must not stop
+               * the rest of this user's scheduled work, but "backups quietly stopped" is the exact
+               * failure this whole feature exists to prevent, so it cannot be silent either.
+               */
+              try {
+                const { storeBackup } = await import("./lib/platform/backup.ts");
+                const { localYmd } = await import("./lib/finance/stats.ts");
+                await storeBackup(env.RECEIPTS, u.id, await stub.exportDump(), localYmd(Math.floor(Date.now() / 1000)));
+              } catch (e) {
+                console.error(`[cron] backup ${u.id} FAILED:`, e instanceof Error ? e.message : e);
               }
             }
           } catch (e) {

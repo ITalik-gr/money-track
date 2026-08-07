@@ -85,6 +85,44 @@ function TableBlock({ title, header, rows, keyBase }: { title: string | null; he
   );
 }
 
+const BLOCK_OPEN = /^\s*\[(chart|table)(?::[^\]]*)?\]\s*$/i;
+const PIPE_ROW = /^\s*\|.*\|\s*$/;
+const PIPE_SEP = /^\s*\|[\s:|-]+\|\s*$/;
+
+/**
+ * Hide the tail of an answer that is still arriving, up to the last point where it renders the
+ * same as it will when finished.
+ *
+ * Only for STREAMING text. Every block syntax here is multi-line, and `renderMarkdown` draws
+ * whatever part of one has arrived: a `[chart]` block with two of its six rows becomes a two-bar
+ * chart that grows a bar per frame, and a GFM table's first row shows as literal `| a | b |`
+ * rubble until its separator line lands and flips it into a table. Both are correct at the end
+ * and unreadable on the way there — the answer visibly re-lays-itself-out while you read it.
+ * Withholding the unfinished block costs nothing: it appears, whole, a fraction of a second later.
+ */
+export function trimIncompleteBlocks(text: string): string {
+  const lines = text.replace(/\r/g, "").split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const open = lines[i].match(BLOCK_OPEN);
+    if (!open) continue;
+    const closer = new RegExp(`^\\s*\\[/${open[1]}\\]\\s*$`, "i");
+    let close = -1;
+    for (let j = i + 1; j < lines.length; j++) if (closer.test(lines[j])) { close = j; break; }
+    if (close === -1) return lines.slice(0, i).join("\n");
+    i = close;
+  }
+
+  // A pipe table needs its header AND its `|---|` separator before it stops looking like debris,
+  // and only a run that reaches the end of the text can still be growing.
+  let run = lines.length;
+  while (run > 0 && PIPE_ROW.test(lines[run - 1])) run--;
+  if (run < lines.length && !(lines.length - run >= 2 && PIPE_SEP.test(lines[run + 1]))) {
+    return lines.slice(0, run).join("\n");
+  }
+  return text;
+}
+
 export function renderMarkdown(text: string): ReactNode {
   const lines = text.replace(/\r/g, "").split("\n");
   const blocks: ReactNode[] = [];

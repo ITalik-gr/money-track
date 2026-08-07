@@ -25,9 +25,13 @@ import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
 import { clearLocalUserData } from "../lib/localdata.ts";
 import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
 import { ExportCard } from "../components/settings/ExportCard.tsx";
+import { BackupCard } from "../components/settings/BackupCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
 import { TelegramCard } from "../components/settings/TelegramCard.tsx";
+import { FeedbackCard } from "../components/settings/FeedbackCard.tsx";
+import { PushCard } from "../components/settings/PushCard.tsx";
+import { FeedbackInbox } from "../components/settings/FeedbackInbox.tsx";
 
 // Settings used to be one flat stack of ten cards — every screen's worth of configuration on one
 // page, so finding anything meant scrolling and recognising it by shape. Tabs group it the way
@@ -93,6 +97,13 @@ export function Setup() {
           {/* §D1: адресат тепер персональний, тож картка — для всіх; owner-only лишилась
               лише реєстрація глобального вебхука (всередині картки). */}
           <TelegramCard isOwner={isOwner} />
+          {/* Поруч із Telegram, бо відповідають на те саме питання — «скажи мені, коли щось
+              важливе, не змушуючи відкривати застосунок». Людині потрібен щонайбільше один із них. */}
+          <PushCard />
+          {/* Для всіх, включно з демо: людина, яка бачить застосунок уперше, і помічає незрозуміле,
+              а форма, доступна лише після реєстрації, збирає відгуки від тих, хто вже проминув
+              зламане місце. */}
+          <FeedbackCard />
           {!isDemo && <DangerZone />}
         </div>
       )}
@@ -112,8 +123,10 @@ export function Setup() {
             </div>
           </div>
           <CsvImportCard />
-          {/* L10: єдиний бекап, який у користувача взагалі є — тож стоїть поруч з імпортом. */}
+          {/* Ручний експорт стоїть поруч з імпортом; автоматичні копії — одразу під ним, бо це
+              відповідь на те саме питання «а якщо все зникне», тільки без «якщо я не забуду». */}
           <ExportCard />
+          {!isDemo && <BackupCard />}
         </div>
       )}
 
@@ -128,6 +141,7 @@ export function Setup() {
       {tab === "users" && isOwner && (
         <div className="settings-grid">
           <UsersCard />
+          <FeedbackInbox />
         </div>
       )}
 

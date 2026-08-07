@@ -20,13 +20,16 @@ import { advisor } from "./advisor.ts";
 import { analytics } from "./analytics.ts";
 import { budgets } from "./budgets.ts";
 import { categories } from "./categories.ts";
+import { chats } from "./chats.ts";
 import { dataExport } from "./export.ts";
 import { events } from "./events.ts";
+import { feedback } from "./feedback.ts";
 import { goals } from "./goals.ts";
 import { jobs } from "./jobs.ts";
 import { knowledge } from "./knowledge.ts";
 import { notifications } from "./notifications.ts";
 import { planned } from "./planned.ts";
+import { push } from "./push.ts";
 import { reports } from "./reports.ts";
 import { settings } from "./settings.ts";
 import { transactions } from "./transactions.ts";
@@ -42,7 +45,10 @@ export const api = apiRoutes();
 // It sits ABOVE the mounts on purpose: parent middleware runs for mounted sub-apps too, so this
 // is the single place the lookup happens for all of them.
 api.use("*", async (c, next) => {
-  c.set("locale", await ownerLocale(c.env.DB));
+  // The reader's own language first (`x-mt-locale`, threaded in by `UserDO.appEnv`), the stored
+  // preference second. `ownerLocale` alone answered "uk" for everyone who never opened Settings —
+  // including every demo visitor, whose whole screen is English.
+  c.set("locale", c.env.UI_LOCALE ?? await ownerLocale(c.env.DB));
   await next();
 });
 
@@ -53,13 +59,16 @@ api.route("/", advisor);
 api.route("/", analytics);
 api.route("/", budgets);
 api.route("/", categories);
+api.route("/", chats);
 api.route("/", dataExport);
 api.route("/", events);
+api.route("/", feedback);
 api.route("/", goals);
 api.route("/", jobs);
 api.route("/", knowledge);
 api.route("/", notifications);
 api.route("/", planned);
+api.route("/", push);
 api.route("/", reports);
 api.route("/", settings);
 api.route("/", transactions);
