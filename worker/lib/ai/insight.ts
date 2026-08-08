@@ -8,7 +8,7 @@ import { callHaikuJson } from "./json.ts";
 import { replyLangDirective } from "./prompt.ts";
 import { getTaskModel } from "./models.ts";
 import type { AnthropicContentBlock } from "./ai.ts";
-import type { AiFact } from "./tasks.ts";
+import type { AiFact } from "./generate.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 
@@ -28,17 +28,19 @@ export async function generateInsight(
     {
       type: "text",
       text:
-        "Ти — фінансовий асистент. На основі агрегованих чисел за період (period_label) склади короткий інсайт " +
-        "українською. КОНТЕКСТ у payload: user_profile (реальна ситуація — поважай її, не радь «по книжці»), " +
-        "top_anomalies (найбільші зміни сум проти минулого періоду, delta_uah від'ємний = витрати зросли), " +
-        "by_importance (essential/discretionary/optional — де можна різати), recurring_vs_oneoff (розділяй звичний " +
-        "місячний ритм від разових викидів — top_oneoff це разові, як податки чи стоматолог; НЕ називай їх " +
-        "регулярними і НЕ проєктуй їх у майбутнє). Враховуй user_notes — якщо користувач пояснив разову витрату, " +
-        "не називай її регулярною. Не вигадуй порад, яких не підтверджують числа. " +
-        "Відповідай ВИКЛЮЧНО валідним JSON без markdown: {headline (1 речення — головне за період), " +
-        "facts:[{label, amount (грн число або null), category (назва або null), delta_pct (зміна проти минулого " +
-        "періоду, число +/- або null), tone ('pos'|'neg'|'neutral')}] (2-5 фактів — куди пішло найбільше, помітні " +
-        "зміни, аномалії, розподіл за вагомістю), note (1 коротка конкретна порада або null)}. Суми — у гривнях." +
+        "You are a financial assistant. From the aggregated figures for the period (period_label), write a short " +
+        "insight. CONTEXT in the payload: user_profile (the real situation — respect it, do not advise \"by the " +
+        "book\"), top_anomalies (the largest changes against the previous period; a negative delta_uah means " +
+        "spending rose), by_importance (essential/discretionary/optional — where cutting is possible), " +
+        "recurring_vs_oneoff (separate the usual monthly rhythm from one-off spikes — top_oneoff are the one-offs, " +
+        "like taxes or a dentist; do NOT call them recurring and do NOT project them forward). Take user_notes into " +
+        "account — if the user explained a one-off expense, do not call it recurring. Do not invent advice the " +
+        "numbers do not support. " +
+        "Answer with VALID JSON ONLY, no markdown: {headline (1 sentence — the main thing about the period), " +
+        "facts:[{label, amount (UAH number or null), category (name or null), delta_pct (change against the previous " +
+        "period, +/- number or null), tone ('pos'|'neg'|'neutral')}] (2-5 facts — where most went, notable changes, " +
+        "anomalies, the split by importance), note (one short concrete piece of advice, or null)}. Amounts in " +
+        "hryvnia." +
         (await replyLangDirective(env)),
     },
   ];
@@ -46,8 +48,8 @@ export async function generateInsight(
 }
 import { getState, setState } from "../finance/repo.ts";
 import { getRates } from "../finance/finance.ts";
-import { st } from "../platform/i18n.ts";
-import { ownerLocale } from "../finance/categories-i18n.ts";
+import { st, resolveLocale } from "../platform/i18n.ts";
+import { catNameSql } from "../finance/categories-i18n.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "../finance/stats.ts";
 
 const DAY = 86400;
@@ -76,13 +78,13 @@ async function resolvePeriodDays(env: Env, override?: number): Promise<number> {
 
 // Канонічна розбивка по ефективній категорії, зведено в ₴ (як Статистика/репорти).
 async function spendByCategory(env: Env, from: number, to: number, mult: string) {
+  const loc = await resolveLocale(env);
   const r = await env.DB.prepare(
-    `SELECT ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
+    `SELECT ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${amountSum(mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 8`,
   ).bind(from, to).all<{ name: string; spent: number; n: number }>();
-  const loc = await ownerLocale(env.DB);
   return (r.results ?? []).map((x) => ({ name: x.name ?? st(loc, "uncategorized"), spent: x.spent / 100, n: x.n }));
 }
 
@@ -125,7 +127,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
   ]);
 
   const totalUAH = (totalRow?.total ?? 0) / 100;
-  const loc = await ownerLocale(env.DB);
+  const loc = await resolveLocale(env);
   const label = days === 7 ? st(loc, "insightWeek") : days === 30 ? st(loc, "insightMonth") : st(loc, "insightDays", { n: days });
   const base = { generated_at: now, period_from: from, period_to: now, period_days: days };
 
@@ -146,7 +148,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
     const payload = {
       period_label: label,
       total_uah_this_period: Math.round(totalUAH),
-      user_profile: profile || "(не вказано)",
+      user_profile: profile || "(not specified)",
       by_category_this_period: thisWeek,
       by_category_prev_period: prevWeek,
       top_anomalies: anomalies,
@@ -166,7 +168,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
       logUsage("insight", usage);
       stored = { ...base, text, structured: result, usage: briefUsage(usage) };
     } catch (e) {
-      stored = { ...base, text: `Не вдалося згенерувати інсайт: ${String(e)}`, empty: true };
+      stored = { ...base, text: st(loc, "insightFailed", { error: String(e) }), empty: true };
     }
   }
 

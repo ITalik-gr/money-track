@@ -49,7 +49,10 @@ const EXCEPTIONS = {
   // 1120 → 1080 (2026-08-07): streaming pushed the file over its allowance, and instead of
   // raising the number the §A1 facts CRUD moved to `lib/ai/facts.ts` — where it belonged anyway,
   // since it is plain CRUD with no advice logic in it. Second time C3 has forced that call.
-  "worker/lib/ai/advisor.ts": 1080,
+  // 2026-08-08: 1080 → 909 after the chat's TOOLS moved to `lib/ai/chat-tools.ts`. The ratchet
+  // did its job — English prompts are longer than the Ukrainian they replaced, the file hit the
+  // ceiling, and the answer was a seam rather than a bigger number.
+  "worker/lib/ai/advisor.ts": 909,
   // The notification centre: one drafting function per event kind, plus the Telegram push.
   "worker/lib/messaging/notify.ts": 1000,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says

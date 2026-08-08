@@ -5,8 +5,7 @@ import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { parseText } from "../lib/ai/enrich.ts";
 import { ingestReceipt } from "../lib/ai/receipt.ts";
-import { st } from "../lib/platform/i18n.ts";
-import { ownerLocale } from "../lib/finance/categories-i18n.ts";
+import { st, resolveLocale } from "../lib/platform/i18n.ts";
 import { countReceiptUpload, DAILY_RECEIPTS } from "../lib/platform/quota.ts";
 
 export const ingest = new Hono<{ Bindings: Env }>();
@@ -15,7 +14,7 @@ const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_TEXT_CHARS = 4000; // a hand-typed expense note; anything longer is a paste-bomb
 
 async function requireKey(env: Env): Promise<string | null> {
-  return env.ANTHROPIC_API_KEY ? null : st(await ownerLocale(env.DB), "errAiKeyMissing");
+  return env.ANTHROPIC_API_KEY ? null : st(await resolveLocale(env), "errAiKeyMissing");
 }
 
 ingest.post("/receipt", async (c) => {
@@ -37,7 +36,7 @@ ingest.post("/receipt", async (c) => {
   const quota = await countReceiptUpload(c.env);
   if (!quota.ok) {
     return c.json(
-      { error: st(await ownerLocale(c.env.DB), "errReceiptQuota", { n: String(DAILY_RECEIPTS) }) },
+      { error: st(await resolveLocale(c.env), "errReceiptQuota", { n: String(DAILY_RECEIPTS) }) },
       429,
       { "retry-after": "3600" },
     );

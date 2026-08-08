@@ -256,7 +256,7 @@ export class UserDO extends DurableObject<Env> {
    * sandbox rather than doubling the data. The Worker addresses demo objects by the `demo:`-
    * prefixed name, which keeps them physically disjoint from real users' objects.
    */
-  async seedDemo(nowSec: number): Promise<{ seeded: boolean; statements: number }> {
+  async seedDemo(nowSec: number, userId?: string): Promise<{ seeded: boolean; statements: number }> {
     const existing = await this.db.prepare("SELECT COUNT(*) AS n FROM transactions").first<{ n: number }>();
     if ((existing?.n ?? 0) > 0) return { seeded: false, statements: 0 };
 
@@ -268,6 +268,11 @@ export class UserDO extends DurableObject<Env> {
     const expiresAt = nowSec + 24 * 3600;
     // The marker doubles as "this is a demo object" for `alarm()` — a real user never has it.
     await setState(this.db, "demo_expires_at", String(expiresAt));
+    // Remembered for the same reason `is_owner` is: the alarm runs with no request and therefore
+    // no `x-mt-user` header, but the spend caps read `env.USER_ID` (`isDemoEnv` matches the
+    // `demo:` prefix). An alarm that could not name itself as a demo would run the demo's own AI
+    // job WITHOUT `demoClamp` or `demoAiGate` — on the platform key, with no ceiling.
+    if (userId) await setState(this.db, "demo_user_id", userId);
     await this.armAlarm();
     return { seeded: true, statements: stmts.length };
   }
@@ -323,14 +328,33 @@ export class UserDO extends DurableObject<Env> {
 
   override async alarm(): Promise<void> {
     const now = Date.now();
-    // A demo sandbox's alarm is its 24h self-destruct and nothing else: it has no mono token to
-    // backfill, and §A6 jobs run inline there (the demo output cap makes a queue pointless).
-    // Distinguished by the marker `seedDemo` wrote; real users never have it.
+    // A demo sandbox has no mono token, so its alarm is the 24h self-destruct plus whatever AI job
+    // was left behind. Distinguished by the marker `seedDemo` wrote; real users never have it.
+    //
+    // ⚠️ The job pass is NOT skipped here any more. It used to be, on the grounds that a demo runs
+    // its jobs inline inside the request — but that makes the request the only executor, so a tab
+    // closed or backgrounded mid-generation stranded the row with nobody to finish it. The alarm is
+    // the object's scheduler (§A6); a demo having one claimant less is not a reason for it to be a
+    // different scheduler.
     const { getState, setState } = await import("../lib/finance/repo.ts");
     const demoExpires = await getState(this.db, "demo_expires_at");
     if (demoExpires != null) {
-      if (now / 1000 >= Number(demoExpires)) await this.reset(); // wipe back to empty schema
-      else await this.armAlarm();
+      if (now / 1000 >= Number(demoExpires)) {
+        await this.reset(); // wipe back to empty schema
+        return;
+      }
+      try {
+        // `demo:` prefix or nothing: `isDemoEnv` keys the spend caps off it, and a sandbox that
+        // failed to identify itself must not be the one case that runs uncapped. Sandboxes seeded
+        // before `demo_user_id` existed fall back to a placeholder that still carries the prefix —
+        // the id itself is only used for R2 receipt keys, which no alarm ever writes.
+        const demoUser = (await getState(this.db, "demo_user_id")) ?? "demo:unknown";
+        const { runNextJob } = await import("../lib/ai/jobs.ts");
+        await runNextJob(await this.appEnv(demoUser));
+      } catch (e) {
+        console.error("[jobs] demo alarm pass failed:", e instanceof Error ? e.message : String(e));
+      }
+      await this.armAlarm();
       return;
     }
 

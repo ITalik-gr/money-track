@@ -25,7 +25,7 @@ export async function parseText(
 ): Promise<{ result: TextResult; usage: AnthropicUsage }> {
   const system = await buildSystemPrefix(
     env,
-    "розпарсити швидкий текстовий запис витрати у JSON {merchant, amount, currency, category_guess (id або null), note}",
+    "parse a quick free-text expense note into JSON {merchant, amount, currency, category_guess (id or null), note}",
   );
   return callHaikuJson<TextResult>(env, system, [{ type: "text", text: input }]);
 }
@@ -52,29 +52,33 @@ export async function enrichTransaction(
 ): Promise<{ result: EnrichResult; usage: AnthropicUsage }> {
   const system = await buildSystemPrefix(
     env,
-    "визначити суть банківської транзакції за сирими полями і повернути JSON " +
-      "{clean_name (людська назва бренду), category_id (id основної категорії або null), " +
+    "work out what a bank transaction actually is from its raw fields and return JSON " +
+      "{clean_name (the human-readable brand name), category_id (id of the main category, or null), " +
       // Промт цілком українською, тож модель за інерцією «олюднювала» латиницю в кирилицю:
       // «SILPO» приїжджало як «Силпо». Назва мерчанта — це ім'я власне й ключ, за яким
       // сходяться merchant_alias/консенсус/сторінка мерчанта, тож транслітерація ще й дробить
       // історію одного магазину на два різні написання.
-      "⚠️ clean_name — ІМʼЯ ВЛАСНЕ: зберігай написання бренду з raw_description, НЕ транслітеруй " +
-      "і НЕ перекладай (SILPO → «Silpo», НЕ «Силпо»; NOVUS → «Novus»). Якщо в описі назва вже " +
-      "кирилицею — лишай кирилицею. Прибирай лише банківський шум: номери терміналів, міста, коди. " +
-      "kind ('expense'|'income'|'transfer'|'withdrawal'; transfer=переказ між своїми рахунками/округлення, " +
-      "withdrawal=зняття готівки), tag_ids (масив 0-3 id вторинних категорій), note (короткий здогад або null)}. " +
-      "ПРІОРИТЕТ №1 — user_note: якщо користувач прямо написав, що це (напр. «це відпочинок», «подарунок», " +
-      "«це Розваги», «це моя зарплата»), став саме ту категорію, яку він має на увазі (враховуй синоніми: відпочинок/дозвілля→Розваги, " +
-      "їжа→Продукти тощо). ПРІОРИТЕТ №2 — current_category: якщо користувач уже вручну обрав категорію, НЕ перетирай " +
-      "її на «Інше» без вагомих підстав із полів; лишай як є або уточнюй у її межах. " +
-      "НАДХОДЖЕННЯ (sign=надходження): вхідний переказ від приватної особи (навіть без магазину/MCC 4829) — це НЕ " +
-      "автоматично «Подарунок». Якщо користувач каже (в user_note чи профілі), що це його зарплата / дохід / вивід " +
-      "власних коштів (напр. вивів криптозарплату через P2P) — став «Зарплата» або відповідний дохід, а не «Подарунок». " +
-      "«Подарунок» лише коли справді схоже на дарунок і немає інших вказівок. " +
-      "Якщо є user_profile — це опис користувача та його ситуації; використовуй для контексту (напр. фрилансер → " +
-      "деякі списання це податки/робочі витрати). Якщо є merchant_history — раніше користувач класифікував цього " +
-      "мерчанта; узгоджуйся, якщо не суперечить вище. Якщо є known_subscriptions — це оголошені користувачем " +
-      "регулярні підписки зі схожою назвою; коли операція скидається на списання такої підписки, став саме ту категорію." +
+      "⚠️ clean_name is a PROPER NOUN: keep the brand exactly as spelled in raw_description, do NOT transliterate " +
+      "and do NOT translate it (SILPO → \"Silpo\", NOT \"Силпо\"; NOVUS → \"Novus\"). If the description already " +
+      "spells the name in Cyrillic, leave it in Cyrillic. Strip only bank noise: terminal numbers, cities, codes. " +
+      "kind ('expense'|'income'|'transfer'|'withdrawal'; transfer = a move between the user's own accounts or a " +
+      "round-up, withdrawal = a cash withdrawal), tag_ids (an array of 0-3 secondary category ids), note (a short " +
+      "guess, or null)}. " +
+      "PRIORITY 1 — user_note: if the user stated outright what this is (\"this was leisure\", \"a gift\", \"this is " +
+      "entertainment\", \"this is my salary\"), set exactly the category they mean, matching by meaning rather than " +
+      "by exact wording (leisure or fun → the entertainment category, food → the groceries category, and so on). " +
+      "PRIORITY 2 — current_category: if the user already picked a category by hand, do NOT overwrite it with the " +
+      "catch-all \"other\" category without strong grounds in the fields; leave it, or refine within it. " +
+      "INCOME (sign=income): an incoming transfer from a private individual — even with no shop and MCC 4829 — is NOT " +
+      "automatically a gift. If the user says (in user_note or their profile) that this is their salary, earnings " +
+      "or a withdrawal of their own money (e.g. moving a crypto salary out via P2P), set the salary category or the " +
+      "matching income category, not the gift one. Use the gift category only when it genuinely looks like a gift " +
+      "and nothing indicates otherwise. " +
+      "If user_profile is present, it describes the user and their situation; use it as context (a freelancer, say, " +
+      "will have charges that are taxes or work expenses). If merchant_history is present, the user has classified " +
+      "this merchant before; agree with it unless it contradicts the above. If known_subscriptions is present, those " +
+      "are recurring payments the user declared with a similar name; when an operation looks like a charge for one " +
+      "of them, set exactly that category." +
       // §LANG (2026-08-08): `note` — ЄДИНЕ поле цього виводу, яке читає людина (воно лягає в
       // `transactions.ai_note` і показується в деталях операції). Решта — структура: id категорій,
       // `kind`, і `clean_name`, що є ІМЕНЕМ ВЛАСНИМ і не перекладається ніколи. Тому директива тут
@@ -92,7 +96,7 @@ export async function enrichTransaction(
     mcc: tx.mcc,
     amount: amountMajor,
     currency_code: tx.currency_code,
-    sign: tx.amount < 0 ? "витрата" : "надходження",
+    sign: tx.amount < 0 ? "expense" : "income",
     merchant_history: tx.history ?? null,
     user_note: tx.user_note ?? null,
     current_category: tx.current_category ?? null,
@@ -104,7 +108,7 @@ export async function enrichTransaction(
   // плутає «зарплату/вивід» з «подарунком»). Масовий/авто-enrich без нотатки лишається на дешевому Haiku.
   const model = tx.user_note?.trim() ? MODEL_SMART : MODEL_FAST;
   return callHaikuJson<EnrichResult>(env, system, [
-    { type: "text", text: `Проаналізуй транзакцію і поверни лише JSON:\n${JSON.stringify(payload)}` },
+    { type: "text", text: `Analyse the transaction and return JSON only:\n${JSON.stringify(payload)}` },
   ], 1024, model);
 }
 
@@ -125,14 +129,15 @@ export async function proposeTransferCategory(
 ): Promise<{ result: TransferCategoryResult; usage: AnthropicUsage }> {
   const system = await buildSystemPrefix(
     env,
-    "це операція-переказ або зняття готівки. Визнач РЕАЛЬНУ категорію витрати — на що кошти " +
-      "пішли насправді (зняв готівку → найімовірніша побутова категорія на кшталт «Продукти» чи «Інше»; " +
-      "переказ конкретному сервісу/людині за товар/послугу → відповідна категорія). Поверни JSON " +
-      "{real_category_id (id основної категорії-витрати або null), note (короткий здогад укр. або null), " +
-      "confidence ('high' якщо впевнений; 'low' якщо це радше здогад і варто перепитати користувача)}. " +
-      "Якщо це справжній рух власних коштів між своїми рахунками/банками/округлення — real_category_id = null. " +
-      "Якщо є user_hint — це уточнення користувача саме про цю операцію; довіряй йому найбільше. " +
-      "Якщо є merchant_history — узгоджуйся з ним.",
+    "this operation is a transfer or a cash withdrawal. Work out the REAL spending category — what the money " +
+      "actually went on (cash withdrawn → the most likely everyday category, such as groceries or the catch-all " +
+      "\"other\"; a transfer to a specific service or person for goods or a service → the matching category). Return " +
+      "JSON {real_category_id (id of the main expense category, or null), note (a short guess, or null), " +
+      "confidence ('high' when you are sure; 'low' when this is more of a guess and the user is worth asking)}. " +
+      "If this really is the user's own money moving between their own accounts or jars, or a round-up, then " +
+      "real_category_id = null. " +
+      "If user_hint is present, it is the user's own clarification about this very operation; trust it most. " +
+      "If merchant_history is present, agree with it.",
   );
   const payload = {
     raw_description: tx.merchant,
@@ -144,7 +149,7 @@ export async function proposeTransferCategory(
     user_hint: tx.hint ?? null,
   };
   return callHaikuJson<TransferCategoryResult>(env, system, [
-    { type: "text", text: `Проаналізуй операцію і поверни лише JSON:\n${JSON.stringify(payload)}` },
+    { type: "text", text: `Analyse the operation and return JSON only:\n${JSON.stringify(payload)}` },
   ], 1024, model);
 }
 import { MODEL_SMART, MODEL_FAST } from "./models.ts";
@@ -264,7 +269,7 @@ async function merchantHistory(env: Env, tx: TxRow): Promise<string | null> {
      WHERE t.merchant = ? AND t.id != ? AND t.category_id IS NOT NULL
      GROUP BY t.category_id ORDER BY n DESC LIMIT 1`,
   ).bind(tx.merchant, tx.id).first<{ name: string; n: number }>();
-  return row ? `раніше «${tx.merchant}» відносили до «${row.name}» (${row.n}×)` : null;
+  return row ? `"${tx.merchant}" was previously classified as "${row.name}" (${row.n}×)` : null;
 }
 
 async function applyEnrichment(
@@ -288,7 +293,7 @@ async function applyEnrichment(
       // §R7: якщо назву зафіксовано вручну (name_locked) — не перетираємо мерчант, лише категорію.
       await env.DB.prepare(
         "UPDATE transactions SET merchant = CASE WHEN name_locked = 1 THEN merchant ELSE ? END, category_id = ?, ai_note = ?, ai_enriched = 1 WHERE id = ?",
-      ).bind(name, hit.category_id, `категорію визначено за історією (${hit.n}× той самий мерчант)`, tx.id).run();
+      ).bind(name, hit.category_id, `category resolved from history (${hit.n}× the same merchant)`, tx.id).run();
       // Навчаємо alias на точному сирому описі — наступний ідентичний піде миттєво (не чіпаючи ручні).
       if (tx.source === "mono" && rawDesc) await writeAiAlias(env, rawDesc, name, hit.category_id, 0);
       return;
@@ -366,7 +371,7 @@ async function realCategoryHistory(env: Env, tx: TxRow): Promise<string | null> 
      WHERE t.merchant = ? AND t.id != ? AND t.real_category_id IS NOT NULL
      GROUP BY t.real_category_id ORDER BY n DESC LIMIT 1`,
   ).bind(tx.merchant, tx.id).first<{ name: string; n: number }>();
-  return row ? `раніше схожий переказ «${tx.merchant}» відносили до «${row.name}» (${row.n}×)` : null;
+  return row ? `a similar transfer "${tx.merchant}" was previously classified as "${row.name}" (${row.n}×)` : null;
 }
 
 // Навчений alias уже несе реальну категорію переказу? (сирий опис, потім mcc).

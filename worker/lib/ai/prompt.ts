@@ -14,7 +14,8 @@
 //    in RUSSIAN — a third Slavic language that broke neither instruction literally. Hence the two
 //    modes below, and the explicit ban stated in BOTH of them.
 import type { Env } from "../../env.ts";
-import { getState } from "../finance/repo.ts";
+import { resolveLocale } from "../platform/i18n.ts";
+import { catNameSql } from "../finance/categories-i18n.ts";
 import type { AnthropicContentBlock } from "./ai.ts";
 
 
@@ -26,19 +27,25 @@ import type { AnthropicContentBlock } from "./ai.ts";
 // СТАБІЛЬНИЙ гайд (CACHE_GUIDE, також покращує якість) з cache_control, щоб перетнути
 // поріг. Поодинокі/інтерактивні виклики лишаємо «лін» (без кешу — малий префікс дешевий).
 export async function buildSystemPrefix(env: Env, task: string, cached = false): Promise<AnthropicContentBlock[]> {
+  // The taxonomy is DATA, and it arrives in the reader's language — the same names the screen
+  // shows and the same names the model is expected to hand back in `clean_name`/`category`.
+  // Selecting the raw stored name here would have shown «Продукти» to a reader who sees
+  // "Groceries", which is how one concept ends up with two resolutions (see `collectFinanceSnapshot`).
+  const loc = await resolveLocale(env);
   const cats = await env.DB.prepare(
-    "SELECT id, name, is_income FROM categories ORDER BY is_income, id",
+    `SELECT id, ${catNameSql(loc, "name")} AS name, is_income FROM categories ORDER BY is_income, id`,
   ).all<{ id: number; name: string; is_income: number }>();
   const taxonomy = (cats.results ?? [])
-    .map((c) => `${c.id}: ${c.name}${c.is_income ? " (дохід)" : ""}`)
+    .map((c) => `${c.id}: ${c.name}${c.is_income ? " (income)" : ""}`)
     .join("\n");
 
   const head: AnthropicContentBlock = {
     type: "text",
     text:
-      "Ти — асистент персонального фінансового трекера. Відповідаєш ВИКЛЮЧНО валідним JSON, " +
-      "без пояснень і без markdown-огорожі. Суми — числом у валюті чека/тексту (не в копійках). " +
-      `Задача: ${task}.\n\nДоступні категорії (id: назва):\n${taxonomy}`,
+      "You are the assistant of a personal finance tracker. You answer with VALID JSON ONLY — no " +
+      "explanation, no markdown fence. Amounts are numbers in the currency of the receipt or text " +
+      "(not in minor units). " +
+      `Task: ${task}.\n\nAvailable categories (id: name):\n${taxonomy}`,
   };
 
   if (cached) {
@@ -49,108 +56,119 @@ export async function buildSystemPrefix(env: Env, task: string, cached = false):
   return [head, { type: "text", text: FEW_SHOT }];
 }
 
-const FEW_SHOT = `Приклади якісної категоризації (обирай category_id з переліку вище):
-- "кава 45 аромакава" -> напій у кавʼярні -> Кафе і ресторани
-- "АТБ 247.30" -> продуктовий магазин -> Продукти
-- "uber 120" -> поїздка -> Транспорт
-- "netflix 199" -> підписка на сервіс -> Підписки
-- "аптека 89" -> ліки -> Здоровʼя
-- "нова пошта 70" -> доставка -> Інше
-- "wog 900" -> заправка -> Транспорт
-- "сільпо 512" -> продукти -> Продукти
-Якщо категорія неясна — став category_guess у найближчу, не вигадуй нову.`;
+// ⚠️ The merchant strings stay exactly as they are: they are DATA — real descriptions as they
+// arrive from the bank, in the alphabet the bank writes them in. Only the instructions around
+// them are English. Category ids are named rather than quoted, because the taxonomy above now
+// arrives in the reader's language and a hardcoded «Продукти» would name nothing on an English
+// screen. `id` is the stable thing here, so the id is what the examples point at.
+const FEW_SHOT = `Examples of good categorisation (pick category_id from the list above; the ids
+named here are the seed ones and may differ — always match by meaning against the list):
+- "кава 45 аромакава" -> a drink at a coffee shop -> the cafés & restaurants category (2)
+- "АТБ 247.30" -> a grocery shop -> the groceries category (1)
+- "uber 120" -> a ride -> the transport category (3)
+- "netflix 199" -> a service subscription -> the subscriptions category (12)
+- "аптека 89" -> medicine -> the health category (4)
+- "нова пошта 70" -> a delivery -> the catch-all other category (14)
+- "wog 900" -> refuelling -> the transport category (3)
+- "сільпо 512" -> groceries -> the groceries category (1)
+If the category is unclear, set category_guess to the nearest one; never invent a new category.`;
 
-// Великий СТАБІЛЬНИЙ гайд для кешованого префікса (cached=true у buildSystemPrefix).
-// Дві мети: (1) перетнути мінімум кешу Haiku (4096 тк), щоб масовий enrich читав кеш;
-// (2) реально підняти якість категоризації (детальні підказки + багато прикладів UA-мерчантів).
-// Тримати стабільним (будь-яка зміна інвалідує кеш) — правити лише свідомо.
-const CACHE_GUIDE = `ДЕТАЛЬНИЙ ГАЙД ПО КАТЕГОРІЯХ (обирай найточніший id; підкатегорії можна, вони згортаються в батька):
+// The large STABLE guide for the cached prefix (cached=true in buildSystemPrefix).
+// Two purposes: (1) cross Haiku's 4096-token cache minimum so bulk enrich reads from cache;
+// (2) genuinely improve categorisation (detailed hints plus many real Ukrainian merchants).
+// Keep it stable — any edit invalidates the cache, so change it only deliberately.
+//
+// ⚠️ MERCHANT NAMES ARE DATA and stay exactly as written, in whatever alphabet the bank uses:
+// they are matched against real descriptions. Categories are anchored by ID rather than by name,
+// because the taxonomy in `buildSystemPrefix` now arrives in the reader's language — a hardcoded
+// «Продукти» would name nothing on an English screen.
+const CACHE_GUIDE = `DETAILED CATEGORY GUIDE (pick the most precise id; subcategories are fine, they roll up into the parent). Category names below are the seed labels for orientation only — always resolve against the id list in the task prompt.
 
-ВИТРАТИ — основні категорії та коли їх обирати:
-- Продукти (1): будь-які продуктові магазини й супермаркети. Підкатегорії: Супермаркет (30) — АТБ, Сільпо, Ашан, Novus, Metro, Varus, Fora, Таврія; Ринок (31) — стихійні ринки, «базар», овочі/фрукти з рук. Якщо це мережевий супермаркет — Супермаркет (30); дрібний магазин біля дому — Продукти (1).
-- Кафе і ресторани (2): їжа й напої поза домом. Підкатегорії: Кава (32) — кавʼярні, «coffee», аромакава, Blur, Львівська майстерня кави, стакан кави на виніс; Ресторани (33) — повноцінні заклади, обід/вечеря, McDonald's, KFC, суші, піцерія; Доставка їжі (34) — Glovo, Bolt Food, Rocket, Menu, замовлення їжі додому. Барна вечеря/алкоголь у закладі — Ресторани (33).
-- Транспорт (3): пересування. Підкатегорії: Таксі (35) — Uber, Bolt, Uklon, Opti; Пальне (36) — WOG, OKKO, UPG, SOCAR, Shell, АЗС, заправка; Громадський (37) — метро, автобус, маршрутка, тролейбус, е-квиток, поповнення транспортної картки. Каршеринг/оренда авто — Транспорт (3). Нова пошта/Укрпошта — це доставка → Інше (14), а не Транспорт.
-- Здоровʼя (4): медицина. Підкатегорії: Аптека (40) — аптеки, ліки, «pharmacy», Аптека доброго дня, Подорожник, ANC; Лікар (41) — клініки, аналізи, стоматолог, Dobrobut, Сінево, Медіком, консультації. Оптика/окуляри — Здоровʼя (4).
-- Одяг і взуття (5): одяг, взуття, аксесуари — Zara, H&M, Reserved, Intertop, LC Waikiki, Sinsay, взуття, сумки.
-- Розваги (6): дозвілля. Підкатегорії: Кіно (38) — кінотеатри, Multiplex, Планета Кіно, квитки на фільм; Ігри (39) — Steam, PlayStation, Xbox, ігрові покупки, донат у грі. Концерти, боулінг, квести, бар «просто випити» — Розваги (6).
-- Комуналка і звʼязок (7): комунальні, інтернет, мобільний — Київстар, Vodafone, lifecell, ОТ «Київенерго», газ, вода, світло, ОСББ, домофон, Ланет, Воля, інтернет-провайдер.
-- Дім і побут (8): товари для дому, госптовари, меблі, ремонт, побутова хімія — JYSK, IKEA, Епіцентр, Нова лінія, Comfy (для дому), декор, посуд, лампочки, засоби для прибирання.
-- Електроніка (9): гаджети й техніка — Rozetka, Comfy, Foxtrot, Allo, Apple, телефон, ноутбук, навушники, зарядка, аксесуари до техніки.
-- Краса і догляд (10): б'юті — перукар, барбершоп, манікюр, косметика, EVA, Watsons, Prostor, парфуми, spa, косметолог.
-- Подорожі (11): поїздки — авіаквитки, готелі, Booking, Airbnb, hostel, потяг Укрзалізниця (міжміський), тури, оренда житла в іншому місті.
-- Підписки (12): регулярні цифрові платежі. Підкатегорії: Стрімінги (42) — Netflix, Spotify, YouTube Premium, MEGOGO, Apple Music, Disney+; Софт і хмара (43) — Anthropic, OpenAI/ChatGPT, Claude, Cloudflare, GitHub, Google One, iCloud, Adobe, Notion, хостинг, домен, VPN. Регулярний однаковий платіж сервісу → Підписки (12).
-- Освіта (19): навчання — курси, Prometheus, Coursera, Udemy, репетитор, книги для навчання, університет, мовна школа, воркшопи.
-- Діти (20): дитячі витрати — іграшки, дитячий одяг, садок, гуртки, памперси, дитяче харчування, Antoshka.
-- Тварини (21): улюбленці — зоомагазин, корм, ветеринар, Masterzoo, засоби для тварин.
-- Спорт і фітнес (22): спорт — абонемент у зал, Sport Life, спортивне харчування, Decathlon, інвентар, басейн, йога.
-- Подарунки (23): подарунки іншим — квіти, сувеніри, подарункові набори, «на день народження».
-- Податки (24): податки й держзбори. Підкатегорії: Єдиний податок (25) — ЄП ФОП; ЄСВ (26) — єдиний соцвнесок; Військовий збір (27); ПДФО (28) — податок з доходів. «Сплата податку», «ЄП», «ЄСВ», казначейство, ДПС — сюди.
-- Дім і побут vs Електроніка: побутова техніка для дому (пилосос, чайник) — залежно від контексту, дрібне для дому → Дім і побут (8), гаджети → Електроніка (9).
-- Перекази і зняття (13): зняття готівки в банкоматі, перекази на картку/між своїми, поповнення банки, card-to-card. НЕ вгадуй тут реальну категорію в основному полі — лишай бакет 13.
-- Інше (14): доставка (Нова пошта, Укрпошта, Meest), пошта, не класифіковане, разові дрібниці без явної категорії, штрафи, комісії банку.
+EXPENSES — the main categories and when to choose them:
+- Groceries (1): any grocery shop or supermarket. Subcategories: Supermarket (30) — АТБ, Сільпо, Ашан, Novus, Metro, Varus, Fora, Таврія; Market (31) — open-air markets, «базар», produce bought from a stall. A supermarket chain goes to Supermarket (30); a small corner shop to Groceries (1).
+- Cafés & restaurants (2): food and drink away from home. Subcategories: Coffee (32) — coffee shops, «coffee», аромакава, Blur, Львівська майстерня кави, a takeaway cup; Restaurants (33) — full venues, lunch or dinner, McDonald's, KFC, sushi, pizzerias; Food delivery (34) — Glovo, Bolt Food, Rocket, Menu, food ordered to the door. A bar meal or alcohol at a venue goes to Restaurants (33).
+- Transport (3): getting around. Subcategories: Taxi (35) — Uber, Bolt, Uklon, Opti; Fuel (36) — WOG, OKKO, UPG, SOCAR, Shell, АЗС, refuelling; Public transport (37) — metro, bus, маршрутка, trolleybus, e-ticket, topping up a transit card. Car sharing and car rental go to Transport (3). Нова пошта and Укрпошта are delivery → Other (14), not Transport.
+- Health (4): medicine. Subcategories: Pharmacy (40) — pharmacies, medication, «pharmacy», Аптека доброго дня, Подорожник, ANC; Doctor (41) — clinics, lab tests, dentists, Dobrobut, Сінево, Медіком, consultations. Optics and glasses go to Health (4).
+- Clothing & shoes (5): clothes, footwear, accessories — Zara, H&M, Reserved, Intertop, LC Waikiki, Sinsay, shoes, bags.
+- Entertainment (6): leisure. Subcategories: Cinema (38) — cinemas, Multiplex, Планета Кіно, film tickets; Games (39) — Steam, PlayStation, Xbox, in-game purchases, game donations. Concerts, bowling, escape rooms and a bar visit for drinks alone go to Entertainment (6).
+- Utilities & connectivity (7): utilities, internet, mobile — Київстар, Vodafone, lifecell, Київенерго, gas, water, electricity, ОСББ, intercom, Ланет, Воля, internet providers.
+- Home & household (8): household goods, hardware, furniture, repairs, cleaning products — JYSK, IKEA, Епіцентр, Нова лінія, Comfy (for the home), decor, tableware, light bulbs, cleaning supplies.
+- Electronics (9): gadgets and appliances — Rozetka, Comfy, Foxtrot, Allo, Apple, phones, laptops, headphones, chargers, tech accessories.
+- Beauty & care (10): beauty — hairdresser, barber, manicure, cosmetics, EVA, Watsons, Prostor, perfume, spa, beautician.
+- Travel (11): trips — flights, hotels, Booking, Airbnb, hostels, Укрзалізниця intercity trains, tours, accommodation in another city.
+- Subscriptions (12): recurring digital payments. Subcategories: Streaming (42) — Netflix, Spotify, YouTube Premium, MEGOGO, Apple Music, Disney+; Software & cloud (43) — Anthropic, OpenAI/ChatGPT, Claude, Cloudflare, GitHub, Google One, iCloud, Adobe, Notion, hosting, domains, VPN. A recurring identical payment to a service → Subscriptions (12).
+- Education (19): learning — courses, Prometheus, Coursera, Udemy, tutors, textbooks, university, language schools, workshops.
+- Children (20): children's spending — toys, children's clothes, nursery, clubs, nappies, baby food, Antoshka.
+- Pets (21): pets — pet shops, food, vets, Masterzoo, pet supplies.
+- Sports & fitness (22): sport — gym membership, Sport Life, sports nutrition, Decathlon, equipment, swimming pool, yoga.
+- Gifts (23): gifts for others — flowers, souvenirs, gift sets, "for a birthday".
+- Taxes (24): taxes and state fees. Subcategories: Single tax (25) — ЄП for sole proprietors; Social contribution (26) — ЄСВ; Military levy (27); Personal income tax (28) — ПДФО. «Сплата податку», «ЄП», «ЄСВ», казначейство and ДПС all belong here.
+- Home & household vs Electronics: household appliances (a vacuum cleaner, a kettle) depend on context — small household items → Home & household (8), gadgets → Electronics (9).
+- Transfers & withdrawals (13): ATM cash withdrawals, transfers to a card or between the user's own accounts, topping up a jar, card-to-card. Do NOT guess the real category in the main field here — leave it in bucket 13.
+- Other (14): delivery (Нова пошта, Укрпошта, Meest), post, unclassified items, one-off odds and ends with no clear category, fines, bank fees.
 
-НАДХОДЖЕННЯ:
-- Зарплата (15): регулярна зарплата, аванс.
-- Фріланс (16): оплата за роботу/послуги, інвойси, Upwork, Deel, Payoneer-виплати за роботу.
-- Повернення (17): повернення коштів, рефанд, скасована покупка.
-- Продаж (44): продаж речей — OLX, Prom, продаж власного майна.
-- Кешбек (45): кешбек банку, бонуси, повернення відсотком.
-- Проценти (46): відсотки на залишок, депозит, нараховані проценти.
-- Подарунок (47): гроші в подарунок, отримані від когось.
-- Інші надходження (18): що не підпадає під інші доходи.
+INCOME:
+- Salary (15): regular salary, advance payment.
+- Freelance (16): payment for work or services, invoices, Upwork, Deel, Payoneer payouts for work.
+- Refund (17): money returned, a refund, a cancelled purchase.
+- Sale (44): selling things — OLX, Prom, selling one's own property.
+- Cashback (45): bank cashback, bonuses, a percentage returned.
+- Interest (46): interest on a balance, deposits, accrued interest.
+- Gift (47): money received as a gift from someone.
+- Other income (18): anything not covered by the other income categories.
 
-БІЛЬШЕ ПРИКЛАДІВ (сирий опис -> міркування -> категорія id):
-- "ATB 320.50" -> супермаркет АТБ -> Супермаркет (30)
-- "SILPO" -> супермаркет Сільпо -> Супермаркет (30)
-- "NOVUS" -> супермаркет -> Супермаркет (30)
-- "WOG 1200" -> заправка пальним -> Пальне (36)
-- "OKKO FUEL" -> заправка -> Пальне (36)
-- "BOLT" -> поїздка таксі -> Таксі (35)
-- "UKLON" -> таксі -> Таксі (35)
-- "GLOVO" -> доставка їжі -> Доставка їжі (34)
-- "BOLT FOOD" -> доставка їжі -> Доставка їжі (34)
-- "MCDONALDS" -> ресторан фастфуд -> Ресторани (33)
-- "KFC" -> фастфуд -> Ресторани (33)
-- "aromakava" -> кавʼярня -> Кава (32)
-- "lviv coffee" -> кавʼярня -> Кава (32)
-- "NETFLIX.COM" -> стрімінг -> Стрімінги (42)
-- "SPOTIFY" -> музика підписка -> Стрімінги (42)
-- "YOUTUBEPREMIUM" -> підписка -> Стрімінги (42)
-- "ANTHROPIC" -> AI-сервіс підписка -> Софт і хмара (43)
-- "OPENAI" -> AI-сервіс -> Софт і хмара (43)
-- "CLOUDFLARE" -> хмара/хостинг -> Софт і хмара (43)
-- "GITHUB" -> dev-сервіс -> Софт і хмара (43)
-- "GOOGLE ONE" -> хмара -> Софт і хмара (43)
-- "APTEKA ANC" -> аптека -> Аптека (40)
-- "SINEVO" -> лабораторія аналізів -> Лікар (41)
-- "DOBROBUT" -> клініка -> Лікар (41)
-- "ROZETKA" -> техніка/маркетплейс -> Електроніка (9)
-- "COMFY" -> техніка -> Електроніка (9)
-- "EPICENTR" -> товари для дому -> Дім і побут (8)
-- "JYSK" -> дім -> Дім і побут (8)
-- "ZARA" -> одяг -> Одяг і взуття (5)
-- "SINSAY" -> одяг -> Одяг і взуття (5)
-- "EVA" -> косметика/догляд -> Краса і догляд (10)
-- "WATSONS" -> догляд -> Краса і догляд (10)
-- "KYIVSTAR" -> мобільний/інтернет -> Комуналка і звʼязок (7)
-- "VODAFONE" -> мобільний -> Комуналка і звʼязок (7)
-- "STEAM" -> ігри -> Ігри (39)
-- "PLAYSTATION" -> ігри -> Ігри (39)
-- "MULTIPLEX" -> кіно -> Кіно (38)
-- "BOOKING.COM" -> готель -> Подорожі (11)
-- "UZ KVYTKY" -> квиток УЗ міжміський -> Подорожі (11)
-- "MASTERZOO" -> зоомагазин -> Тварини (21)
-- "SPORTLIFE" -> спортзал -> Спорт і фітнес (22)
-- "ANTOSHKA" -> дитячі товари -> Діти (20)
-- "PROMETHEUS" -> онлайн-курси -> Освіта (19)
-- "Сплата ЄП" -> єдиний податок -> Єдиний податок (25)
-- "ЄСВ ФОП" -> єдиний соцвнесок -> ЄСВ (26)
-- "Військовий збір" -> податок -> Військовий збір (27)
-- "Нова Пошта" -> доставка -> Інше (14)
-- "Зняття готівки ATM" -> готівка -> Перекази і зняття (13)
-- "Переказ на картку" -> card-to-card -> Перекази і зняття (13)
-- "На банку" -> поповнення власної банки -> Перекази і зняття (13)
-Якщо мерчант нижче невідомий — став найближчу за змістом категорію, не вигадуй нову; при повній неоднозначності — Інше (14).`;
+MORE EXAMPLES (raw description -> reasoning -> category id):
+- "ATB 320.50" -> the АТБ supermarket -> Supermarket (30)
+- "SILPO" -> the Сільпо supermarket -> Supermarket (30)
+- "NOVUS" -> a supermarket -> Supermarket (30)
+- "WOG 1200" -> refuelling -> Fuel (36)
+- "OKKO FUEL" -> refuelling -> Fuel (36)
+- "BOLT" -> a taxi ride -> Taxi (35)
+- "UKLON" -> a taxi -> Taxi (35)
+- "GLOVO" -> food delivery -> Food delivery (34)
+- "BOLT FOOD" -> food delivery -> Food delivery (34)
+- "MCDONALDS" -> fast-food restaurant -> Restaurants (33)
+- "KFC" -> fast food -> Restaurants (33)
+- "aromakava" -> a coffee shop -> Coffee (32)
+- "lviv coffee" -> a coffee shop -> Coffee (32)
+- "NETFLIX.COM" -> streaming -> Streaming (42)
+- "SPOTIFY" -> a music subscription -> Streaming (42)
+- "YOUTUBEPREMIUM" -> a subscription -> Streaming (42)
+- "ANTHROPIC" -> an AI service subscription -> Software & cloud (43)
+- "OPENAI" -> an AI service -> Software & cloud (43)
+- "CLOUDFLARE" -> cloud and hosting -> Software & cloud (43)
+- "GITHUB" -> a developer service -> Software & cloud (43)
+- "GOOGLE ONE" -> cloud storage -> Software & cloud (43)
+- "APTEKA ANC" -> a pharmacy -> Pharmacy (40)
+- "SINEVO" -> a testing laboratory -> Doctor (41)
+- "DOBROBUT" -> a clinic -> Doctor (41)
+- "ROZETKA" -> tech marketplace -> Electronics (9)
+- "COMFY" -> tech -> Electronics (9)
+- "EPICENTR" -> household goods -> Home & household (8)
+- "JYSK" -> home goods -> Home & household (8)
+- "ZARA" -> clothes -> Clothing & shoes (5)
+- "SINSAY" -> clothes -> Clothing & shoes (5)
+- "EVA" -> cosmetics and care -> Beauty & care (10)
+- "WATSONS" -> personal care -> Beauty & care (10)
+- "KYIVSTAR" -> mobile and internet -> Utilities & connectivity (7)
+- "VODAFONE" -> mobile -> Utilities & connectivity (7)
+- "STEAM" -> games -> Games (39)
+- "PLAYSTATION" -> games -> Games (39)
+- "MULTIPLEX" -> cinema -> Cinema (38)
+- "BOOKING.COM" -> a hotel -> Travel (11)
+- "UZ KVYTKY" -> an intercity rail ticket -> Travel (11)
+- "MASTERZOO" -> a pet shop -> Pets (21)
+- "SPORTLIFE" -> a gym -> Sports & fitness (22)
+- "ANTOSHKA" -> children's goods -> Children (20)
+- "PROMETHEUS" -> online courses -> Education (19)
+- "Сплата ЄП" -> the single tax -> Single tax (25)
+- "ЄСВ ФОП" -> the social contribution -> Social contribution (26)
+- "Військовий збір" -> a tax -> Military levy (27)
+- "Нова Пошта" -> delivery -> Other (14)
+- "Зняття готівки ATM" -> cash -> Transfers & withdrawals (13)
+- "Переказ на картку" -> card-to-card -> Transfers & withdrawals (13)
+- "На банку" -> topping up the user's own jar -> Transfers & withdrawals (13)
+If a merchant is unknown, pick the closest category by meaning and never invent a new one; when it is genuinely ambiguous, use Other (14).`;
 
 // P3.4/§12.5: make USER-FACING free-text answers come back in the right language. Structured
 // tasks (enrich/OCR/parse) intentionally do NOT use this — their output is ids, and the numeric
@@ -174,19 +192,25 @@ const NEVER_RUSSIAN =
   "the user writes to you in Russian (in that case answer in Ukrainian).";
 
 export async function replyLangDirective(env: Env, mode: "content" | "conversation" = "content"): Promise<string> {
-  // Same order as `c.get("locale")`: the reader's current language beats the stored preference,
-  // and the stored preference is what cron/Telegram (no request, no header) fall back to.
-  const en = (env.UI_LOCALE ?? (await getState(env.DB, "locale"))) === "en";
+  const en = (await resolveLocale(env)) === "en";
 
   if (mode === "conversation") {
-    return " 🌐 RESPONSE LANGUAGE (overrides any language wording above): reply in the SAME language " +
-      "the user wrote their latest message in — Ukrainian question, Ukrainian answer; English question, " +
-      `English answer. If the message is too short to tell, use ${en ? "English" : "Ukrainian"}. ` +
+    // ⚠️ "the instructions above are written in Ukrainian … that is not a signal" is not padding.
+    // Every prompt around this one is Ukrainian prose, and an English question kept coming back
+    // in Ukrainian: the model read the language of its own instructions as the language of the
+    // job. The prompts no longer NAME a language (that fix is in `tasks.ts`/`report.ts`), but
+    // they are still written in one, so the pull has to be denied out loud.
+    return " 🌐 RESPONSE LANGUAGE (this overrides everything above and is decided per message): reply in " +
+      "the SAME language the user wrote their LATEST message in — Ukrainian question, Ukrainian answer; " +
+      "English question, English answer. The instructions above are written in Ukrainian for internal " +
+      "reasons; that is NOT a signal about the answer's language and must be ignored when choosing it. " +
+      `If the latest message is too short to tell, use ${en ? "English" : "Ukrainian"}. ` +
       "Never mix two languages inside one reply." + NEVER_RUSSIAN;
   }
 
   return (en
-    ? " 🌐 RESPONSE LANGUAGE (overrides any Ukrainian wording above): write EVERYTHING the user reads " +
+    ? " 🌐 RESPONSE LANGUAGE (overrides any Ukrainian wording above — the instructions are written in " +
+      "Ukrainian for internal reasons and say nothing about the answer): write EVERYTHING the user reads " +
       "— headlines, advice, labels, section titles, chart/table captions — in natural English. Keep JSON " +
       "keys and enum values (e.g. 'pos'/'neg', 'info'/'warn') exactly as specified; translate only " +
       "human-readable text. Do NOT reply in Ukrainian."
@@ -203,7 +227,7 @@ export async function replyLangDirective(env: Env, mode: "content" | "conversati
  * purchase. Naming the field is what keeps the rest untouched.
  */
 export async function langNoteDirective(env: Env): Promise<string> {
-  const en = (env.UI_LOCALE ?? (await getState(env.DB, "locale"))) === "en";
+  const en = (await resolveLocale(env)) === "en";
   return en
     ? " 🌐 LANGUAGE: `note` is the only field a human reads — write it in natural English. " +
       "Everything else (ids, `kind`, `clean_name`) is data: leave it exactly as specified, and " +

@@ -14,6 +14,8 @@
 // `stats.ts`). Storing one is a proposal, not an edit — a model-authored guess must never silently
 // change what the user's runway says.
 import type { Env } from "../../env.ts";
+import { st, resolveLocale } from "../platform/i18n.ts";
+import { catNameSql } from "../finance/categories-i18n.ts";
 import type { Fact, FactInput as SharedFactInput } from "../../../shared/api/ai.ts";
 
 /**
@@ -29,9 +31,10 @@ export type FactRow = Fact;
 export interface FactInput extends SharedFactInput { source?: string }
 
 export async function listFacts(env: Env): Promise<FactRow[]> {
+  const loc = await resolveLocale(env);
   const rows = await env.DB.prepare(
     `SELECT f.id, f.text, f.effective_from, f.expires_at, f.category_id,
-            c.name AS category_name, f.adjust_kind, f.adjust_value,
+            ${catNameSql(loc, "c.name")} AS category_name, f.adjust_kind, f.adjust_value,
             f.confirmed_at, f.source, f.created_at
      FROM facts f LEFT JOIN categories c ON c.id = f.category_id
      ORDER BY f.confirmed_at IS NOT NULL, f.created_at DESC`,
@@ -42,7 +45,7 @@ export async function listFacts(env: Env): Promise<FactRow[]> {
 export async function addFact(env: Env, f: FactInput): Promise<{ id: number | null }> {
   const now = Math.floor(Date.now() / 1000);
   const text = (f.text ?? "").trim();
-  if (!text) throw new Error("потрібен текст факту");
+  if (!text) throw new Error(st(await resolveLocale(env), "factTextRequired"));
   // Коригування числа тільки при заданій категорії.
   const kind = f.category_id != null ? (f.adjust_kind ?? null) : null;
   const value = kind ? (f.adjust_value ?? null) : null;

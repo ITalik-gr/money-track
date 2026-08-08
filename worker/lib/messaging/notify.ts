@@ -12,7 +12,7 @@
 import type { Env } from "../../env.ts";
 import { debtMinor } from "../finance/own-funds.ts";
 import { getRates } from "../finance/finance.ts";
-import { st } from "../platform/i18n.ts";
+import { st, resolveLocale } from "../platform/i18n.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
@@ -20,7 +20,7 @@ import {
   localMonthStart, localYm, localYmd,
 } from "../finance/stats.ts";
 import { getState, setState } from "../finance/repo.ts";
-import { renderNotif, type NotifTemplateKey, type NotifParams, type NotifLocale } from "../../../shared/notif-i18n.ts";
+import { renderNotif, type NotifTemplateKey, type NotifParams } from "../../../shared/notif-i18n.ts";
 
 export type NotifKind =
   | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
@@ -146,11 +146,9 @@ export async function clearNotifications(env: Env): Promise<void> {
 // файлі — це і є те, як подія тихо зникає.
 const isoDay = (unix: number) => localYmd(unix);
 
-// Owner locale, read once per run — used to compose the stored fallback title/body and the
-// TG push. The feed itself re-renders client-side, so this only affects the fallback path.
-async function ownerLocale(env: Env): Promise<NotifLocale> {
-  return (await getState(env.DB, "locale")) === "en" ? "en" : "uk";
-}
+// Language for the stored fallback title/body and the TG push. `resolveLocale` (reader first,
+// stored preference second) — the feed itself re-renders client-side, so this only affects the
+// fallback path, but it must not be a fifth answer to the same question.
 
 /**
  * Записати чернетки у стрічку. ЄДИНЕ місце, де подія стає рядком.
@@ -163,7 +161,7 @@ async function ownerLocale(env: Env): Promise<NotifLocale> {
 async function insertDrafts(env: Env, drafts: Draft[], now: number, max = MAX_PER_RUN): Promise<number> {
   // Fallback title/body are composed in the owner's locale at insert (P3.3): they serve
   // legacy/`ai` rows and TG. The client re-renders templated rows live from key/params.
-  const locale = await ownerLocale(env);
+  const locale = await resolveLocale(env);
   let created = 0;
   for (const d of drafts) {
     // Ліміт рахуємо по СТВОРЕНИХ, а не по переглянутих: інакше десяток уже наявних
@@ -366,7 +364,7 @@ async function monthPace(env: Env, now: number): Promise<MonthPace> {
      GROUP BY ${EFF_CAT_ID}`,
   ).bind(monthStart, now).all<{ id: number | null; name: string | null; spent: number; n: number }>();
 
-  const loc = await ownerLocale(env);
+  const loc = await resolveLocale(env);
   const rows = (cur.results ?? [])
     .filter((r): r is { id: number; name: string | null; spent: number; n: number } => r.id != null)
     .map((r) => ({ id: r.id, name: r.name ?? st(loc, "uncategorized"), spent: r.spent, n: r.n, usual: levels.get(r.id)?.level ?? 0 }));
@@ -807,7 +805,7 @@ async function draftAiObservations(env: Env, now: number): Promise<Draft[]> {
   if (await getState(env.DB, AI_LAST_DAY_KEY) === day) return [];
 
   const { collectFinanceSnapshot } = await import("../ai/advisor.ts");
-  const { generateNotifyObservations } = await import("../ai/tasks.ts");
+  const { generateNotifyObservations } = await import("../ai/generate.ts");
 
   // Теми останніх двох тижнів — і як підказка моделі («не переказуй це знову»), і як фільтр
   // нижче. Промт сам по собі не гарантія (§Правила: інструкція ≠ перевірка), тож обидва шари.

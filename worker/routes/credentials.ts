@@ -11,8 +11,7 @@ import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { getClientInfo, MonoRateLimit } from "../lib/bank/mono.ts";
 import { deleteSecret, putSecret, secretStatuses, SECRET_NAMES, type SecretName } from "../lib/platform/secrets.ts";
-import { st } from "../lib/platform/i18n.ts";
-import { ownerLocale } from "../lib/finance/categories-i18n.ts";
+import { st, resolveLocale } from "../lib/platform/i18n.ts";
 
 export const credentials = new Hono<{ Bindings: Env }>();
 
@@ -73,13 +72,13 @@ credentials.put("/:name", async (c) => {
       ok = true;
     } else {
       ok = await verifyAnthropic(secret);
-      if (!ok) detail = st(await ownerLocale(c.env.DB), "errAnthropicRejected");
+      if (!ok) detail = st(await resolveLocale(c.env), "errAnthropicRejected");
     }
   } catch (e) {
     if (e instanceof MonoRateLimit) {
       // Mono allows one client-info call per 60s. Rejecting the token here would be a lie —
       // we simply could not check it, so store it and let the status stay "not verified".
-      detail = st(await ownerLocale(c.env.DB), "errMonoRateLimited");
+      detail = st(await resolveLocale(c.env), "errMonoRateLimited");
     } else {
       detail = e instanceof Error ? e.message : String(e);
     }

@@ -51,10 +51,24 @@ const LocaleContext = createContext<{
 
 /** Tell the server which locale this account displays in. Fire-and-forget: the UI never blocks
  *  on it, but the caches carrying server-resolved category names must be dropped afterwards. */
+/**
+ * Every request says which language the reader is looking at — including the two hand-written
+ * `fetch`es in this file.
+ *
+ * RTK Query adds `x-mt-locale` in `prepareHeaders`, but these two do not go through it, and neither
+ * does the chat stream (`lib/aiStream.ts` sets it by hand for the same reason). That mattered most
+ * for the GET below: it is the call that DECIDES whether to adopt the server's language, and it was
+ * asking the server what language to use without telling it who was asking.
+ */
+const localeHeaders = (extra?: Record<string, string>): Record<string, string> =>
+  ({ "x-mt-locale": getLocale(), ...extra });
+
 function pushLocale(l: Locale): void {
   fetch("/api/settings/locale", {
     method: "PUT",
-    headers: { "content-type": "application/json" },
+    // The body carries the NEW value; the header carries what is on screen right now. They differ
+    // for exactly one request — this one — and the server reads the body for the write.
+    headers: localeHeaders({ "content-type": "application/json" }),
     body: JSON.stringify({ locale: l }),
   })
     .then(() => {
@@ -82,26 +96,32 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!identity) return; // anonymous: no account state to reconcile with
     let cancelled = false;
-    fetch("/api/settings/locale")
+    fetch("/api/settings/locale", { headers: localeHeaders() })
       .then((r) => (r.ok ? r.json() : null))
       .then((j: { locale?: string } | null) => {
         if (cancelled || !j) return;
         const server = j.locale === "uk" || j.locale === "en" ? j.locale : null;
         const local = getLocale();
-        // The demo is the exception: its language is a product decision (the sandbox ships in
-        // English for the portfolio audience), not a preference the visitor carried in from
-        // another account in the same browser. The server value therefore wins outright — the
-        // visitor can still switch inside the demo, which writes back to the sandbox.
-        // The server has no opinion yet → give it the one the reader is actually looking at.
+        // What this sync is FOR, now that `x-mt-locale` rides on every request: the paths with no
+        // request. Cron reports, Telegram pushes and the notification feed have no header to read,
+        // so `app_state.locale` is their only source and it has to be kept in step with the screen.
+        // Anything with a reader attached is already decided by the header (`resolveLocale`).
         //
-        // This is the case that made every new account's AI answer in the wrong language: the
-        // column is unset until someone opens Settings and switches, and unset was read as
-        // Ukrainian while the client's default is English. The request header (`x-mt-locale`)
-        // fixes anything with a reader attached; this fixes the rest — cron reports, Telegram
-        // pushes and the notification feed have no request to read a header from.
+        // The server has no opinion yet → give it the one the reader is actually looking at. For a
+        // fresh demo that is now ALWAYS the case: the sandbox no longer inherits a `locale` row
+        // from the fixture (see DEMO_EXCLUDED_STATE_KEYS), which used to hand `resolveLocale` a
+        // stored answer to prefer over the visitor's own — the toggle said EN while the categories
+        // and the AI came back Ukrainian.
         if (!server) { pushLocale(local); return; }
-        if (hasStoredLocale() && !me?.demo) {
-          // Explicit local choice still wins — but push it so the server agrees.
+        if (hasStoredLocale() || me?.demo) {
+          // An explicit local choice wins, and so does the reader in a demo: a sandbox lives 24
+          // hours and accumulates no preference worth overruling the person looking at it. Push,
+          // so the request-less paths agree.
+          //
+          // ⚠️ `!me?.demo` used to sit here, which made the sandbox's stored value beat the
+          // visitor. That was defensible while the fixture seeded a language on purpose; with that
+          // row gone it would only mean "whatever the last PUT happened to write wins over the
+          // person reading the screen".
           if (server !== local) pushLocale(local);
           return;
         }
@@ -117,6 +137,13 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [identity, me?.demo]);
+
+  // Keep `<html lang>` on the language actually being shown. `index.html` ships `lang="uk"` as a
+  // static value, so every English screen was claiming to be Ukrainian — which is what screen
+  // readers pick a voice from, what the browser's translate prompt reads, and what hyphenation
+  // follows. It is NOT what decides the `dd.mm.yyyy` in a native date input: that comes from the
+  // browser's own locale (Chromium: UI language; Safari: system region), which a page cannot set.
+  useEffect(() => { document.documentElement.lang = locale; }, [locale]);
 
   const change = useCallback((l: Locale) => {
     setLocale(l, true); // module value + localStorage (explicit choice)

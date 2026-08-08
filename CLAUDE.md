@@ -72,8 +72,13 @@ Rules:
      Existing Ukrainian prose is NOT translated en masse (there are thousands of lines and they
      carry the "why it is like this") — it migrates when that text is rewritten for another
      reason, so these documents stay mixed for a while. That is the accepted transitional state.
-     **Never translated** (data, not prose): UI strings — they go through `t()` · model prompts ·
-     matching keys (`.includes("фоп")`, `/переказ|зняття/i`) · seeded category names.
+     **Never translated** (data, not prose): UI strings — they go through `t()` · matching keys
+     (`.includes("фоп")`, `/переказ|зняття/i`) · seeded category names · merchant examples inside
+     prompts.
+     ⚠️ **Model prompts moved OFF this list on 2026-08-08 — they are now English** (§LANG-ARCH).
+     They were exempt on the grounds that maintaining two copies is not worth it; writing them once
+     in English is still one copy, and it is what actually stopped the answers coming back in the
+     wrong language.
      ⚠️ Chat replies to the owner stay Ukrainian — this rule covers artifacts committed to the
      repo, never the conversation.
    - Коментувати **«чому саме так»**, а не «що робить рядок»: яку альтернативу відкинуто, який баг
@@ -133,7 +138,11 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   яку задачу · `cost.ts` — скільки коштував виклик і лічильник · **`json.ts` — ШОВ ПРОВАЙДЕРА**
   (усе вище нього провайдер-агностичне) · `prompt.ts` — стабільний префікс + мовна директива ·
   `tasks.ts` — розмовні виклики без власного фіча-файлу · `advisor`, `enrich`, `insight`,
-  `report`, `receipt` — фіча-логіка ЖИВЕ ТУТ, а не в транспорті · `facts.ts` — §A1 CRUD фактів
+  `report`, `receipt` — фіча-логіка ЖИВЕ ТУТ, а не в транспорті · **`generate.ts`** — одноразові
+  генерації (порада, план бюджетів, спостереження стрічки, вердикт групи): payload → структурований
+  JSON, ніхто не читає наживо, тому вивід перевіряється кодом · **`chat-tools.ts`** — інструменти,
+  якими модель сама читає базу (схема + виконавець поруч, щоб розбіжність було видно) ·
+  `facts.ts` — §A1 CRUD фактів
   (винесено з `advisor.ts` 2026-08-07: чистий CRUD без логіки поради, і без цього виносу
   `chat-tools`↔`advisor` замкнули б цикл імпортів) · `knowledge/` (корпус).
   ⚠️ **Новий AI-виклик кладеться у ФІЧА-файл, а не в `ai.ts`.** Саме так `generateFinancialReport`
@@ -352,6 +361,14 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 - **Лічильник** (`app_state.ai_usage`, міграція 0010): `recordUsage` акумулює usage+вартість у `callHaiku`/`callHaikuMessages`; `GET /ai-usage`; картка «💸 Витрати на AI» в Налаштуваннях.
 - **Задачі-моделі:** `report`/`advisor`/`insight`/`chat`/`budget`/`group`/**`notify`** (спостереження у стрічці сповіщень, дефолт Haiku, ≤1 виклик/добу).
 - Реалістично ~$1–2/міс на Sonnet-гібриді; user-facing на Opus ≈ $1.5–3/міс. Модель-за-задачею через `MODEL_SMART` в `ai.ts`.
+- **The requested SHAPE of an answer must match the output budget it will be given (2026-08-08).**
+  The demo asked for a four-part structured answer («висновок → числа → 2-4 кроки») while
+  `demoClamp` pinned output at 900 tokens with continuation disabled — a contradiction that
+  guaranteed a reply stopping mid-sentence, which reads as the app breaking rather than as a
+  sandbox limit. The demo prompt now asks for ≤120 words, no charts, no unfinishable lists, and the
+  chat screen says so (`chat.demoShort`). ⚠️ The override lives in the DYNAMIC block, not in
+  `stableRules`: that block is byte-identical across calls and users so the 1h prompt cache holds,
+  and a demo branch inside it would split the cache in two for one paragraph.
 - **Стеля виводу чату — 4000 токенів + ОДНА до-генерація** (`CHAT_MAX_OUTPUT` у `tasks.ts`,
   `stop === "max_tokens"` у `runToolConversation`). Було 1500 — і структурована відповідь
   («висновок → числа → 2-4 кроки») українською регулярно обривалась на півслові. Доти це виглядало
@@ -391,6 +408,13 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   півречення, яке виглядає як закінчене, гірше за помилку.
   Парсер покритий `worker/test/ai-stream.test.ts` — межі чанків рубляться по БАЙТАХ (кирилиця =
   2 байти, тож розрив усередині літери — норма, а не край).
+  ⚠️ **Smooth reading is a steady RATE, not a bounded interval (2026-08-08).** Batching deltas per
+  animation frame was not enough: a frame drew everything that had arrived since the last one, so
+  the model's jitter just moved from the delta to the frame — one frame a character, the next a
+  paragraph. `Chat.tsx` now reveals a SHARE of the backlog per frame (`REVEAL_SHARE`, floor
+  `MIN_REVEAL`), draining bursts exponentially; arrival rate sets how full the buffer is, not how
+  the text lands. New markdown blocks additionally fade in (`.chat-msg.live > *`) — pacing smooths
+  text growing inside a paragraph, but a new paragraph is a whole shape arriving at once.
 
 ## ✅ Зроблено — у `HISTORY.md`
 
@@ -518,6 +542,20 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   платний). Закрито лічильником `attempts` (стеля 3) + мінімальною затримкою переармування.
 - **Ідемпотентність постановки — за видом задачі.** Подвійний клік по «Оновити пораду» інакше
   = два виклики Sonnet і подвійний рахунок при однаковому результаті на екрані.
+- **`running` is a TRACE that someone claimed the row, not a promise anyone is still on it
+  (2026-08-08).** An isolate that dies mid-generation leaves the row in that state forever, and
+  every selector treated it as live: `runNextJob`/`hasQueuedJobs` matched only `queued`, while the
+  idempotency above handed that dead row's id back on every later click. One interrupted pass
+  disabled the whole job kind for that user, and it looked like a button that does nothing. A
+  `running` row older than 3 min is now claimable (`attempts` still caps the retries) — the longest
+  real generation is ~1 min, so a live job is never stolen.
+  ⚠️ **A demo is not a different scheduler.** Its jobs run inline in the request (`demoClamp` makes
+  the wait short), but that made the request the ONLY executor: close the tab and nobody finishes
+  the work. The demo alarm now drains the queue too, and the route drains it regardless of
+  `created`. The sandbox must be able to name itself as a demo with no request attached
+  (`app_state.demo_user_id`, written by `seedDemo` — `idFromName` is one-way): `isDemoEnv` keys the
+  spend caps off the `demo:` prefix, so an alarm that could not would run uncapped on the platform
+  key. Held by `worker/test/jobs.test.ts` (4 сценарії).
 - **Поллінг лише поки є активна задача.** Постійний інтервал заради події, що стається раз на
   добу, — податок на кожного користувача; `pollingInterval: 0` вимикає таймер, початковий
   запит при монтуванні лишається (саме він ловить «закрив вкладку на середині»).
@@ -768,6 +806,51 @@ owner-шляху), заголовки безпеки на КОЖНІЙ відп�
   report/insight/budget/notify/**group**/**budget-план**. У `chatAdvice` — у ДИНАМІЧНИЙ блок (не в
   кеш-стабільну персону). Режим `conversation` відповідає МОВОЮ ПИТАННЯ, а налаштування вирішує
   лише нічию (повідомлення закоротке, щоб визначити мову).
+- **§LANG-ARCH (2026-08-08) — ONE LANGUAGE IN, ONE LANGUAGE OUT.** The rewrite after the same bug
+  was reported a THIRD time. The plumbing above was already correct; the answer still came back in
+  Ukrainian on an English screen, because language was being *requested* rather than *produced*.
+  Three defects, each sufficient on its own:
+  1. **Four resolvers, two answers.** `routes/api/index.ts` read the reader first; `ownerLocale(db)`
+     and two private copies in `notify.ts`/`deliver.ts` read `app_state.locale` ALONE. Twenty call
+     sites — the whole AI surface, `/ingest`, `/setup`, `/import`, `/credentials`, the feed and the
+     delivery layer — therefore ignored `x-mt-locale` entirely. And that column is EMPTY for anyone
+     who never opened Settings and for every demo sandbox, while empty read as Ukrainian.
+     → **`resolveLocale(env)` (`lib/platform/i18n.ts`) is now the single answer.** Reader first,
+     stored preference only where there is no request (cron, Telegram, alarm). **A second reader of
+     `app_state.locale` is a bug by construction.**
+  2. **The prompts were WRITTEN in Ukrainian** — ~32 000 characters of it, opening with a 26k
+     knowledge corpus as the first cached block. No instruction outvotes that mass; the model reads
+     the language of its own instructions as the language of the job. → **Prompts are English, once.
+     They are instructions, not UI, so there is still exactly ONE copy** and the prompt cache stays
+     whole. Merchant strings, Cyrillic regex classes and the `uk` half of doc titles stay — they are
+     data. A prompt names no language at all; that is `replyLangDirective`'s single job, and it is
+     its OWN final system block in `chatAdvice`.
+  3. **The DATA in the context was Ukrainian too.** `catNameSql` was used in `repo/*` (what the
+     screen reads) and NOWHERE in `lib/ai/*`: the screen said "Groceries" while the model was handed
+     «Продукти». One concept, two resolutions, diverging where the reader can see it — §CUR-PLAN
+     again. → The AI snapshot, the taxonomy in `buildSystemPrefix`, the report, the insight and the
+     chat tools all resolve through `catNameSql`.
+     ⚠️ **Tool FILTERS too, not just tool output.** The model can only name a category it has been
+     shown, so on an English screen it filters for "Groceries" — and `EFF_CAT_NAME LIKE '%Groceries%'`
+     matches no stored row. The model then reports, truthfully and uselessly, that there is no such
+     spending.
+  4. **The demo inherited a language from the FIXTURE.** `worker/demo/dataset.json` is a dump of
+     the owner's object, so its `app_state` carried a `locale` row — the owner's setting frozen when
+     `scripts/seed-demo.mjs` last ran. That made the sandbox the ONE account holding a stored
+     preference for someone who had never expressed one, so `resolveLocale` had a stored answer to
+     prefer and the visitor's header never got a say. Symptom, reported precisely: the toggle reads
+     EN, the shell is English, and category names and the whole AI answer come back Ukrainian —
+     until the visitor toggles the language twice and the PUT overwrites the row.
+     → `DEMO_EXCLUDED_STATE_KEYS` (`lib/platform/demo.ts`) drops it at LOAD time, so regenerating
+     the fixture cannot put it back. **A stranger's language is a property of their request.**
+  5. **Two raw `fetch`es bypassed `prepareHeaders`** (`i18n/index.ts`). The GET that DECIDES whether
+     to adopt the server's language was asking without saying who was asking. Same class as
+     `lib/aiStream.ts`. **Rule: a `fetch` outside RTK Query carries `x-mt-locale` by hand.**
+  Held by `worker/test/locale.test.ts` (14 сценаріїв): `resolveLocale` in both directions, the
+  header surviving the Worker→DO hop, the demo seed carrying no language, no
+  Ukrainian category name in the AI context, no prompt naming a language, and a **budget of 2000
+  Cyrillic characters** across `lib/ai` prompt strings (currently ~744, all of it data) — prose runs
+  to thousands, so only prose can close that gap.
   ⚠️ **Enrich/OCR/parse — структурований вивід, але одне поле в них ПРОЗА.** `note` лягає в
   `transactions.ai_note` і показується під операцією, тож у нього є ВЛАСНА, адресна директива
   (`langNoteDirective`): перекладається лише `note`, а `clean_name` — імʼя власне («SILPO» лишається

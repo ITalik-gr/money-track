@@ -13,7 +13,7 @@ import { computeSummary, createCashTx, recentTransactions, type Summary } from "
 import { ingestReceipt } from "../lib/ai/receipt.ts";
 import { parseText } from "../lib/ai/enrich.ts";
 import type { ChatMsg } from "../lib/ai/ai.ts";
-import type { AiFact } from "../lib/ai/tasks.ts";
+import type { AiFact } from "../lib/ai/generate.ts";
 import { buildAndStoreInsight, getStoredInsight } from "../lib/ai/insight.ts";
 import { buildAdvice, chatReply, getStoredAdvice } from "../lib/ai/advisor.ts";
 import {

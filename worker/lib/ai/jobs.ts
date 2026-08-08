@@ -41,6 +41,24 @@ export const JOB_RETENTION_DAYS = 7;
 const MAX_ATTEMPTS = 3;
 
 /**
+ * How long a 'running' row may sit before it counts as abandoned and may be claimed again.
+ *
+ * 'running' is not a state of the work — it is a TRACE that someone picked the row up. An isolate
+ * that dies mid-generation (a demo tab closed while the job runs inside the request, an evicted
+ * object, a timeout) leaves the row in that state forever: `runNextJob` selected only 'queued',
+ * `hasQueuedJobs` too, and `enqueueJob` reads it as "already in flight" and hands the same dead id
+ * back on EVERY later click. One interrupted pass therefore disabled that kind of job for the user
+ * permanently, and it looked exactly like a button that does nothing.
+ *
+ * 3 minutes: the longest real generation (a Sonnet report) is about a minute, so this never steals
+ * a live job, and `attempts` still stops a row that keeps dying from spinning forever.
+ */
+const STALE_RUNNING_SEC = 180;
+
+/** A row worth picking up: never started, or started and abandoned. */
+const CLAIMABLE = "(status = 'queued' OR (status = 'running' AND COALESCE(started_at, 0) < ?))";
+
+/**
  * Поставити задачу в чергу.
  *
  * ⚠️ Ідемпотентно за `kind`: якщо для цього виду вже є незавершена задача, повертаємо ЇЇ id.
@@ -94,8 +112,8 @@ export async function markSeen(env: Env, id: number): Promise<void> {
  */
 export async function hasQueuedJobs(db: Env["DB"]): Promise<boolean> {
   const r = await db.prepare(
-    "SELECT 1 AS x FROM ai_jobs WHERE status = 'queued' LIMIT 1",
-  ).first<{ x: number }>();
+    `SELECT 1 AS x FROM ai_jobs WHERE ${CLAIMABLE} LIMIT 1`,
+  ).bind(Math.floor(Date.now() / 1000) - STALE_RUNNING_SEC).first<{ x: number }>();
   return r != null;
 }
 
@@ -115,12 +133,12 @@ export async function pruneJobs(env: Env): Promise<void> {
  * `hasQueuedJobs` скаже DO переармуватись, і наступна піде своїм проходом.
  */
 export async function runNextJob(env: Env): Promise<boolean> {
+  const now = Math.floor(Date.now() / 1000);
   const job = await env.DB.prepare(
-    "SELECT * FROM ai_jobs WHERE status = 'queued' ORDER BY id LIMIT 1",
-  ).first<JobRow>();
+    `SELECT * FROM ai_jobs WHERE ${CLAIMABLE} ORDER BY id LIMIT 1`,
+  ).bind(now - STALE_RUNNING_SEC).first<JobRow>();
   if (!job) return false;
 
-  const now = Math.floor(Date.now() / 1000);
   // Лічильник рухаємо ПЕРЕД роботою і в тій самій операції, що й перехід у 'running'. Якщо
   // виконання впаде так, що ми не встигнемо записати 'failed' (обрив ізоляту, помилка самого
   // UPDATE), наступний прохід побачить рядок знову — і на MAX_ATTEMPTS зупинить його сам.

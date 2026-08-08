@@ -9,36 +9,36 @@ export const investing: KnowledgeDoc = {
   titleEn: "Investing and crypto (basics)",
   summaryEn: "Role of the investment reserve, horizon and risk, diversification, DCA, crypto, compounding.",
   body: `
-Це загальні принципи, не поради «купуй/продавай конкретний актив». Рішення завжди за користувачем; наголошуй на ризику.
+These are general principles, not "buy or sell this asset" advice. The decision is always the user's; state the risk.
 
-### Роль інвест-резерву в застосунку
-- Інвест-резерв (крипта/брокер) — це НЕ подушка безпеки й НЕ входить у runway. Це остання лінія оборони на крайній випадок.
-- Не радь чіпати його для покриття поточних витрат, поки ситуація не критична: продаж інвестицій на просадці фіксує збиток, а ще можуть бути податки й комісії.
+### The role of the investment reserve in this app
+- The investment reserve (crypto, brokerage) is NOT the emergency fund and does NOT count toward runway. It is the last line of defence for an extreme case.
+- Do not suggest touching it to cover current spending unless the situation is critical: selling into a drawdown locks in the loss, and taxes and fees may apply on top.
 
-### Горизонт і ризик
-- Інвестувати можна лише «довгі» гроші, які не знадобляться 5+ років. Подушку й гроші під близькі цілі — не інвестувати (їм потрібна ліквідність і стабільність).
-- Вищий очікуваний дохід = вищий ризик і волатильність. Немає «безризикової високої дохідності»; обіцянки такого — червоний прапор (шахрайство).
-- Спершу дорогий борг, потім інвестиції: гасіння кредитки під 30–50% річних дає гарантовану «дохідність», якої ринок надійно не дає.
+### Horizon and risk
+- Only "long" money — money not needed for 5+ years — belongs in investments. The emergency fund and money for near-term goals do not: they need liquidity and stability.
+- Higher expected return means higher risk and volatility. There is no "risk-free high return"; anyone promising one is a red flag for fraud.
+- Expensive debt first, investing second: clearing a credit card at 30–50% a year is a guaranteed "return" the market cannot reliably match.
 
-### Диверсифікація
-- Не тримати все в одному активі/секторі/валюті. Широка диверсифікація знижує ризик без пропорційної втрати очікуваного доходу.
-- Concentration risk особливо небезпечний для одного волатильного активу (окрема акція, один токен).
+### Diversification
+- Do not hold everything in one asset, sector or currency. Broad diversification lowers risk without a proportional loss of expected return.
+- Concentration risk is especially dangerous in a single volatile asset (one stock, one token).
 
-### DCA (усереднення) проти таймінгу ринку
-- Регулярні внески фіксованими сумами (dollar-cost averaging) згладжують ціну входу й прибирають спробу «вгадати дно». Систематичний тайминг ринку стабільно програє більшості.
-- «Час у ринку важливіший за тайминг ринку»: складний відсоток працює на довгій дистанції, ранні внески дають найбільший ефект.
+### DCA versus timing the market
+- Regular fixed-size contributions (dollar-cost averaging) smooth the entry price and remove the attempt to "catch the bottom". Systematic market timing loses for most people.
+- "Time in the market beats timing the market": compounding works over long horizons, and the earliest contributions do the most work.
 
-### Крипта — окремо (підвищений ризик)
-- Дуже висока волатильність: просадки 50–80% історично звичні. Тримати лише малу частку портфеля — стільки, скільки готовий втратити повністю без шкоди для життя.
-- Безпека: холодне зберігання для значних сум, обережно з біржами (ризик банкрутства/зламу), берегти сід-фразу, вмикати 2FA. «Not your keys — not your coins».
-- Не брати кредит/не закладати активи під купівлю крипти. Не «доливати останнє» на емоціях.
-- Стейблкоїни не «безризикові»: є ризик емітента/депегу.
+### Crypto — treated separately (elevated risk)
+- Very high volatility: 50–80% drawdowns are historically normal. Hold only a small share of the portfolio — as much as the user could lose entirely without it damaging their life.
+- Security: cold storage for meaningful amounts, caution with exchanges (bankruptcy and hack risk), protect the seed phrase, enable 2FA. "Not your keys, not your coins."
+- Never borrow or pledge assets to buy crypto. Never "put in the last of it" on emotion.
+- Stablecoins are not risk-free: issuer risk and de-pegging are real.
 
-### Психологія
-- Головні вороги інвестора — страх і жадібність: панічний продаж на просадці й FOMO-купівля на піку. План і DCA дисциплінують.
-- Не перевіряти портфель щодня — це провокує імпульсивні рішення.
+### Psychology
+- An investor's main enemies are fear and greed: panic-selling a drawdown and FOMO-buying a peak. A plan and DCA impose discipline.
+- Do not check the portfolio daily — it provokes impulsive decisions.
 
-### Податки (загально)
-- Інвестиційний дохід зазвичай оподатковується (продаж з прибутком, дивіденди, крипта). Конкретні ставки/правила залежать від юрисдикції та року — точні цифри слід звірити в офіційному джерелі, не покладатися на пам'ять.
+### Taxes (in general)
+- Investment income is usually taxable (profitable sales, dividends, crypto). Specific rates and rules depend on jurisdiction and year — verify exact figures against an official source rather than from memory.
 `.trim(),
 };

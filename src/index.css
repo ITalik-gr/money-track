@@ -3759,7 +3759,24 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .chat-msg .md-list { margin: 4px 0 8px; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; }
 .chat-msg .md-list li { line-height: 1.45; }
 .chat-msg .md-list li::marker { color: var(--muted); }
+/* Demo-only note under the chat subtitle. Muted and bordered rather than a warning colour: it
+   states a limit of the sandbox, it does not report that anything went wrong. */
+.chat-demo-note {
+  margin-top: 6px; padding: 6px 10px; max-width: 62ch;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2);
+  color: var(--muted); font-size: 12.5px; line-height: 1.45;
+}
 .chat-msg strong { font-weight: 650; }
+/* A block that appears while the answer is still streaming fades in instead of snapping into
+   place. The character pacing in `Chat.tsx` smooths text GROWING inside a paragraph; this covers
+   the other half — a new paragraph, list or heading is a whole shape arriving at once, and at
+   reading distance that pops. `both` matters: without it the block is drawn at full opacity for
+   one frame before the animation takes over, which is the flash this removes. Only new elements
+   animate — an existing paragraph gaining words is the same DOM node and never restarts. */
+.chat-msg.live > * { animation: chat-block-in var(--dur-2) var(--ease-out) both; }
+@keyframes chat-block-in { from { opacity: 0; } to { opacity: 1; } }
+/* Motion here is decoration over text that is already legible, so it goes away entirely. */
+@media (prefers-reduced-motion: reduce) { .chat-msg.live > * { animation: none; } }
 /* §CH4: міні-графік у відповіді чату */
 .md-chart { margin: 8px 0; display: flex; flex-direction: column; gap: 5px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .md-chart-title { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.02em; }

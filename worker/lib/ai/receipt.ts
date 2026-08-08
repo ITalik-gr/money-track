@@ -27,11 +27,11 @@ export async function readReceipt(
 ): Promise<{ result: ReceiptResult; usage: AnthropicUsage }> {
   const system = await buildSystemPrefix(
     env,
-    "розпізнати чек із фото і повернути JSON {store, purchased_at (ISO), currency, total, items:[{name, qty, price}]}",
+    "read a receipt from a photo and return JSON {store, purchased_at (ISO), currency, total, items:[{name, qty, price}]}",
   );
   return callHaikuJson<ReceiptResult>(env, system, [
     { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
-    { type: "text", text: "Розпізнай цей чек. Поверни лише JSON." },
+    { type: "text", text: "Read this receipt. Return JSON only." },
   ]);
 }
 

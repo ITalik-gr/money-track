@@ -17,6 +17,19 @@ const sign = (c: number) => (c === 840 ? "$" : c === 978 ? "€" : "₴");
 
 const SUGGESTION_KEYS = ["chat.suggest1", "chat.suggest2", "chat.suggest3", "chat.suggest4"] as const;
 
+/**
+ * How the streamed answer is paced onto the screen (see `ask`).
+ *
+ * A frame reveals `pending / REVEAL_SHARE` characters, so the backlog drains exponentially: 6 at
+ * 60fps empties a burst in about a tenth of a second — fast enough that nothing feels held back,
+ * even in tone with what came before it. Lower is jumpier, higher visibly lags the model.
+ *
+ * `MIN_REVEAL` is the floor. Without it the tail of an answer creeps out a character per frame
+ * (`ceil(1/6)` is 1), and the last few words are exactly where the reader is watching hardest.
+ */
+const REVEAL_SHARE = 6;
+const MIN_REVEAL = 3;
+
 // Id-и генерує КЛІЄНТ: стрічка розмов має показати нову розмову в мить кліку, задовго до того, як
 // сервер щось відповість. Форма звужена до `[A-Za-z0-9_-]`, бо саме її перевіряє роут.
 const newId = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
@@ -202,11 +215,20 @@ export function Chat() {
    * з'являється ривками в темпі мережі. `requestAnimationFrame` зводить усе, що прийшло між
    * кадрами, в одне оновлення: та сама швидкість, але рівний темп.
    *
+   * ⚠️ Frame pacing alone was not enough, and this is why (the reported complaint: the words do not
+   * appear smoothly). A frame showed EVERYTHING that had arrived since the previous one, so the
+   * jitter simply moved from the delta to the frame: one frame added a character, the next dumped
+   * a whole paragraph. What the reader sees as smooth is a steady rate, not a bounded interval.
+   * So the frame now reveals a SHARE of the backlog (`REVEAL_SHARE`) instead of all of it, which
+   * drains bursts exponentially — visually immediate, never in lumps — and the arrival rate only
+   * sets how full the buffer is, not how the text lands.
+   *
    * ⚠️ Хід асистента в базу пише СЕРВЕР (див. роут `/advisor/chat/stream`), а не цей код: інакше
    * закрита посеред відповіді вкладка забирала б її з собою.
    */
   async function ask(chatId: string, history: Msg[], attachedTxIds: string[]) {
-    const acc = { text: "" };
+    // `text` — everything received; `shown` — how much of it has been drawn.
+    const acc = { text: "", shown: 0 };
     let opened = false;
     let frame = 0;
     const put = (content: string) => putLive(chatId, (m) => {
@@ -215,7 +237,19 @@ export function Chat() {
       else { next.push({ role: "assistant", content }); opened = true; }
       return next;
     });
-    const flush = () => { frame = 0; put(acc.text); };
+    const flush = () => {
+      frame = 0;
+      const pending = acc.text.length - acc.shown;
+      if (pending <= 0) return;
+      // A share of the backlog, with a floor so a one-character tail still lands next frame. The
+      // floor also keeps the very first words fast: at that point the backlog is tiny, and a pure
+      // share would trickle them out one letter at a time.
+      acc.shown = Math.min(acc.text.length, acc.shown + Math.max(MIN_REVEAL, Math.ceil(pending / REVEAL_SHARE)));
+      put(acc.text.slice(0, acc.shown));
+      // Re-arm while there is still buffered text: deltas arrive in bursts and then stop, so the
+      // last burst would otherwise sit half-drawn until the next one pushed it out.
+      if (acc.shown < acc.text.length) schedule();
+    };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(flush); };
     // Кадр, що спрацює ПІСЛЯ фінального тексту, перезаписав би повну відповідь накопиченою —
     // тобто відкотив би її на пів-речення назад.
@@ -362,6 +396,10 @@ export function Chat() {
           <div>
             <div className="greet">{tr("chat.title")}</div>
             <div className="sub">{tr("chat.sub")}</div>
+            {/* A short answer in the demo is a BUDGET, not a shrug. Saying so is the difference
+                between "this product gives thin answers" and "this is the sandbox's ceiling" —
+                and the visitor has no other way to tell those apart. */}
+            {me?.demo && <div className="chat-demo-note">{tr("chat.demoShort")}</div>}
           </div>
           <div className="page-head-actions">
             <button className="btn ghost sm" onClick={newChat}><Icon name="plus" size={14} />{tr("chat.newShort")}</button>
@@ -387,7 +425,7 @@ export function Chat() {
                 const liveMsg = streamStarted && i === messages.length - 1 && m.role === "assistant";
                 return (
                   <div key={i} className={`chat-msg-wrap ${m.role}`} ref={isLastUser ? lastUserRef : undefined}>
-                    <div className={`chat-msg ${m.role}`}>{renderMarkdown(liveMsg ? trimIncompleteBlocks(m.content) : m.content)}</div>
+                    <div className={`chat-msg ${m.role}${liveMsg ? " live" : ""}`}>{renderMarkdown(liveMsg ? trimIncompleteBlocks(m.content) : m.content)}</div>
                     {m.role === "assistant" && m.content && (
                       <div className="chat-msg-actions">
                         <button onClick={() => copyMsg(m.content, i)} title={tr("tx.copy")}>

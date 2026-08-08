@@ -35,10 +35,17 @@ jobs.post("/jobs", async (c) => {
 
   const { isDemoEnv } = await import("../../lib/platform/demo.ts");
   if (isDemoEnv(c.env)) {
-    // Демо рахує синхронно: `demoClamp` тисне вивід до 900 токенів, тож чекати там і так
-    // недовго, а єдиний alarm пісочниці зайнятий її самознищенням. Клієнт цього не помічає —
-    // він у будь-якому разі бачить задачу через `GET /jobs`, просто вже завершеною.
-    if (created) await runNextJob(c.env);
+    // A demo runs the job inline: `demoClamp` caps the output at 900 tokens, so the wait is short.
+    // The client never notices the difference — it sees the job through `GET /jobs` either way,
+    // just already finished.
+    //
+    // ⚠️ Drain the queue ALWAYS, not only when `created` — that gate is what made the demo "only
+    // start on the second try". An interrupted first request (navigated away, backgrounded tab)
+    // leaves the row unfinished, and `enqueueJob` correctly returns its id instead of a new one.
+    // Behind `if (created)` nobody was left to execute that row: the sandbox's single alarm is
+    // busy with its own self-destruct and never touches the queue, so every later click landed in
+    // the same "already exists, do nothing" branch and the work never happened.
+    await runNextJob(c.env);
   } else {
     await c.env.scheduleWork?.();
   }

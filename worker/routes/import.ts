@@ -5,6 +5,7 @@
 // after a month of wrong numbers is already in the canon — and nobody re-reads a statement they
 // have already imported.
 import { Hono } from "hono";
+import { resolveLocale } from "../lib/platform/i18n.ts";
 import type { Env } from "../env.ts";
 import {
   detectDelimiter,
@@ -14,7 +15,6 @@ import {
   toCanonical,
   type ColumnMapping,
 } from "../lib/bank/providers/csv.ts";
-import { ownerLocale } from "../lib/finance/categories-i18n.ts";
 import { findForImport } from "../repo/accounts.ts";
 import { countExisting } from "../repo/transactions.ts";
 
@@ -64,7 +64,7 @@ importRoutes.post("/csv/preview", async (c) => {
     account?.id ?? "preview",
     account?.currency_code ?? 980,
     hasHeader,
-    await ownerLocale(c.env.DB),
+    await resolveLocale(c.env),
   );
 
   // Which of these rows are already in the database. Shown BEFORE writing, because "imported
@@ -111,7 +111,7 @@ importRoutes.post("/csv/commit", async (c) => {
     account.id,
     account.currency_code ?? 980,
     hasHeader,
-    await ownerLocale(c.env.DB),
+    await resolveLocale(c.env),
   );
   const result = await importTransactions(c.env.DB, txs);
 

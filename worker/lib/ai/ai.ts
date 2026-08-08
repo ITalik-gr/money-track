@@ -294,8 +294,8 @@ export async function callMessagesRaw(
 // conclusion, which reads as the answer repeating itself.
 const MAX_CONTINUATIONS = 1;
 const CONTINUE_PROMPT =
-  "Твоя попередня відповідь обірвалась на межі ліміту токенів. Продовж РІВНО з місця обриву: " +
-  "без вступу, без повторення вже написаного, без «отже» на початку — просто дописуй речення далі.";
+  "Your previous answer stopped at the token limit. Continue EXACTLY from where it broke off: " +
+  "no preamble, no repetition of what you already wrote, no \"so,\" at the start — just carry the sentence on.";
 
 // Веде діалог з інструментами до фінальної текстової відповіді (кеп ходів — межа вартості).
 export async function runToolConversation(

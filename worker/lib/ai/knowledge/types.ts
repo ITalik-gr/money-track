@@ -3,10 +3,16 @@ export type KnowledgeDoc = {
   id: string;
   title: string;
   summary: string;
-  // English label for the UI card (P3.4-style resolution, see knowledgeMeta). ONLY the label:
-  // `body` stays Ukrainian on purpose. The body is model input, not UI — the assistant already
-  // answers in the reader's locale via `replyLangDirective`, and duplicating ~26k chars of
-  // corpus per language would double the maintenance and split the prompt cache in two.
+  // English label for the UI card (P3.4-style resolution, see knowledgeMeta) — `title`/`summary`
+  // are the Ukrainian side of the same pair.
+  //
+  // `body` is NOT part of that pair: it is written once, in English, because it is model input
+  // rather than UI. That is a reversal (2026-08-08) of "the body stays Ukrainian, the directive
+  // makes the answer follow the reader" — the directive lost. ~26k characters of Ukrainian prose
+  // opened every chat request as its first cached block, and no instruction after it reliably
+  // outvoted that mass: an English question on an English screen kept coming back in Ukrainian,
+  // reported three times. One language in, one language out. Still ONE copy, so nothing doubles
+  // and the prompt cache stays whole.
   titleEn?: string;
   summaryEn?: string;
   body: string;

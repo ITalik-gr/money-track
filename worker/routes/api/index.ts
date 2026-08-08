@@ -11,9 +11,9 @@
 // for a path — which is what makes that rule checkable by reading a single file rather than by
 // reasoning about the order below.
 import { apiRoutes } from "./_shared.ts";
+import { resolveLocale } from "../../lib/platform/i18n.ts";
 // `catNameSql` is deliberately absent here and everywhere under `routes/`: it produces SQL, and
 // the route layer no longer writes any.
-import { ownerLocale } from "../../lib/finance/categories-i18n.ts";
 
 import { accounts } from "./accounts.ts";
 import { advisor } from "./advisor.ts";
@@ -48,7 +48,7 @@ api.use("*", async (c, next) => {
   // The reader's own language first (`x-mt-locale`, threaded in by `UserDO.appEnv`), the stored
   // preference second. `ownerLocale` alone answered "uk" for everyone who never opened Settings —
   // including every demo visitor, whose whole screen is English.
-  c.set("locale", c.env.UI_LOCALE ?? await ownerLocale(c.env.DB));
+  c.set("locale", await resolveLocale(c.env));
   await next();
 });
 

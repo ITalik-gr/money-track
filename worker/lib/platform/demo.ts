@@ -78,6 +78,27 @@ const monthKey = () => new Date().toISOString().slice(0, 7);
  * under-protect (estimate too low) or throttle honest visitors (estimate too high).
  */
 /** New sandboxes per day, across everyone. */
+/**
+ * `app_state` keys a fresh sandbox must NOT inherit from the committed snapshot.
+ *
+ * `worker/demo/dataset.json` is a dump of the OWNER's object, so every row in it is the owner's
+ * setting frozen at the moment `scripts/seed-demo.mjs` last ran. For most keys that is the point —
+ * the demo should look like a real account. `locale` is the exception: it decides what language a
+ * STRANGER is answered in, and a stranger's language is a property of their request, not of
+ * whoever built the fixture.
+ *
+ * Leaving it in also made the sandbox the one account where a stored preference existed for
+ * someone who had never expressed one — so `resolveLocale` had a stored answer to prefer and the
+ * visitor's `x-mt-locale` never got a say. The visible symptom was precise and confusing: the
+ * toggle reads EN, the shell is English, and the category names and the whole AI answer come back
+ * Ukrainian, until the visitor toggles the language twice and the PUT finally overwrites the row.
+ *
+ * It lives HERE, next to the other demo policy, rather than in `demo-load.ts`: that module imports
+ * the dataset JSON, which makes it unloadable from a plain Node test — and this is exactly the
+ * rule most worth testing.
+ */
+export const DEMO_EXCLUDED_STATE_KEYS = new Set(["locale"]);
+
 export const DEMO_DAILY_NEW_SANDBOXES = 300;
 
 /**

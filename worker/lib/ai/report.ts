@@ -4,8 +4,8 @@
 // кличе Sonnet 5, зберігає структурований репорт у ai_reports. Ідемпотентно по періоду.
 import type { Env } from "../../env.ts";
 import { getRates } from "../finance/finance.ts";
-import { st } from "../platform/i18n.ts";
-import { ownerLocale } from "../finance/categories-i18n.ts";
+import { st, resolveLocale } from "../platform/i18n.ts";
+import { catNameSql } from "../finance/categories-i18n.ts";
 import { fundsBreakdown } from "./advisor.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_COUNT, SPEND_TX_COUNT, valueMode, spendSum, incomeSum, amountSum,
@@ -19,7 +19,7 @@ import { getState } from "../finance/repo.ts";
 import { callHaikuJson } from "./json.ts";
 import { replyLangDirective } from "./prompt.ts";
 import type { AnthropicContentBlock } from "./ai.ts";
-import type { AdviceAction } from "./tasks.ts";
+import type { AdviceAction } from "./generate.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import { logUsage, callCostUsd } from "./cost.ts";
 
@@ -44,57 +44,64 @@ export async function generateFinancialReport(
     {
       type: "text",
       text:
-        "Ти — старший персональний фінансовий аналітик. Побудуй ДЕТАЛЬНИЙ періодичний звіт українською на " +
-        "основі поданих КАНОНІЧНИХ даних користувача (усі суми — у гривнях, уже зведені; period описує тип і межі). " +
-        "Дані вже коректно порахували (готівка за реальною категорією, перекази між своїми виключені, валюти зведені " +
-        "в ₴) — БЕРИ саме ці числа, не перераховуй і не вигадуй. У payload є: current (spend/income/net/savings_rate), " +
-        "previous (той самий попередній період — для чесного порівняння), categories (з delta_pct до минулого), " +
-        "top_merchants, notable (помітні операції з описами користувача user_note — враховуй їх, щоб не називати " +
-        "разове регулярним), anomalies_hint (підказки про подорожчання підписок/викиди), forecast (прогноз/runway), " +
-        "by_importance (частка витрат за вагомістю: essential=обов'язкові, discretionary=бажані, optional=необов'язкові — " +
-        "у порадах про скорочення цілься в optional/discretionary, а essential не радь різати). " +
-        "ВАЖЛИВО (не «по книжці»): поважай user_profile — це реальна ситуація людини; якщо нема активного доходу, " +
-        "НЕ рекомендуй загальники типу «наростіть дохід/інвестуйте» — фокус на runway та зрізанні optional/discretionary. " +
-        "recurring_vs_oneoff розділяє звичний місячний ритм (recurring) від разових викидів (oneoff: податки, стоматолог, " +
-        "велика покупка) — разові НЕ проєктуй у наступний період і НЕ називай трендом. Прогнози став на реальну ПОДУШКУ " +
-        "(forecast.cushion_uah — позитивні власні кошти), а НЕ на нетто з кредиткою; борг (forecast.debt_uah) згадуй окремо. " +
-        "forecast.investment_reserve_uah (крипта/брокер) — НЕ ліквідна подушка й НЕ входить у runway; це окрема остання лінія, " +
-        "не пропонуй продавати інвестиції без крайньої потреби. accounts — рахунки з роллю та ОПИСОМ (note): враховуй note як контекст. " +
+        "You are a senior personal financial analyst. Build a DETAILED periodic report from the user's CANONICAL " +
+        "data supplied below (all amounts in hryvnia, already converted; period describes the type and the bounds). " +
+        "The data has already been computed correctly (cash counted by its real category, transfers between the " +
+        "user's own accounts excluded, currencies converted to UAH) — USE these numbers, do not recompute and do not " +
+        "invent. The payload carries: current (spend/income/net/savings_rate), previous (the same preceding period, " +
+        "for a fair comparison), categories (with delta_pct against the previous one), top_merchants, notable " +
+        "(noteworthy operations with the user's own user_note — take them into account so you do not call a one-off " +
+        "recurring), anomalies_hint (hints about subscription price rises and outliers), forecast (projection and " +
+        "runway), by_importance (share of spending by importance: essential, discretionary, optional — aim advice " +
+        "about cutting at optional and discretionary, and never advise cutting essential). " +
+        "IMPORTANT (not \"by the book\"): respect user_profile — it is the person's real situation; if there is no " +
+        "active income, do NOT recommend generalities like \"grow your income\" or \"invest\" — focus on runway and " +
+        "on trimming optional/discretionary. " +
+        "recurring_vs_oneoff separates the usual monthly rhythm (recurring) from one-off spikes (oneoff: taxes, " +
+        "dentist, a large purchase) — do NOT project one-offs into the next period and do NOT call them a trend. " +
+        "Base forecasts on the real CUSHION (forecast.cushion_uah — positive own funds), NOT on a net figure that " +
+        "includes the credit card; mention debt (forecast.debt_uah) separately. " +
+        "forecast.investment_reserve_uah (crypto, brokerage) is NOT the liquid cushion and NOT part of runway; it is " +
+        "a separate last line, so do not propose selling investments without dire need. accounts lists accounts with " +
+        "their role and DESCRIPTION (note): treat note as context. " +
         // ⚠️ Явні мінімуми, бо без них модель вивалювала ВЕСЬ звіт в один абзац `summary`, а
         // `sections`/`predictions`/`advice` лишала порожніми — валідний JSON і порожній екран.
         // Перевірка в коді (`validate` нижче) ловить це й перепитує; тут — щоб не доводилось.
-        "🔴 ОБОВʼЯЗКОВО ЗАПОВНИ ВСІ ПОЛЯ. `summary` — це 2-4 речення огляду, НЕ місце для всього " +
-        "звіту: деталі йдуть у `sections` (2-4 секції), прогноз — у `predictions`, поради — у " +
-        "`advice` (3-5 штук), топ-категорії — у `category_breakdown`. Звіт із самим лише summary " +
-        "вважається помилковим і буде відхилений. " +
+        "🔴 YOU MUST FILL EVERY FIELD. `summary` is a 2-4 sentence overview, NOT the place for the whole report: " +
+        "detail goes in `sections` (2-4 sections), the projection in `predictions`, advice in `advice` (3-5 items), " +
+        "top categories in `category_breakdown`. A report consisting of summary alone counts as an error and will " +
+        "be rejected. " +
         // §CADENCE — без цього блоку модель порівнювала МІСЯЧНІ платежі тиждень-до-тижня й видавала
         // «підписки впали з 1300₴ до 99₴ (−92%)», хоча це той самий календар: одне списання потрапило
         // у вікно, друге — ні. Прапорці рахує report.ts (детерміновано), тут — що з ними робити.
-        "🔴 РИТМ СПИСАНЬ. У categories є charges_n / prev_charges_n (скільки списань дало суму), " +
-        "monthly_usual_uah (канонічний МІСЯЧНИЙ рівень категорії) і billing: 'monthly_fixed' = списується " +
-        "раз на місяць (підписка, оренда, страховка), 'variable' = багато дрібних покупок. Якщо " +
-        "delta_meaningful=false — delta_pct показує ТАЙМІНГ списання, а не зміну поведінки, і подавати його " +
-        "як тренд ЗАБОРОНЕНО. Замість «підписки впали на 92%» пиши «цього тижня місячних списань не було; " +
-        "звичний рівень — monthly_usual_uah». Так само income_delta_meaningful=false означає, що зарплата чи " +
-        "інвойс прийшов іншого тижня, а НЕ що дохід зник — не будуй на цьому ні висновку, ні прогнозу. " +
-        "Для періодів, коротших за місяць, порівнюй витрати з monthly_usual_uah, а не лише з previous. " +
+        "🔴 CHARGE CADENCE. categories carry charges_n / prev_charges_n (how many charges produced the sum), " +
+        "monthly_usual_uah (the canonical MONTHLY level of the category) and billing: 'monthly_fixed' = charged once " +
+        "a month (subscription, rent, insurance), 'variable' = many small purchases. When delta_meaningful=false, " +
+        "delta_pct reflects the TIMING of a charge rather than a change in behaviour, and presenting it as a trend " +
+        "is FORBIDDEN. Instead of \"subscriptions fell 92%\", write \"no monthly charge landed this week; the usual " +
+        "level is monthly_usual_uah\". Likewise income_delta_meaningful=false means the salary or invoice arrived in " +
+        "a different week, NOT that income disappeared — build neither a conclusion nor a forecast on it. " +
+        "For periods shorter than a month, compare spending against monthly_usual_uah, not against previous alone. " +
         // §NOVELTY — модель повторювала ту саму думку щотижня («квартира забрала багато»), бо
         // найбільша категорія найбільша завжди. Список тем рахує report.ts із попередніх звітів.
-        "🔴 НОВИЗНА. already_covered — спостереження, аномалії й поради з ТВОЇХ попередніх звітів. НЕ подавай " +
-        "їх як новину вдруге: якщо ситуація не змінилась, дай максимум одну фразу «без змін» і йди далі. " +
-        "Найбільша категорія сама по собі — НЕ спостереження («оренда найбільша» правда щомісяця й не додає " +
-        "нічого); спостереження — це те, що ЗМІНИЛОСЬ, або те, чого людина не бачить із самої таблиці. " +
-        "prior_reports — твої попередні звіти: звір траєкторію, відзнач що покращилось/погіршилось відтоді. " +
-        "notable та biggest_expenses мають поле tx_id — коли згадуєш КОНКРЕТНУ операцію в тексті (summary/sections/" +
-        "anomalies.detail/advice.detail), встав посилання на неї токеном [tx:ID] одразу після назви (напр. «Rozetka [tx:abc123]»), " +
-        "де ID — саме tx_id тієї операції. Використовуй ЛИШЕ наявні tx_id, не вигадуй. Не зловживай — 1-2 цитати там, де доречно. " +
-        "Пиши по суті, з конкретними числами й % змін. Відповідай ВИКЛЮЧНО валідним JSON без markdown: " +
-        "{headline, summary, sections:[{title, body}] (2-4 секції — куди пішли гроші, що змінилось і чому, ризики), " +
-        "category_breakdown:[{name, amount_uah, delta_pct (число або null), note}] (топ-8 категорій, note — 1 фраза), " +
-        "anomalies:[{label, detail, severity ('info'|'warn'|'high')}] (незвичні/разові витрати, подорожчання підписок; " +
-        "порожній масив якщо нема), predictions:{next_period_spend_uah (число або null), runway_months (число або null), " +
-        "note}, advice:[{title, detail, action}] (3-5 дієвих порад з ефектом у грн; action — null або " +
-        "{type:'create_budget', label, category_id, category_name, amount_uah})}. Суми — цілі числа гривень." +
+        "🔴 NOVELTY. already_covered holds the observations, anomalies and advice from YOUR previous reports. Do NOT " +
+        "present them as news a second time: if the situation has not changed, give at most one \"unchanged\" phrase " +
+        "and move on. The largest category is not in itself an observation (\"rent is the largest\" is true every " +
+        "month and adds nothing); an observation is what CHANGED, or what the person cannot see from the table " +
+        "itself. prior_reports holds your earlier reports: check the trajectory and note what improved or worsened " +
+        "since. " +
+        "notable and biggest_expenses carry a tx_id field — when you mention a SPECIFIC operation in the text " +
+        "(summary/sections/anomalies.detail/advice.detail), put the token [tx:ID] right after its name (e.g. " +
+        "\"Rozetka [tx:abc123]\"), where ID is that operation's tx_id. Use ONLY ids that exist, never invented. Do " +
+        "not overdo it — 1-2 citations where they are apt. " +
+        "Write to the point, with concrete numbers and percentage changes. Answer with VALID JSON ONLY, no markdown: " +
+        "{headline, summary, sections:[{title, body}] (2-4 sections — where the money went, what changed and why, " +
+        "risks), category_breakdown:[{name, amount_uah, delta_pct (number or null), note}] (top 8 categories, note is " +
+        "one phrase), anomalies:[{label, detail, severity ('info'|'warn'|'high')}] (unusual or one-off spending, " +
+        "subscription price rises; empty array if none), predictions:{next_period_spend_uah (number or null), " +
+        "runway_months (number or null), note}, advice:[{title, detail, action}] (3-5 actionable items with the " +
+        "effect in UAH; action is null or {type:'create_budget', label, category_id, category_name, amount_uah})}. " +
+        "Amounts are whole hryvnia." +
         (await replyLangDirective(env)),
     },
   ];
@@ -108,12 +115,12 @@ export async function generateFinancialReport(
     env, system, [{ type: "text", text: JSON.stringify(payload) }], 8000, await getTaskModel(env, "report"),
     (r) => {
       const missing: string[] = [];
-      if (!(r.sections?.length >= 2)) missing.push("розбір (sections, 2-4 секції)");
-      if (!(r.advice?.length >= 3)) missing.push("поради (advice, 3-5 штук)");
-      if (!r.predictions) missing.push("прогноз (predictions)");
+      if (!(r.sections?.length >= 2)) missing.push("the breakdown (sections, 2-4 of them)");
+      if (!(r.advice?.length >= 3)) missing.push("advice (advice, 3-5 items)");
+      if (!r.predictions) missing.push("the projection (predictions)");
       // `category_breakdown` — єдине з чотирьох, що має детермінований дублікат (ми рахуємо
       // категорії самі), тож його відсутність екран не ламає й на ретрай не тягне.
-      return missing.length ? `бракує обовʼязкових полів: ${missing.join(", ")}.` : null;
+      return missing.length ? `required fields are missing: ${missing.join(", ")}.` : null;
     },
   );
 }
@@ -157,8 +164,9 @@ interface CatRow { id: number | null; name: string | null; spent: number; n: num
 
 // Розбивка по ефективній категорії (канонічно, зведено в ₴).
 async function cats(env: Env, from: number, to: number, mult: string): Promise<CatRow[]> {
+  const loc = await resolveLocale(env);
   const r = await env.DB.prepare(
-    `SELECT ${EFF_CAT_ID} AS id, ${EFF_CAT_NAME} AS name, ${amountSum(mult)} AS spent, ${SPEND_TX_COUNT} AS n
+    `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${amountSum(mult)} AS spent, ${SPEND_TX_COUNT} AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 14`,
@@ -206,6 +214,7 @@ export async function buildReportContext(
   importance: ImportancePoint[];
   categories: CategoryDetail[];
 }> {
+  const loc = await resolveLocale(env);
   const rates = await getRates(env.DB);
   const { mult } = valueMode(rates, null);
   const { from, to, prevFrom, prevTo } = resolveBounds(type, scope, range);
@@ -224,7 +233,7 @@ export async function buildReportContext(
     ).bind(from, to).all<{ merchant: string; spent: number; n: number }>(),
     // Помітні операції з описом користувача — щоб AI не плутав разове з регулярним.
     env.DB.prepare(
-      `SELECT t.id AS id, t.merchant AS merchant, t.user_note AS note, ${EFF_CAT_NAME} AS category,
+      `SELECT t.id AS id, t.merchant AS merchant, t.user_note AS note, ${catNameSql(loc, EFF_CAT_NAME)} AS category,
               CAST(ROUND((-${EFF_AMOUNT}) * ${mult}) AS INTEGER) AS amount
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND t.user_note IS NOT NULL AND t.user_note <> ''
@@ -232,7 +241,7 @@ export async function buildReportContext(
     ).bind(from, to).all<{ id: string; merchant: string | null; note: string; category: string | null; amount: number }>(),
     // Найбільші разові витрати (кандидати в аномалії).
     env.DB.prepare(
-      `SELECT t.id AS id, t.merchant AS merchant, ${EFF_CAT_NAME} AS category,
+      `SELECT t.id AS id, t.merchant AS merchant, ${catNameSql(loc, EFF_CAT_NAME)} AS category,
               CAST(ROUND((-${EFF_AMOUNT}) * ${mult}) AS INTEGER) AS amount
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}
@@ -267,7 +276,6 @@ export async function buildReportContext(
 
   const prevMap = new Map(prevCats.map((c) => [c.id, c.spent]));
   const prevNMap = new Map(prevCats.map((c) => [c.id, c.n]));
-  const loc = await ownerLocale(env.DB);
   const categories = curCats.map((c) => {
     const p = prevMap.get(c.id) ?? 0;
     const delta = p > 0 ? Math.round(((c.spent - p) / p) * 100) : (c.spent > 0 ? null : 0);
@@ -315,7 +323,7 @@ export async function buildReportContext(
   const anomaliesHint: string[] = [];
   for (const a of actuals) {
     if (a.price_change_pct != null && a.price_change_pct >= 5) {
-      anomaliesHint.push(`підписка id=${a.id} подорожчала на ${a.price_change_pct}% (остання ${a.last_amount != null ? money(a.last_amount) : "?"}₴)`);
+      anomaliesHint.push(`subscription id=${a.id} rose by ${a.price_change_pct}% (latest ${a.last_amount != null ? money(a.last_amount) : "?"}₴)`);
     }
   }
 
@@ -325,13 +333,13 @@ export async function buildReportContext(
       // Модель мусить знати, чи період завершений: інакше вона екстраполює півтижня як тиждень.
       // Для custom довжина довільна, тож і «previous» — рівно такий самий проміжок перед ним.
       note: type === "custom"
-        ? `довільний діапазон на ${periodDays} дн., обраний користувачем; previous — такий самий за довжиною проміжок безпосередньо перед ним`
+        ? `an arbitrary ${periodDays}-day range chosen by the user; previous is an equally long stretch immediately before it`
         : scope === "current"
-          ? "поточний період ДО СЬОГОДНІ (ще не завершений — не екстраполюй як повний)"
-          : "завершений період",
+          ? "the CURRENT period UP TO TODAY (not finished — do not extrapolate it as a full one)"
+          : "a completed period",
     },
     // §B реальна ситуація користувача — поважай її, не радь «по книжці» (напр. нема роботи → фокус на runway, а не «наростити дохід»).
-    user_profile: profile || "(не вказано)",
+    user_profile: profile || "(not specified)",
     current: {
       spend_uah: money(cur.spend), income_uah: money(cur.income), net_uah: money(net),
       savings_rate_pct: savingsRate, income_charges_n: cur.income_n,
@@ -355,7 +363,7 @@ export async function buildReportContext(
     // §R3 investment_reserve_uah — крипта/брокер: НЕ подушка й НЕ входить у runway, окрема остання лінія.
     forecast: {
       cushion_uah: cushionMajor, debt_uah: money(debt), investment_reserve_uah: money(investment),
-      monthly_burn_uah: burnMonthly, burn_method: last3.length ? "середнє за 3 завершені місяці" : "витрати періоду ×30",
+      monthly_burn_uah: burnMonthly, burn_method: last3.length ? "average of the 3 completed months" : "period spending ×30",
       runway_months: runwayMonths,
     },
     // §R3: рахунки з роллю та описом (note) — контекст для AI (не пропонуй продавати інвестиції без потреби).

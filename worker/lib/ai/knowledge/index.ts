@@ -14,13 +14,14 @@ import type { NotifLocale } from "../../../../shared/notif-i18n.ts";
 export const KNOWLEDGE_DOCS: KnowledgeDoc[] = [personalFinance, appMethodology, investing];
 
 const PREAMBLE =
-  "БАЗА ЗНАНЬ (довідкові принципи, якими ти керуєшся як фінменеджер). " +
-  "Це ЗАГАЛЬНІ знання, а НЕ дані цього користувача — конкретні числа завжди бери з фінансового контексту нижче, " +
-  "а не звідси. Якщо принцип суперечить реальній ситуації користувача — пріоритет у реальних даних.";
+  "KNOWLEDGE BASE (the reference principles you work from as a financial manager). " +
+  "This is GENERAL knowledge, NOT this user's data — always take concrete numbers from the financial context " +
+  "below, never from here. Where a principle conflicts with the user's actual situation, the real data wins.";
 
 const USER_NOTE =
-  "Далі — нотатки, які написав САМ користувач (його правила, контекст, домовленості). " +
-  "Став їх вище за загальні принципи, коли вони суперечать, але НІКОЛИ вище за реальні числа з фінансового контексту.";
+  "What follows are notes the USER wrote themselves (their own rules, context, arrangements). " +
+  "Rank them above the general principles where the two conflict, but NEVER above the real numbers in the " +
+  "financial context.";
 
 function render(docs: { title: string; body: string }[]): string {
   return docs.map((d) => `# ${d.title}\n${d.body}`).join("\n\n---\n\n");

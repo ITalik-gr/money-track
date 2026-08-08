@@ -13,6 +13,8 @@
 // Pure and side-effect free: it returns {sql, binds}[] and the DO runs them in one batch. Keeping
 // it a pure builder means it can be unit-tested against the shim without a live object.
 import demoDatasetJson from "../demo/dataset.json";
+// What a sandbox must not inherit from the owner's snapshot — see the constant's own note.
+import { DEMO_EXCLUDED_STATE_KEYS } from "../lib/platform/demo.ts";
 
 type Row = Record<string, unknown>;
 interface DemoDataset {
@@ -66,6 +68,7 @@ const SHIFTED_STATE_KEYS = new Set(["advisor", "advisor_history"]);
 /** Timestamp-bearing fields inside those blobs. */
 const STATE_TIME_FIELDS = new Set(["generated_at"]);
 
+
 /**
  * Shift the unix timestamps inside one stored JSON blob. Walks the parsed structure instead of
  * doing a regex over the text: a string replace would also hit amounts and ids that happen to sit
@@ -111,6 +114,8 @@ export function buildDemoStatements(nowSec: number): DemoStatement[] {
     const sql = `INSERT OR REPLACE INTO ${table} (${cols.join(", ")}) VALUES (${placeholders})`;
 
     for (const row of rows) {
+      // The sandbox must not inherit the fixture author's language — see DEMO_EXCLUDED_STATE_KEYS.
+      if (table === "app_state" && DEMO_EXCLUDED_STATE_KEYS.has(String(row.key))) continue;
       const shifted: Row = { ...row };
       for (const tc of timeCols) if (typeof shifted[tc] === "number") shifted[tc] = (shifted[tc] as number) + shift;
       // `health_history.day` is the string form of its `ts`; after shifting ts it must be recomputed.

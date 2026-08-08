@@ -849,6 +849,7 @@
   "chat.sub": "Your personal financial manager — sees all your numbers, accounts, subscriptions, and budgets.",
   "chat.newShort": "New",
   "chat.emptyPrompt": "Ask anything about your money — I'll answer using your real numbers:",
+  "chat.demoShort": "Demo mode: answers here are deliberately short. The sandbox runs on a shared AI budget, so the reply is capped — a full account answers in as much detail as the question needs.",
   "chat.regenerateTitle": "Regenerate",
   "chat.regenerateBtn": "Again",
   "chat.retryBtn": "Reply didn't come through — send again ↻",

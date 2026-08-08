@@ -10,8 +10,8 @@
  * product, not as a missing translation.
  *
  * Deliberately NOT here (they are not UI):
- *   - model prompts and tool schemas (`lib/ai/*`) — instructions to Claude, which answers in the
- *     reader's language via `replyLangDirective`;
+ *   - model prompts and tool schemas (`lib/ai/*`) — instructions to Claude. They are written ONCE,
+ *     in English, and never translated: see `resolveLocale` below and §LANG in CLAUDE.md;
  *   - match keys (`transfers.ts`, `REFUND_PREFIXES` in `stats.ts`, CSV header aliases) — they are
  *     compared against bank data, so translating them would break the matching;
  *   - the Telegram bot (`routes/telegram.ts`, `messaging/{alert,proactive}.ts`) — owner-only by
@@ -21,8 +21,32 @@
  * `if (locale === "en")` at the call site — that is how two spellings of one phrase appear.
  */
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
+import type { Env } from "../../env.ts";
+import { getState } from "../finance/repo.ts";
 
 export type ServerLocale = NotifLocale;
+
+/**
+ * WHAT LANGUAGE IS THIS REQUEST IN — the single answer, for the whole worker.
+ *
+ * Reader first (`env.UI_LOCALE`, sent as `x-mt-locale` on every request), stored preference second
+ * (`app_state.locale`, which is all the request-less paths have: cron, Telegram, the DO alarm).
+ *
+ * WHY IT IS ONE FUNCTION NOW. The question used to have FOUR implementations with two different
+ * answers: `routes/api/index.ts` did reader-first, while `ownerLocale(db)` in categories-i18n and
+ * two private copies in `notify.ts`/`deliver.ts` read the stored column ALONE. Twenty call sites —
+ * the entire AI surface, `/ingest`, `/setup`, `/import`, `/credentials`, the notification feed and
+ * the delivery layer — therefore silently ignored the reader. And the stored column is EMPTY for
+ * everyone who never opened Settings (and for every demo sandbox, which never writes it), while
+ * empty read as Ukrainian. That is why an English screen kept producing Ukrainian category names,
+ * Ukrainian error strings and Ukrainian AI prose no matter how often the directive was rewritten.
+ *
+ * One question, one function. A second reader of `app_state.locale` is a bug by construction.
+ */
+export async function resolveLocale(env: Env): Promise<ServerLocale> {
+  if (env.UI_LOCALE === "en" || env.UI_LOCALE === "uk") return env.UI_LOCALE;
+  return (await getState(env.DB, "locale")) === "en" ? "en" : "uk";
+}
 
 /**
  * uk/en pairs in one place, so a missing translation is impossible to commit: the `en` half is
@@ -141,6 +165,9 @@ const S = {
     en: "{avg} ₴/mo on average. Cutting 15% frees {cut} ₴/mo — that is {year} ₴ a year.",
   },
   advTopCatAction: { uk: "Ліміт {amount} ₴ на «{name}»", en: "Set a {amount} ₴ limit on “{name}”" },
+  // Shown ON the insight card in place of the insight. §Обробка помилок: it carries the real
+  // reason, because "try again" makes a missing key or a rate limit undiagnosable.
+  insightFailed: { uk: "Не вдалося згенерувати інсайт: {error}", en: "Could not generate the insight: {error}" },
   advOptionalTitle: { uk: "Необовʼязкові витрати — найбезпечніше скорочення", en: "Optional spending is the safest thing to cut" },
   advOptionalDetail: {
     uk: "За 90 днів {sum} ₴ (≈ {perMonth} ₴/міс) у категоріях, позначених як необовʼязкові. Це те, що ріжеться без шкоди для базових потреб.",
@@ -253,6 +280,8 @@ const S = {
   errFilterTooMany: { uk: "Забагато збережених фільтрів (максимум {max})", en: "Too many saved filters (maximum {max})" },
 
   errDocNotFound: { uk: "Документ не знайдено", en: "Document not found" },
+  errGroupNotFound: { uk: "Групу не знайдено", en: "Group not found" },
+  factTextRequired: { uk: "Потрібен текст факту", en: "The fact needs some text" },
   errDocTitleRequired: { uk: "Потрібна назва документа", en: "A document title is required" },
   errDocEmpty: { uk: "Документ порожній", en: "The document is empty" },
   errDocTooLong: { uk: "Задовгий документ: {len} символів, максимум {max}", en: "Document too long: {len} characters, maximum {max}" },

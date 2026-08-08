@@ -3,6 +3,7 @@
 // (account, window) pairs stepped one request at a time; the client drives the 60s
 // spacing and shows progress. Cursor lives in app_state so it survives interruption.
 import { Hono } from "hono";
+import { resolveLocale } from "../lib/platform/i18n.ts";
 import type { Env } from "../env.ts";
 import type { SetupStatus } from "../../shared/api/platform.ts";
 import { MonoRateLimit } from "../lib/bank/mono.ts";
@@ -91,8 +92,7 @@ setup.get("/telegram", async (c) => {
 setup.post("/telegram/link", async (c) => {
   if (!c.env.TG_BOT_TOKEN) {
     const { st } = await import("../lib/platform/i18n.ts");
-    const { ownerLocale } = await import("../lib/finance/categories-i18n.ts");
-    return c.json({ error: st(await ownerLocale(c.env.DB), "tgNotConfigured") }, 400);
+    return c.json({ error: st(await resolveLocale(c.env), "tgNotConfigured") }, 400);
   }
   const userId = c.env.USER_ID;
   if (!userId) return c.json({ error: "no user" }, 400);
@@ -103,8 +103,7 @@ setup.post("/telegram/link", async (c) => {
   const { isDemoEnv } = await import("../lib/platform/demo.ts");
   if (isDemoEnv(c.env)) {
     const { st } = await import("../lib/platform/i18n.ts");
-    const { ownerLocale } = await import("../lib/finance/categories-i18n.ts");
-    return c.json({ error: st(await ownerLocale(c.env.DB), "tgDemoUnavailable") }, 403);
+    return c.json({ error: st(await resolveLocale(c.env), "tgDemoUnavailable") }, 403);
   }
   const { telegramLinkToken } = await import("../lib/platform/auth.ts");
   const { getBotUsername } = await import("../lib/messaging/telegram.ts");

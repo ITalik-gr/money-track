@@ -205,7 +205,9 @@ app.get("/demo", async (c) => {
   const nowSec = Math.floor(Date.now() / 1000);
   const stub = c.env.USER_DO.get(c.env.USER_DO.idFromName(`demo:${demoId}`));
   try {
-    await stub.seedDemo(nowSec);
+    // The object cannot derive its own name (`idFromName` is one-way), so it is told: the alarm
+    // needs it to identify itself as a demo when no request is there to say so.
+    await stub.seedDemo(nowSec, `demo:${demoId}`);
   } catch (e) {
     // Seeding is the one slow, failure-prone step. Report it as such instead of letting it
     // surface as an empty 500 — a visitor who gets a blank page reads it as "the app is broken",

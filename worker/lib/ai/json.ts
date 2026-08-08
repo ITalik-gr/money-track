@@ -101,7 +101,7 @@ function parseJson<T>(text: string): T {
     if (repaired) {
       try { return JSON.parse(repaired) as T; } catch { /* здались */ }
     }
-    throw new Error(`AI повернув невалідний JSON: ${text.slice(0, 200)}`);
+    throw new Error(`the AI returned invalid JSON: ${text.slice(0, 200)}`);
   }
 }
 
@@ -133,11 +133,11 @@ export async function callHaikuJson<T>(
   const settle = async (result: T, usage: AnthropicUsage): Promise<{ result: T; usage: AnthropicUsage }> => {
     const complaint = first.capped ? null : validate?.(result);
     if (!complaint) return { result, usage };
-    console.warn(`ai/json: неповна відповідь — ${complaint}; перепитую`);
+    console.warn(`ai/json: incomplete answer — ${complaint}; asking again`);
     try {
       const again = await callHaiku(
         env, system,
-        [...userContent, { type: "text", text: `Твоя попередня відповідь була НЕПОВНОЮ: ${complaint} Поверни ПОВНИЙ JSON з усіма полями схеми. Не скорочуй: довгий текст має жити в sections, а не в summary.` }],
+        [...userContent, { type: "text", text: `Your previous answer was INCOMPLETE: ${complaint} Return the FULL JSON with every field of the schema. Do not abbreviate: long text belongs in sections, not in summary.` }],
         Math.min(Math.round(maxTokens * 1.5), 16000), model,
       );
       const retried = parseJson<T>(again.text);
@@ -164,7 +164,7 @@ export async function callHaikuJson<T>(
     } catch {
       const second = await callHaiku(
         env, system,
-        [...userContent, { type: "text", text: "Твоя попередня відповідь була невалідним JSON. Поверни ЛИШЕ валідний JSON-обʼєкт, без жодного тексту, пояснень чи markdown до або після." }],
+        [...userContent, { type: "text", text: "Your previous answer was not valid JSON. Return ONLY a valid JSON object, with no text, explanation or markdown before or after it." }],
         maxTokens, model,
       );
       return await settle(parseJson<T>(second.text), second.usage);
@@ -172,7 +172,7 @@ export async function callHaikuJson<T>(
   }
 
   const retryTokens = Math.min(Math.round(maxTokens * 1.8), 16000);
-  console.warn(`ai/json: відповідь обірвано на ${maxTokens} токенах, повторюю з ${retryTokens}`);
+  console.warn(`ai/json: answer cut off at ${maxTokens} tokens, retrying with ${retryTokens}`);
   const second = await callHaiku(env, system, userContent, retryTokens, model);
   try {
     return await settle(parseJson<T>(second.text), second.usage);
@@ -200,7 +200,7 @@ export async function callHaikuMessagesJson<T>(
     const retryTokens = truncated ? Math.min(Math.round(maxTokens * 1.8), 8000) : maxTokens;
     const retry: ChatMsg[] = truncated
       ? messages
-      : [...messages, { role: "user", content: "Поверни ЛИШЕ валідний JSON-обʼєкт, без тексту до/після." }];
+      : [...messages, { role: "user", content: "Return ONLY a valid JSON object, with no text before or after it." }];
     const second = await callHaikuMessages(env, system, retry, retryTokens, model);
     return { result: parseJson<T>(second.text), usage: second.usage };
   }

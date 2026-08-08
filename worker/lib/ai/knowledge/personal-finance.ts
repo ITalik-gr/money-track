@@ -9,46 +9,46 @@ export const personalFinance: KnowledgeDoc = {
   titleEn: "Personal finance principles",
   summaryEn: "Emergency fund, runway, money priorities, debt payoff, savings rate, sinking funds.",
   body: `
-### Подушка безпеки (emergency fund)
-- Ліквідний резерв на непередбачене (втрата доходу, ремонт, здоров'я). Тримати ЛІКВІДНО (готівка/картки/банки), не в інвестиціях чи криптовалюті.
-- Орієнтир розміру: 3–6 місяців базових витрат для стабільного доходу; **6–12 місяців для нестабільного/нерегулярного доходу** (фриланс, ФОП, сезонність), бо провали доходу глибші.
-- «Базові витрати» = обов'язкові (житло, їжа, комуналка, транспорт, зв'язок, мінімальні платежі), а не весь спосіб життя. Подушку рахуємо від них, не від максимальних місяців.
+### Emergency fund
+- A liquid reserve for the unexpected (lost income, repairs, health). Keep it LIQUID (cash, cards, jars) — not in investments or crypto.
+- Target size: 3–6 months of basic expenses on a stable income; **6–12 months on an unstable or irregular income** (freelance, sole proprietor, seasonal work), because the income gaps run deeper.
+- "Basic expenses" means the obligatory ones (housing, food, utilities, transport, communications, minimum payments), not the whole lifestyle. Size the fund against those, not against the most expensive months.
 
-### Runway (запас ходу)
-- runway = ліквідна подушка ÷ середні місячні витрати (burn). Показує, скільки місяців протягнеш без доходу за поточного темпу.
-- Орієнтири: <3 міс — тривожно, пріоритет №1 нарощувати подушку й різати необов'язкове; 3–6 міс — прийнятно; >6 міс — комфортно, можна спрямовувати надлишок у цілі/інвестиції.
-- Runway рахується від ЛІКВІДНОЇ подушки, борг по кредитці й інвест-резерв у знаменник/чисельник не входять.
+### Runway
+- runway = liquid emergency fund ÷ average monthly spend (burn). It says how many months the user lasts with no income at the current pace.
+- Reference points: <3 months is alarming — priority number one is growing the fund and cutting the optional; 3–6 months is acceptable; >6 months is comfortable and the surplus can go to goals or investments.
+- Runway is measured from the LIQUID fund. Credit-card debt and the investment reserve enter neither the numerator nor the denominator.
 
-### Ієрархія пріоритетів грошей (waterfall)
-Куди спрямовувати вільні кошти по черзі:
-1. Покрити базові витрати місяця.
-2. Міні-подушка ~1 місяць (щоб не залазити в борг на дрібницях).
-3. **Погасити дорогий борг** (кредитка, споживчі кредити з високим %) — це гарантований «дохід» на рівні ставки боргу.
-4. Повна подушка (3–12 міс за ситуацією).
-5. Цілі середнього строку (велика покупка, поїздка) через sinking funds.
-6. Довгострокові інвестиції.
-Не перестрибувати рівні без причини: інвестувати, маючи борг по кредитці під 30–50% річних, — майже завжди програш.
+### Money priority waterfall
+Where free money goes, in order:
+1. Cover the month's basic expenses.
+2. A mini-fund of about one month, so small surprises do not turn into debt.
+3. **Pay off expensive debt** (credit cards, high-rate consumer loans) — a guaranteed "return" equal to the debt's rate.
+4. The full emergency fund (3–12 months depending on the situation).
+5. Medium-term goals (a large purchase, a trip) through sinking funds.
+6. Long-term investing.
+Do not skip levels without a reason: investing while carrying credit-card debt at 30–50% a year is almost always a loss.
 
-### Погашення боргу
-- **Метод лавини** (avalanche): гасити першим борг із найвищою відсотковою ставкою — математично оптимально, менша переплата.
-- **Метод сніжку** (snowball): гасити першим найменший за сумою борг — гірше математично, але дає психологічні «перемоги» й мотивацію.
-- Кредитний ліміт/кредитка — зазвичай найдорожчий борг; гасити його пріоритетно. Мінімальний платіж покриває переважно відсотки — тіло майже не зменшується.
+### Paying off debt
+- **Avalanche**: pay the highest interest rate first — mathematically optimal, least total interest.
+- **Snowball**: pay the smallest balance first — worse mathematically, but it delivers psychological wins and keeps momentum.
+- A credit limit or credit card is usually the most expensive debt, so it comes first. The minimum payment is mostly interest, and barely touches the principal.
 
-### Норма заощаджень і бюджет
-- Норма заощаджень = (дохід − витрати) ÷ дохід. Орієнтир — 20%+; для агресивних цілей — більше. Це головний важіль багатства, важливіший за дохідність інвестицій на ранньому етапі.
-- Орієнтир 50/30/20: ~50% потреби, ~30% бажання, ~20% заощадження/борг. Це відправна точка, а не догма — адаптувати під реальність.
-- **Pay yourself first**: відкладати заплановану суму ОДРАЗУ після доходу, а не «що лишиться в кінці місяця» (зазвичай не лишається).
+### Savings rate and budgeting
+- Savings rate = (income − spending) ÷ income. Aim for 20%+, more for aggressive goals. Early on this matters more for wealth than investment returns do.
+- The 50/30/20 guide: ~50% needs, ~30% wants, ~20% savings and debt. A starting point, not a rule — adapt it to reality.
+- **Pay yourself first**: move the planned amount aside IMMEDIATELY when income arrives, rather than "whatever is left at the end of the month" (usually nothing is).
 
-### Sinking funds (конверти під нерегулярне)
-- Під річні/квартальні/сезонні витрати (страховка, податки, техобслуговування, подарунки, ремонт) відкладати щомісяця частину суми заздалегідь. Тоді великий рахунок не б'є по бюджету одним ударом.
-- У застосунку це конверти-бюджети й цілі-заощадження.
+### Sinking funds
+- For annual, quarterly or seasonal costs (insurance, taxes, maintenance, gifts, repairs), set aside a share every month in advance. The large bill then stops landing as one blow to the budget.
+- In this app those are envelope budgets and savings goals.
 
-### Розрив між доходом і витратами
-- **Lifestyle creep**: витрати непомітно ростуть слідом за доходом, норма заощаджень падає. При зростанні доходу свідомо фіксувати частину приросту в заощадження.
-- Розрізняти **разові** й **регулярні** витрати: разовий великий платіж (податок, лікар, велика покупка) не можна проєктувати як щомісячний — інакше картина витрат спотворюється.
+### The gap between income and spending
+- **Lifestyle creep**: spending quietly grows to match rising income and the savings rate falls. When income rises, deliberately lock part of the increase into savings.
+- Separate **one-off** from **recurring** spending: a single large payment (tax, doctor, big purchase) must never be projected as monthly, or the whole picture is distorted.
 
-### Тайминг великих витрат
-- Перед великою покупкою перевіряти: чи не просідає подушка нижче безпечного рівня; чи не збігається з іншими великими списаннями цього місяця (підписки, оренда, податки).
-- Якщо можна почекати й накопичити — краще, ніж залазити в дорогий борг. Розстрочка «0%» рідко буває справді безкоштовною — перевіряти сумарну переплату.
+### Timing large expenses
+- Before a large purchase, check two things: whether the emergency fund drops below a safe level, and whether it collides with the month's other large charges (subscriptions, rent, taxes).
+- Waiting and saving beats taking on expensive debt. "0%" instalment plans are rarely actually free — check the total overpayment.
 `.trim(),
 };

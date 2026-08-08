@@ -18,16 +18,13 @@
  * then the one that mattered is ignored with them.
  */
 import type { Env } from "../../env.ts";
-import { getState } from "../finance/repo.ts";
-import { renderNotif, type NotifLocale, type NotifParams, type NotifTemplateKey } from "../../../shared/notif-i18n.ts";
+import { resolveLocale } from "../platform/i18n.ts";
+import { renderNotif, type NotifParams, type NotifTemplateKey } from "../../../shared/notif-i18n.ts";
 import type { Severity } from "./notify.ts";
 
-// Owner locale, read at SEND time rather than at creation: the stored title/body is only a
+// Language is resolved at SEND time rather than at creation: the stored title/body is only a
 // fallback for rows without a template, and a user who switched language yesterday should not get
-// yesterday's language tonight.
-async function ownerLocale(env: Env): Promise<NotifLocale> {
-  return (await getState(env.DB, "locale")) === "en" ? "en" : "uk";
-}
+// yesterday's language tonight. `resolveLocale` is the single answer (reader first, stored second).
 
 // `notif_params` is a JSON string; a malformed one must degrade to {} (the template then shows its
 // defaults) rather than throw and drop the whole batch.
@@ -66,7 +63,7 @@ export async function pushPendingToTelegram(env: Env): Promise<{ sent: number; r
 
   // Render in the owner's CURRENT locale at send time (§12.3), not the locale stored at
   // creation — the stored title/body is only a fallback for rows without a template.
-  const locale = await ownerLocale(env);
+  const locale = await resolveLocale(env);
   const { sendMessage } = await import("./telegram.ts");
   const lines = items.map((n) => {
     let title = n.title, body = n.body;
