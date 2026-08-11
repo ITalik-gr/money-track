@@ -155,6 +155,25 @@ admin.get("/feedback", async (c) => {
   } satisfies AdminFeedback);
 });
 
+/**
+ * Take the owner's own demo visits back out of the tally.
+ *
+ * ⚠️ Declared ABOVE `/feedback/:id/handled` (lint C7): `demo` would otherwise be matched as an
+ * `:id` and this route would be unreachable.
+ */
+admin.post("/feedback/demo/:day/discount", async (c) => {
+  const day = c.req.param("day");
+  // Shape-checked because it goes straight into a WHERE — and because a typo should be a 400
+  // rather than a silent no-op the owner reads as "the button is broken".
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return c.json({ error: "bad_day" }, 400);
+  const body = await c.req.json<{ n?: number }>().catch(() => ({} as { n?: number }));
+  const n = Math.trunc(Number(body.n ?? 1));
+  if (!Number.isFinite(n) || n < 1 || n > 1000) return c.json({ error: "bad_count" }, 400);
+  const { discountDemoVisits } = await import("../lib/platform/feedback.ts");
+  await discountDemoVisits(c.env.DIRECTORY, day, n);
+  return c.json({ ok: true });
+});
+
 admin.post("/feedback/:id/handled", async (c) => {
   const { markFeedbackHandled } = await import("../lib/platform/feedback.ts");
   const on = (await c.req.json<{ on?: boolean }>().catch(() => ({ on: true }))).on !== false;

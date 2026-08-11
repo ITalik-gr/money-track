@@ -1518,6 +1518,7 @@
   "feedback.inboxSub": "Що написали користувачі та скільки людей відкривало демо.",
   "feedback.inboxEmpty": "Повідомлень ще не було.",
   "feedback.demoEmpty": "Демо ще ніхто не відкривав.",
+  "feedback.demoDiscount": "Це не справжній візит — відняти один за цей день",
   "feedback.demoTitle": "Запуски демо по днях",
   "feedback.demoTotal": "Усього за {n} дн.",
   "feedback.anonymous": "демо-візитер",

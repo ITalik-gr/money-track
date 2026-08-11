@@ -579,6 +579,12 @@ export const api = createApi({
       query: ({ id, on }) => ({ url: `/admin/feedback/${id}/handled`, method: "POST", body: { on } }),
       invalidatesTags: ["Feedback"],
     }),
+    // Прибрати з денного лічильника демо власні заходи: власник відкриває пісочницю постійно,
+    // тестуючи, і сам робить шум у єдиному числі, яке мало відповісти «чи хтось дивиться».
+    discountDemoVisits: b.mutation<{ ok: boolean }, { day: string; n?: number }>({
+      query: ({ day, n = 1 }) => ({ url: `/admin/feedback/demo/${day}/discount`, method: "POST", body: { n } }),
+      invalidatesTags: ["Feedback"],
+    }),
     // §A5: корпус знань — заводські доки + власні нотатки користувача.
     getKnowledge: b.query<KnowledgeList, void>({ query: () => "/knowledge", providesTags: ["Knowledge"] }),
     getKnowledgeDoc: b.query<KnowledgeDocFull, string>({ query: (id) => `/knowledge/${encodeURIComponent(id)}`, providesTags: ["Knowledge"] }),
@@ -873,6 +879,7 @@ export const {
   useSendFeedbackMutation,
   useGetAdminFeedbackQuery,
   useMarkFeedbackHandledMutation,
+  useDiscountDemoVisitsMutation,
   useGetChatsQuery,
   useGetChatQuery,
   useCreateChatMutation,

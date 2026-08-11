@@ -85,6 +85,23 @@ export async function recordDemoVisit(env: Env): Promise<void> {
   }
 }
 
+/**
+ * Subtract visits the owner made themselves.
+ *
+ * The tally counts sandboxes that opened, and the owner opens them constantly while testing — so
+ * the one number meant to answer "is anyone out there" is mostly noise made by the person reading
+ * it. Correcting it beats not trusting it.
+ *
+ * Subtracting rather than clearing the day: a day usually holds both the owner's visits and real
+ * ones, and deleting the row would throw away the part worth keeping. A day that reaches zero is
+ * removed entirely, because "0 visits" and "no visits recorded" are the same fact and the list is
+ * a log of days that happened.
+ */
+export async function discountDemoVisits(db: D1Database, day: string, n = 1): Promise<void> {
+  await db.prepare("UPDATE demo_daily SET sandboxes = sandboxes - ? WHERE day = ?").bind(n, day).run();
+  await db.prepare("DELETE FROM demo_daily WHERE day = ? AND sandboxes <= 0").bind(day).run();
+}
+
 /** The last `days` days that had at least one visit, newest first. */
 export async function demoVisits(db: D1Database, days = 60): Promise<DemoDay[]> {
   const r = await db.prepare(

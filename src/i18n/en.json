@@ -1518,6 +1518,7 @@
   "feedback.inboxSub": "What users wrote, and how many people opened the demo.",
   "feedback.inboxEmpty": "No messages yet.",
   "feedback.demoEmpty": "Nobody has opened the demo yet.",
+  "feedback.demoDiscount": "Not a real visit — subtract one from this day",
   "feedback.demoTitle": "Demo starts per day",
   "feedback.demoTotal": "{n} days total",
   "feedback.anonymous": "demo visitor",

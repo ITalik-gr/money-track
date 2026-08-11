@@ -3,7 +3,7 @@ import { dateFmt } from "../../i18n/locale.ts";
 import { errText } from "../../lib/errors.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
-import { useGetAdminFeedbackQuery, useMarkFeedbackHandledMutation } from "../../store/api.ts";
+import { useGetAdminFeedbackQuery, useMarkFeedbackHandledMutation, useDiscountDemoVisitsMutation } from "../../store/api.ts";
 
 const when = dateFmt({ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 const dayLabel = dateFmt({ day: "numeric", month: "short" });
@@ -24,6 +24,7 @@ export function FeedbackInbox() {
   const t = useT();
   const { data, isError, error, refetch } = useGetAdminFeedbackQuery();
   const [mark] = useMarkFeedbackHandledMutation();
+  const [discount] = useDiscountDemoVisitsMutation();
 
   const days = data?.demo_days ?? [];
   const peak = Math.max(1, ...days.map((d) => d.sandboxes));
@@ -52,6 +53,16 @@ export function FeedbackInbox() {
                 <span className="fb-demo-day">{dayLabel.format(new Date(`${d.day}T12:00:00`))}</span>
                 <span className="fb-demo-bar"><span style={{ width: `${(d.sandboxes / peak) * 100}%` }} /></span>
                 <span className="fb-demo-n">{d.sandboxes}</span>
+                {/* The owner opens the sandbox constantly while testing, so the one number meant
+                    to answer "is anyone out there" is largely noise they made themselves.
+                    Subtracting one is a correction, not a delete: a day usually holds both their
+                    visits and real ones. */}
+                <button
+                  className="fb-demo-minus"
+                  title={t("feedback.demoDiscount")}
+                  aria-label={t("feedback.demoDiscount")}
+                  onClick={() => void discount({ day: d.day })}
+                >−</button>
               </div>
             ))}
           </div>
