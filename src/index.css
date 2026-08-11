@@ -537,14 +537,21 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .env-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; color: var(--muted); }
 .env-pct.warn { color: var(--warn, #c9871a); }
 .env-pct.over { color: var(--neg); }
-.env-bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.env-bar { position: relative; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 /* scaleX, не width — анімація layout-властивості = thrash (див. .bc-bar). */
 .env-bar span { display: block; width: 100%; height: 100%; border-radius: 999px;
   transform-origin: left center; transition: transform var(--dur-2, .25s) var(--ease-out, ease); }
+/* §BUDGET-FORECAST — where the month lands at this pace, marked INSIDE the same track: the gap
+   between the filled bar and this hairline is literally "what is still coming". A separate bar
+   would have made it a second quantity to compare instead of the same one, later.
+   2px and `--ink-2`, not the accent: a projection must never outweigh the fact beside it. */
+.env-proj { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--ink-2); opacity: 0.55; }
+/* Reads as a footnote to the numbers above, because that is what it is. */
+.env-forecast { font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 11px; color: var(--muted); }
 /* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
    `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
    стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
 .wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
 .wd-bar {
@@ -552,12 +559,6 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   background: var(--accent); opacity: .85; transition: opacity .15s;
 }
 /* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
-.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
-.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
-.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
-.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-.wd-label { font-size: 11px; }
-.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
 
 @media (max-width: 480px) {
   /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
@@ -569,19 +570,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 /* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
    `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
    як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
-.hb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
-.hb-grid > :only-child { grid-column: 1 / -1; }
-.hb-card { padding: 16px; }
-.hb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.hb-kind { font-size: 13px; font-weight: 600; }
-.hb-kind.started { color: var(--warn, var(--text-1)); }
-.hb-kind.stopped { color: var(--text-2); }
-.hb-total { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 /* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-.hb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 0; font-size: 13px; }
-.hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hb-when { font-size: 11.5px; white-space: nowrap; }
-.hb-amt { white-space: nowrap; }
 
 @media (max-width: 720px) {
   .hb-grid { grid-template-columns: minmax(0, 1fr); }
@@ -819,10 +808,23 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .goal-target { font-size: 13px; color: var(--muted); }
 .goal-bar { height: 9px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .goal-fill { height: 100%; border-radius: 999px; background: var(--goal-color, var(--accent)); }
-.goal-foot { display: flex; align-items: center; justify-content: space-between; }
+.goal-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .goal-pct { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .goal-meta { font-size: 12.5px; color: var(--muted); }
 .goal-meta.pos { color: var(--pos); }
+/* §GOAL-PACE — whether the goal will make it. Sits NEXT TO the percentage because it qualifies
+   that very number: "42%" on its own says nothing until you know how much of the time those 42%
+   took. The tone is deliberately quiet in the normal case and visible only in deviation —
+   otherwise a screen of six goals becomes six coloured blobs and none of them stands out any
+   more. `flex-shrink: 0` because this is a fixed-length label beside an amount that grows (the
+   `.cb-val` rule: a number broken over two lines reads as a different number). */
+.goal-pace {
+  flex-shrink: 0; margin-right: auto;
+  font-size: 11.5px; line-height: 1.4; padding: 2px 7px;
+  border-radius: 6px; background: var(--surface-2); color: var(--muted);
+}
+.goal-pace.behind { color: var(--warn); }
+.goal-pace.at_risk, .goal-pace.overdue { color: var(--neg); }
 /* §P5: скільки відкладати на місяць, щоб устигнути до дедлайну */
 .goal-need { font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border-radius: var(--radius-sm); padding: 7px 10px; }
 .goal-need b { color: var(--accent); font-variant-numeric: tabular-nums; }
@@ -1753,7 +1755,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
    `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
    стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
 .wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
 .wd-bar {
@@ -1761,12 +1762,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   background: var(--accent); opacity: .85; transition: opacity .15s;
 }
 /* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
-.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
-.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
-.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
-.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-.wd-label { font-size: 11px; }
-.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
 
 @media (max-width: 480px) {
   /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
@@ -1778,19 +1773,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
    `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
    як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
-.hb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
-.hb-grid > :only-child { grid-column: 1 / -1; }
-.hb-card { padding: 16px; }
-.hb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.hb-kind { font-size: 13px; font-weight: 600; }
-.hb-kind.started { color: var(--warn, var(--text-1)); }
-.hb-kind.stopped { color: var(--text-2); }
-.hb-total { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 /* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-.hb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 0; font-size: 13px; }
-.hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hb-when { font-size: 11.5px; white-space: nowrap; }
-.hb-amt { white-space: nowrap; }
 
 @media (max-width: 720px) {
   .hb-grid { grid-template-columns: minmax(0, 1fr); }
@@ -2284,7 +2267,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
    `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
    стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
 .wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
 .wd-bar {
@@ -2292,12 +2274,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   background: var(--accent); opacity: .85; transition: opacity .15s;
 }
 /* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
-.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
-.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
-.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
-.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-.wd-label { font-size: 11px; }
-.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
 
 @media (max-width: 480px) {
   /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
@@ -2309,19 +2285,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
    `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
    як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
-.hb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
-.hb-grid > :only-child { grid-column: 1 / -1; }
-.hb-card { padding: 16px; }
-.hb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.hb-kind { font-size: 13px; font-weight: 600; }
-.hb-kind.started { color: var(--warn, var(--text-1)); }
-.hb-kind.stopped { color: var(--text-2); }
-.hb-total { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 /* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-.hb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 0; font-size: 13px; }
-.hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hb-when { font-size: 11.5px; white-space: nowrap; }
-.hb-amt { white-space: nowrap; }
 
 @media (max-width: 720px) {
   .hb-grid { grid-template-columns: minmax(0, 1fr); }
@@ -2909,7 +2873,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
    `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
    стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
 .wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
 .wd-bar {
@@ -2917,12 +2880,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   background: var(--accent); opacity: .85; transition: opacity .15s;
 }
 /* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
-.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
-.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
-.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
-.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
-.wd-label { font-size: 11px; }
-.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
 
 @media (max-width: 480px) {
   /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
@@ -2934,19 +2891,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 /* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
    `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
    як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
-.hb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
-.hb-grid > :only-child { grid-column: 1 / -1; }
-.hb-card { padding: 16px; }
-.hb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
-.hb-kind { font-size: 13px; font-weight: 600; }
-.hb-kind.started { color: var(--warn, var(--text-1)); }
-.hb-kind.stopped { color: var(--text-2); }
-.hb-total { font-size: 13px; color: var(--text-2); white-space: nowrap; }
 /* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-.hb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 0; font-size: 13px; }
-.hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hb-when { font-size: 11.5px; white-space: nowrap; }
-.hb-amt { white-space: nowrap; }
 
 @media (max-width: 720px) {
   .hb-grid { grid-template-columns: minmax(0, 1fr); }
@@ -3746,6 +3691,20 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .gc-del { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 3px; }
 .gc-del:hover { color: var(--neg); }
 .gc-empty { margin-top: 9px; font-size: 12.5px; color: var(--muted); }
+/* §P2.1 — the goal progress chart. Three lines of different weight, and it is the difference in
+   weight that makes it readable at a glance: solid and coloured is the real money, dashed is the
+   required pace, a hairline is today. Weighted equally they would just be three lines. */
+.goal-chart { margin-top: 10px; }
+.goal-chart svg { display: block; width: 100%; height: 72px; }
+/* `vector-effect` is needed because `preserveAspectRatio="none"` stretches the viewBox
+   horizontally, and without it the stroke width would stretch with it — vertical lines would come
+   out thicker than horizontal ones on the very same card. */
+.goal-chart line, .goal-chart polyline { vector-effect: non-scaling-stroke; }
+.gch-pace { stroke: var(--muted); stroke-width: 1.2; opacity: 0.7; }
+.gch-target { stroke: var(--line-strong); stroke-width: 1; }
+.gch-today { stroke: var(--ink-2); stroke-width: 1; opacity: 0.35; }
+.gch-line { stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.gch-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .toast-link .toast-go { color: var(--accent); font-size: 14px; }
 .toast-link:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line-strong)); }
 .toast-x:hover { color: var(--ink); }
@@ -4200,11 +4159,127 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hb-when { font-size: 11.5px; white-space: nowrap; }
 .hb-amt { white-space: nowrap; }
+/* ⚠️ This `.hb-*` block is duplicated FIVE times in this file (≈581, 1803, 2334, 2959 and here).
+   The LAST one wins — this one — so an edit in any copy above simply has no effect. Cause and
+   clean-up plan: `STYLES.md` §2.4. That is why `.hb-row` below is redefined rather than edited
+   in place. */
+.hb-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+/* The actions sit next to the amount, not the name: the row reads as "who → when → how much", and
+   an action belongs at the end of that sentence rather than inside it. `align-self: center`
+   because the rest of the row is baseline-aligned, and a button's baseline is its own height. */
+.hb-acts { display: flex; gap: 6px; align-self: center; white-space: nowrap; }
 
 @media (max-width: 720px) {
   .hb-grid { grid-template-columns: minmax(0, 1fr); }
+  /* Buttons onto their own row: across four columns the merchant name squeezes down to three
+     letters, and a row that does not show WHAT it is about is not worth acting on. */
+  .hb-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .hb-acts { grid-column: 1 / -1; justify-content: flex-end; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- categorisation rules (Categories page) ------------------------------------------------
+   The deterministic layer, editable since 2026-08-12. Laid out as one wrapping row rather than a
+   grid: the four controls have genuinely different natural widths (a select, a free-text pattern,
+   a category, two buttons), and forcing them into equal columns would make the pattern field —
+   the only one anybody types into — the narrowest thing on the card. */
+.rule-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.rule-pattern { flex: 1 1 180px; min-width: 0; font-size: 13px; padding: 6px 9px; }
+/* The preview is EVIDENCE, so it gets a surface of its own — it is not part of the form, it is
+   the form's answer. */
+.rule-preview { background: var(--surface-2); border-radius: var(--radius-sm); padding: 9px 11px; margin-bottom: 10px; }
+.rule-preview-head { font-size: 12.5px; color: var(--ink-2); }
+.rule-samples { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.rule-samples li { font-size: 11.5px; color: var(--muted); background: var(--surface); border-radius: 6px; padding: 2px 7px; }
+.rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* `minmax(0, …)` on the pattern: a long substring must ellipsize rather than push the category
+   and the buttons off the card — the same rule as `.hb-name`. */
+.rule-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+.rule-kind { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+  background: var(--surface-2); border-radius: 5px; padding: 2px 6px; }
+.rule-pat { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.rule-arrow { color: var(--muted); }
+.rule-cat { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rule-cat .d { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rule-seeded-toggle { margin-top: 10px; }
+/* Built-in rules read as reference material, not as the person's own work. */
+.rule-list-seeded { margin-top: 8px; opacity: 0.72; }
+.rule-list-seeded li { grid-template-columns: auto minmax(0, 1fr) auto auto auto; }
+@media (max-width: 620px) {
+  /* Below this the six columns leave the pattern three characters wide, and a rule you cannot
+     read is not a rule you can decide about. */
+  .rule-list li, .rule-list-seeded li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .rule-list li .rule-arrow { display: none; }
+}
+
+/* ---- §AI-AUDIT: what the model changed on this operation --------------------------------------
+   Sits above the transaction chat, where most of these changes come from. Reads as a LOG, not as a
+   control panel: small, monospaced values, the action tucked at the end. A change the AI made is
+   information first; undoing it is the rarer second thought. */
+.audit { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.audit-head { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.audit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* `minmax(0, …)` on the value pair — a long `ai_note` must ellipsize rather than push the undo
+   button off the card (the `.hb-name` rule again). */
+.audit-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center; gap: 8px; font-size: 12px; }
+.audit-field { color: var(--muted); white-space: nowrap; }
+.audit-move { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.audit-old, .audit-new { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The OLD value is struck through, so "what it used to be" needs no label to be understood. */
+.audit-old { color: var(--muted); text-decoration: line-through; }
+.audit-new { color: var(--ink); }
+.audit-arrow { color: var(--muted); flex-shrink: 0; }
+.audit-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.audit-done { color: var(--muted); font-size: 11px; white-space: nowrap; }
+/* An undone row stays, dimmed: the fact that the AI did it AND that you reversed it is worth more
+   than the row vanishing as though nothing had happened. */
+.audit-list li.reverted { opacity: 0.6; }
+@media (max-width: 620px) {
+  /* Four columns leave the values unreadable; the metadata drops to its own line. */
+  .audit-list li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .audit-meta { grid-column: 1 / -1; }
+}
+/* The wide §AI-AUDIT list carries a link to the operation where the per-transaction one does not
+   (there, you are already on it). Same row grammar, one column more. */
+.audit-wide li { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto; }
+.audit-tx { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.audit-tx:hover { color: var(--accent); }
+@media (max-width: 620px) {
+  .audit-wide li { grid-template-columns: minmax(0, 1fr) auto; }
+  .audit-wide .audit-move { grid-column: 1 / -1; }
+}
+/* ---- local passcode screen (lib/lock.ts) ------------------------------------------------------
+   Covers everything, opaque: the point is that the screen cannot be READ, so a translucent overlay
+   would defeat it exactly where it matters. `--bg` rather than a scrim for the same reason. */
+.lock-screen { position: fixed; inset: 0; z-index: 200; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; }
+.lock-box { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px; }
+.lock-title { font-size: 15px; font-weight: 600; }
+.lock-dots { display: flex; gap: 12px; }
+.lock-dots span { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--line-strong);
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out); }
+.lock-dots span.on { background: var(--accent); border-color: var(--accent); }
+/* Off-screen but focusable — it summons the numeric keypad on a phone and keeps the browser's own
+   accessibility behaviour, which a grid of custom buttons would have to reimplement badly. */
+.lock-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.lock-hint { font-size: 12px; color: var(--muted); max-width: 32ch; text-align: center; }
+/* The only feedback on a wrong code, so it has to be unmistakable and then gone. */
+.lock-box.wrong { animation: lock-shake 0.4s var(--ease-out); }
+.lock-box.wrong .lock-hint { color: var(--neg); }
+@keyframes lock-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) { .lock-box.wrong { animation: none; } }
+.lock-field { width: 92px; font-size: 13px; padding: 6px 9px; letter-spacing: 0.3em; }
+.lock-on { font-size: 13px; color: var(--pos); font-weight: 600; }
+/* The limits are stated permanently, not behind a tooltip — see `LockCard`. */
+.lock-facts { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.5; }

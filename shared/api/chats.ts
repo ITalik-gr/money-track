@@ -23,3 +23,11 @@ export interface ChatSummary {
 export interface ChatDetail extends ChatSummary {
   messages: ChatTurn[];
 }
+
+/**
+ * §TX-CHAT — every turn already exchanged about one transaction (`GET /transactions/:id/chat`).
+ *
+ * Same shape as an advisor conversation's turns, because it IS one — stored in `chats` with
+ * `kind='tx'` (migration 0040) rather than in a table of its own.
+ */
+export type TxChatHistory = ChatTurn[];

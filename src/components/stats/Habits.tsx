@@ -1,7 +1,11 @@
-import { useGetHabitsQuery } from "../../store/api.ts";
+import {
+  useGetHabitsQuery, usePlanFromHabitMutation, useDismissPlannedCandidateMutation,
+} from "../../store/api.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { useT } from "../../i18n/index.ts";
+import { toast } from "../../lib/toast.ts";
+import { errText } from "../../lib/errors.ts";
 import type { HabitChange } from "../../store/api.ts";
 
 // §HABITS: що ТИХО зʼявилось у регулярних витратах і що ТИХО зникло.
@@ -16,8 +20,36 @@ function monthLabel(ym: string): string {
   return monthShort(Number(m) - 1);
 }
 
+/**
+ * A found habit is only useful if you can DO something with it.
+ *
+ * The block detects a recurring charge the user never declared — and until now that was the end
+ * of it: to track the thing it just found, you had to go to Plans and retype what the app already
+ * knew. Detection without an action is a report, not a tool.
+ *
+ * Two actions, and the asymmetry is deliberate. A newcomer gets "track it" (create the plan) and
+ * "not a subscription" (dismiss). A merchant that went quiet gets dismiss only — there is nothing
+ * to start tracking, and the row's whole job is to be acknowledged and gone.
+ *
+ * ⚠️ Only the merchant NAME is sent. The amount here is UAH-converted (`monthly`), while a plan
+ * stores its amount in its own currency (§CUR-PLAN) — sending this number would make a $5
+ * subscription weigh 5 ₴. The server reads the real charges instead.
+ */
 function Row({ h, kind }: { h: HabitChange; kind: "started" | "stopped" }) {
   const t = useT();
+  const [track, { isLoading: tracking }] = usePlanFromHabitMutation();
+  const [dismiss, { isLoading: dismissing }] = useDismissPlannedCandidateMutation();
+  const busy = tracking || dismissing;
+
+  async function run(fn: () => Promise<unknown>, okKey: "hb.tracked" | "hb.dismissed") {
+    try {
+      await fn();
+      // The row vanishes on success (the list hides merchants already answered for), so without
+      // a toast the click would read as "nothing happened" — or worse, as the row being lost.
+      toast.success(t(okKey, { merchant: h.merchant }));
+    } catch (e) { toast.error(errText(e)); }
+  }
+
   return (
     <div className="hb-row">
       <span className="hb-name" title={h.merchant}>{h.merchant}</span>
@@ -27,6 +59,18 @@ function Row({ h, kind }: { h: HabitChange; kind: "started" | "stopped" }) {
           : t("hb.lastSeen", { month: monthLabel(h.last) })}
       </span>
       <span className="hb-amt num-mono">{formatMinor(h.monthly, { decimals: false })} ₴</span>
+      <span className="hb-acts">
+        {kind === "started" && (
+          <button className="btn sm" disabled={busy}
+            onClick={() => run(() => track(h.merchant).unwrap(), "hb.tracked")}>
+            {t("hb.track")}
+          </button>
+        )}
+        <button className="btn sm ghost" disabled={busy}
+          onClick={() => run(() => dismiss(h.merchant).unwrap(), "hb.dismissed")}>
+          {kind === "started" ? t("hb.notSub") : t("hb.gotIt")}
+        </button>
+      </span>
     </div>
   );
 }

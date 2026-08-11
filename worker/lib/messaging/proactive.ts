@@ -5,7 +5,8 @@ import type { Env } from "../../env.ts";
 import { sendMessage } from "./telegram.ts";
 import { getStoredInsight, buildAndStoreInsight, type StoredInsight } from "../ai/insight.ts";
 import { nextChargeUnix } from "../finance/subscriptions.ts";
-import { budgetStatus, valueMode } from "../finance/stats.ts";
+import { valueMode } from "../finance/stats.ts";
+import { budgetStatus } from "../finance/budgets.ts";
 import { getRates } from "../finance/finance.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

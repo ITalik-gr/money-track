@@ -12,6 +12,8 @@ import { apiRoutes, normChatMessages } from "./_shared.ts";
 import type {
   TxRow, TxDetail, TxSplit, FrequentTx, Reimbursement, ReimbursementUsage,
 } from "../../../shared/api/transactions.ts";
+import type { TxChatHistory } from "../../../shared/api/chats.ts";
+import type { AiChange } from "../../../shared/api/ai.ts";
 import { editTransaction, type TxEdit } from "../../services/transactions.ts";
 import { setReimbursement, type ReimbursementBody } from "../../services/reimbursements.ts";
 
@@ -308,10 +310,47 @@ transactions.post("/transactions/:id/chat", async (c) => {
   const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
-  const { chatAboutTx } = await import("../../lib/ai/advisor.ts");
+  const { chatAboutTx } = await import("../../lib/ai/tx-chat.ts");
+  const id = c.req.param("id");
   try {
-    return c.json(await chatAboutTx(c.env, c.req.param("id"), msgs));
+    const out = await chatAboutTx(c.env, id, msgs);
+    /**
+     * §TX-CHAT — the exchange is RECORDED, not just returned.
+     *
+     * It used to live in the page's `useState` and vanish on navigation: a person would explain
+     * "this was for the course, not entertainment", the model would use it, and an hour later
+     * there was no trace the explanation had ever been given. Written here, server-side, for the
+     * same reason §CHAT-SYNC writes the advisor's turn here — a client that records its own half
+     * leaves a broken exchange behind whenever the generation fails.
+     *
+     * Best-effort: a conversation that could not be filed must never swallow the answer the
+     * person is waiting for.
+     */
+    const reply = typeof (out as { reply?: unknown }).reply === "string" ? (out as { reply: string }).reply : "";
+    if (reply) {
+      try {
+        const chatsRepo = await import("../../repo/chats.ts");
+        const last = msgs[msgs.length - 1];
+        await chatsRepo.appendTxTurn(
+          c.env.DB, id, last?.content ?? "", last?.content ?? "", reply, Math.floor(Date.now() / 1000));
+      } catch (e) {
+        console.error("[tx-chat] could not store the exchange:", e instanceof Error ? e.message : e);
+      }
+    }
+    return c.json(out);
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }
+});
+
+/** §AI-AUDIT — what the model changed on THIS operation, newest first. */
+transactions.get("/transactions/:id/ai-changes", async (c) => {
+  const auditRepo = await import("../../repo/ai-changes.ts");
+  return c.json(await auditRepo.forTx(c.env.DB, c.req.param("id")) satisfies AiChange[]);
+});
+
+/** §TX-CHAT — everything already said about this operation. Empty array when nothing was. */
+transactions.get("/transactions/:id/chat", async (c) => {
+  const chatsRepo = await import("../../repo/chats.ts");
+  return c.json(await chatsRepo.txMessages(c.env.DB, c.req.param("id")) satisfies TxChatHistory);
 });

@@ -3,6 +3,7 @@ import { useGetCategoriesQuery, useDeleteCategoryMutation, useLazyGetCategoryUsa
 import { CategoryIcon } from "../components/ui/CategoryIcon.tsx";
 import { CategoryModal } from "../components/planning/CategoryModal.tsx";
 import { Select, type SelectOption } from "../components/ui/Select.tsx";
+import { RulesCard } from "../components/planning/RulesCard.tsx";
 import { CategoryGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { toast } from "../lib/toast.ts";
@@ -61,6 +62,9 @@ export function Categories() {
           onEdit={(c) => setModal({ open: true, cat: c })}
           onAddSub={(p) => setModal({ open: true, cat: null, parentId: p.id, income: !!p.is_income })}
           onDelete={askDelete} />
+        {/* Rules live on this page, not in Settings: they are how a category gets ASSIGNED, and
+            the person who wants one is already looking at the category list. */}
+        <RulesCard />
       </div>
       )}
 

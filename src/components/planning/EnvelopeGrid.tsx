@@ -1,48 +1,34 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { useGetBudgetsQuery, useGetByCategoryQuery, useGetCategoriesQuery } from "../../store/api.ts";
-import { startOfMonthUnix } from "../../lib/format.ts";
+import { useGetBudgetStatusQuery, useGetCategoriesQuery } from "../../store/api.ts";
 import { Money } from "../ui/Money.tsx";
 import { useT } from "../../i18n/index.ts";
 
-// Конверти: кожна бюджетна категорія — кишеня, що спорожняється в міру витрат (§8).
+/**
+ * Envelopes: every budgeted category is a pocket that empties as you spend (§8).
+ *
+ * Reads `GET /budgets/status` — the canon (`lib/finance/budgets.ts`). It used to combine
+ * `/budgets` with `/analytics/by-category` and derive spent-vs-limit here, which was a THIRD
+ * definition of a number the server already owns; the Telegram push once had a fourth, and quoted
+ * different figures for the same envelope. The component now renders and computes nothing.
+ *
+ * §BUDGET-FORECAST: each envelope also shows where the month CLOSES at the current pace. That is
+ * the point of the whole feature — "over budget" arriving on the 28th is a fact you can do nothing
+ * about, while "heading for 130%" on the 12th is still a decision.
+ */
 export function EnvelopeGrid() {
   const t = useT();
-  const from = startOfMonthUnix();
-  const to = Math.floor(Date.now() / 1000);
-  const { data: budgets } = useGetBudgetsQuery();
+  const { data: rows } = useGetBudgetStatusQuery();
   const { data: cats } = useGetCategoriesQuery();
-  const { data: spend } = useGetByCategoryQuery({ from, to });
 
+  // Colour is the only thing still joined client-side: the canon answers about MONEY, and a
+  // category's colour is not money.
   const envelopes = useMemo(() => {
-    if (!budgets || !cats) return [];
-    const catById = new Map(cats.map((c) => [c.id, c]));
-    const spentByCat = new Map<number, number>();
-    for (const s of spend ?? []) {
-      // §Аналітика 2.0: by-category тепер канонічний і зведений у ₴ (одна сума на категорію).
-      if (s.category_id != null) {
-        spentByCat.set(s.category_id, (spentByCat.get(s.category_id) ?? 0) + Math.abs(s.spent));
-      }
-    }
-    return budgets
-      .filter((bd) => bd.category_id != null && bd.period === "month")
-      .map((bd) => {
-        const cat = catById.get(bd.category_id!);
-        const spent = spentByCat.get(bd.category_id!) ?? 0;
-        const ratio = bd.amount > 0 ? Math.min(spent / bd.amount, 1) : 0;
-        return {
-          id: bd.category_id!,
-          name: cat?.name ?? "—",
-          color: cat?.color ?? "#6B7A74",
-          spent,
-          budget: bd.amount,
-          pct: Math.round(ratio * 100),
-          remain: bd.amount - spent,
-          over: spent > bd.amount,
-        };
-      })
-      .sort((a, b) => b.pct - a.pct); // спершу найнапруженіші конверти
-  }, [budgets, cats, spend]);
+    const catById = new Map((cats ?? []).map((c) => [c.id, c]));
+    return [...(rows ?? [])]
+      .map((r) => ({ ...r, color: catById.get(r.id)?.color ?? "#6B7A74" }))
+      .sort((a, b) => b.ratio - a.ratio); // tightest envelopes first
+  }, [rows, cats]);
 
   if (!envelopes.length) {
     return (
@@ -55,21 +41,45 @@ export function EnvelopeGrid() {
   return (
     <div className="env-list">
       {envelopes.map((e) => {
-        const state = e.over ? "over" : e.pct >= 80 ? "warn" : "ok";
-        const bar = state === "over" ? "var(--neg)" : state === "warn" ? "var(--warn, #c9871a)" : e.color;
+        const pct = Math.round(e.ratio * 100);
+        const over = e.ratio > 1;
+        const state = over ? "over" : pct >= 80 ? "warn" : "ok";
+        const bar = state === "over" ? "var(--neg)" : state === "warn" ? "var(--warn)" : e.color;
+        const remain = e.amount - e.spent;
+        // The forecast line earns its space only when it says something the bar does not: the
+        // envelope is not in trouble YET, but is heading there. Once it is already over, the
+        // projection is history and repeating it would be noise. `lumpy` means the projection was
+        // deliberately not extrapolated (a rent payment landed, or has not landed yet) — there is
+        // no pace to warn about, and claiming one would be a guess dressed as a number.
+        const projPct = Math.round(e.projected_ratio * 100);
+        const showForecast = !over && !e.lumpy && e.projected_ratio >= 1.05;
         return (
           <Link to="/plan" key={e.id} className={`env-item ${state}`}>
             <div className="env-top">
               <span className="env-name"><span className="d" style={{ background: e.color }} />{e.name}</span>
-              <span className={`env-pct ${state}`}>{e.pct}%</span>
+              <span className={`env-pct ${state}`}>{pct}%</span>
             </div>
-            <div className="env-bar"><span style={{ transform: `scaleX(${Math.min(e.pct, 100) / 100})`, background: bar }} /></div>
+            <div className="env-bar">
+              <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: bar }} />
+              {/* A hairline where the projection lands, drawn INSIDE the same track: the gap
+                  between the filled bar and the mark is literally "what is still coming". */}
+              {showForecast && (
+                <i className="env-proj" style={{ left: `${Math.min(projPct, 100)}%` }} aria-hidden />
+              )}
+            </div>
             <div className="env-sub">
-              <span><Money minor={e.spent} decimals={false} /> {t("common.of")} <Money minor={e.budget} decimals={false} /></span>
+              <span><Money minor={e.spent} decimals={false} /> {t("common.of")} <Money minor={e.amount} decimals={false} /></span>
               <span className="env-remain">
-                {e.remain >= 0 ? <>{t("eg.left")} <Money minor={e.remain} decimals={false} /></> : <>{t("eg.exceeded")}</>}
+                {remain >= 0 ? <>{t("eg.left")} <Money minor={remain} decimals={false} /></> : <>{t("eg.exceeded")}</>}
               </span>
             </div>
+            {showForecast && (
+              // The word "projected" is not decoration: a forecast read as a fact is a lie the app
+              // tells once and then has to live with.
+              <div className="env-forecast">
+                {t("eg.projected", { pct: projPct })} · <Money minor={e.projected} decimals={false} />
+              </div>
+            )}
           </Link>
         );
       })}

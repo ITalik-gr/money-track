@@ -25,6 +25,8 @@ import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
 import { clearLocalUserData } from "../lib/localdata.ts";
 import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
 import { ExportCard } from "../components/settings/ExportCard.tsx";
+import { AiActivityCard } from "../components/settings/AiActivityCard.tsx";
+import { LockCard } from "../components/settings/LockCard.tsx";
 import { BackupCard } from "../components/settings/BackupCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
@@ -113,6 +115,7 @@ export function Setup() {
           {/* Keys first: every step of the first run needs them, so a page that opened on the
               checklist would be asking for actions that cannot succeed yet. */}
           <CredentialsCard />
+          <LockCard />
           <FirstRun />
           <div className="card set-card">
             <div className="set-card-h"><Icon name="stats" size={16} />{t("setup.dbState")}</div>
@@ -133,6 +136,9 @@ export function Setup() {
       {tab === "ai" && (
         <div className="settings-grid">
           <AiUsageCard />
+          {/* §AI-AUDIT beside the spend card on purpose: one says what the model COST, the other
+              what it CHANGED. Those are the two questions people have about an AI in their data. */}
+          <AiActivityCard />
         </div>
       )}
 

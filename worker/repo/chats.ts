@@ -14,13 +14,52 @@ import type { ChatSummary, ChatTurn } from "../../shared/api/chats.ts";
 const MAX_CHATS = 60;
 const MAX_MESSAGES_PER_CHAT = 200;
 
+/**
+ * The advisor's rail — `kind='advisor'` ONLY (§TX-CHAT, migration 0040).
+ *
+ * A conversation about one coffee is a real conversation and is stored in the same table, but it
+ * does not belong in the list of financial conversations: mixing them would bury the four the user
+ * actually returns to under every operation they ever asked about.
+ */
 export async function listChats(db: AppDb): Promise<ChatSummary[]> {
   const r = await db.prepare(
     `SELECT c.id AS id, c.title AS title, c.updated_at AS updated_at,
             (SELECT COUNT(*) FROM chat_messages m WHERE m.chat_id = c.id) AS message_count
-       FROM chats c ORDER BY c.updated_at DESC`,
+       FROM chats c WHERE c.kind = 'advisor' ORDER BY c.updated_at DESC`,
   ).all<ChatSummary>();
   return r.results ?? [];
+}
+
+/**
+ * §TX-CHAT — the conversation about one transaction, addressed by WHAT IT IS ABOUT.
+ *
+ * The id is derived, not remembered: the page knows the transaction, so it must be able to find
+ * the conversation without storing a second key anywhere. Prefixed rather than reusing the raw
+ * transaction id so a `tx` row can never collide with a client-generated advisor id (`c<base36>`).
+ */
+export const txChatId = (txId: string) => `tx-${txId}`;
+
+export async function txMessages(db: AppDb, txId: string): Promise<ChatTurn[]> {
+  return await messages(db, txChatId(txId));
+}
+
+/**
+ * Append one exchange about a transaction, creating the conversation on first use.
+ *
+ * Written by the SERVER, both halves, in the same place the answer is produced — the §CHAT-SYNC
+ * rule. The client posting its own turn and the server posting the reply would leave a
+ * half-recorded exchange whenever the generation failed.
+ */
+export async function appendTxTurn(
+  db: AppDb, txId: string, title: string, question: string, answer: string, at: number,
+): Promise<void> {
+  const id = txChatId(txId);
+  await db.prepare(
+    "INSERT OR IGNORE INTO chats (id, title, created_at, updated_at, kind, entity_id) VALUES (?, ?, ?, ?, 'tx', ?)",
+  ).bind(id, title.slice(0, 80), at, at, txId).run();
+  await pruneChats(db, "tx");
+  await append(db, id, "user", question, at);
+  await append(db, id, "assistant", answer, at);
 }
 
 export async function messages(db: AppDb, chatId: string): Promise<ChatTurn[]> {
@@ -84,10 +123,17 @@ export async function truncate(db: AppDb, chatId: string, keep: number): Promise
   ).bind(chatId, chatId, Math.max(0, keep)).run();
 }
 
-/** Oldest conversations beyond the ceiling. Never touches the one just written (it is newest). */
-async function pruneChats(db: AppDb): Promise<void> {
+/**
+ * Oldest conversations beyond the ceiling. Never touches the one just written (it is newest).
+ *
+ * ⚠️ The ceiling is PER KIND (§TX-CHAT). A single shared limit would let the two compete: asking
+ * about sixty individual operations would silently evict every advisor conversation, and the user
+ * would find their financial discussions gone without ever deleting one. They are different
+ * things with different lifespans, so they get separate budgets.
+ */
+async function pruneChats(db: AppDb, kind = "advisor"): Promise<void> {
   await db.prepare(
-    `DELETE FROM chats WHERE id NOT IN (
-       SELECT id FROM chats ORDER BY updated_at DESC LIMIT ?)`,
-  ).bind(MAX_CHATS).run();
+    `DELETE FROM chats WHERE kind = ? AND id NOT IN (
+       SELECT id FROM chats WHERE kind = ? ORDER BY updated_at DESC LIMIT ?)`,
+  ).bind(kind, kind, MAX_CHATS).run();
 }

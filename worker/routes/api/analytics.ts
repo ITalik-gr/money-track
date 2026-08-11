@@ -15,7 +15,7 @@ import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
 import { buildWeekdayAnalytics } from "../../lib/finance/weekday.ts";
 import { buildNetworth } from "../../lib/finance/networth.ts";
-import { buildHabits } from "../../lib/finance/habits.ts";
+import { collectHabits } from "../../lib/finance/habits.ts";
 import type {
   Overview, MonthlyHistory, SafeToSpend, CapitalTrend, Networth, Compare, Forecast,
   IncomeAnalytics, CashflowCalendar, ReceiptItemsAnalytics, PriceDrift, SpendPatterns,
@@ -658,15 +658,12 @@ analytics.get("/analytics/weekday", async (c) => {
   return c.json(buildWeekdayAnalytics(rows, from, to) satisfies WeekdayAnalytics);
 });
 
-// §HABITS: що зʼявилось у регулярних витратах і що замовкло. Вікно — 9 ПОВНИХ місяців:
-// поточний свідомо виключено, бо півмісяця даних виглядає точнісінько як «мерчант зник».
+// §HABITS — the assembly lives in the feature file (`lib/finance/habits.ts`); this is transport
+// only. The extraction was forced by lint C3, and it is exactly the case the lint exists for: the
+// window, the canon conversion and excluding already-known merchants are feature logic, not a
+// route's job.
 analytics.get("/analytics/habits", async (c) => {
-  const rates = await getRates(c.env.DB);
-  const { mult } = valueMode(rates, null);
-  const now = Math.floor(Date.now() / 1000);
-  const from = localMonthStart(now, -9);
-  const rows = await analyticsRepo.merchantMonths(c.env.DB, { mult, curFilter: "" }, { from, to: now }, now);
-  return c.json(buildHabits(rows, now) satisfies Habits);
+  return c.json(await collectHabits(c.env, Math.floor(Date.now() / 1000)) satisfies Habits);
 });
 
 // Спарклайни: 6-міс місячні витрати на КАТЕГОРІЮ й на МЕРЧАНТА (канон stats.ts, зведено в ₴).

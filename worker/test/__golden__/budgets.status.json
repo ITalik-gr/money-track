@@ -1,0 +1,25 @@
+{
+  "status": 200,
+  "body": [
+    {
+      "id": 1,
+      "name": "Продукти",
+      "amount": 1500000,
+      "spent": 287600,
+      "ratio": 0.19173333333333334,
+      "projected": 530899,
+      "projected_ratio": 0.3539326666666667,
+      "lumpy": false
+    },
+    {
+      "id": 2,
+      "name": "Кафе і ресторани",
+      "amount": 100000,
+      "spent": 185000,
+      "ratio": 1.85,
+      "projected": 300000,
+      "projected_ratio": 3,
+      "lumpy": false
+    }
+  ]
+}

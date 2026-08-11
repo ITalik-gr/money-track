@@ -117,6 +117,7 @@ export async function upsertMonoTx(
   const { category_id, display_name, is_transfer, real_category_id, planned_id } = await categorize(db, {
     mcc: item.mcc,
     description: item.description,
+    comment: item.comment,   // §RULES-UI: text rules match description + comment, as the preview does
     amount: item.amount,           // у валюті рахунку — як і currency нижче
     currency_code: accountCurrency,
   });

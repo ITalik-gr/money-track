@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getLocale, dateFmt, numFmt } from "../i18n/locale.ts";
+import { AiChangeLog } from "../components/transactions/AiChangeLog.tsx";
 import { translate, useT } from "../i18n/index.ts";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
@@ -9,6 +10,7 @@ import {
   useGetCategoriesQuery,
   useGetEventsQuery,
   useGetTransactionQuery,
+  useGetTxChatQuery,
 } from "../store/api.ts";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { Money } from "../components/ui/Money.tsx";
@@ -346,6 +348,9 @@ export function TxDetail() {
             </label>
 
             {/* Інлайн-чат: обговорити операцію, уточнити («це відпочинок») — AI оновить категорію */}
+            {/* §AI-AUDIT sits directly ABOVE the chat: the chat is where most of these changes
+                come from, so the record of them belongs next to their source. */}
+            <AiChangeLog txId={id} />
             <TxAiChat txId={id} txName={tx.merchant ?? tx.comment ?? t("tx.chatFallback")} />
           </div>
 
@@ -506,14 +511,32 @@ export function TxDetail() {
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
-// Інлайн-чат по конкретній операції: користувач уточнює («це відпочинок»), AI відповідає
-// й може оновити категорію/прапорець переказу (застосовується на бекенді, тег Tx інвалідиться).
+/**
+ * The conversation about ONE operation: the person clarifies ("this was for the course"), the
+ * model answers and may update the category or the transfer flag (applied server-side).
+ *
+ * §TX-CHAT (2026-08-12): the exchange is STORED. It used to live in this component's `useState`,
+ * so it existed until the user navigated away and then was gone — strictly worse than the state
+ * §CHAT-SYNC was created to end. Somebody would explain why a payment is not what it looks like,
+ * the model would use it, and an hour later there was no evidence the explanation had ever
+ * happened. Now it loads with the page, so the operation carries its own history: what was said
+ * about it, and when.
+ */
 function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
   const t = useT();
   const [chatTx, { isLoading: chatting }] = useChatTxMutation();
+  const { data: history } = useGetTxChatQuery(txId);
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const sending = useRef(false);
+
+  // Server history seeds the thread once. Not `messages = history` on every render: the optimistic
+  // user turn is added locally the moment it is sent, and re-reading the server between the send
+  // and its answer would make the question flicker out and back.
+  useEffect(() => {
+    if (history && messages.length === 0) setMessages(history as ChatMsg[]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history]);
 
   async function send(text?: string) {
     const q = (text ?? input).trim();

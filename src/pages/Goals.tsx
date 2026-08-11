@@ -11,6 +11,7 @@ import { GoalGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { GoalModal } from "../components/planning/GoalModal.tsx";
+import { GoalProgress } from "../components/planning/GoalProgress.tsx";
 import type { SavingsGoal } from "../store/api.ts";
 
 const fmtDate = dateFmt({ day: "numeric", month: "short", year: "numeric" });
@@ -91,11 +92,14 @@ export function Goals() {
  * Історія згорнута за замовчуванням: на екрані з шістьма цілями шість розгорнутих списків —
  * це стіна, у якій самі цілі губляться. Кнопка «+» завжди видима, бо саме вона тут дія.
  */
-function GoalContribs({ goalId }: { goalId: number }) {
+function GoalContribs({ g }: { g: SavingsGoal }) {
   const t = useT();
+  const goalId = g.id;
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState("");
-  // `skip`, поки згорнуто: історія потрібна рівно тому, хто її відкрив.
+  // `skip` while collapsed: the history is needed by exactly whoever opened it. The chart runs on
+  // THE SAME data, which is why it lives here and not on the card — otherwise a page with six
+  // goals would fire six history requests just to draw six tiny lines.
   const { data: items = [] } = useGetGoalContributionsQuery(goalId, { skip: !open });
   const [add, { isLoading }] = useAddGoalContributionMutation();
   const [del] = useDeleteGoalContributionMutation();
@@ -126,6 +130,10 @@ function GoalContribs({ goalId }: { goalId: number }) {
       </div>
       {open && (
         items.length ? (
+          <>
+          {/* The chart goes BEFORE the list: it answers "am I going to make it", the list answers
+              "what exactly did I put in". The reader asks the first question first. */}
+          <GoalProgress g={g} items={items} />
           <ul className="gc-list">
             {items.map((c) => (
               <li key={c.id}>
@@ -137,6 +145,7 @@ function GoalContribs({ goalId }: { goalId: number }) {
               </li>
             ))}
           </ul>
+          </>
         ) : <div className="gc-empty">{t("goal.contribEmpty")}</div>
       )}
     </div>
@@ -145,18 +154,25 @@ function GoalContribs({ goalId }: { goalId: number }) {
 
 function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void; onDelete: () => void }) {
   const t = useT();
-  const ratio = g.target_amount > 0 ? Math.min(g.current / g.target_amount, 1) : 0;
-  const pct = Math.round(ratio * 100);
-  const left = Math.max(0, g.target_amount - g.current);
-  const dl = daysLeft(g.deadline);
+  // §GOAL-PACE — the whole pace is computed on the server (`lib/finance/goals.ts`), because the
+  // notification drafter calls that same function. Until now this component had its OWN monthly
+  // rate formula, so the feed could name a different figure about the very same goal.
+  const p = g.pace;
+  const pct = Math.round(p.progress_frac * 100);
+  const left = p.left;
+  const dl = p.days_left ?? daysLeft(g.deadline);
   const color = g.color ?? "var(--accent)";
-  const done = g.current >= g.target_amount;
+  const done = p.status === "done";
 
-  // §P5: скільки відкладати на місяць, щоб устигнути до дедлайну = залишок ÷ місяців до дати.
-  // <1 міс до дедлайну — показуємо «зібрати X за N дн» (місячна ставка вводила б в оману).
-  const monthsLeft = g.deadline != null ? (g.deadline - Date.now() / 1000) / (86400 * 30.44) : null;
-  const perMonth = !done && left > 0 && monthsLeft != null && monthsLeft >= 1 ? Math.round(left / monthsLeft) : null;
-  const sprint = !done && left > 0 && dl != null && dl >= 0 && (monthsLeft == null || monthsLeft < 1);
+  // The pace badge exists only for goals with a deadline. `done` and `no_deadline` are not a pace
+  // but its absence, and there is nothing to label them with (the ✓ and "reached" already said it).
+  const pace = p.status === "on_track" || p.status === "behind" || p.status === "at_risk" || p.status === "overdue"
+    ? p.status : null;
+
+  const perMonth = !done && left > 0 ? p.per_month : null;
+  // Sprint: under a month to the deadline, so a monthly rate would mislead — show the whole
+  // remaining amount instead (decision of 2026-07-14, DESIGN §8 P5).
+  const sprint = !done && left > 0 && p.per_month == null && dl != null && dl >= 0 && g.deadline != null;
   return (
     <div className="goal-card" style={{ "--goal-color": color } as React.CSSProperties}>
       <div className="goal-top">
@@ -173,6 +189,20 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
       <div className="goal-bar"><div className="goal-fill" style={{ width: `${pct}%` }} /></div>
       <div className="goal-foot">
         <span className="goal-pct">{pct}%</span>
+        {/* §GOAL-PACE. Rendered on EVERY goal with a deadline, "on track" included: if the badge
+            only appeared when something is wrong, its absence would mean two different things —
+            "all fine" and "no deadline" — the same ambiguity as empty-vs-error. With no deadline
+            there is no pace, so there is no badge. */}
+        {pace && (
+          <span
+            className={`goal-pace ${pace}`}
+            // Why this status, in numbers — the same ones the notification uses. Without it
+            // "behind" has to be taken on faith.
+            title={p.elapsed_frac != null
+              ? t("goal.paceDetail", { progress: pct, elapsed: Math.round(p.elapsed_frac * 100) })
+              : undefined}
+          >{t(`goal.pace.${pace}` as const)}</span>
+        )}
         {done
           ? <span className="goal-meta pos">{t("goal.achieved")}</span>
           : <span className="goal-meta">{t("goal.leftPrefix")} <Money minor={left} decimals={false} /></span>}
@@ -204,7 +234,7 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
       {g.note && <div className="goal-note">{g.note}</div>}
       {/* Внески — лише для РУЧНОЇ цілі: прогрес цілі-банки веде баланс рахунку, і ручний
           внесок поверх нього рахував би ті самі гроші двічі (сервер це теж відхиляє). */}
-      {!g.account_id && <GoalContribs goalId={g.id} />}
+      {!g.account_id && <GoalContribs g={g} />}
     </div>
   );
 }

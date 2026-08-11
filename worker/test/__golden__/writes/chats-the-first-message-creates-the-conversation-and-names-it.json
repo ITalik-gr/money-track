@@ -1286,7 +1286,9 @@
           "id": "cnew1",
           "title": "Скільки я витратив на таксі?",
           "created_at": 1778749200,
-          "updated_at": 1778749200
+          "updated_at": 1778749200,
+          "kind": "advisor",
+          "entity_id": null
         }
       ],
       "messages": [

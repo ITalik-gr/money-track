@@ -93,3 +93,37 @@ test("§HABITS: the total is what the newcomers add per month, and the list is b
   assert.deepEqual(r.started.map((h) => h.merchant), ["Big", "Small"]);
   assert.equal(r.started_monthly_total, 100_000);
 });
+
+// ---- already answered for (2026-08-12) --------------------------------------------------------
+// The list became actionable: a row can be turned into a plan or dismissed as "not a subscription".
+// Both write somewhere the detector must then respect, or the row survives its own action and the
+// click reads as "nothing happened".
+
+test("§HABITS: a merchant already declared as a plan is not reported as new", () => {
+  const known = new Set(["netflix"]);
+  const r = buildHabits([row("Netflix", 1, 30_000), row("Netflix", 2, 30_000)], NOW, known);
+  assert.deepEqual(r.started, []);
+  // And the total follows: it is what the newcomers add, so a known merchant must not inflate it.
+  assert.equal(r.started_monthly_total, 0);
+});
+
+test("§HABITS: the match is case-insensitive, because the two sources disagree on case", () => {
+  // `declaredTitles` lower-cases; merchants arrive from the bank in whatever case it sends.
+  const r = buildHabits([row("NETFLIX", 1, 30_000), row("NETFLIX", 2, 30_000)], NOW, new Set(["netflix"]));
+  assert.deepEqual(r.started, []);
+});
+
+test("§HABITS: a declared plan going quiet is not reported here either", () => {
+  // `dead_sub` in notify.ts already says exactly this about declared plans. Two features
+  // reporting one fact in different words is how a user learns to distrust both.
+  const rows = [row("Gym", 3, 80_000), row("Gym", 4, 80_000), row("Gym", 5, 80_000)];
+  assert.deepEqual(buildHabits(rows, NOW, new Set(["gym"])).stopped, []);
+  // Sanity: without the exclusion this very fixture DOES report it, so the test above is not
+  // passing for some unrelated reason.
+  assert.equal(buildHabits(rows, NOW).stopped.length, 1);
+});
+
+test("§HABITS: an unknown merchant is unaffected by the exclusion set", () => {
+  const r = buildHabits([row("Spotify", 1, 20_000), row("Spotify", 2, 20_000)], NOW, new Set(["netflix"]));
+  assert.deepEqual(r.started.map((h) => h.merchant), ["Spotify"]);
+});

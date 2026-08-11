@@ -25,7 +25,7 @@ export type NotifParams = Record<string, string | number | boolean | null>;
 export type NotifTemplateKey =
   | "report" | "deadline_plan" | "deadline_credit" | "anomaly" | "win" | "budget"
   | "price_up" | "liquidity" | "big_tx" | "duplicate" | "health_drop"
-  | "goal_risk" | "dead_sub" | "todo" | "job_done";
+  | "goal_risk" | "dead_sub" | "todo" | "job_done" | "cron_failed" | "budget_forecast";
 
 export interface RenderedNotif { title: string; body: string | null }
 
@@ -268,6 +268,47 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
         body: uk
           ? "За останні 30 днів. Поки вони без категорії — статистика, бюджети й поради рахують не все."
           : "In the last 30 days. While uncategorized, stats, budgets and advice don't count everything.",
+      };
+    }
+
+    /**
+     * §BUDGET-FORECAST — the envelope is heading over, and there is still time to steer.
+     *
+     * Says the projected figure AND what is spent so far, in that order: the projection is the
+     * actionable number, but showing it alone would invite reading it as money already gone. The
+     * word "projected" is not decoration here — a forecast presented as a fact is a lie the app
+     * tells once and then has to live with.
+     */
+    case "budget_forecast": {
+      const name = s(p, "name");
+      const pct = num(p, "pct");
+      return {
+        title: uk
+          ? `«${name}» іде на ${pct}% бюджету`
+          : `“${name}” is heading for ${pct}% of its budget`,
+        body: uk
+          ? `За поточним темпом місяць закриється на ${money(locale, num(p, "projected"))} при ліміті ${money(locale, num(p, "amount"))}. Витрачено поки що ${money(locale, num(p, "spent"))} — час іще є.`
+          : `At the current pace the month closes at ${money(locale, num(p, "projected"))} against a ${money(locale, num(p, "amount"))} limit. Spent so far: ${money(locale, num(p, "spent"))} — there is still time.`,
+      };
+    }
+
+    /**
+     * Scheduled work that did not finish.
+     *
+     * Names the STEP and the reason, because the only thing worse than a weekly report failing is
+     * a weekly report failing silently — "there is no report for last week" and "the generation
+     * threw last Monday" look identical from the outside, and until now the app could not tell
+     * them apart either. The error text is shown as-is, for the same reason §Error handling shows
+     * the real cause: a limit, a missing key and a model outage need different responses.
+     */
+    case "cron_failed": {
+      const step = s(p, "step");
+      const reason = s(p, "reason");
+      return {
+        title: uk ? "Планова задача не виконалась" : "A scheduled task did not run",
+        body: uk
+          ? `«${step}» впала: ${reason}. Наступна спроба — за розкладом; запустити вручну можна на відповідному екрані.`
+          : `“${step}” failed: ${reason}. The next attempt is on schedule; you can also run it by hand from its own screen.`,
       };
     }
 

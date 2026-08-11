@@ -17,6 +17,8 @@ import { resolveLocale } from "../../lib/platform/i18n.ts";
 
 import { accounts } from "./accounts.ts";
 import { advisor } from "./advisor.ts";
+import { rules } from "./rules.ts";
+import { aiChanges } from "./ai-changes.ts";
 import { analytics } from "./analytics.ts";
 import { budgets } from "./budgets.ts";
 import { categories } from "./categories.ts";
@@ -56,6 +58,8 @@ api.use("*", async (c, next) => {
 
 api.route("/", accounts);
 api.route("/", advisor);
+api.route("/", rules);
+api.route("/", aiChanges);
 api.route("/", analytics);
 api.route("/", budgets);
 api.route("/", categories);

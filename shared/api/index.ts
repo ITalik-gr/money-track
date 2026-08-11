@@ -29,5 +29,6 @@ export * from "./chats.ts";
 export * from "./feedback.ts";
 export * from "./planning.ts";
 export * from "./platform.ts";
+export * from "./rules.ts";
 export * from "./push.ts";
 export * from "./transactions.ts";

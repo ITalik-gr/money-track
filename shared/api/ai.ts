@@ -120,3 +120,25 @@ export interface KnowledgeDocFull { id: string; title: string; summary: string; 
 
 export type AiTask = "report" | "advisor" | "insight" | "chat" | "budget" | "group" | "notify";
 export type AiModelToken = "haiku" | "sonnet" | "opus";
+
+/**
+ * §AI-AUDIT (migration 0041) — one field the model rewrote on a transaction.
+ *
+ * `old_value` is what makes this an undo rather than a log. `NULL` in it is a real previous value
+ * ("had no category"), not a missing one, which is why every value is stored as text: the three
+ * audited columns have three different types and one nullable string carries all of them without
+ * a per-field shape.
+ */
+export interface AiChange {
+  id: number;
+  tx_id: string;
+  field: string;            // 'category_id' | 'is_transfer' | 'ai_note'
+  old_value: string | null;
+  new_value: string | null;
+  source: string;           // 'enrich' | 'chat' | 'resweep'
+  created_at: number;
+  /** Set once the user put the old value back. The row stays — see `repo/ai-changes.ts`. */
+  reverted_at: number | null;
+  /** Only on the cross-transaction list, so a row reads on its own. */
+  merchant?: string | null;
+}

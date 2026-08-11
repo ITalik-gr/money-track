@@ -2,7 +2,7 @@
 // подаємо разом із профілем ситуації в Haiku → поради-картки. Кешуємо в app_state.
 import type { Env } from "../../env.ts";
 import type { ChatMsg, OnText } from "./ai.ts";
-import { type BudgetChatResult, budgetChat, chatAdvice, txChat } from "./tasks.ts";
+import { type BudgetChatResult, budgetChat, chatAdvice } from "./tasks.ts";
 import { type AdviceResult, type AiFact, evaluateGroup, generateAdvice, proposeBudgetLimits } from "./generate.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
@@ -841,68 +841,3 @@ export async function chatAboutGroup(env: Env, eventId: number, messages: ChatMs
 // Інлайн-чат по КОНКРЕТНІЙ операції: людяна відповідь + опційне застосування зміни
 // (категорія / прапорець переказу), коли з розмови стало однозначно ясно, що це.
 export interface TxChatApplied { category_id?: number | null; category_name?: string | null; is_transfer?: boolean; understanding?: string }
-export async function chatAboutTx(
-  env: Env,
-  id: string,
-  messages: ChatMsg[],
-): Promise<{ reply: string; applied?: TxChatApplied }> {
-  const loc = await resolveLocale(env);
-  const tx = await env.DB.prepare(
-    `SELECT t.id, t.merchant, t.comment, t.mcc, t.amount, t.currency_code, t.category_id,
-            t.is_transfer, t.user_note, ${catNameSql(loc, "c.name")} AS category_name
-     FROM transactions t LEFT JOIN categories c ON c.id = t.category_id WHERE t.id = ?`,
-  ).bind(id).first<{
-    id: string; merchant: string | null; comment: string | null; mcc: number | null;
-    amount: number; currency_code: number; category_id: number | null; is_transfer: number;
-    user_note: string | null; category_name: string | null;
-  }>();
-  if (!tx) return { reply: st(await resolveLocale(env), "errTxNotFound") };
-
-  const tags = await env.DB.prepare(
-    `SELECT ${catNameSql(loc, "c.name")} AS name FROM transaction_tags tt JOIN categories c ON c.id = tt.category_id WHERE tt.transaction_id = ?`,
-  ).bind(id).all<{ name: string }>();
-
-  const ctx = {
-    name: tx.merchant ?? tx.comment ?? "operation",
-    bank_comment: tx.comment,
-    mcc: tx.mcc,
-    amount: Math.round(tx.amount / 100),
-    currency_code: tx.currency_code,
-    sign: tx.amount < 0 ? "expense" : "income",
-    current_category: tx.category_name ?? "uncategorised",
-    current_category_id: tx.category_id,
-    is_transfer: !!tx.is_transfer,
-    tags: (tags.results ?? []).map((t) => t.name),
-    user_note: tx.user_note ?? null,
-    user_profile: (await getProfile(env)) || null,
-  };
-
-  const { result, usage } = await txChat(env, ctx, messages);
-  logUsage("tx-chat", usage);
-
-  const applied: TxChatApplied = {};
-  // Категорію міняємо, лише якщо AI явно повернув інший валідний id.
-  if (result.category_id != null && result.category_id !== tx.category_id) {
-    const cat = await env.DB.prepare("SELECT name FROM categories WHERE id = ?")
-      .bind(result.category_id).first<{ name: string }>();
-    if (cat) {
-      await env.DB.prepare("UPDATE transactions SET category_id = ? WHERE id = ?").bind(result.category_id, id).run();
-      applied.category_id = result.category_id;
-      applied.category_name = cat.name;
-    }
-  }
-  if (result.is_transfer !== undefined && !!result.is_transfer !== !!tx.is_transfer) {
-    await env.DB.prepare("UPDATE transactions SET is_transfer = ? WHERE id = ?").bind(result.is_transfer ? 1 : 0, id).run();
-    applied.is_transfer = !!result.is_transfer;
-  }
-  // §Хвіст: чат оновлює «AI розуміє це як» (ai_note). txChat повертає уточнене understanding —
-  // раніше воно викидалось, тож пояснення в чаті («це моя зарплата з крипти») не приживалось на
-  // екрані. Тепер персистимо, щоб рядок відображав актуальне розуміння після розмови.
-  const understanding = result.understanding?.trim();
-  if (understanding) {
-    await env.DB.prepare("UPDATE transactions SET ai_note = ? WHERE id = ?").bind(understanding, id).run();
-    applied.understanding = understanding;
-  }
-
-  return { reply: result.reply, applied: Object.keys(applied).length ? applied : undefined };
-}

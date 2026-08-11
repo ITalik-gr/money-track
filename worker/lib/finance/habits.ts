@@ -9,8 +9,37 @@
 // Deliberately NOT the same thing as `planned_payments`: those are the plans the user DECLARED.
 // This looks at what the bank actually did, so it finds the ones never declared — which is the
 // entire point, since an undeclared recurring charge is the one nobody is tracking.
-import { localYm, localMonthStart } from "./stats.ts";
+import { localYm, localMonthStart, valueMode } from "./stats.ts";
+import { getRates } from "./finance.ts";
+import type { Env } from "../../env.ts";
 import type { HabitChange, Habits } from "../../../shared/api/analytics.ts";
+
+/**
+ * The whole feature, assembled: window, canon conversion, and the merchants already answered for.
+ *
+ * Lives here rather than in the route because all three are decisions ABOUT habits — the same rule
+ * that keeps AI feature logic out of `ai.ts`. The route is left with one line, which is what a
+ * route should be.
+ *
+ * The window is 9 COMPLETE months; the current one is excluded everywhere inside `buildHabits`,
+ * because half a month of data looks exactly like a merchant that stopped.
+ */
+export async function collectHabits(env: Env, now: number): Promise<Habits> {
+  const analyticsRepo = await import("../../repo/analytics.ts");
+  const planningRepo = await import("../../repo/planning.ts");
+  const rates = await getRates(env.DB);
+  const { mult } = valueMode(rates, null);   // always UAH — the lists compare merchants with each other
+  const from = localMonthStart(now, -9);
+  const [rows, declared, dismissed] = await Promise.all([
+    analyticsRepo.merchantMonths(env.DB, { mult, curFilter: "" }, { from, to: now }, now),
+    // Merchants the user has already answered for: a declared plan, or "this is not a
+    // subscription". Without this the row would stay in the list AFTER its own action — the click
+    // would look like it did nothing, which is worse than having no button at all.
+    planningRepo.declaredTitles(env.DB),
+    planningRepo.dismissedMerchants(env.DB),
+  ]);
+  return buildHabits(rows, now, new Set([...declared, ...dismissed]));
+}
 
 /** One merchant's spend in one calendar month, from `repo/analytics.ts`. */
 export interface MerchantMonthRow { merchant: string; ym: string; spent: number; n: number }
@@ -30,8 +59,14 @@ export interface MerchantMonthRow { merchant: string; ym: string; spent: number;
  * `monthly` is the average over the months it was actually charged — not over the window, which
  * would understate a merchant that started recently. That is the same reasoning as `typical` in
  * §WEEKDAY: divide by the periods that could have contained it, not by the calendar.
+ *
+ * `known` (lower-cased) drops merchants the user has already answered for — a declared plan, or a
+ * row dismissed with "this is not a subscription". It applies to BOTH lists, and the second one
+ * is the less obvious half: a declared plan that goes silent is worth saying, but `dead_sub` in
+ * `notify.ts` already says it. Two features reporting the same fact in different words is how a
+ * user learns to distrust both.
  */
-export function buildHabits(rows: MerchantMonthRow[], now: number): Habits {
+export function buildHabits(rows: MerchantMonthRow[], now: number, known: Set<string> = new Set()): Habits {
   // Complete months only, newest first: [last complete, one before, …]. The current month is
   // excluded everywhere — half a month of data looks exactly like a merchant going quiet.
   const months: string[] = [];
@@ -49,6 +84,9 @@ export function buildHabits(rows: MerchantMonthRow[], now: number): Habits {
   const stopped: HabitChange[] = [];
 
   for (const [merchant, hist] of byMerchant) {
+    // Already answered for — declared as a plan or dismissed. Filtered here rather than in SQL so
+    // the rule sits next to the thresholds it qualifies, and so the tests can state it.
+    if (known.has(merchant.toLowerCase())) continue;
     const hit = (set: Set<string>) => hist.filter((h) => set.has(h.ym));
 
     const inRecent = hit(recent3);

@@ -221,6 +221,12 @@ const S = {
     en: "AI features need your own Anthropic key — add it in Settings → “Keys & data”.",
   },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
+  // §HABITS → plan. Only reachable when the charges disappeared between the list being rendered
+  // and the click (a re-import, a renamed merchant). Says WHY it failed, not "an error occurred".
+  errHabitNoCharges: {
+    uk: "Списань цього мерчанта більше не видно — можливо, його перейменували. Заведи план вручну.",
+    en: "No charges from this merchant are visible any more — it may have been renamed. Add the plan manually.",
+  },
   errFeedbackEmpty: { uk: "Напиши кілька слів — інакше нема з чим працювати", en: "Write a few words — there is nothing to act on otherwise" },
   errFeedbackTooMany: {
     uk: "Забагато повідомлень за добу. Напиши на пошту — вона під формою.",

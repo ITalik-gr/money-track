@@ -27,6 +27,7 @@ import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS = join(HERE, "..", "..", "migrations");
+const DIRECTORY_MIGRATIONS = join(HERE, "..", "..", "migrations-directory");
 
 /** Statement bound to an in-memory SQLite database, shaped like a D1 prepared statement. */
 class MemStatement {
@@ -117,9 +118,26 @@ export class MemDb {
 
 /** Fresh database with every real migration applied, in filename order. */
 export function migratedDb(): MemDb {
+  return migrateFrom(MIGRATIONS);
+}
+
+/**
+ * The SHARED directory database — identity, plus the counters that are about the platform rather
+ * than about one person's money (`demo_daily`, `shared_state`).
+ *
+ * A separate helper because it is a separate database with its own migration folder and its own
+ * numbering: the finance schema is per-user and lives inside a Durable Object, while this one is
+ * a single D1 every user touches. Mixing the two in one fixture would blur exactly the boundary
+ * that keeps money out of the shared database.
+ */
+export function migratedDirectoryDb(): MemDb {
+  return migrateFrom(DIRECTORY_MIGRATIONS);
+}
+
+function migrateFrom(dir: string): MemDb {
   const d = new DatabaseSync(":memory:");
-  for (const f of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
-    d.exec(readFileSync(join(MIGRATIONS, f), "utf8"));
+  for (const f of readdirSync(dir).filter((f) => f.endsWith(".sql")).sort()) {
+    d.exec(readFileSync(join(dir, f), "utf8"));
   }
   return new MemDb(d);
 }

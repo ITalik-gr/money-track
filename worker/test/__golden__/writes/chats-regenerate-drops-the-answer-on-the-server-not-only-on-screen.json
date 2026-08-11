@@ -1286,7 +1286,9 @@
           "id": "cold1",
           "title": "Оренда",
           "created_at": 1778700000,
-          "updated_at": 1778700000
+          "updated_at": 1778700000,
+          "kind": "advisor",
+          "entity_id": null
         }
       ],
       "messages": [

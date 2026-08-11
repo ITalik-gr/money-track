@@ -11,6 +11,10 @@
 ## 📁 Система документів (як усе влаштовано)
 - **`CLAUDE.md`** (цей файл) — durable-довідник. Глобальні налаштування, інваріанти, «як усе працює зараз». Сюди **виписуй важливе, коли доробив фічу** (див. робочий процес).
 - **`DESIGN.md`** — дизайн-система (живий документ). **Читай ПЕРШИМ перед будь-якою роботою над UI/UX.** Токени, патерни, референси, «Журнал рішень». Код токенів — `src/index.css`.
+- **`STYLES.md`** — the client's style architecture: why one 4 237-line `src/index.css` hurts,
+  which of the obvious fixes (Tailwind / Sass / CSS Modules) were rejected and WHY, and the phased
+  plan for splitting it by domain. Read it before any structural CSS work. **How things should
+  LOOK is not here — that is `DESIGN.md`.**
 - **`ROADMAP.md`** — жива черга задач/фіч. **Тільки невиконане**; доробив — видаляй картку.
 - **`ARCHITECTURE.md`** — шари (`routes → services → lib → repo`), лінти C1–C7 і те, що свідомо
   НЕ робимо. Читай перед структурною зміною або перед новим лінтом.
@@ -231,8 +235,71 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   рядок → `D1_ERROR: FOREIGN KEY constraint failed` на enrich. Хелпер `existingCategoryIds()` (enrich.ts)
   фільтрує `category_id` + `tag_ids` одним запитом; alias пише лише перевірений id.
 - **Наступне списання плану — лише `nextChargeUnix(startDate, period, count, now)`** (subscriptions.ts, ЄДИНЕ джерело; враховує `period_count` — «кожні N періодів»). Не дублювати логіку в ендпоінтах.
+- **§GOAL-PACE (2026-08-12): "will this goal make it" — `goalPace()` ALONE** (`lib/finance/goals.ts`,
+  a pure function with no database access). One question, answered in TWO places: the card computed
+  the monthly rate in the CLIENT (`left ÷ months`, month = 30.44 days), `draftGoalRisk` had its own
+  (`need ÷ (days / 30)`), and only the second knew anything about falling behind — which the card
+  never showed at all. So the feed could announce a goal is behind and name a figure written down
+  nowhere on the goal itself. The pace is computed on the SERVER now and returned as `pace` on
+  `/goals`; the notification drafter calls the same function.
+  **Do not compute "how much to save per month" in a component.**
+  ⚠️ Thresholds: behind = a gap between "time elapsed" and "money saved" of **≥15 points** (any
+  contribution arriving a week late produces a smaller one, and a badge that is always lit stops
+  being read); the final week is `at_risk` regardless of percentage, because the question there is
+  no longer "are you catching up" but "will you make it".
+  ⚠️ **There is NO monthly rate under a month to the deadline** (`per_month === null`): "save
+  120 000/mo" with 20 days left is arithmetically true and practically nonsense. Both the card and
+  the notification fall back on `left`. Decision of 2026-07-14, DESIGN §8 P5.
+  ⚠️ The start is the goal's `created_at`, not its first contribution: a goal opened six months ago
+  and still empty is behind precisely because nothing happened for six months.
+  Held by `worker/test/goals.test.ts` (10 scenarios).
 - **Фінансовий контекст для AI — лише `collectFinanceSnapshot(env)`** (advisor.ts, ЄДИНЕ джерело, 2026-07-14). І Порадник (`buildAdvice`), і Чат (`chatReply`) беруть ТОЙ САМИЙ знімок: розбивка коштів (`fundsBreakdown`), канонічний burn (`sumLevels`)/runway, підписки, бюджети, вагомість, тренд 6 міс, разові/регулярні, найближчі списання (`upcoming_charges`). → цифри чату = цифри Порадника. НЕ будувати збіднений контекст для чату вручну (це давало баг «домисленої подушки» — модель називала суму, якої не було в жодному запиті, + розсинхрон runway).
 
+- **§LOCK (2026-08-12): локальний код на вхід — це ПРИВАТНІСТЬ, не безпека.** `src/lib/lock.ts` +
+  `LockScreen` поверх оболонки + картка в Налаштуваннях. Зберігається `SHA-256(salt + code)`, сам
+  код — ніде. Ключ `mt-lock:<user_id>` (сховище спільне на браузер).
+  ⚠️ **Межі названі в UI, а не в примітці:** код ховає ЕКРАН на цьому пристрої, нічого не шифрує,
+  не заважає тому, хто вміє відкрити devtools, і не впливає на сесію. Лок, що обіцяє більше, ніж
+  дає, гірший за його відсутність — він міняє те, що людина готова лишити відкритим на столі.
+  ⚠️ Розблокування — у `sessionStorage`, а не `localStorage`: інакше розблокував один раз і більше
+  ніколи його не бачив, тобто лока фактично немає.
+  ⚠️ **Переживає вихід** (на відміну від чат-ключів у `lib/localdata.ts`, як тема): це властивість
+  ПРИСТРОЮ, і тихо вимкнути власний код при виході — протилежне до того, що просили.
+  ⚠️ Ніколи в демо: пісочниця не тримає нічиїх грошей і живе добу, а код на першому ж погляді на
+  продукт читається як «треба акаунт, щоб подивитись».
+- **§AI-AUDIT (2026-08-12, міграція 0041): що змінив AI — записано, і це МОЖНА відкотити.**
+  Застосунок дозволяє моделі переписати `category_id`, `is_transfer` і `ai_note` операції з трьох
+  шляхів (enrich, ре-світ, розмова на сторінці операції), і жоден із них не лишав сліду: категорія
+  могла не збігатися з тим, що поставив банк або людина, а хто це вирішив і яким було попереднє
+  значення — не знав ніхто. Таблиця `ai_changes` (`tx_id`, `field`, `old_value`, `new_value`,
+  `source`, `reverted_at`), журнал на сторінці операції з кнопкою «Повернути».
+  ⚠️ **`old_value` — це те, що робить журнал ВІДКОТОМ, а не просто логом.** `NULL` у ньому —
+  справжнє попереднє значення («категорії не було»), а не «невідомо»; тому всі три поля
+  зберігаються текстом — один nullable-рядок несе три різні типи без окремої форми на кожне.
+  ⚠️ **Пишемо, лише коли значення СПРАВДІ змінилось** (`logChange` порівнює рядкові форми):
+  enrich, що підтвердив наявну категорію, — найчастіший випадок, і його запис поховав би десяток
+  реальних змін під тисячами «AI погодився з тобою».
+  ⚠️ **Відкот МАРКУЄ рядок, а не видаляє його**, і повторний відкот — no-op: журнал фіксує те, що
+  БУЛО, тож друга спроба записала б застаріле значення поверх того, що людина вже обрала.
+  ⚠️ Логування best-effort: журнал, здатний завалити зміну, яку він описує, робить застосунок
+  гіршим у тому, про що його попросили.
+  Тримається `writes.test.ts` (4 сценарії: відкот категорії, повторний відкот, відкот у «без
+  категорії», 404 на невідомий запис).
+- **§TX-CHAT (2026-08-12, міграція 0040): розмова ПРО ОПЕРАЦІЮ теж зберігається.** Жила в
+  `useState` компонента `TxAiChat` — існувала до переходу на інший екран і зникала. Це гірше за
+  стан, який лікував §CHAT-SYNC: людина пояснює «це було за курс, а не розваги», модель це
+  враховує, а через годину сліду пояснення немає ніде. Тепер це рядок у ТИХ САМИХ `chats` із
+  `kind='tx'` + `entity_id = transactions.id`; id виводиться (`tx-<txId>`), тож сторінка знаходить
+  розмову, знаючи лише операцію, і другого ключа зберігати не треба.
+  ⚠️ **Рейка порадника фільтрує `kind='advisor'`** — інакше розмова про одну каву лежала б у
+  списку фінансових бесід і ховала б ті чотири, до яких справді повертаються.
+  ⚠️ **Стеля 60 розмов — ПОКИ НА ВИД.** Зі спільною людина, що розпитала про шістдесят операцій,
+  мовчки витерла б собі всі розмови з порадником. Це різні речі з різним часом життя.
+  ⚠️ Обидва ходи пише СЕРВЕР у `POST /transactions/:id/chat`, поруч із генерацією відповіді (те
+  саме правило, що §CHAT-SYNC): клієнт, який записує свою половину сам, лишає обірваний обмін
+  щоразу, коли генерація впала. Запис best-effort — нездатність зберегти розмову не має зʼїдати
+  відповідь, на яку людина чекає.
+  Тримається `writes.test.ts` (3 сценарії, зокрема «не потрапляє в рейку порадника»).
 - **Розмови з порадником живуть НА СЕРВЕРІ (§CHAT-SYNC, міграція 0038).** Таблиці `chats` +
   `chat_messages` у власному DO юзера; єдиний писар — `repo/chats.ts`, транспорт — `routes/api/chats.ts`.
   Доти вони лежали в `localStorage` (`mt-chats:<user_id>`), тобто розмова існувала лише на тому
@@ -312,20 +379,34 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 - **Вагомість (§6):** `EFF_IMPORTANCE` = `COALESCE(t.importance, рол-ап importance ефективної категорії, 'discretionary')`. Рівні `essential|discretionary|optional`. Задається на категорії (дефолт) + override на транзакції. Міграція 0016.
 - **Разові vs регулярні (§E1):** `isRecurringExpr` — операція регулярна, якщо прив'язана до плану (`planned_id IS NOT NULL`, напр. квартальна підписка) АБО її мерчант має витрати у ≥3 різних місяцях трейлінг-вікна. `recurringOneoffSplit()` дає {recurring, oneoff, oneoff_items}.
 - **Місячний рівень категорії — `categoryMonthlyLevels()` (ЄДИНЕ джерело, 2026-07-12).** Один «скільки на місяць» на категорію, узгоджений скрізь (Патерни `usual`, Порадник/Бюджети `avg_month_uah`): fixed-кости (рента/підписка — останні 2-3 повні міс стабільні, CV≤0.12) → рівень = середнє останніх платежів (ловить стрибок ціни, коли орендодавець підняв ставку: 6-місячне середнє тягнуло б рівень до старої ціни ще півроку); змінні категорії → середнє за вікно (не хапає випадковий пік). Рахує лише по ПОВНИХ місяцях. Замінив розсинхрон «6-міс середнє / 90д÷3 / останній платіж». НЕ рахувати місячну суму категорії деінде вручну — брати звідси. **§A1 (2026-07-19):** наприкінці функції — `applyFactAdjustments()`: ПІДТВЕРДЖЕНІ факти (`facts.confirmed_at IS NOT NULL`, активні на `now`) коригують рівень (multiplier ×/ delta_minor +). Це ЄДИНЕ місце, де факт рухає число (не в ендпоінті) — тож burn/runway/Патерни/чат лишаються узгодженими.
-  **§A1-WRITE (2026-08-12): факт створює ЛИШЕ `addFact` (`lib/ai/facts.ts`).** Писарів було два —
-  він і власний `INSERT` в інструменті `remember_fact` (`chat-tools.ts`) — з однаковим списком
-  колонок і різними дефолтами: рівно та форма, з якої виросли §CUR-PLAN і §REFUND (одне поняття,
-  дві реалізації, розходяться там, де ніхто не дивиться). Різниця тепер — АРГУМЕНТИ:
-  `source: "user" | "ai_proposed"` і `confirm`. ⚠️ `confirm` — це не налаштування, а сам ГЕЙТ:
-  `confirm: true` означає «людина сама ввела число», тож факт від моделі ЗАВЖДИ йде з
-  `confirm: false`, інакше здогад мовчки зрушив би burn і runway. Тримається `writes.test.ts`
-  (6 сценаріїв: обидва писарі, гейт підтвердження, глобальний факт без коригування, невідома
-  категорія й порожній текст не пишуть нічого).
-- **Бюджети-конверти (ліміт ↔ витрачено) — `budgetStatus(env, mult, now)`** (stats.ts, ЄДИНЕ
-  джерело, 2026-07-31). Витрата — канон (`STATS_JOINS` + `SPEND_WHERE` + `amountSum`), рол-ап у
-  батька, місяць рахується від його першого дня. Читають стрічка сповіщень (`draftBudgets`) і
-  тижневий TG-пуш (`proactive.overBudget`) — раніше другий мав власний SQL і давав інші числа.
-  **Не рахувати «скільки з бюджету зʼїдено» деінде вручну.**
+  **§A1-WRITE (2026-08-12): a fact is created by `addFact` (`lib/ai/facts.ts`) ALONE.** There were
+  two writers — that function and a private `INSERT` inside the `remember_fact` tool
+  (`chat-tools.ts`) — with the same column list and different defaults: exactly the shape §CUR-PLAN
+  and §REFUND grew out of (one concept, two implementations, drifting where nobody looks). The
+  difference is now ARGUMENTS: `source: "user" | "ai_proposed"` and `confirm`. ⚠️ `confirm` is not
+  a preference but the GATE itself: `confirm: true` means a human typed the number, so a
+  model-authored fact ALWAYS passes `confirm: false` — otherwise a guess would silently move burn
+  and runway. Held by `writes.test.ts` (6 scenarios: both writers, the confirmation gate, a global
+  fact carrying no adjustment, and an unknown category or empty text writing nothing).
+- **Бюджети-конверти (ліміт ↔ витрачено ↔ прогноз) — `budgetStatus(env, mult, now)`**
+  (`lib/finance/budgets.ts`, ЄДИНЕ джерело; 2026-07-31, переїхало зі `stats.ts` 2026-08-12).
+  Витрата — канон (`STATS_JOINS` + `SPEND_WHERE` + `amountSum`), рол-ап у батька, місяць від його
+  першого дня. **Не рахувати «скільки з бюджету зʼїдено» деінде вручну.**
+  Читають: стрічка (`drafts-budget.ts`), тижневий TG-пуш (`proactive.overBudget`) і
+  `GET /budgets/status` → `EnvelopeGrid`. Кожен із трьох колись мав власну версію цього числа.
+  ⚠️ **Клієнт більше НЕ виводить його сам** (2026-08-12): `EnvelopeGrid` склеював `/budgets` з
+  `/analytics/by-category` — третє визначення того, чим уже володіє сервер. Тепер компонент лише
+  малює.
+  - **§BUDGET-FORECAST (2026-08-12): конверт каже, де місяць ЗАКРИЄТЬСЯ.** `projected` рахує той
+    самий `projectSpend`, що «Радар темпу», тож конверт і радар не можуть розійтись; лумп-правило
+    теж спільне (`n ≤ 1 OR biggest ≥ 55%`, або несплачений fixed-кост). Доти бюджет був дзеркалом
+    заднього виду: «перевищено» приходило тоді, коли вдіяти вже нічого не можна.
+    ⚠️ **`lumpy` віддається назовні, а не ховається:** `projected === spent` означає дві різні
+    речі, і UI, який їх не розрізняє, показав би «все гаразд» на оренді, яка просто ще не пішла.
+    ⚠️ Сповіщення `budget_forecast` — **не раніше 10-го числа** (рано в місяці прогноз це майже
+    сама історія), **не коли гроші вже витрачені** (`ratio ≥ 0.9` — там говорить `draftBudgets`,
+    і дві події про один конверт за день це застосунок, що сперечається сам із собою), не для
+    лумпа, і лише від **110% прогнозу + 200 ₴** перевищення. Один рядок на конверт на МІСЯЦЬ.
 - **Місячний BURN (знаменник runway) — `sumLevels(levels)` = сума рівнів категорій (ЄДИНЕ джерело, P1 2026-07-14).** Замінив «витрати_90д ÷ 3» у Пораднику (`buildAdvice`), AI-бюджет-плані (`proposeBudgets`) і бюджет-чаті (`budgetChatReply`). Тепер «Витрати/міс» = сумі `usual` Патернів → одна цифра всюди; не роздувається разовими лумпами (податок/лікар — рівень їх усереднює/виключає), ловить стрибок fixed-косту одразу. `runway = ліквідна_подушка ÷ burn`. **Виняток:** `/analytics/forecast.projectedSpend` — це ІНША цифра (проєкція саме поточного місяця, з його разовими), її свідомо НЕ чіпали.
 - **Прогноз темпу (`/analytics/patterns`) — `projectSpend()` (stats.ts):** прогноз кінця місяця = «вже витрачено + історичний залишок» (НЕ наївний `spent/elapsedFrac`, що роздував рано в місяці / лумпи). Лумпи (1-2 великі операції: податок/оренда/заправка — детект `n≤1 OR biggest≥55%`, або fixed-кост ще не сплачений) НЕ екстраполюємо; кеп 3× звичного. `usual` — з `categoryMonthlyLevels`. `mostly_oneoff`/lumpy — поза «Радаром аномалій». Агрегат `/analytics/forecast` — бленд поточного темпу з історією 3 міс. Стара логіка (elapsedFrac × регулярна частина) замінена.
 - **§WEEKDAY — витрати за днями тижня (2026-08-07): `lib/finance/weekday.ts`, ЄДИНЕ джерело.**
@@ -364,6 +445,29 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 ## 🧠 Категоризація (детермін.-first, AI-last)
 Порядок у `categorize()`/`enrich()`: 1) навчений `merchant_alias` (точний опис) → 2) активна підписка (мерчант+сума+валюта, `subscriptions.ts`) → 3) консенсус мерчанта (корінь назви ≥3× ≥80% в одну кат.) → 4) `mcc`/`text` rules → 5) AI-enrich (Haiku, з `known_subscriptions`-нюджем).
 - **Alias source (0014):** колонка `source` (`manual`|`ai`). `learn`→manual; enrich→`writeAiAlias` НІКОЛИ не перетирає manual; авто-ре-світ пропускає manual; консенсус важить ручні ×3.
+- **§RULES-UI (2026-08-12): крок 4 (`rules`) нарешті редагується з застосунку.** Таблиця існує з
+  міграції 0001, але писати в неї могли лише сід і каскад видалення категорії — правило додавалось
+  ВИКЛЮЧНО руками в БД. Тепер `/rules/*` (CRUD + `POST /rules/preview` + `POST /rules/:id/apply`),
+  картка на сторінці Категорій.
+  ⚠️ **Превʼю — це не зручність, а запобіжник:** правило — це стояча інструкція про гроші, яких ще
+  немає, тож єдиний чесний спосіб його оцінити — прогнати по минулому. Кнопка «Зберегти» замкнена,
+  поки не натиснуто «Перевірити».
+  ⚠️ **`apply` чіпає ЛИШЕ операції без категорії.** Правило — це здогад про текст, а збережена
+  категорія це рішення (MCC банку, навчений alias, AI-enrich або сама людина); перезаписати їх
+  підрядком означало б, що застосунок мовчки сперечається з уже зробленою роботою.
+  ⚠️ **Текст, по якому матчить `text`-правило, — ОДИН для рушія й для превʼю:** сира банківська
+  `description` + `comment`. Рушій будує його в JS (`categorize`), превʼю — тим самим виразом у SQL
+  (`textHaystack`, `repo/rules.ts`, через `json_extract(raw_json,'$.description')` з фолбеком на
+  `merchant` для ручних/CSV). **Розійшлись у день релізу фічі:** превʼю шукало по ПОТОЧНОМУ
+  `merchant`, який AI-enrich переписує на чисту назву («Silpo»), а рушій — по сирому опису
+  («SILPO 1234 KYIV». Людина писала правило по тому, що бачить на екрані, бачила збіг, зберігала —
+  і воно не спрацьовувало ніколи. Заразом `comment` додано в матчинг: у P2P-переказу опис — це
+  просто чиєсь імʼя, а сенс лежить у коментарі.
+  ⚠️ Порядок лишився `categorize()`: `mcc` → `text`, обидва за спаданням `priority`. Щоб побити
+  заводське MCC-правило, юзер створює власне `mcc` із пріоритетом > 10 — саме тому міграція й
+  окремий `source`-стовпчик не знадобились.
+  Тримається 6 сценаріями у `writes.test.ts` (створення, три відмови валідації, apply-лише-без-
+  категорії, видалення).
 
 ## 💸 AI-модель і вартість
 - Ціни за MTok: **Haiku $1/$5, Sonnet $3/$15, Opus 4.8 $5/$25.** Cache read ≈0.1× input, write ≈1.25–2×.

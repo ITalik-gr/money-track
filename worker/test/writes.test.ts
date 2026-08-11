@@ -111,13 +111,19 @@ const EXTRA_PROBES = {
   // device is that a chat and its turns stay one thing, and the failure worth catching is a
   // conversation whose messages outlive it (or the reverse).
   chats: (db: MemDb) => ({
-    chats: rows(db, "SELECT id, title, created_at, updated_at FROM chats ORDER BY id"),
+    // `kind`/`entity_id` are in the probe since §TX-CHAT (migration 0040): a conversation about a
+    // transaction must never land in the advisor's rail, and that is decided by these two columns.
+    chats: rows(db, "SELECT id, title, created_at, updated_at, kind, entity_id FROM chats ORDER BY id"),
     messages: rows(db, "SELECT chat_id, role, content FROM chat_messages ORDER BY chat_id, id"),
   }),
   // §A1. `confirmed_at` and `source` are the two columns worth the snapshot: the first IS the
   // gate (only a confirmed fact with an adjustment moves burn and runway), and the second records
   // who authored the claim. A write that sets either of them wrongly does not fail visibly — it
   // quietly changes what the user's runway says.
+  // §AI-AUDIT. `old_value` is what makes the log an undo, and `reverted_at` is what stops the
+  // same undo being offered twice — both are worth a snapshot.
+  ai_changes: (db: MemDb) =>
+    rows(db, "SELECT id, tx_id, field, old_value, new_value, source, reverted_at FROM ai_changes ORDER BY id"),
   facts: (db: MemDb) =>
     rows(db, `SELECT id, text, effective_from, expires_at, category_id, adjust_kind, adjust_value,
                      confirmed_at, source FROM facts ORDER BY id`),
@@ -982,6 +988,174 @@ const SCENARIOS: Scenario[] = [
     path: () => "/facts",
     body: () => ({ text: "Звільнився з роботи", adjust_kind: "multiplier", adjust_value: 0.5, confirm: true }),
     extraProbes: ["facts"],
+  },
+  // ---- §AI-AUDIT: what the model changed, and putting it back ------------------------------
+  {
+    // The invariant worth the test: revert restores the OLD value on the TRANSACTION and marks the
+    // log row — it does not delete it. "The AI did this and I undid it" has to stay knowable.
+    name: "ai-audit: reverting restores the previous category and marks the entry",
+    method: "POST",
+    path: () => "/ai-changes/9001/revert",
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO ai_changes (id, tx_id, field, old_value, new_value, source, created_at)
+                      VALUES (9001, 'tx0001', 'category_id', '2', '6', 'chat', 1778600000)`).run();
+      db.raw.prepare("UPDATE transactions SET category_id = 6 WHERE id = 'tx0001'").run();
+    },
+    extraProbes: ["ai_changes"],
+  },
+  {
+    // A second revert would write a stale value over whatever the person has since chosen: the log
+    // records what WAS, not what is.
+    name: "ai-audit: reverting twice is a no-op",
+    method: "POST",
+    path: () => "/ai-changes/9002/revert",
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO ai_changes (id, tx_id, field, old_value, new_value, source, created_at, reverted_at)
+                      VALUES (9002, 'tx0001', 'category_id', '2', '6', 'chat', 1778600000, 1778600100)`).run();
+      db.raw.prepare("UPDATE transactions SET category_id = 11 WHERE id = 'tx0001'").run();
+    },
+    extraProbes: ["ai_changes"],
+  },
+  {
+    // NULL in `old_value` is a real previous value — "had no category" — not a missing one.
+    name: "ai-audit: reverting to no category at all",
+    method: "POST",
+    path: () => "/ai-changes/9003/revert",
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO ai_changes (id, tx_id, field, old_value, new_value, source, created_at)
+                      VALUES (9003, 'tx0001', 'category_id', NULL, '6', 'enrich', 1778600000)`).run();
+      db.raw.prepare("UPDATE transactions SET category_id = 6 WHERE id = 'tx0001'").run();
+    },
+    extraProbes: ["ai_changes"],
+  },
+  {
+    name: "ai-audit: reverting an unknown entry is 404, not a silent success",
+    method: "POST",
+    path: () => "/ai-changes/9999/revert",
+    extraProbes: ["ai_changes"],
+  },
+
+  // ---- §TX-CHAT: a conversation about one operation is STORED --------------------------------
+  // It used to live in React state and vanish on navigation. These pin the two properties that
+  // make storing it useful rather than merely true: it is addressable by the transaction, and it
+  // stays OUT of the advisor's conversation list.
+  {
+    name: "tx-chat: history is empty before anything was said",
+    method: "GET",
+    path: (db) => `/transactions/${txId(db, "Кафе")}/chat`,
+    extraProbes: ["chats"],
+  },
+  {
+    name: "tx-chat: a stored exchange does not appear in the advisor rail",
+    method: "GET",
+    path: () => "/chats",
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO chats (id, title, created_at, updated_at, kind, entity_id)
+                      VALUES ('tx-tx0001', 'це було за курс', 1778600000, 1778600000, 'tx', 'tx0001')`).run();
+      db.raw.prepare(`INSERT INTO chats (id, title, created_at, updated_at)
+                      VALUES ('cadv1', 'Скільки я витрачаю', 1778600001, 1778600001)`).run();
+      db.raw.prepare(`INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES
+        ('tx-tx0001', 'user', 'це було за курс, не розваги', 1778600000),
+        ('tx-tx0001', 'assistant', 'Зрозумів, перекатегоризував.', 1778600001)`).run();
+    },
+    extraProbes: ["chats"],
+  },
+  {
+    name: "tx-chat: the history reads back what was said about that operation",
+    method: "GET",
+    path: () => "/transactions/tx0001/chat",
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO chats (id, title, created_at, updated_at, kind, entity_id)
+                      VALUES ('tx-tx0001', 'це було за курс', 1778600000, 1778600000, 'tx', 'tx0001')`).run();
+      db.raw.prepare(`INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES
+        ('tx-tx0001', 'user', 'це було за курс, не розваги', 1778600000),
+        ('tx-tx0001', 'assistant', 'Зрозумів, перекатегоризував.', 1778600001)`).run();
+    },
+  },
+
+  // ---- rules: the deterministic categorisation layer, finally writable ----------------------
+  // The table existed from migration 0001 with no way to write to it but a seed. These pin the
+  // guards that make user-authored rules safe: the shape checks (a one-character pattern would
+  // file the whole history into one category), the §FK-GUARD on the category, and — the one that
+  // matters — that applying a rule NEVER overwrites a category something else already decided.
+  {
+    name: "rules: a text rule is created with its category and priority",
+    method: "POST",
+    path: () => "/rules",
+    body: () => ({ match_type: "text", pattern: "таксі", category_id: 3, priority: 50 }),
+    extraProbes: ["rules"],
+  },
+  {
+    // THE regression this exists for (found 2026-08-12, the day the feature shipped): the preview
+    // used to search the CURRENT merchant, which AI enrichment rewrites to a clean name, while the
+    // engine searches the bank's raw description. Here the row shows "Silpo" and the bank sent
+    // "SILPO 1234 KYIV" — a rule on the raw text must be reported as matching, because that is
+    // what will actually fire on the next one.
+    name: "rules: the preview searches the RAW bank text, not the cleaned merchant",
+    method: "POST",
+    path: () => "/rules/preview",
+    body: () => ({ match_type: "text", pattern: "SILPO 1234" }),
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO transactions (id, account_id, source, currency_code, time, amount, merchant, raw_json, category_id)
+                      VALUES ('rule-raw', 'acc-uah', 'mono', 980, 1778600000, -20000, 'Silpo',
+                              '{"description":"SILPO 1234 KYIV"}', NULL)`).run();
+    },
+  },
+  {
+    // The other half of the same mirror: a P2P transfer's description is just a name, and the
+    // meaning is in the comment. Matching it was impossible until the engine started reading it.
+    name: "rules: the preview matches a P2P comment, because the engine now does too",
+    method: "POST",
+    path: () => "/rules/preview",
+    body: () => ({ match_type: "text", pattern: "оренда" }),
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO transactions (id, account_id, source, currency_code, time, amount, merchant, comment, category_id)
+                      VALUES ('rule-p2p', 'acc-uah', 'mono', 980, 1778600000, -1200000, 'Іван П.', 'оренда за серпень', NULL)`).run();
+    },
+  },
+  {
+    name: "rules: rejected — a one-character pattern would match everything",
+    method: "POST",
+    path: () => "/rules",
+    body: () => ({ match_type: "text", pattern: "а", category_id: 3 }),
+    extraProbes: ["rules"],
+  },
+  {
+    name: "rules: rejected — an MCC pattern must be digits",
+    method: "POST",
+    path: () => "/rules",
+    body: () => ({ match_type: "mcc", pattern: "grocery", category_id: 1 }),
+    extraProbes: ["rules"],
+  },
+  {
+    name: "rules: rejected — the category must exist (§FK-GUARD)",
+    method: "POST",
+    path: () => "/rules",
+    body: () => ({ match_type: "text", pattern: "щось", category_id: 9999 }),
+    extraProbes: ["rules"],
+  },
+  {
+    // Proves BOTH halves at once, which is the whole point: the fixture's "Ашан" already carries
+    // category 1, and `rule-unc` carries none. After the apply the second must be filed and the
+    // first must be untouched — a rule is a guess about text, and a stored category is a decision.
+    name: "rules: applying one files ONLY the operations with no category",
+    method: "POST",
+    path: () => "/rules/7001/apply",
+    setup: (db) => {
+      db.raw.prepare("INSERT INTO rules (id, match_type, pattern, category_id, priority) VALUES (7001, 'text', 'Ашан', 6, 50)").run();
+      db.raw.prepare(`INSERT INTO transactions (id, account_id, source, currency_code, time, amount, merchant, category_id)
+                      VALUES ('rule-unc', 'acc-uah', 'mono', 980, 1778600000, -50000, 'Ашан Сільпо', NULL)`).run();
+    },
+    extraProbes: ["rules"],
+  },
+  {
+    name: "rules: deleting one leaves the transactions it filed alone",
+    method: "DELETE",
+    path: (db) => {
+      db.raw.prepare("INSERT INTO rules (id, match_type, pattern, category_id, priority) VALUES (7002, 'text', 'Кафе', 2, 50)").run();
+      return "/rules/7002";
+    },
+    extraProbes: ["rules"],
   },
   {
     name: "export: transactions as strict RFC CSV",

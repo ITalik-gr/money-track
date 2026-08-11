@@ -26,7 +26,93 @@ export type AutofillKind = (typeof AUTOFILL_KINDS)[number];
 export const isGoalKind = (v: unknown): v is GoalKind => GOAL_KINDS.includes(v as GoalKind);
 export const isAutofillKind = (v: unknown): v is AutofillKind => AUTOFILL_KINDS.includes(v as AutofillKind);
 
-/** `current_amount` = сума внесків. ЄДИНИЙ писар цієї колонки. */
+/**
+ * §GOAL-PACE — "is this goal going to make it", the SINGLE source.
+ *
+ * One question, answered in TWO places with different arithmetic: the goal card computed "how much
+ * to save per month" in the CLIENT (`left / months`, month = 30.44 days), while `draftGoalRisk` in
+ * `notify.ts` had its own (`need / (days / 30)`) — and only the second one knew anything about
+ * falling behind, which the card never showed at all. So the feed could announce that a goal is
+ * behind and name a monthly figure written down nowhere on the goal itself. Same mechanism as
+ * §CUR-PLAN and §SUB-MONTH: one concept, two implementations.
+ *
+ * A pure function with no database access, which is exactly why both the route and the
+ * notification drafter can use it.
+ *
+ * ⚠️ There is NO `per_month` when less than a month remains: a monthly rate is misleading there
+ * ("save 30 000/mo" with seven days left), and the decision to show the remaining total instead
+ * was taken on 2026-07-14 (DESIGN §8, P5). Whoever needs a number in that mode reads `left`.
+ * ⚠️ The start is the goal's `created_at`, not its first contribution: a goal opened six months
+ * ago and still empty is behind precisely BECAUSE nothing happened for six months. With no date
+ * we assume 180 days before the deadline — the only assumption in here.
+ */
+export type GoalStatus = "done" | "no_deadline" | "on_track" | "behind" | "at_risk" | "overdue";
+
+export interface GoalPace {
+  status: GoalStatus;
+  /** 0..1, capped at one. */
+  progress_frac: number;
+  /** 0..1 — how much of the window has passed. `null` when there is no window (no deadline). */
+  elapsed_frac: number | null;
+  /** How far time is ahead of money, as a fraction. `null` with no deadline. */
+  behind_frac: number | null;
+  days_left: number | null;
+  /** Still to be saved, in minor units. */
+  left: number;
+  /** Minor units per month to make it. `null` in a sprint (<1 month) and with no deadline. */
+  per_month: number | null;
+}
+
+/** Average month length. Not 30: over a year that difference is five whole days of rate. */
+const MONTH_DAYS = 30.44;
+/** The "time ran ahead of money" gap at which a goal counts as behind. */
+const BEHIND_THRESHOLD = 0.15;
+/** Past this point the question stops being "are you catching up" and becomes "will you make it". */
+const SPRINT_DAYS = 7;
+
+export function goalPace(
+  g: { target_amount: number; current: number; deadline: number | null; created_at?: number | null },
+  now = Math.floor(Date.now() / 1000),
+): GoalPace {
+  const target = g.target_amount;
+  const left = Math.max(0, target - g.current);
+  const progress_frac = target > 0 ? Math.min(g.current / target, 1) : 0;
+  const base = { progress_frac, left };
+
+  if (target > 0 && g.current >= target) {
+    return { ...base, status: "done", elapsed_frac: null, behind_frac: null, days_left: null, per_month: null };
+  }
+  if (!g.deadline) {
+    return { ...base, status: "no_deadline", elapsed_frac: null, behind_frac: null, days_left: null, per_month: null };
+  }
+
+  const days_left = Math.ceil((g.deadline - now) / 86400);
+  const months_left = (g.deadline - now) / (86400 * MONTH_DAYS);
+  // A monthly rate only outside the sprint — see the note above.
+  const per_month = months_left >= 1 && left > 0 ? Math.round(left / months_left) : null;
+
+  const start = g.created_at ?? g.deadline - 180 * 86400;
+  // The window cannot be zero or negative (a deadline earlier than the goal's own creation):
+  // dividing by it is impossible, and "behind" is meaningless for such a goal anyway — the
+  // deadline itself is all that is left to report.
+  const window = g.deadline - start;
+  const elapsed_frac = window > 0 ? Math.min(Math.max((now - start) / window, 0), 1) : null;
+  const behind_frac = elapsed_frac != null ? elapsed_frac - progress_frac : null;
+
+  const status: GoalStatus =
+    days_left < 0 ? "overdue"
+      : days_left <= SPRINT_DAYS ? "at_risk"
+        : (behind_frac ?? 0) >= BEHIND_THRESHOLD ? "behind"
+          : "on_track";
+
+  return { ...base, status, elapsed_frac, behind_frac, days_left, per_month };
+}
+
+/** Whether a goal is worth a line in the feed. The same gate `draftGoalRisk` used to hold itself. */
+export const goalNeedsAttention = (p: GoalPace) =>
+  p.status === "overdue" || p.status === "at_risk" || p.status === "behind";
+
+/** `current_amount` = the sum of contributions. THE ONLY writer of this column. */
 export async function recalcGoal(db: AppDb, goalId: number): Promise<number> {
   const r = await db.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM goal_contributions WHERE goal_id = ?")
     .bind(goalId).first<{ s: number }>();

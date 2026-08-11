@@ -7,6 +7,15 @@ import type { AppDb } from "../platform/db-shim.ts";
 export interface CategorizeInput {
   mcc: number | null;
   description: string | null;
+  /**
+   * The counterparty's own text on a P2P transfer (mono sends it separately from `description`).
+   *
+   * Matched by text rules alongside the description since 2026-08-12. It was excluded before,
+   * which made a whole class of rule impossible to write: "comment contains оренда" is exactly
+   * the kind of standing instruction a person wants, and the money that needs it — rent, splitting
+   * a bill, a repayment — arrives as a P2P transfer whose description is just someone's name.
+   */
+  comment?: string | null;
   amount?: number | null;        // копійки (знак: витрата < 0) — для матчу з підписками
   currency_code?: number | null; // валюта РАХУНКУ операції
 }
@@ -64,13 +73,24 @@ export async function categorize(
       .first<{ category_id: number }>();
     if (r) return { category_id: r.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null };
   }
-  if (desc) {
+  /**
+   * Text rules match the description AND the comment, joined.
+   *
+   * ⚠️ This string has to stay identical to the one `repo/rules.ts` `preview()` builds. The rule
+   * screen shows the user what a pattern WOULD match before they save it, and a preview that
+   * matches differently from the engine is worse than no preview — it is a promise the app does
+   * not keep. (Found on 2026-08-12: the preview searched the CURRENT `merchant`, which AI
+   * enrichment rewrites to a clean name, while the engine searched the raw bank description. A
+   * rule written against what the screen showed would simply never fire.)
+   */
+  const haystack = [desc, (input.comment ?? "").trim()].filter(Boolean).join(" ");
+  if (haystack) {
     const textRules = await db
       .prepare(
         "SELECT pattern, category_id FROM rules WHERE match_type = 'text' ORDER BY priority DESC",
       )
       .all<{ pattern: string; category_id: number }>();
-    const lower = desc.toLowerCase();
+    const lower = haystack.toLowerCase();
     for (const rule of textRules.results ?? []) {
       if (lower.includes(rule.pattern.toLowerCase())) {
         return { category_id: rule.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null };

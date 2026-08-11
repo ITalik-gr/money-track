@@ -182,6 +182,37 @@ export async function merchantMatches(
   return r.results ?? [];
 }
 
+/**
+ * Everything needed to turn ONE known merchant into a plan: its typical charge, in its OWN
+ * currency, plus when it started and where it usually lands.
+ *
+ * Exact match on the merchant, not `LIKE` as in `merchantMatches`: this one is not a search, it
+ * is "the row the user just pointed at", and a `LIKE` would happily also fold in a longer name
+ * that merely contains it.
+ *
+ * ⚠️ `avg_amount` is in `currency_code`, NOT converted to UAH — `planned_payments.period_amount`
+ * is stored in the plan's own currency (§CUR-PLAN). Handing this a ₴-converted figure together
+ * with a USD `currency_code` is precisely the bug that made a $5 subscription weigh 5 ₴.
+ * Grouped by currency and the busiest group wins, because a merchant that changed currency mid-way
+ * has two answers and only the current one is a plan.
+ */
+export async function merchantProfile(
+  db: AppDb, merchant: string, since: number,
+): Promise<MerchantMatch | null> {
+  const r = await db.prepare(
+    `SELECT t.merchant, t.currency_code, -AVG(t.amount) AS avg_amount, COUNT(*) AS n,
+            MIN(t.time) AS first_time, MAX(t.time) AS last_time,
+            (SELECT x.category_id FROM transactions x
+             WHERE x.merchant = t.merchant AND x.category_id IS NOT NULL
+             GROUP BY x.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id
+     FROM transactions t
+     WHERE t.amount < 0 AND t.is_transfer = 0 AND t.merchant = ? AND t.time >= ?
+     GROUP BY t.currency_code
+     ORDER BY n DESC LIMIT 1`,
+  ).bind(merchant, since).first<MerchantMatch>();
+  return r ?? null;
+}
+
 /** Lower-cased titles of declared plans — a candidate matching one is already known. */
 export async function declaredTitles(db: AppDb): Promise<Set<string>> {
   const r = await db.prepare(

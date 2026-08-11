@@ -50,6 +50,24 @@ export interface BudgetChatReply {
   proposals?: { category_id: number; limit_uah: number; reason: string }[];
 }
 
+/**
+ * `GET /budgets/status` — the envelope canon: limit, spent so far, and the month-end projection.
+ * Shaped by `lib/finance/budgets.ts` `budgetStatus`; the client renders it and computes nothing.
+ */
+export interface BudgetStatusRow {
+  id: number; name: string;
+  amount: number; spent: number; ratio: number;
+  /** §BUDGET-FORECAST: where the month closes at this pace, ₴ minor. */
+  projected: number;
+  projected_ratio: number;
+  /** The projection was deliberately NOT extrapolated (a lump landed, or a fixed cost is pending). */
+  lumpy: boolean;
+}
+export type BudgetStatusList = BudgetStatusRow[];
+
+/** `POST /planned/from-habit` — §HABITS row turned into a declared plan. */
+export interface PlanFromHabit { ok: boolean; id: number }
+
 export type GoalKind = "save_up" | "debt_payoff" | "sinking_fund";
 export type AutofillKind = "fixed" | "income_pct";
 
@@ -61,6 +79,23 @@ export interface GoalBody {
 }
 
 export interface GoalContribution { id: number; amount: number; at: number; note: string | null; source: string }
+
+/**
+ * §GOAL-PACE — is the goal going to make it. Computed on the SERVER (`lib/finance/goals.ts`,
+ * `goalPace`), because the notification drafter reads the same answer: otherwise the card and the
+ * feed would name different numbers about one goal, and one of them would look like a bug.
+ */
+export type GoalStatus = "done" | "no_deadline" | "on_track" | "behind" | "at_risk" | "overdue";
+
+export interface GoalPace {
+  status: GoalStatus;
+  progress_frac: number;
+  elapsed_frac: number | null;
+  behind_frac: number | null;
+  days_left: number | null;
+  left: number;
+  per_month: number | null;
+}
 
 export interface SavingsGoal {
   id: number;
@@ -80,5 +115,7 @@ export interface SavingsGoal {
   autofill_kind?: AutofillKind | null;
   autofill_value?: number | null;
   autofill_last_ym?: string | null;
+  created_at?: number | null;
   current: number; // ефективний прогрес (баланс банки або ручний)
+  pace: GoalPace;  // §GOAL-PACE — server-computed, so the card and the feed cannot diverge
 }

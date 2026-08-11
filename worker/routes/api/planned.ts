@@ -8,7 +8,7 @@ import * as planningRepo from "../../repo/planning.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
 import type { PlannedPayment, PlannedActual } from "../../../shared/types.ts";
-import type { UpcomingSubs, RecurringCandidate } from "../../../shared/api/planning.ts";
+import type { UpcomingSubs, RecurringCandidate, PlanFromHabit } from "../../../shared/api/planning.ts";
 
 export const planned = apiRoutes();
 
@@ -102,6 +102,49 @@ planned.patch("/planned/:id", async (c) => {
     ...(b.category_id !== undefined ? { category_id: b.category_id } : {}),
   });
   return c.json({ ok: true });
+});
+
+/**
+ * §HABITS → a plan in one click.
+ *
+ * The "newly regular" block found what the user had declared nowhere, and stopped there: to track
+ * what it just found you had to go to Plans and retype what the app already knew. Detection
+ * without an action is a report, not a tool.
+ *
+ * ⚠️ The amount and the date are computed by the SERVER, not the client, and not taken from the
+ * request body. `HabitChange.monthly` is already converted to UAH, while
+ * `planned_payments.period_amount` is stored in the PLAN's own currency (§CUR-PLAN) — passing a
+ * UAH figure together with `currency_code: USD` is precisely the bug that made a $5 subscription
+ * weigh 5 ₴. So the client sends only the merchant name, and the profile (amount in its own
+ * currency, first charge, most common category) is read from the transactions.
+ * ⚠️ The period is monthly and is NOT guessed: most of what §HABITS catches is monthly, and a
+ * wrong quarterly plan would quietly corrupt both the month forecast and safe-to-spend. Fixing the
+ * period in the plan form is one click; noticing that it is wrong is not.
+ */
+planned.post("/planned/from-habit", async (c) => {
+  const { merchant } = await c.req.json<{ merchant?: string }>();
+  const name = merchant?.trim();
+  if (!name) return c.json({ error: "merchant required" }, 400);
+
+  const now = Math.floor(Date.now() / 1000);
+  const profile = await planningRepo.merchantProfile(c.env.DB, name, now - 400 * 86400);
+  if (!profile) return c.json({ error: st(c.get("locale"), "errHabitNoCharges") }, 404);
+
+  const id = await planningRepo.create(c.env.DB, {
+    title: name,
+    kind: "subscription",
+    total_amount: null,
+    period_amount: Math.round(profile.avg_amount),
+    period: "month",
+    period_count: 1,
+    start_date: profile.first_time,
+    end_date: null,
+    occurrences: null,
+    category_id: profile.category_id,
+    account_id: null,
+    currency_code: profile.currency_code,
+  });
+  return c.json({ ok: true, id } satisfies PlanFromHabit);
 });
 
 // §R5: закрити кандидата в підписки («це не підписка») — детект більше не пропонує.

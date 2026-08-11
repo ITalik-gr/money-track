@@ -1286,13 +1286,17 @@
           "id": "cimp1",
           "title": "Вже тут",
           "created_at": 1778600000,
-          "updated_at": 1778600000
+          "updated_at": 1778600000,
+          "kind": "advisor",
+          "entity_id": null
         },
         {
           "id": "cimp2",
           "title": "Ще ні",
           "created_at": 1778700000,
-          "updated_at": 1778700000
+          "updated_at": 1778700000,
+          "kind": "advisor",
+          "entity_id": null
         }
       ],
       "messages": [

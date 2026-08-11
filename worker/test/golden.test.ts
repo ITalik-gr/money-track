@@ -44,6 +44,10 @@ const ENDPOINTS: string[] = [
   "/transactions?limit=50",
   "/transactions/frequent",
   "/budgets",
+  // §BUDGET-FORECAST — limit, spent AND the month-end projection, from the canon. Pinned here
+  // because the client stopped deriving it: `EnvelopeGrid` renders these numbers verbatim, so a
+  // silent change to the projection is a silent change on screen.
+  "/budgets/status",
   "/budgets/auto",
   "/budgets/auto?trim=25",
   "/planned",

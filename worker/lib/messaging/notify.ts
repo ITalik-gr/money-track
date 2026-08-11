@@ -14,11 +14,13 @@ import { debtMinor } from "../finance/own-funds.ts";
 import { getRates } from "../finance/finance.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
+import { goalPace, goalNeedsAttention } from "../finance/goals.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
-  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom, budgetStatus,
+  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom,
   localMonthStart, localYm, localYmd,
 } from "../finance/stats.ts";
+import { draftBudgets, draftBudgetForecast } from "./drafts-budget.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams } from "../../../shared/notif-i18n.ts";
 
@@ -52,7 +54,7 @@ export interface NotifRow {
 // A generated event. Deterministic kinds carry a template `tkey` + `tparams` (composed into
 // title/body at insert time in the owner's locale, and re-composed client-side on a language
 // switch). The free-text `ai` kind instead carries a ready `title`/`body` from the model.
-interface Draft {
+export interface Draft {
   kind: NotifKind;
   tkey?: NotifTemplateKey;
   tparams?: NotifParams;
@@ -232,6 +234,48 @@ export async function pushJobNotification(
     // датою («job:advisor:2026-08-01») зробив би два запуски за день одним рядком.
     dedup_key: `job:${kind}:${jobId}`,
   }], now);
+}
+
+/**
+ * A scheduled step that threw — announced to the person it was scheduled for.
+ *
+ * Reported by the owner as "there is no report for last week". It was not missing: the generation
+ * failed, `runCron`'s `step()` caught it into `failed`, the Worker wrote one `console.error`, and
+ * that was the end of it. From inside the app "the report failed" and "the report was never due"
+ * look exactly the same, so a broken key or a model outage could go unnoticed for weeks — the
+ * whole `weekly_report` branch is behind `if (env.ANTHROPIC_API_KEY)` and skips in silence too.
+ *
+ * ⚠️ Deduped per STEP per DAY (`localYmd`, §APP_TZ — the same Kyiv day as every other key in this
+ * file). A key that is permanently broken fails on every run; without the day in the key the feed
+ * would carry one row forever, and with a timestamp in it the feed would be nothing but this.
+ * ⚠️ Severity `warn`, not `urgent`: nothing about the user's money is wrong. Something the app
+ * promised to do did not happen, which is the app's problem, honestly reported.
+ * ⚠️ Not gated on any preference. Every other kind can be switched off because it is an OPINION
+ * about the data; this one is a statement that the product did not do its job, and a product that
+ * lets you mute that is lying by omission.
+ */
+export async function announceCronFailures(
+  env: Env, failures: string[], now = Math.floor(Date.now() / 1000),
+): Promise<number> {
+  if (!failures.length) return 0;
+  const day = localYmd(now);
+  const drafts: Draft[] = failures.slice(0, 3).map((f) => {
+    // `step()` formats these as "name: message"; split on the FIRST colon only, because the
+    // message itself routinely contains more of them (URLs, "Error: ...").
+    const i = f.indexOf(":");
+    const step = i > 0 ? f.slice(0, i) : f;
+    const reason = i > 0 ? f.slice(i + 1).trim() : "";
+    return {
+      kind: "todo",
+      tkey: "cron_failed",
+      tparams: { step, reason: reason || "no details" },
+      severity: "warn",
+      entity_type: null,
+      entity_id: null,
+      dedup_key: `cron_failed:${step}:${day}`,
+    };
+  });
+  return insertDrafts(env, drafts, now);
 }
 
 /**
@@ -430,29 +474,6 @@ function draftWins(pace: MonthPace): Draft[] {
   return out.slice(0, 2);
 }
 
-/** Бюджети-конверти: вичерпані (≥100%) або на межі (≥90%). Розрахунок — `budgetStatus` (канон). */
-async function draftBudgets(env: Env, now: number): Promise<Draft[]> {
-  const rates = await getRates(env.DB);
-  const { mult } = valueMode(rates, null);
-  const monthKey = localYm(now);   // §APP_TZ — `budgetStatus` рахує місяць від локальної півночі
-
-  const out: Draft[] = [];
-  for (const b of await budgetStatus(env, mult, now)) {
-    if (b.ratio < 0.9) continue;
-    const over = b.ratio >= 1;
-    out.push({
-      kind: "budget",
-      tkey: "budget",
-      tparams: { name: b.name, over, spent: b.spent, amount: b.amount, pct: Math.round(b.ratio * 100) },
-      severity: over ? "urgent" : "warn",
-      entity_type: "category", entity_id: String(b.id),
-      // Різні ключі для 90% і 100% — щоб «майже» не глушило подальше «вичерпано».
-      dedup_key: `budget:${b.id}:${monthKey}:${over ? "over" : "warn"}`,
-    });
-  }
-  return out;
-}
-
 /** Подорожчання підписки: остання фактична сума помітно вища за план (plannedActuals). */
 async function draftPriceUps(env: Env): Promise<Draft[]> {
   const [actuals, plans] = await Promise.all([
@@ -644,26 +665,22 @@ async function draftGoalRisk(env: Env, now: number): Promise<Draft[]> {
   const today = isoDay(now);
   for (const g of rows.results ?? []) {
     const current = g.account_balance ?? g.current_amount;   // банка-джерело має пріоритет
-    if (current >= g.target_amount) continue;                 // вже зібрано
-    const start = g.created_at ?? g.deadline - 180 * 86400;
-    if (g.deadline <= start) continue;
-    const progressFrac = current / g.target_amount;
-    const elapsedFrac = (now - start) / (g.deadline - start);
-    const daysLeft = Math.round((g.deadline - now) / 86400);
-    // Ризик = час іде помітно швидше за гроші (розрив >15 п.п.), АБО дедлайн уже за тиждень.
-    const behind = elapsedFrac - progressFrac;
-    if (behind < 0.15 && daysLeft > 7) continue;
-    const need = g.target_amount - current;
-    const perMonth = daysLeft > 0 ? Math.round(need / Math.max(1, daysLeft / 30)) : need;
+    // §GOAL-PACE: the same computation the goal card itself displays. Until now this drafter had
+    // its own arithmetic, so the feed could name a monthly rate written nowhere on the goal.
+    const p = goalPace({ ...g, current }, now);
+    if (!goalNeedsAttention(p)) continue;
+    // A sprint (<1 month) has no monthly rate — the only meaningful figure there is the whole
+    // remaining amount. That is exactly what the drafter used to show via `max(1, days / 30)`.
+    const perMonth = p.per_month ?? p.left;
     out.push({
       kind: "goal_risk",
       tkey: "goal_risk",
       tparams: {
-        name: g.name, passed: daysLeft <= 0,
-        current, target: g.target_amount, progressPct: Math.round(progressFrac * 100),
-        elapsedPct: Math.round(elapsedFrac * 100), perMonth, daysLeft,
+        name: g.name, passed: p.status === "overdue",
+        current, target: g.target_amount, progressPct: Math.round(p.progress_frac * 100),
+        elapsedPct: Math.round((p.elapsed_frac ?? 0) * 100), perMonth, daysLeft: p.days_left ?? 0,
       },
-      severity: daysLeft <= 7 ? "warn" : "info",
+      severity: p.status === "overdue" || p.status === "at_risk" ? "warn" : "info",
       entity_type: "goal", entity_id: String(g.id),
       // Раз на тиждень: щоденне нагадування про ту саму ціль — це вже докучання.
       dedup_key: `goal_risk:${g.id}:${today.slice(0, 8)}${Math.floor(Number(today.slice(8)) / 7)}`,
@@ -883,7 +900,9 @@ export async function generateNotifications(
     ["report", () => draftReports(env, now)],
     ["deadline", () => draftDeadlines(env, now)],
     ["anomaly", async () => draftAnomalies(await getPace())],
-    ["budget", () => draftBudgets(env, now)],
+    // Both budget drafters share the `budget` preference: they are one concern seen at two
+    // moments (what already happened, and where it is heading), so muting one must mute both.
+    ["budget", async () => [...(await draftBudgets(env, now)), ...(await draftBudgetForecast(env, now))]],
     ["price_up", () => draftPriceUps(env)],
     ["liquidity", () => draftLiquidity(env, now)],
     ["big_tx", () => draftBigTx(env, now)],

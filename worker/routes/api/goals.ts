@@ -1,7 +1,7 @@
 // `/goals/*` — savings goals and their contribution history. `current_amount` is derived from
 // the contributions (§P2.1), so every write goes through `recalcGoal`.
 import * as goalsRepo from "../../repo/goals.ts";
-import { recalcGoal, isGoalKind, isAutofillKind } from "../../lib/finance/goals.ts";
+import { recalcGoal, isGoalKind, isAutofillKind, goalPace } from "../../lib/finance/goals.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 import { apiRoutes } from "./_shared.ts";
@@ -14,10 +14,15 @@ export const goals = apiRoutes();
 // Список цілей із прогресом. Якщо привʼязано банку (account_id) — прогрес = її баланс,
 // інакше — ручний current_amount.
 goals.get("/goals", async (c) => {
-  const goals = (await goalsRepo.listActive(c.env.DB)).map((g) => ({
-    ...g,
-    current: g.account_id != null && g.account_balance != null ? g.account_balance : g.current_amount,
-  }));
+  // One `now` for the whole list: otherwise two cards from the same request could end up with a
+  // different number of days to their deadline if the response were assembled across midnight.
+  const now = Math.floor(Date.now() / 1000);
+  const goals = (await goalsRepo.listActive(c.env.DB)).map((g) => {
+    const current = g.account_id != null && g.account_balance != null ? g.account_balance : g.current_amount;
+    // §GOAL-PACE is computed HERE, not in the component: `draftGoalRisk` calls the same function,
+    // so "behind" on the card and "behind" in the feed are literally one computation.
+    return { ...g, current, pace: goalPace({ ...g, current }, now) };
+  });
   return c.json(goals satisfies SavingsGoal[]);
 });
 

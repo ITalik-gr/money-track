@@ -15,7 +15,7 @@ import type {
   FrequentTx, FundsBreakdown, GoalBody, GoalContribution, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
-  RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
+  AiChange, BudgetStatusList, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
@@ -35,7 +35,7 @@ export const api = createApi({
     baseUrl: "/api",
     prepareHeaders: (headers) => { headers.set("x-mt-locale", getLocale()); return headers; },
   }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -97,6 +97,46 @@ export const api = createApi({
     getRates: b.query<{ rates: Record<string, number>; updated: number | null }, void>({
       query: () => "/rates", providesTags: ["Summary"],
     }),
+    // Categorisation RULES — the deterministic layer (`categorize()` step 4). Writable from the
+    // UI since 2026-08-12; before that the table could only be changed in the database by hand.
+    getRules: b.query<RuleRow[], void>({ query: () => "/rules", providesTags: ["Rule"] }),
+    // A lazy QUERY, not a mutation: it changes nothing, and phrasing it as a mutation would put a
+    // read into the invalidation graph for no reason.
+    previewRule: b.query<RulePreview, { match_type: string; pattern: string }>({
+      query: (body) => ({ url: "/rules/preview", method: "POST", body }),
+    }),
+    createRule: b.mutation<{ ok: boolean; id: number }, { match_type: string; pattern: string; category_id: number; priority?: number }>({
+      query: (body) => ({ url: "/rules", method: "POST", body }),
+      invalidatesTags: ["Rule"],
+    }),
+    deleteRule: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/rules/${id}`, method: "DELETE" }),
+      invalidatesTags: ["Rule"],
+    }),
+    // Invalidates `Tx` too: it files previously uncategorised operations, so every screen that
+    // counts by category is now stale.
+    applyRule: b.mutation<RuleApplyResult, number>({
+      query: (id) => ({ url: `/rules/${id}/apply`, method: "POST" }),
+      invalidatesTags: ["Rule", "Tx", "Summary"],
+    }),
+    // §TX-CHAT — what has already been said about this operation. `Tx`-tagged so applying a
+    // category from the chat refreshes both the transaction and its history in one go.
+    getTxChat: b.query<TxChatHistory, string>({
+      query: (id) => `/transactions/${id}/chat`, providesTags: ["Tx"],
+    }),
+    // §AI-AUDIT — what the model changed on this operation, and undoing it.
+    // The wide view: what the model changed lately, across every operation.
+    getAiChanges: b.query<AiChange[], number | void>({
+      query: (limit) => `/ai-changes?limit=${limit ?? 50}`, providesTags: ["Tx"],
+    }),
+    getTxAiChanges: b.query<AiChange[], string>({
+      query: (id) => `/transactions/${id}/ai-changes`, providesTags: ["Tx"],
+    }),
+    revertAiChange: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/ai-changes/${id}/revert`, method: "POST" }),
+      // `Tx` and `Summary`: an undone category moves money between categories everywhere.
+      invalidatesTags: ["Tx", "Summary"],
+    }),
     getCategories: b.query<Category[], void>({ query: () => "/categories", providesTags: ["Category"] }),
     createCategory: b.mutation<{ ok: boolean; id: number }, { name: string; color?: string; icon?: string; parent_id?: number | null; is_income?: boolean; importance?: string | null }>({
       query: (body) => ({ url: "/categories", method: "POST", body }),
@@ -142,6 +182,12 @@ export const api = createApi({
     deleteEvent: b.mutation<unknown, number>({
       query: (id) => ({ url: `/events/${id}`, method: "DELETE" }),
       invalidatesTags: ["Event", "Tx"],
+    }),
+    // §BUDGET-FORECAST — the canon (`lib/finance/budgets.ts`), not a client-side derivation.
+    // `EnvelopeGrid` used to combine /budgets with /analytics/by-category and compute
+    // spent-vs-limit itself — a third definition of a number the server already owns.
+    getBudgetStatus: b.query<BudgetStatusList, void>({
+      query: () => "/budgets/status", providesTags: ["Budget", "Tx"],
     }),
     getBudgets: b.query<Budget[], void>({ query: () => "/budgets", providesTags: ["Budget"] }),
     getPlanned: b.query<PlannedPayment[], void>({ query: () => "/planned", providesTags: ["Planned"] }),
@@ -347,6 +393,14 @@ export const api = createApi({
     }),
     dismissPlannedCandidate: b.mutation<{ ok: boolean }, string>({
       query: (merchant) => ({ url: "/planned/dismiss", method: "POST", body: { merchant } }),
+      invalidatesTags: ["Planned"],
+    }),
+    // §HABITS → plan. The body is the merchant NAME alone: the amount, currency, start date and
+    // category are read from the transactions by the server. The client only holds a UAH-converted
+    // `monthly`, and sending that as `period_amount` would be §CUR-PLAN in reverse (a UAH figure
+    // under the plan's own currency).
+    planFromHabit: b.mutation<PlanFromHabit, string>({
+      query: (merchant) => ({ url: "/planned/from-habit", method: "POST", body: { merchant } }),
       invalidatesTags: ["Planned"],
     }),
     detectPlanned: b.query<RecurringCandidate[], void>({
@@ -604,7 +658,9 @@ export const api = createApi({
     getSpark: b.query<SparkData, void>({ query: () => "/analytics/spark", providesTags: ["Summary"] }),
     // §HABITS: що зʼявилось у регулярних витратах і що замовкло. Вікно фіксоване (9 міс) —
     // параметрів нема, тож і кешується один раз на зміну операцій.
-    getHabits: b.query<Habits, void>({ query: () => "/analytics/habits", providesTags: ["Tx"] }),
+    // `Planned` too: the list now hides merchants with a declared or dismissed plan, so without
+    // this tag a row would stay on screen after its own action.
+    getHabits: b.query<Habits, void>({ query: () => "/analytics/habits", providesTags: ["Tx", "Planned"] }),
     // §WEEKDAY: витрати за днями тижня. Тег `Tx` — правка операції може змінити і день, і суму.
     getWeekday: b.query<WeekdayAnalytics, { preset?: Preset; currency?: number | null } | void>({
       query: (a) => `/analytics/weekday?preset=${a?.preset ?? "month"}${a?.currency ? `&currency=${a.currency}` : ""}`,
@@ -765,6 +821,15 @@ export const {
   useDeleteAccountMutation,
   useGetRatesQuery,
   useGetCategoriesQuery,
+  useGetTxChatQuery,
+  useGetAiChangesQuery,
+  useGetTxAiChangesQuery,
+  useRevertAiChangeMutation,
+  useGetRulesQuery,
+  useLazyPreviewRuleQuery,
+  useCreateRuleMutation,
+  useDeleteRuleMutation,
+  useApplyRuleMutation,
   useCreateCategoryMutation,
   useUpdateCategoryMutation,
   useDeleteCategoryMutation,
@@ -777,6 +842,7 @@ export const {
   useDeleteEventPlannedMutation,
   useDeleteEventMutation,
   useGetBudgetsQuery,
+  useGetBudgetStatusQuery,
   useGetPlannedQuery,
   useGetAiUsageQuery,
   useGetCredentialsQuery,
@@ -846,6 +912,7 @@ export const {
   useApplySubscriptionCategoriesMutation,
   useUpdatePlannedMutation,
   useDismissPlannedCandidateMutation,
+  usePlanFromHabitMutation,
   useCategorizeTransfersMutation,
   useReviewTransfersMutation,
   useSaveTransferReviewMutation,

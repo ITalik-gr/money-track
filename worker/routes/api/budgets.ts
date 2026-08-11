@@ -1,5 +1,5 @@
 // `/budgets/*` — envelope budgets, their AI proposal and the budget chat.
-// Limit-versus-spent is `budgetStatus()` in lib/finance/stats.ts and nowhere else.
+// Limit-versus-spent is `budgetStatus()` in lib/finance/budgets.ts and nowhere else.
 import { getRates } from "../../lib/finance/finance.ts";
 import {
   valueMode, categoryMonthlyLevels, } from "../../lib/finance/stats.ts";
@@ -8,7 +8,8 @@ import * as budgetsRepo from "../../repo/budgets.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
 import type { Budget } from "../../../shared/types.ts";
-import type { AutoBudget } from "../../../shared/api/planning.ts";
+import { budgetStatus } from "../../lib/finance/budgets.ts";
+import type { AutoBudget, BudgetStatusList } from "../../../shared/api/planning.ts";
 
 export const budgets = apiRoutes();
 
@@ -16,6 +17,24 @@ export const budgets = apiRoutes();
 
 budgets.get("/budgets", async (c) => {
   return c.json(await budgetsRepo.listAll(c.env.DB) satisfies Budget[]);
+});
+
+/**
+ * §BUDGET-FORECAST — limit, spent AND where the month is heading, from the canon.
+ *
+ * ⚠️ Declared ABOVE `PUT /budgets` is not required (different method), but it IS above any
+ * `/budgets/:id` route — lint C7.
+ *
+ * This endpoint exists because the client was computing the same thing itself: `EnvelopeGrid`
+ * combined `/budgets` with `/analytics/by-category` and derived its own spent-vs-limit, which is
+ * exactly the duplication `budgetStatus` was created to end (the Telegram push had its own SQL and
+ * quoted different numbers for the same envelope). One more consumer of the canon, and one less
+ * private definition of "how full is this envelope".
+ */
+budgets.get("/budgets/status", async (c) => {
+  const rates = await getRates(c.env.DB);
+  const { mult } = valueMode(rates, null);
+  return c.json(await budgetStatus(c.env, mult) satisfies BudgetStatusList);
 });
 
 // Idempotent set: one budget per category+period. amount<=0 clears it.

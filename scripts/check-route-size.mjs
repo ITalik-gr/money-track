@@ -60,7 +60,6 @@ const EXCEPTIONS = {
   "worker/lib/finance/stats.ts": 615,
   // Categorisation, transfer review and text parsing — three model calls that share a taxonomy.
   "worker/lib/ai/enrich.ts": 560,
-  "worker/lib/ai/report.ts": 450,
 };
 
 function tsFiles(dir, prefix = dir + "/") {

@@ -237,6 +237,27 @@ export class UserDO extends DurableObject<Env> {
       });
     }
 
+    /**
+     * Anything that failed above becomes a line in the user's feed.
+     *
+     * Until now `failed` reached exactly one place: a `console.error` in the Worker's fan-out,
+     * which the user cannot read. So a weekly report that threw was indistinguishable from a
+     * weekly report that was never due — reported by the owner as "there is no report for last
+     * week". A scheduled promise the product quietly stops keeping is worse than one it never
+     * made.
+     *
+     * LAST, and outside `step()`: it reports on the others, so it must run after all of them, and
+     * a failure to announce failures must not add itself to the list it is announcing.
+     */
+    if (failed.length) {
+      try {
+        const { announceCronFailures } = await import("../lib/messaging/notify.ts");
+        await announceCronFailures(env, failed);
+      } catch (e) {
+        console.error("[cron] could not announce failures:", e instanceof Error ? e.message : e);
+      }
+    }
+
     return { ran, failed };
   }
 

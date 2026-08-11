@@ -230,8 +230,22 @@ app.get("/demo", async (c) => {
   // One line in the daily tally (migrations-directory/0007). Here, and not at the gate above:
   // the gate counts attempts including refused ones, and it runs before the seed that can fail.
   // A visitor who never saw the demo is not a visit.
-  const { recordDemoVisit } = await import("./lib/platform/feedback.ts");
-  await recordDemoVisit(c.env);
+  //
+  // ⚠️ SIGNED-IN VISITORS ARE NOT COUNTED. The tally answers one question — "is anyone out there
+  // who has never seen this app" — and someone holding a valid session has an account already.
+  // In practice that someone is almost always the owner, who opens the sandbox constantly while
+  // testing and was therefore the largest single contributor to the number they were reading.
+  // The signature check is HMAC-only (no directory read), so this costs nothing on the path a
+  // stranger takes, and a stale-generation cookie skipping a count is not worth a D1 round trip.
+  //
+  // This does NOT make `discountDemoVisits` redundant: testing from a logged-out window, a
+  // private tab or a second browser still lands in the tally, and only the owner knows which
+  // rows those were.
+  const signedIn = !!(await verifySession(c.env, getCookie(c, SESSION_COOKIE)));
+  if (!signedIn) {
+    const { recordDemoVisit } = await import("./lib/platform/feedback.ts");
+    await recordDemoVisit(c.env);
+  }
 
   setCookie(c, DEMO_COOKIE, await createDemoToken(c.env, demoId), {
     httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 60 * 60 * 24,
