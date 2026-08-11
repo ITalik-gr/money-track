@@ -18,6 +18,7 @@ import type { ChatTool } from "./ai.ts";
 import { getRates } from "../finance/finance.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
+import { addFact } from "./facts.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, SPEND_WHERE, INCOME_WHERE, valueMode, amountSum,
 } from "../finance/stats.ts";
@@ -192,19 +193,29 @@ export async function runFinanceTool(env: Env, name: string, input: Record<strin
       categoryId = cat.id;
     }
     // Коригування числа лише коли є категорія (глобальний факт = лише наратив).
-    let adjustKind: string | null = null;
+    let adjustKind: "multiplier" | "delta_minor" | null = null;
     let adjustValue: number | null = null;
     if (categoryId != null) {
       if (typeof input.multiplier === "number" && input.multiplier > 0) { adjustKind = "multiplier"; adjustValue = input.multiplier; }
       else if (typeof input.monthly_delta_uah === "number" && input.monthly_delta_uah !== 0) { adjustKind = "delta_minor"; adjustValue = Math.round(input.monthly_delta_uah * 100); }
     }
-    const res = await env.DB.prepare(
-      `INSERT INTO facts (text, effective_from, expires_at, category_id, adjust_kind, adjust_value, confirmed_at, source, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, 'ai_proposed', ?) RETURNING id`,
-    ).bind(text, ef, ex, categoryId, adjustKind, adjustValue, now).first<{ id: number }>();
+    /**
+     * Stored through `addFact`, not through an `INSERT` of our own.
+     *
+     * The two writers had the same column list and different defaults, and a column added to one
+     * would have been missing from the other with nothing to notice. What is genuinely different
+     * about this path is stated as arguments: the model AUTHORED this fact (`ai_proposed`) and
+     * therefore may not confirm it (`confirm: false`) — a guess must not move burn or runway on
+     * its own. The `note` below tells the user exactly that.
+     */
+    const res = await addFact(env, {
+      text, effective_from: ef, expires_at: ex, category_id: categoryId,
+      adjust_kind: adjustKind, adjust_value: adjustValue,
+      source: "ai_proposed", confirm: false,
+    });
     return {
       saved: true,
-      fact_id: res?.id ?? null,
+      fact_id: res.id,
       needs_confirmation: adjustKind != null,
       text, category_id: categoryId, adjust_kind: adjustKind, adjust_value: adjustValue,
       note: adjustKind

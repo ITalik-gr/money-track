@@ -58,6 +58,21 @@ class MemStatement {
     if (/^\s*(select|with|pragma)/i.test(this.query)) {
       return { results: stmt.all(...params) as Record<string, unknown>[], changes: 0, lastRowId: 0 };
     }
+    /**
+     * `INSERT … RETURNING` returns ROWS as well as writing, and `run()` throws away the rows.
+     *
+     * Routing it here rather than by the leading keyword: without this the shim answered `null` to
+     * every `first()` on a RETURNING insert, so a handler that gives the caller back the id it just
+     * minted — `addFact` is one — looked like it returned `{id: null}` under test while working in
+     * production. That is worse than an unsupported feature: it is a green test recording a
+     * response shape the real database never produces.
+     */
+    if (/\breturning\b/i.test(this.query)) {
+      const results = stmt.all(...params) as Record<string, unknown>[];
+      // `all()` gives no counters, and both are read off the connection right after the statement.
+      const meta = this.db.prepare("SELECT changes() AS c, last_insert_rowid() AS r").get() as { c: number; r: number };
+      return { results, changes: Number(meta.c ?? 0), lastRowId: Number(meta.r ?? 0) };
+    }
     const info = stmt.run(...params);
     return { results: [], changes: Number(info.changes ?? 0), lastRowId: Number(info.lastInsertRowid ?? 0) };
   }

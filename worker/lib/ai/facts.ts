@@ -27,8 +27,15 @@ import type { Fact, FactInput as SharedFactInput } from "../../../shared/api/ai.
  * that forced the client to hand-write its own narrower twin — defect D2 in one line.
  */
 export type FactRow = Fact;
-/** Creation input. `source` is server-side only, which is why this is not `SharedFactInput`. */
-export interface FactInput extends SharedFactInput { source?: string }
+/**
+ * Creation input. `source` is server-side only, which is why this is not `SharedFactInput`.
+ *
+ * Narrowed to the two literals for the same reason as `adjust_kind` above: the column is a plain
+ * `TEXT DEFAULT 'user'` with no CHECK, so the only thing that can keep a third value out is the
+ * type on the ONE function allowed to insert. `listFacts` still returns the column as `string`
+ * (that is the contract for rows already stored), but nothing new can widen it.
+ */
+export interface FactInput extends SharedFactInput { source?: "user" | "ai_proposed" }
 
 export async function listFacts(env: Env): Promise<FactRow[]> {
   const loc = await resolveLocale(env);
@@ -42,6 +49,19 @@ export async function listFacts(env: Env): Promise<FactRow[]> {
   return rows.results ?? [];
 }
 
+/**
+ * THE ONLY WRITER of `facts` — both the user's own fact and the one the model files from a
+ * conversation (`remember_fact` in `chat-tools.ts`).
+ *
+ * The two used to be two `INSERT`s with the same column list and different defaults, which is
+ * exactly the shape §CUR-PLAN and §REFUND grew out of: one concept, two implementations, drifting
+ * where nobody looks. The differing defaults are the ARGUMENTS now — `source` and `confirm` — so
+ * the difference is stated once and visible at both call sites.
+ *
+ * ⚠️ `confirm` is not a preference, it is the §A1 GATE. A `confirm: true` write says the human
+ * typed the number themselves; a model-authored fact must always pass `confirm: false`, or its
+ * guess would silently move burn and runway (`applyFactAdjustments` in `stats.ts`).
+ */
 export async function addFact(env: Env, f: FactInput): Promise<{ id: number | null }> {
   const now = Math.floor(Date.now() / 1000);
   const text = (f.text ?? "").trim();

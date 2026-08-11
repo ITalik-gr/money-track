@@ -114,6 +114,13 @@ const EXTRA_PROBES = {
     chats: rows(db, "SELECT id, title, created_at, updated_at FROM chats ORDER BY id"),
     messages: rows(db, "SELECT chat_id, role, content FROM chat_messages ORDER BY chat_id, id"),
   }),
+  // §A1. `confirmed_at` and `source` are the two columns worth the snapshot: the first IS the
+  // gate (only a confirmed fact with an adjustment moves burn and runway), and the second records
+  // who authored the claim. A write that sets either of them wrongly does not fail visibly — it
+  // quietly changes what the user's runway says.
+  facts: (db: MemDb) =>
+    rows(db, `SELECT id, text, effective_from, expires_at, category_id, adjust_kind, adjust_value,
+                     confirmed_at, source FROM facts ORDER BY id`),
 } satisfies Record<string, (db: MemDb) => unknown>;
 
 interface Scenario {
@@ -957,6 +964,25 @@ const SCENARIOS: Scenario[] = [
     },
     extraProbes: ["chats"],
   },
+  // §A1 — facts, the USER's half of the one writer. The other half (the model filing a fact from
+  // a conversation) is not an endpoint, so it is tested below against `runFinanceTool` directly.
+  // Both go through `addFact`, and these pin the defaults that differ between them.
+  {
+    name: "facts: a fact the user typed is confirmed on arrival",
+    method: "POST",
+    path: () => "/facts",
+    body: () => ({ text: "Комуналка подорожчала на 2500 ₴/міс", category_id: 7, adjust_kind: "delta_minor", adjust_value: 250000, confirm: true }),
+    extraProbes: ["facts"],
+  },
+  {
+    // The gate the other way round: a fact about the world at large ("I left my job") is narrative
+    // only. Keeping the adjustment would attach a number to a category nobody named.
+    name: "facts: a global fact drops the adjustment it came with",
+    method: "POST",
+    path: () => "/facts",
+    body: () => ({ text: "Звільнився з роботи", adjust_kind: "multiplier", adjust_value: 0.5, confirm: true }),
+    extraProbes: ["facts"],
+  },
   {
     name: "export: transactions as strict RFC CSV",
     method: "GET",
@@ -1015,6 +1041,91 @@ test("golden: write endpoints leave the same database state", async (t) => {
   } finally {
     restoreRandom();
     restoreUuid();
+    restoreTime();
+  }
+});
+
+/**
+ * §A1 — the OTHER half of the single fact writer: the model filing a fact from a conversation.
+ *
+ * Not in the scenario table because `remember_fact` is a tool, not an endpoint — it is reached
+ * through `runToolConversation`, never through a URL. It still writes to the user's database, so
+ * it needs the same guard as any write, and it needed one BEFORE the two `INSERT`s were merged
+ * into `addFact`: this path is the one whose defaults may not drift. A model-authored fact that
+ * arrived confirmed would move burn and runway on a guess, and nothing on screen would say so.
+ *
+ * Asserted rather than snapshotted: there are three columns that matter and each carries a
+ * sentence of reasoning, which a golden file would reduce to a diff nobody reads.
+ */
+test("§A1: a fact the model files is stored as an unconfirmed proposal", async (t) => {
+  const restoreTime = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const { runFinanceTool } = await import("../lib/ai/chat-tools.ts");
+
+    await t.test("with a category and an adjustment", async () => {
+      const db = migratedDb();
+      seed(db);
+      const out = await runFinanceTool(testEnv(db) as never, "remember_fact", {
+        text: "Метро подорожчало з 8 до 30 ₴", category: "Транспорт", multiplier: 3.75,
+      }) as { saved?: boolean; needs_confirmation?: boolean };
+
+      assert.equal(out.saved, true);
+      // The model is told to say this out loud; if the flag ever went false the answer would
+      // promise an effect the numbers are not going to show.
+      assert.equal(out.needs_confirmation, true);
+
+      const f = rows(db, "SELECT text, category_id, adjust_kind, adjust_value, confirmed_at, source FROM facts");
+      assert.equal(f.length, 1);
+      assert.equal(f[0]!.source, "ai_proposed");
+      // THE GATE. `applyFactAdjustments` reads confirmed facts only, so this NULL is the whole
+      // reason a model may file a fact at all.
+      assert.equal(f[0]!.confirmed_at, null);
+      assert.equal(f[0]!.adjust_kind, "multiplier");
+      assert.equal(f[0]!.adjust_value, 3.75);
+      assert.equal(f[0]!.category_id, 3);
+    });
+
+    await t.test("a global fact carries no adjustment", async () => {
+      const db = migratedDb();
+      seed(db);
+      // No category, so the multiplier has nothing to apply to. Storing it anyway would leave a
+      // number waiting for a category to be attached later — and then it would apply silently.
+      await runFinanceTool(testEnv(db) as never, "remember_fact", {
+        text: "Звільнився з роботи", multiplier: 0.5,
+      });
+      const f = rows(db, "SELECT category_id, adjust_kind, adjust_value, confirmed_at, source FROM facts");
+      assert.equal(f.length, 1);
+      assert.deepEqual(
+        { cat: f[0]!.category_id, kind: f[0]!.adjust_kind, val: f[0]!.adjust_value, conf: f[0]!.confirmed_at },
+        { cat: null, kind: null, val: null, conf: null },
+      );
+      assert.equal(f[0]!.source, "ai_proposed");
+    });
+
+    await t.test("an unknown category writes nothing at all", async () => {
+      const db = migratedDb();
+      seed(db);
+      const out = await runFinanceTool(testEnv(db) as never, "remember_fact", {
+        text: "Абонемент подорожчав", category: "Спортзал", monthly_delta_uah: 300,
+      }) as { error?: string; needs_category?: boolean };
+
+      // The tool RETURNS the error instead of throwing: the model has to be able to recover by
+      // calling `list_categories` and retrying, and a thrown error would end the conversation.
+      assert.match(out.error ?? "", /was not found/);
+      assert.equal(out.needs_category, true);
+      // And the fact must not land half-stored under a null category — the text alone would read
+      // as a confirmed global fact about the world.
+      assert.equal(rows(db, "SELECT id FROM facts").length, 0);
+    });
+
+    await t.test("empty text is refused before anything is written", async () => {
+      const db = migratedDb();
+      seed(db);
+      const out = await runFinanceTool(testEnv(db) as never, "remember_fact", { text: "   " }) as { error?: string };
+      assert.ok(out.error);
+      assert.equal(rows(db, "SELECT id FROM facts").length, 0);
+    });
+  } finally {
     restoreTime();
   }
 });
