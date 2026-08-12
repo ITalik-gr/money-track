@@ -100,8 +100,42 @@
   Settings → AI now shows what the model changed lately, each row linking to its operation.
 - `DONE` **§LOCK** — local passcode (`lib/lock.ts`, `LockScreen`, `LockCard`). Honest in the UI
   about being a privacy screen and not security; never in demo; survives logout like the theme.
-- `TODO` STYLES phases 0.5-3 (owner said: leave styles for now); the category permalink page;
-  smart goal challenges.
+### Overnight batch, 2026-08-12 — **FINISHED**, green (349 tests, check + build)
+> All four planned items are done. Nothing is committed: the tree carries the work, which survives
+> an interruption on its own. What is left needs the owner's eye and is named at the bottom.
+- `DONE` **A. §CATEGORY-PAGE** `/categories/:id` — `GET /categories/:id/overview` (canonical monthly
+  level, 12-month trend, envelope, recurring/one-off), `src/pages/Category.tsx`, entry points from
+  the envelope tile and the category list, 2 goldens.
+  ⚠️ Fixed while building it: the endpoint defaulted to a rolling 30 days while `budgetStatus` is
+  month-to-date, so its two halves described different periods. Now both are month-to-date and the
+  golden proves they agree to the kopeck (287600 = 287600).
+- `DONE` **B. Statistics verified.** New `worker/test/consistency.test.ts` asserts RELATIONSHIPS,
+  not values — the claim "one canon, so every screen agrees" made testable. All identities already
+  held: categories / accounts / importance each add up EXACTLY to the period total; the envelope,
+  the Stats donut and the new category page agree to the kopeck; safe-to-spend is its own
+  arithmetic; the last point of the 6-month trend IS the month preset.
+  ⚠️ One apparent discrepancy investigated and found CORRECT: `byMerchant` sums higher than the
+  total because it is a top-10 and a §REFUND carries a NEGATIVE spend that sorts last, so it falls
+  outside. Documented in the test rather than "fixed".
+  ⚠️ Checked before building: a savings-rate TREND already exists in `MonthlyHistory` — no
+  duplicate built.
+- `DONE` **C. STYLES — the file is split** into nine parts under `src/styles/`, `index.css` is
+  imports only, and the concatenation was proved **byte-identical** to what shipped before writing
+  anything to disk. New lint **C8** (`scripts/check-styles.mjs`) keeps it split. Build emits one
+  CSS asset, zero `@import` left.
+  ⚠️ NOT done and needing the owner's eye: phase 0.5 (8 conflicting duplicates — collapsing them
+  changes rendering) and phase 4 (true domain grouping — it moves rules across cascade boundaries).
+  `@layer` was deliberately skipped for the same reason.
+- Nothing is committed unless asked; the tree survives an interruption on its own.
+- `DONE` **D. §IMPORTANCE-TREND** — the spending MIX per month (essential / discretionary /
+  optional) added to `/analytics/monthly-history` and drawn as a 100%-stacked strip under the
+  savings rate. The genuinely missing statistic: the period tabs say what share of THIS month was
+  optional, nothing said whether that share is climbing.
+  ⚠️ A real bug caught by the tests while building it: `GROUP BY importance` is AMBIGUOUS (the
+  joined `categories` rows carry their own column) and SQLite refused the statement — a 500 the
+  golden alone would not have explained. Grouped by the expression instead.
+  ⚠️ Checked first: a savings-rate trend already existed, so none was rebuilt.
+- `TODO` smart goal challenges; STYLES phase 0.5 + 4 (both need the owner's eye — see STYLES.md).
 - ⚠️ **`worker/lib/ai/report.ts` is at its C3 ceiling (450).** Adding anything to it now requires
   an extraction first — the obvious seam is the system prompt + `generateFinancialReport` into
   their own module, leaving context assembly and storage behind.

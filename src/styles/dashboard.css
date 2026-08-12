@@ -1,0 +1,248 @@
+/* ---- page head ----------------------------------------------------------- */
+.page-head {
+  display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
+  flex-wrap: wrap; margin-bottom: 22px;
+}
+.page-head .greet { font-size: 1.375rem; font-weight: 640; letter-spacing: -0.025em; }
+.page-head .sub { color: var(--muted); font-size: 14px; margin-top: 5px; }
+.page-head-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* §1: вирівнюємо фільтри Статистики в одну лінію однакової висоти (період | режим | валюта) */
+.page-head-actions .seg { height: 40px; box-sizing: border-box; align-items: center; }
+/* ⚠️ Селектор БЕЗ `.page-head-actions` (2026-08-01). Клас називається `pill-toggle`, тож коли
+   перемикач періоду переїхав у топбар, він приїхав туди голим: браузерна кнопка з дефолтною
+   рамкою, без падінгів і без проміжку між іконкою й підписом. Вигляд контрола не має залежати
+   від того, у якому контейнері він опинився — базові стилі живуть на самому класі. */
+.pill-toggle {
+  height: 40px; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 13px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink-2); font-size: 13px; font-weight: 500; cursor: pointer;
+  font-family: inherit; line-height: 1;
+}
+.pill-toggle:hover { border-color: var(--muted); color: var(--ink); }
+/* §1: валюта — проєктний Select (не native <select>), компактний, вирівняний з .seg/.pill-toggle */
+.page-head-actions .ph-cur-sel { width: auto; }
+.page-head-actions .ph-cur-sel .sel-trigger {
+  height: 40px; box-sizing: border-box; padding: 0 12px; gap: 6px; min-width: 88px;
+  border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; color: var(--ink-2);
+}
+.page-head-actions .ph-cur-sel .sel-trigger:hover { border-color: var(--muted); color: var(--ink); }
+.page-head-actions .ph-cur-sel .sel-caret { width: 14px; height: 14px; }
+.date-pill {
+  display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px;
+  border-radius: 12px; border: 1px solid var(--line-strong); background: var(--surface);
+  font-size: 13.5px; color: var(--ink-2); font-weight: 500;
+}
+.date-pill .ico { color: var(--muted); display: flex; }
+
+/* ---- dashboard grid ------------------------------------------------------ */
+/* Hero band: balance (elevated) + the two key KPI metrics, top of page */
+.dash-hero { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); margin-bottom: var(--sp-5); align-items: start; }
+@media (min-width: 1040px) { .dash-hero { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } }
+/* KPI tiles fill the hero's right cell as a matched pair */
+.dash-hero .kpi-row { height: 100%; }
+.dash-hero .kpi-tile { height: 100%; justify-content: space-between; }
+
+/* Main split: wide analysis column + narrow "quick glance" rail.
+   ⚠️ Рейл повернуто (2026-08-01). Його мовчки прибрали разом із §A6, лишивши `minmax(0,1fr)`:
+   коментар обіцяв дві колонки, код давав одну, і головна перетворювалась на довгу стрічку
+   на всю ширину — індекс здоровʼя, кредитка й останні операції їхали ПІД аналітику, тобто
+   «швидкий погляд» переставав бути швидким. Ширші за 1440px екрани обмежує `.content`. */
+.dash { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); align-items: start; }
+@media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr) 340px; } }
+.dash-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+.dash-rail { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+.dash-col { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+
+/* Paired supporting cards within the main column (equal, side by side) */
+.dash-pair { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); }
+/* `start`, а не `end` (повернуто 2026-08-01 за фідбеком). Вирівнювання по НИЗУ мало сенс, поки
+   половина пари = сама картка; але кожна половина несе ще й ЗАГОЛОВОК секції над карткою, і по
+   низу ці заголовки роз'їжджались по вертикалі — око читає розсинхрон заголовків як зламану
+   верстку швидше, ніж різну довжину карток. Заголовки в одному рядку важливіші за рівний низ. */
+@media (min-width: 680px) { .dash-pair { grid-template-columns: 1fr 1fr; align-items: start; } }
+.dash-pair > * { min-width: 0; }
+/* Safety net (ROADMAP L3): a pair whose second half rendered nothing must not leave half the
+   page blank — the survivor takes the full width. Empty-state cards cover the cases we know
+   about; this covers the ones a future `return null` introduces. */
+.dash-pair > :only-child { grid-column: 1 / -1; }
+
+/* ---- balance card (dashboard hero) --------------------------------------- */
+.balance { padding: var(--sp-6) var(--sp-6) var(--sp-5); display: flex; flex-direction: column; }
+.balance .bal-top { display: flex; justify-content: space-between; align-items: center; }
+.balance .bal-num { font-size: 2.25rem; line-height: 1.06; margin: 10px 0 2px; }
+.balance .bal-chips { display: flex; gap: var(--sp-2); flex-wrap: wrap; margin-top: var(--sp-4); }
+.bal-chip { display: flex; flex-direction: column; gap: 3px; padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm); background: var(--surface-2); }
+.bal-chip .money { font-size: 14px; }
+/* actions pinned to the bottom so the hero card fills its band cleanly */
+.quick-actions { display: flex; gap: var(--sp-2); margin-top: auto; padding-top: var(--sp-4); }
+.quick-actions .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* ---- KPI tiles ----------------------------------------------------------- */
+.kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 560px) { .kpi-row { grid-template-columns: 1fr; } }
+/* §1: kpi-tile буває <button> (клікабельні Витрати/Надходження) — button має UA text-align:center,
+   тож без явного left клікабельні плитки виглядали центрованими проти div-плиток (Чистий потік). */
+.kpi-tile { padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 12px; width: 100%; text-align: left; }
+.kpi-tile .kpi-head { display: flex; align-items: center; gap: 10px; }
+.kpi-tile .kpi-ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex-shrink: 0; }
+.kpi-ic.spend { background: var(--neg-soft); color: var(--neg); }
+.kpi-ic.income { background: var(--pos-soft); color: var(--pos); }
+.kpi-tile .kpi-title { font-size: 13.5px; color: var(--ink-2); font-weight: 500; }
+.kpi-tile.kpi-click { cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .kpi-tile.kpi-click:hover { border-color: var(--muted); transform: translateY(-1px); } }
+.kpi-tile.kpi-click.open { border-color: var(--accent); }
+.kpi-tile .kpi-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.kpi-tile .kpi-info { flex-shrink: 0; margin-top: 1px; }
+.kpi-num { font-size: 1.5rem; line-height: 1.05; }
+
+/* Hero numbers: fixed scale, bumped up once at ≥640px (structural, not fluid) */
+@media (min-width: 640px) {
+  .summary .total { font-size: 2.75rem; }
+  .page-head .greet { font-size: 1.625rem; }
+  .balance .bal-num { font-size: 2.375rem; }
+  .kpi-num { font-size: 1.75rem; }
+}
+.kpi-foot { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--muted); }
+
+/* delta pill (± vs минулий місяць) */
+.delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px;
+}
+.delta.up { color: var(--pos); background: var(--pos-soft); }
+.delta.down { color: var(--neg); background: var(--neg-soft); }
+
+/* ---- cashflow chart ------------------------------------------------------ */
+.cashflow { padding: 18px 20px 10px; }
+.cashflow-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+.cashflow-head .cf-total { font-size: 26px; line-height: 1.1; margin-top: 4px; }
+/* §1: Календар списань — компактна сітка з датою в кутку (як справжній календар), а не
+   квадратні великі плитки по центру; хто/скільки видно прямо в клітинці, без ховеру. */
+.subs-cal { padding: 14px 16px; }
+.sc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.sc-head { margin-bottom: 5px; }
+.sc-wd { font-size: 10.5px; color: var(--muted); text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
+.sc-cell {
+  min-height: 48px; border-radius: 8px; border: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
+  gap: 3px; padding: 5px 6px; background: var(--surface); overflow: hidden;
+}
+.sc-cell.weekend { background: var(--surface-2); }
+.sc-cell.past { opacity: 0.45; }
+.sc-cell.has { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 35%, transparent); cursor: default; }
+.sc-cell.today { border-color: var(--accent); border-width: 1.5px; }
+.sc-day { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.sc-cell.today .sc-day { color: var(--accent); font-weight: 700; }
+.sc-cell.has .sc-day { color: var(--ink-2); font-weight: 600; }
+.sc-hit { display: flex; flex-direction: column; gap: 1px; margin-top: auto; min-width: 0; }
+.sc-title { font-size: 10px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sc-amt { font-size: 10.5px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.2; }
+@media (max-width: 560px) { .sc-title { display: none; } }
+
+/* Головна — рядок швидких переходів (чипи-інсайти прибрано: дублювали картки) */
+.quickbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-5); }
+.qb-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap; }
+.qb-action { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; border-radius: var(--radius-pill); background: var(--surface); border: 1px solid var(--line-strong); color: var(--ink-2); font-size: 13.5px; font-weight: 500; text-decoration: none; transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
+.qb-action:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* §1 Аналітика доходу — джерела + стабільність */
+.inc-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.inc-sources { display: flex; flex-direction: column; gap: 8px; }
+/* «Надходжень ще не було» — стан, а не порожнеча: панель без нього читалась як недовантажена. */
+.inc-empty { font-size: 13px; color: var(--muted); }
+/* §1: значення — ФІКСОВАНА ширина (не auto): кожен рядок — окремий grid-контекст, тож
+   auto-колонка рахується per-row і зсуває трек бару відносно сусідніх рядків. */
+.inc-src { display: grid; grid-template-columns: 1fr 60px 112px; align-items: center; gap: 10px; }
+.inc-src .is-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inc-src .is-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.inc-src .is-track { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.inc-src .is-track > span { display: block; height: 100%; border-radius: 999px; }
+.inc-src .is-val { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; white-space: nowrap; }
+.inc-stab { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.stab-badge { font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.stab-badge.pos { background: color-mix(in srgb, var(--pos) 14%, transparent); color: var(--pos); }
+.stab-badge.warn { background: color-mix(in srgb, var(--c-ochre, #c9871a) 16%, transparent); color: var(--c-ochre, #c9871a); }
+.stab-badge.neg { background: color-mix(in srgb, var(--neg) 14%, transparent); color: var(--neg); }
+.inc-months { display: flex; align-items: flex-end; gap: 8px; height: 90px; margin-bottom: 8px; }
+.im-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; }
+.im-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.im-bar { width: 100%; background: var(--pos); border-radius: 5px 5px 0 0; min-height: 2px; }
+.im-lbl { font-size: 10.5px; color: var(--muted); }
+
+/* §4 «Скоро спишеться» — прийдешні підписки з лого */
+.up-subs { padding: 14px 16px; }
+.up-subs-total { display: flex; align-items: baseline; justify-content: space-between; padding-bottom: 12px; margin-bottom: 10px; border-bottom: 1px solid var(--line); }
+.up-subs-list { display: flex; flex-direction: column; gap: 4px; }
+.up-sub { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px; padding: 6px 0; }
+.up-sub .us-mid { display: flex; flex-direction: column; min-width: 0; }
+.up-sub .us-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.up-sub .us-when { font-size: 12px; color: var(--muted); }
+.up-sub .us-when.urgent { color: var(--c-ochre, #c9871a); font-weight: 500; }
+.up-sub .us-amt { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+/* ₴-еквівалент валютного плану — підпорядкований рядок під сумою у валюті. */
+.us-amt-uah { font-size: var(--fs-xs); font-weight: 400; color: var(--muted); }
+
+/* §4 Пульс місяця — норма заощаджень + топ-категорії міні */
+/* 16 → 18/20, як у сусідів по ряду (`.sts-card`, `.forecast-card`): картки однієї пари з
+   різним падінгом дають різний ритм тексту в двох сусідніх колонках. `margin-top: auto`
+   більше не потрібен — заголовок виїхав із картки, і вона живе в `<section>`, а не у flex-колонці. */
+.pulse { padding: 18px 20px; }
+.pulse-save { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; flex-wrap: wrap; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.pulse-rate { font-size: 34px; line-height: 1; margin-top: 4px; }
+.pulse-rate.pos { color: var(--pos); }
+.pulse-rate.neg { color: var(--neg); }
+.pulse-rate.warn { color: var(--c-ochre, #c9871a); }
+.pulse-rate .cur { font-size: 0.5em; color: var(--muted); margin-left: 0.1em; vertical-align: 0.14em; }
+.pulse-save-detail { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); text-align: right; }
+.pulse-save-detail b { font-variant-numeric: tabular-nums; margin-left: 5px; }
+.pulse-save-detail .pos { color: var(--pos); }
+.pulse-save-detail .neg { color: var(--neg); }
+.pulse-cat { display: grid; grid-template-columns: 1fr 70px 84px; align-items: center; gap: 10px; padding: 5px 0; color: inherit; text-decoration: none; }
+.pulse-cat:hover .pc-name { color: var(--accent); }
+.pulse-cat .pc-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pulse-cat .pc-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.pulse-cat .pc-track { height: 6px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.pulse-cat .pc-track > span { display: block; height: 100%; border-radius: 999px; }
+.pulse-cat .pc-val { font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right; white-space: nowrap; }
+/* §4 тренд капіталу — дельта-бейдж справа у шапці */
+.cap-delta { display: flex; flex-direction: column; align-items: flex-end; font-size: 13.5px; font-weight: 600; }
+.cap-delta.pos { color: var(--pos); }
+.cap-delta.neg { color: var(--neg); }
+.cap-delta .cap-delta-sub { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 1px; }
+.legend { display: flex; gap: 16px; align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+.legend .d { width: 9px; height: 9px; border-radius: 50%; }
+.chart-wrap { width: 100%; height: 230px; }
+.chart-tip {
+  background: #0f1620; color: #fff; border-radius: 10px; padding: 9px 12px;
+  font-size: 12px; box-shadow: var(--shadow); border: none;
+}
+.chart-tip .tip-lbl { color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 4px; }
+.chart-tip .r { display: flex; align-items: center; gap: 7px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.chart-tip .r + .r { margin-top: 2px; }
+.chart-tip .d { width: 8px; height: 8px; border-radius: 50%; }
+
+/* §R2-ST1: плаваючий тултип за курсором (портал у body) для не-recharts барів. */
+.hover-tip {
+  position: fixed; z-index: 200; pointer-events: none;
+  background: #0f1620; color: #fff; border-radius: 10px; padding: 9px 12px;
+  font-size: 12px; box-shadow: var(--shadow); max-width: 240px;
+}
+.hover-tip .tip-lbl { color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 4px; }
+.hover-tip .r { display: flex; align-items: center; gap: 7px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.hover-tip .r + .r { margin-top: 2px; }
+.hover-tip .d { width: 8px; height: 8px; border-radius: 50%; }
+.hover-tip b { color: #fff; }
+.tip-explain { line-height: 1.45; max-width: 210px; }
+.tip-explain b { color: #fff; }
+
+/* §1: інфо-іконка з поясненням метрики (KPI/факти) — не заважає кліку на плитку. */
+.info-tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; color: var(--muted);
+  flex-shrink: 0; transition: color 0.12s, background 0.12s;
+}
+.info-tip:hover, .info-tip:focus-visible { color: var(--ink-2); background: var(--surface-2); outline: none; }
+

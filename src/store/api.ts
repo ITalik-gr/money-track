@@ -15,7 +15,7 @@ import type {
   FrequentTx, FundsBreakdown, GoalBody, GoalContribution, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
-  AiChange, BudgetStatusList, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
+  AiChange, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
@@ -128,6 +128,13 @@ export const api = createApi({
     // The wide view: what the model changed lately, across every operation.
     getAiChanges: b.query<AiChange[], number | void>({
       query: (limit) => `/ai-changes?limit=${limit ?? 50}`, providesTags: ["Tx"],
+    }),
+    // §CATEGORY-PAGE — the deterministic half of the permalink (level, trend, envelope, split).
+    // Separate from `getCategoryDrill`, which the Stats tab uses for subs/merchants/operations:
+    // one shape per screen, so the tab keeps paying only for what it renders.
+    getCategoryOverview: b.query<CategoryOverview, { id: number; from: number; to: number }>({
+      query: ({ id, from, to }) => `/categories/${id}/overview?from=${from}&to=${to}`,
+      providesTags: ["Category", "Tx", "Budget"],
     }),
     getTxAiChanges: b.query<AiChange[], string>({
       query: (id) => `/transactions/${id}/ai-changes`, providesTags: ["Tx"],
@@ -822,6 +829,7 @@ export const {
   useGetRatesQuery,
   useGetCategoriesQuery,
   useGetTxChatQuery,
+  useGetCategoryOverviewQuery,
   useGetAiChangesQuery,
   useGetTxAiChangesQuery,
   useRevertAiChangeMutation,

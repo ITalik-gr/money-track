@@ -44,6 +44,11 @@ const ENDPOINTS: string[] = [
   "/transactions?limit=50",
   "/transactions/frequent",
   "/budgets",
+  // §CATEGORY-PAGE — the permalink's deterministic half. Pinned because the page RENDERS these
+  // numbers verbatim: the canonical monthly level, a 12-month trend, the envelope and the
+  // recurring/one-off split all come from here and are recomputed nowhere on the client.
+  "/categories/1/overview",
+  "/categories/13/overview",
   // §BUDGET-FORECAST — limit, spent AND the month-end projection, from the canon. Pinned here
   // because the client stopped deriving it: `EnvelopeGrid` renders these numbers verbatim, so a
   // silent change to the projection is a silent change on screen.

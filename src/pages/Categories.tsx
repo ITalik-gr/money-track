@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useGetCategoriesQuery, useDeleteCategoryMutation, useLazyGetCategoryUsageQuery } from "../store/api.ts";
 import { CategoryIcon } from "../components/ui/CategoryIcon.tsx";
 import { CategoryModal } from "../components/planning/CategoryModal.tsx";
@@ -150,7 +151,10 @@ function CatSection({ title, groups, onEdit, onAddSub, onDelete }: {
             <div className="cat-card-head">
               <span className="cat-ico" style={{ background: parent.color ?? "var(--muted)" }}><CategoryIcon slug={parent.icon} size={20} /></span>
               <div className="cat-card-title">
-                <div className="cat-card-name">{parent.name}</div>
+                {/* §CATEGORY-PAGE — the name is the way in. Only the name, not the whole card:
+                    the card carries edit and delete, and a link wrapping them would swallow the
+                    clicks that matter most on this screen. */}
+                <Link className="cat-card-name" to={`/categories/${parent.id}`}>{parent.name}</Link>
                 {parent.is_custom ? <span className="cat-badge">{t("cat.customBadge")}</span> : null}
               </div>
               <div className="cat-card-actions">

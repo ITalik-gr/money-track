@@ -43,7 +43,15 @@ export interface Overview {
   byImportance: { importance: string; spent: number; n: number }[];
 }
 
-export interface MonthlyHistory { months: { month: string; spend: number; income: number }[] }
+/**
+ * §IMPORTANCE-TREND (2026-08-12): every month also carries the essential / discretionary /
+ * optional split, so the long view can answer whether the OPTIONAL share is climbing.
+ *
+ * On the same rows rather than in a second array: it is the same months over the same window, and
+ * two arrays would let a caller pair them up wrongly. The three add up to `spend` by construction
+ * (`EFF_IMPORTANCE` defaults to `discretionary`, so no spending falls outside).
+ */
+export interface MonthlyHistory { months: { month: string; spend: number; income: number; essential: number; discretionary: number; optional: number }[] }
 
 export interface SafeToSpend {
   safe: number; income: number; spend: number; essential: number; discretionary: number;
@@ -205,4 +213,32 @@ export interface MerchantAnalytics {
   top_category: { name: string; color: string | null; spent: number } | null;
   category_share: number | null; // % витрат категорії, що припадає на мерчанта
   transactions: import("./transactions.ts").TxRow[];
+}
+
+/**
+ * `GET /categories/:id/overview` — the deterministic half of the category page.
+ *
+ * Deliberately separate from `CategoryDrill` (which the Stats tab already uses for sub-categories,
+ * merchants and operations): this carries the things a PAGE needs and a drill panel does not — the
+ * canonical monthly level, the twelve-month trend, the envelope state and the one-off / recurring
+ * split. Two shapes rather than one bloated one, so the Stats tab keeps paying for only what it
+ * renders.
+ */
+export interface CategoryOverview {
+  id: number;
+  name: string;
+  color: string | null;
+  /** `EFF_IMPORTANCE` of the category itself — essential | discretionary | optional. */
+  importance: string;
+  /** Sub-categories rolled INTO this one, so the page can say what it is aggregating. */
+  children: { id: number; name: string; color: string | null }[];
+  /** §categoryMonthlyLevels — the canonical "how much a month", and how it was decided. */
+  level: { level: number; mean: number; last: number; active_months: number; fixed: boolean } | null;
+  /** Twelve complete months, oldest first. Gaps are zeros, so the axis is continuous. */
+  trend: { month: string; spent: number }[];
+  /** §BUDGET-FORECAST — the envelope for this category, when one exists. */
+  budget: { amount: number; spent: number; projected: number; lumpy: boolean } | null;
+  /** §E1 — spending that repeats versus spending that happened once, this period. */
+  recurring: number;
+  oneoff: number;
 }

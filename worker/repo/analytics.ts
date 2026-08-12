@@ -741,3 +741,29 @@ export async function healthTrend(
   ).bind(since).all<{ day: string; score: number }>();
   return res.results ?? [];
 }
+
+/**
+ * §IMPORTANCE-TREND — the monthly split into essential / discretionary / optional.
+ *
+ * The period breakdown on the Stats overview answers "what share of THIS month was optional". It
+ * cannot answer the question that matters more: whether the optional share is CLIMBING. A total
+ * that grows tells you nothing on its own — a bigger essential bill and a bigger optional habit
+ * look identical in it, and only one of them is a decision you can revisit.
+ *
+ * Canon throughout (`SPEND_WHERE` + `amountSum` + `EFF_IMPORTANCE`), and the month key is
+ * `localYmSql` for the same reason as everywhere else: keys are built in JS by the caller, and a
+ * month grouped in UTC misses the key silently and reads as a ZERO month (§APP_TZ).
+ */
+export async function importanceByMonth(
+  db: AppDb, v: Pick<ValueScope, "mult">, now: number, from: number,
+): Promise<{ month: string; importance: string; spent: number }[]> {
+  const res = await db.prepare(
+    `SELECT ${localYmSql(now)} AS month, ${EFF_IMPORTANCE} AS importance, ${amountSum(v.mult)} AS spent
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND ${SPEND_WHERE}
+     -- GROUP BY the EXPRESSION, not the alias: the joined \`categories\` rows carry their own
+     -- \`importance\` column, so the bare name is ambiguous and SQLite refuses the statement.
+     GROUP BY month, ${EFF_IMPORTANCE} ORDER BY month`,
+  ).bind(from).all<{ month: string; importance: string; spent: number }>();
+  return res.results ?? [];
+}

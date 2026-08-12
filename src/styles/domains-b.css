@@ -1,0 +1,403 @@
+/* ---- Порівняння двох довільних місяців (таб Статистики) ------------------- */
+/* Два селекти в один ряд із «проти» посередині — вибір читається як речення.
+   На вузькому екрані «проти» їде в окремий рядок, селекти стають на всю ширину. */
+.mc-pickers {
+  display: flex; align-items: flex-end; gap: var(--sp-3); flex-wrap: wrap;
+  margin-bottom: var(--sp-4);
+}
+.mc-pick { display: flex; flex-direction: column; gap: 5px; min-width: 190px; flex: 1 1 190px; }
+.mc-pick > .label { font-size: var(--fs-xs); color: var(--muted); }
+.mc-vs { font-size: var(--fs-sm); color: var(--muted); padding-bottom: 9px; flex: none; }
+.mc-note {
+  margin: 0 0 var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.45;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--warn) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--line));
+}
+
+/* ---- Центр сповіщень (ROADMAP §Черга 2) ---------------------------------- */
+/* Стрічка = ledger-рядки, не «картки-бульбашки»: подій багато, вони скануються очима
+   зверху вниз. Непрочитане позначає ліва акцентна засічка + жирніший заголовок —
+   без кольорових плашок на весь рядок (DESIGN.md §10.1 «точний інструмент»). */
+.nt-group { margin-bottom: var(--sp-5); }
+.nt-day {
+  font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--muted); margin: 0 2px var(--sp-2);
+}
+/* `overflow: hidden` clips the rows to the card's radius (B8). Without it the unread row's
+   square `border-left` accent ran past the rounded corner and read as a stray bar floating
+   beside the card rather than as part of it. */
+.nt-list { display: flex; flex-direction: column; overflow: hidden; border-radius: inherit; }
+.nt-row {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: start;
+  gap: var(--sp-3); width: 100%; text-align: left;
+  padding: var(--sp-4) var(--sp-5);
+  border: none; border-top: 1px solid var(--line);
+  border-left: 2px solid transparent;
+  background: none; color: inherit; font: inherit; cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out);
+}
+/* Рядок, що веде на екран події (той самий прийом, що в `.toast-link`): четверта колонка під
+   стрілку. Стрілка приглушена й прокидається на hover — вона підказка, а не акцент. */
+.nt-row.nt-link { grid-template-columns: auto 1fr auto auto; }
+.nt-go { color: var(--muted); font-size: 14px; line-height: 1.5; transition: color var(--dur-1) var(--ease-out); }
+.nt-row.nt-link:hover .nt-go { color: var(--accent); }
+.nt-row:first-child { border-top: none; }
+.nt-row:hover { background: var(--surface-2); }
+.nt-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.nt-row.unread { border-left-color: var(--accent); }
+.nt-row.read { color: var(--ink-2); }
+.nt-row.read .nt-title { font-weight: 500; color: var(--ink-2); }
+
+.nt-ico {
+  display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0;
+  border-radius: var(--radius-sm); color: var(--muted);
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+/* Серйозність фарбує лише іконку — рядок лишається спокійним. */
+.nt-ico.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); border-color: color-mix(in srgb, var(--warn) 30%, var(--line)); }
+.nt-ico.urgent { color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 30%, var(--line)); }
+
+.nt-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.nt-title { font-size: var(--fs-md); font-weight: 600; color: var(--ink); }
+.nt-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.45; font-variant-numeric: tabular-nums; }
+.nt-time { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.nt-prefs { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-3); }
+.nt-pref { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; }
+.nt-pref > svg { color: var(--muted); }
+
+/* Лічильник непрочитаних на дзвіночку. До 9 — цифра, далі «9+». */
+.icon-btn .count-badge {
+  position: absolute; top: 3px; right: 2px; min-width: 16px; height: 16px; padding: 0 4px;
+  display: grid; place-items: center; border-radius: 999px;
+  background: var(--neg); color: #fff; border: 1.5px solid var(--surface);
+  font-size: 10px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+  .nt-row { padding: var(--sp-3) var(--sp-4); }
+  .nt-time { display: none; }
+}
+
+/* ===== Skeleton (плейсхолдери на час фетчу) ============================== */
+.skeleton {
+  display: block;
+  background: var(--surface-2);
+  border-radius: var(--radius-xs);
+  position: relative;
+  overflow: hidden;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--surface) 60%, transparent), transparent);
+  animation: sk-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes sk-shimmer { 100% { transform: translateX(100%); } }
+.sk-rows { display: flex; flex-direction: column; gap: 13px; padding: 12px 2px; }
+.sk-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* ===== Історія по місяцях (6-міс тренд) ================================= */
+.mh-card { display: flex; flex-direction: column; }
+.mh-rates { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.mh-rates-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+.mh-rate-bars { display: flex; gap: 8px; }
+.mh-rate-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+.mh-rate-track { position: relative; width: 100%; height: 54px; background: var(--surface-2); border-radius: var(--radius-xs); }
+.mh-rate-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--line-strong); }
+.mh-rate-fill { position: absolute; left: 18%; right: 18%; border-radius: 3px; min-height: 2px; }
+.mh-rate-fill.pos { bottom: 50%; background: var(--pos); }
+.mh-rate-fill.neg { top: 50%; background: var(--neg); }
+.mh-rate-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.mh-rate-val.pos { color: var(--pos); }
+.mh-rate-val.neg { color: var(--neg); }
+.mh-rate-lbl { font-size: 11px; color: var(--muted); }
+
+/* ===== Донат витрат по категоріях + легенда ============================= */
+.cat-with-donut { display: grid; grid-template-columns: 300px 1fr; gap: 14px; align-items: start; }
+/* Та сама сітка безпеки, що в `.dash-pair`/`.stats-2col` — і тут вона була потрібна найбільше.
+   `SpendDonut` повертає null, коли категорія одна (донат із одного сектора нічого не показує),
+   і тоді розподіл лишався ЄДИНОЮ дитиною — тобто сідав у колонку 300px, розраховану на донат:
+   бар стискався до смужки, сума ламалась на два рядки, а решта 80% ширини лишалась порожньою
+   (скарга 2026-08-01, місяць з однією категорією). Дитина, що лишилась сама, бере всю ширину. */
+.cat-with-donut > :only-child { grid-column: 1 / -1; }
+.spend-donut-card { display: flex; flex-direction: column; gap: 12px; }
+.donut-legend { display: flex; flex-direction: column; gap: 7px; }
+.dl-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dl-item .dl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
+.dl-item .dl-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+@media (max-width: 860px) { .cat-with-donut { grid-template-columns: 1fr; } }
+
+/* ===== Рахунки: розкладка сторінки ======================================
+   Було: секції одна під одною, кожна — сітка `auto-fill` на всю ширину. Секція з двома
+   картками займала лише лівий край п'ятиколонкової сітки → права половина екрана порожня,
+   а сторінка вдвічі довша, ніж потрібно. Стало: секції — плитки в кілька колонок НА ВСЮ
+   ШИРИНУ; довідники (валюти, історія капіталу, архів) — під ними, а не сайдбаром: рахунки
+   тут головні, і рейл відрізав би від них 320px заради зведення на два рядки. */
+.acct-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 0 24px; align-items: start; }
+/* Контейнер для запиту нижче: щільність карток має залежати від ширини САМОЇ секції, а не
+   від ширини вікна — секцій може бути одна на всю сторінку або дві поруч. */
+.acct-sec { min-width: 0; container-type: inline-size; }
+/* :first-child не спрацює для другої колонки — у сітці «перша» лише одна секція, а верхній
+   ряд має вирівнятись увесь. Тому відступ заголовка задаємо явно. */
+.acct-sec .section-head { margin-top: 18px; }
+/* Усередині вужчої колонки картки мають бути щільнішими, інакше в колонку влазить одна. */
+.acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 6px; }
+/* Але коли секція займає всю сторінку (один банк — саме так у більшості), 185px давало 7-8
+   колонок: назва рахунку обрізалась до «madel…», а кнопка редагування тиснулась до неї
+   впритул. Ширина картки має залежати від ширини СЕКЦІЇ, тож це container-query, а не
+   media-query — інакше довелось би вибирати одне число на обидва випадки. */
+@container (min-width: 660px) {
+  /* 232 → 270 (фідбек 2026-08-01): у широкій секції картки все одно виходили тіснуватими —
+     форма редагування всередині картки (селект ролі + textarea) диктує більший мінімум, ніж
+     статичний вигляд. Ширину задає найширший СТАН картки, а не найвужчий. */
+  .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+}
+.acct-tail { margin-top: 4px; }
+
+/* ===== Рахунки: огляд коштів + секції ==================================== */
+.funds-overview { margin-bottom: 16px; }
+.funds-stats { display: flex; flex-wrap: wrap; gap: 20px 32px; }
+.funds-stat { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.funds-stat.net { padding-right: 16px; border-right: 1px solid var(--line); }
+.funds-stat .fs-lbl { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); }
+.funds-stat .fs-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.funds-stat .fs-val.num-hero { font-size: 26px; }
+.funds-stat .fs-val.neg { color: var(--neg); }
+.funds-stat .fs-sub { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.funds-bar { display: flex; height: 10px; margin-top: 16px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-2); gap: 2px; }
+.funds-bar > span { min-width: 3px; }
+.funds-bar > span:first-child { border-top-left-radius: var(--radius-pill); border-bottom-left-radius: var(--radius-pill); }
+.funds-bar > span:last-child { border-top-right-radius: var(--radius-pill); border-bottom-right-radius: var(--radius-pill); }
+
+.section-head .acct-sec-sum { margin-left: auto; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; color: var(--muted); }
+
+.acct-danger { display: flex; gap: 8px; margin-top: 10px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+.acct-danger .btn.sm { display: inline-flex; align-items: center; gap: 5px; }
+.btn.ghost.danger-text { color: var(--neg); }
+/* Небезпечна зона Налаштувань: видалення акаунта. Рамка --neg, але приглушена — блок має
+   читатись як «обережно», а не як помилка (той самий словник, що .err-note, лише тихіший). */
+.danger-zone {
+  border-color: color-mix(in srgb, var(--neg) 30%, var(--line));
+  background: color-mix(in srgb, var(--neg) 4%, var(--surface));
+  margin-bottom: 18px;
+}
+.danger-zone .set-card-h svg { color: var(--neg); }
+.btn.sm.danger-text { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 45%, var(--line-strong)); }
+.btn.sm.danger-text:hover:not(:disabled) { background: color-mix(in srgb, var(--neg) 10%, transparent); }
+
+.btn.ghost.danger-text:hover { background: color-mix(in srgb, var(--neg) 10%, transparent); border-color: color-mix(in srgb, var(--neg) 40%, var(--line-strong)); }
+.archived-acct { opacity: 0.72; }
+
+/* Умови кредитки — форма редактора + рядок на картці */
+.credit-terms { border-top: 1px solid var(--line); padding-top: 10px; }
+.credit-terms .ct-title { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.credit-terms .ct-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.credit-terms .ct-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.credit-terms .ct-grid input { width: 100%; }
+.acct2-credit-terms { display: flex; align-items: center; gap: 5px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+
+/* Тренд балансу на картці (спарклайн на всю ширину) */
+.acct2-spark { margin-top: 8px; }
+.acct2-spark svg { width: 100%; height: 26px; display: block; }
+
+/* Пресети типу в модалці додавання рахунку */
+.kind-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+.kind-btn { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 9px 11px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out); }
+.kind-btn:hover { border-color: var(--muted); }
+.kind-btn.on { border-color: var(--accent); background: var(--accent-soft); }
+.kind-btn .kb-label { font-size: 13.5px; font-weight: 600; }
+.kind-btn .kb-hint { font-size: 11px; color: var(--muted); }
+
+/* Розподіл активів по валютах */
+.cur-split { margin-bottom: 16px; }
+.cur-split-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.cur-split-bar { display: flex; height: 10px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-2); gap: 2px; }
+.cur-split-bar > span { min-width: 4px; border-radius: 2px; }
+.cur-split-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; }
+.cur-split-legend .cs-item { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.cur-split-legend .cs-cur { font-weight: 600; }
+.cur-split-legend .cs-val { font-variant-numeric: tabular-nums; }
+.cur-split-legend .cs-pct { font-size: 12px; }
+
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
+.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
+.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
+.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wd-label { font-size: 11px; }
+.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
+
+/* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
+   `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
+   як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
+.hb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.hb-grid > :only-child { grid-column: 1 / -1; }
+.hb-card { padding: 16px; }
+.hb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.hb-kind { font-size: 13px; font-weight: 600; }
+.hb-kind.started { color: var(--warn, var(--text-1)); }
+.hb-kind.stopped { color: var(--text-2); }
+.hb-total { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+/* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
+.hb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 0; font-size: 13px; }
+.hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hb-when { font-size: 11.5px; white-space: nowrap; }
+.hb-amt { white-space: nowrap; }
+/* ⚠️ This `.hb-*` block is duplicated FIVE times in this file (≈581, 1803, 2334, 2959 and here).
+   The LAST one wins — this one — so an edit in any copy above simply has no effect. Cause and
+   clean-up plan: `STYLES.md` §2.4. That is why `.hb-row` below is redefined rather than edited
+   in place. */
+.hb-row { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+/* The actions sit next to the amount, not the name: the row reads as "who → when → how much", and
+   an action belongs at the end of that sentence rather than inside it. `align-self: center`
+   because the rest of the row is baseline-aligned, and a button's baseline is its own height. */
+.hb-acts { display: flex; gap: 6px; align-self: center; white-space: nowrap; }
+
+@media (max-width: 720px) {
+  .hb-grid { grid-template-columns: minmax(0, 1fr); }
+  /* Buttons onto their own row: across four columns the merchant name squeezes down to three
+     letters, and a row that does not show WHAT it is about is not worth acting on. */
+  .hb-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .hb-acts { grid-column: 1 / -1; justify-content: flex-end; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
+
+/* ---- categorisation rules (Categories page) ------------------------------------------------
+   The deterministic layer, editable since 2026-08-12. Laid out as one wrapping row rather than a
+   grid: the four controls have genuinely different natural widths (a select, a free-text pattern,
+   a category, two buttons), and forcing them into equal columns would make the pattern field —
+   the only one anybody types into — the narrowest thing on the card. */
+.rule-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+.rule-pattern { flex: 1 1 180px; min-width: 0; font-size: 13px; padding: 6px 9px; }
+/* The preview is EVIDENCE, so it gets a surface of its own — it is not part of the form, it is
+   the form's answer. */
+.rule-preview { background: var(--surface-2); border-radius: var(--radius-sm); padding: 9px 11px; margin-bottom: 10px; }
+.rule-preview-head { font-size: 12.5px; color: var(--ink-2); }
+.rule-samples { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.rule-samples li { font-size: 11.5px; color: var(--muted); background: var(--surface); border-radius: 6px; padding: 2px 7px; }
+.rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* `minmax(0, …)` on the pattern: a long substring must ellipsize rather than push the category
+   and the buttons off the card — the same rule as `.hb-name`. */
+.rule-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+  align-items: center; gap: 8px; font-size: 12.5px; padding: 4px 0; }
+.rule-kind { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+  background: var(--surface-2); border-radius: 5px; padding: 2px 6px; }
+.rule-pat { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.rule-arrow { color: var(--muted); }
+.rule-cat { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.rule-cat .d { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.rule-seeded-toggle { margin-top: 10px; }
+/* Built-in rules read as reference material, not as the person's own work. */
+.rule-list-seeded { margin-top: 8px; opacity: 0.72; }
+.rule-list-seeded li { grid-template-columns: auto minmax(0, 1fr) auto auto auto; }
+@media (max-width: 620px) {
+  /* Below this the six columns leave the pattern three characters wide, and a rule you cannot
+     read is not a rule you can decide about. */
+  .rule-list li, .rule-list-seeded li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .rule-list li .rule-arrow { display: none; }
+}
+
+/* ---- §AI-AUDIT: what the model changed on this operation --------------------------------------
+   Sits above the transaction chat, where most of these changes come from. Reads as a LOG, not as a
+   control panel: small, monospaced values, the action tucked at the end. A change the AI made is
+   information first; undoing it is the rarer second thought. */
+.audit { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.audit-head { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.audit-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+/* `minmax(0, …)` on the value pair — a long `ai_note` must ellipsize rather than push the undo
+   button off the card (the `.hb-name` rule again). */
+.audit-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center; gap: 8px; font-size: 12px; }
+.audit-field { color: var(--muted); white-space: nowrap; }
+.audit-move { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.audit-old, .audit-new { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The OLD value is struck through, so "what it used to be" needs no label to be understood. */
+.audit-old { color: var(--muted); text-decoration: line-through; }
+.audit-new { color: var(--ink); }
+.audit-arrow { color: var(--muted); flex-shrink: 0; }
+.audit-meta { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.audit-done { color: var(--muted); font-size: 11px; white-space: nowrap; }
+/* An undone row stays, dimmed: the fact that the AI did it AND that you reversed it is worth more
+   than the row vanishing as though nothing had happened. */
+.audit-list li.reverted { opacity: 0.6; }
+@media (max-width: 620px) {
+  /* Four columns leave the values unreadable; the metadata drops to its own line. */
+  .audit-list li { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .audit-meta { grid-column: 1 / -1; }
+}
+/* The wide §AI-AUDIT list carries a link to the operation where the per-transaction one does not
+   (there, you are already on it). Same row grammar, one column more. */
+.audit-wide li { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr) auto auto; }
+.audit-tx { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
+.audit-tx:hover { color: var(--accent); }
+@media (max-width: 620px) {
+  .audit-wide li { grid-template-columns: minmax(0, 1fr) auto; }
+  .audit-wide .audit-move { grid-column: 1 / -1; }
+}
+/* ---- local passcode screen (lib/lock.ts) ------------------------------------------------------
+   Covers everything, opaque: the point is that the screen cannot be READ, so a translucent overlay
+   would defeat it exactly where it matters. `--bg` rather than a scrim for the same reason. */
+.lock-screen { position: fixed; inset: 0; z-index: 200; background: var(--bg);
+  display: flex; align-items: center; justify-content: center; }
+.lock-box { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px; }
+.lock-title { font-size: 15px; font-weight: 600; }
+.lock-dots { display: flex; gap: 12px; }
+.lock-dots span { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--line-strong);
+  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out); }
+.lock-dots span.on { background: var(--accent); border-color: var(--accent); }
+/* Off-screen but focusable — it summons the numeric keypad on a phone and keeps the browser's own
+   accessibility behaviour, which a grid of custom buttons would have to reimplement badly. */
+.lock-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+.lock-hint { font-size: 12px; color: var(--muted); max-width: 32ch; text-align: center; }
+/* The only feedback on a wrong code, so it has to be unmistakable and then gone. */
+.lock-box.wrong { animation: lock-shake 0.4s var(--ease-out); }
+.lock-box.wrong .lock-hint { color: var(--neg); }
+@keyframes lock-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+@media (prefers-reduced-motion: reduce) { .lock-box.wrong { animation: none; } }
+.lock-field { width: 92px; font-size: 13px; padding: 6px 9px; letter-spacing: 0.3em; }
+.lock-on { font-size: 13px; color: var(--pos); font-weight: 600; }
+/* The limits are stated permanently, not behind a tooltip — see `LockCard`. */
+.lock-facts { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+/* §IMPORTANCE-TREND — the spending MIX per month, under the savings rate.
+   Stacked to 100%, not to amount: the question is share, and stacking by amount would let a big
+   month hide a worsening mix. Column order is essential → discretionary → optional, bottom to top,
+   so the band that matters (optional) sits where the eye lands last and reads as "the extra". */
+.mh-weights { margin-top: 16px; padding-top: 12px; border-top: 1px dashed var(--line); }
+.mh-weight-bars { display: flex; gap: 6px; margin-top: 8px; }
+/* `min-width: 0` — a translated month label must not push the strip wider than its card. */
+.mh-weight-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.mh-weight-track { width: 100%; height: 54px; display: flex; flex-direction: column-reverse;
+  border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+.mh-weight-track span { width: 100%; display: block; }

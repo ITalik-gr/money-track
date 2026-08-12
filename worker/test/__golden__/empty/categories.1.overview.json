@@ -1,0 +1,75 @@
+{
+  "status": 200,
+  "body": {
+    "id": 1,
+    "name": "Продукти",
+    "color": "#1F6E4C",
+    "importance": "essential",
+    "children": [
+      {
+        "id": 31,
+        "name": "Ринок",
+        "color": "#1F6E4C"
+      },
+      {
+        "id": 30,
+        "name": "Супермаркет",
+        "color": "#1F6E4C"
+      }
+    ],
+    "level": null,
+    "trend": [
+      {
+        "month": "2025-06",
+        "spent": 0
+      },
+      {
+        "month": "2025-07",
+        "spent": 0
+      },
+      {
+        "month": "2025-08",
+        "spent": 0
+      },
+      {
+        "month": "2025-09",
+        "spent": 0
+      },
+      {
+        "month": "2025-10",
+        "spent": 0
+      },
+      {
+        "month": "2025-11",
+        "spent": 0
+      },
+      {
+        "month": "2025-12",
+        "spent": 0
+      },
+      {
+        "month": "2026-01",
+        "spent": 0
+      },
+      {
+        "month": "2026-02",
+        "spent": 0
+      },
+      {
+        "month": "2026-03",
+        "spent": 0
+      },
+      {
+        "month": "2026-04",
+        "spent": 0
+      },
+      {
+        "month": "2026-05",
+        "spent": 0
+      }
+    ],
+    "budget": null,
+    "recurring": 0,
+    "oneoff": 0
+  }
+}

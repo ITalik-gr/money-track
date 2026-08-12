@@ -11,6 +11,7 @@ import { Reports, ReportDetail } from "./pages/Reports.tsx";
 import { Advisor } from "./pages/Advisor.tsx";
 import { Chat } from "./pages/Chat.tsx";
 import { Plan } from "./pages/Plan.tsx";
+import { Category } from "./pages/Category.tsx";
 import { Categories } from "./pages/Categories.tsx";
 import { Goals } from "./pages/Goals.tsx";
 import { Subscriptions } from "./pages/Subscriptions.tsx";
@@ -41,6 +42,9 @@ const router = createBrowserRouter([
       { path: "add", element: <Add /> },
       { path: "plan", element: <Plan /> },
       { path: "categories", element: <Categories /> },
+      // §CATEGORY-PAGE — the permalink. Below the list route, and a distinct path, so neither
+      // shadows the other however the router is reordered later.
+      { path: "categories/:id", element: <Category /> },
       { path: "goals", element: <Goals /> },
       { path: "subs", element: <Subscriptions /> },
       { path: "events", element: <Events /> },

@@ -7,11 +7,18 @@ import { useGetMonthlyHistoryQuery } from "../../store/api.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { monthShort } from "../../lib/format.ts";
+import { IMPORTANCE_META } from "../../lib/importance.ts";
 
 const monLbl = (m: string) => monthShort(Number(m.split("-")[1]) - 1) ?? m;
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
 
-type Row = { label: string; spend: number; income: number; net: number; rate: number | null; current: boolean };
+type Row = {
+  label: string; spend: number; income: number; net: number; rate: number | null; current: boolean;
+  // §IMPORTANCE-TREND — hryvnia, already rolled up. The three add up to `spend` by construction
+  // (`EFF_IMPORTANCE` defaults to discretionary), which is what lets the strip below be read as a
+  // share of the month rather than as three unrelated bars.
+  essential: number; discretionary: number; optional: number;
+};
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function MhTooltip(props: any) {
@@ -41,6 +48,7 @@ export function MonthlyHistory() {
     const spend = m.spend / 100, income = m.income / 100;
     return {
       label: monLbl(m.month), spend, income, net: income - spend,
+      essential: m.essential / 100, discretionary: m.discretionary / 100, optional: m.optional / 100,
       rate: m.income > 0 ? Math.round(((m.income - m.spend) / m.income) * 100) : null,
       current: i === data.months.length - 1,
     };
@@ -99,6 +107,48 @@ export function MonthlyHistory() {
             ))}
           </div>
         </div>
+
+        {/* §IMPORTANCE-TREND — is the OPTIONAL share climbing?
+            The period tabs already say what share of THIS month was optional; only a trend can say
+            whether it is growing. A rising total on its own is ambiguous — a bigger rent and a
+            bigger takeaway habit look identical in it, and only one of them is a decision anyone
+            can revisit. Stacked to 100% deliberately: the question is about SHARE, and stacking by
+            amount would let a big month hide a worsening mix. */}
+        {rows.some((r) => r.spend > 0) && (
+          <div className="mh-weights">
+            <div className="mh-rates-head">
+              <span className="label">{t("mh.weightsLabel")}</span>
+              <InfoTip>{t("mh.weightsTip")}</InfoTip>
+            </div>
+            <div className="mh-weight-bars">
+              {rows.map((r, i) => {
+                const tot = r.essential + r.discretionary + r.optional;
+                const pct = (v: number) => (tot > 0 ? (v / tot) * 100 : 0);
+                return (
+                  <HoverTip key={i} content={
+                    <>
+                      <div className="tip-lbl">{r.label}{r.current ? t("mh.currentSuffix") : ""}</div>
+                      <div className="r"><span className="d" style={{ background: IMPORTANCE_META.essential.color }} />{t(IMPORTANCE_META.essential.shortKey)}: {Math.round(pct(r.essential))}%</div>
+                      <div className="r"><span className="d" style={{ background: IMPORTANCE_META.discretionary.color }} />{t(IMPORTANCE_META.discretionary.shortKey)}: {Math.round(pct(r.discretionary))}%</div>
+                      <div className="r"><span className="d" style={{ background: IMPORTANCE_META.optional.color }} />{t(IMPORTANCE_META.optional.shortKey)}: {Math.round(pct(r.optional))}%</div>
+                    </>
+                  }>
+                    <div className="mh-weight-col">
+                      <div className="mh-weight-track">
+                        {/* A month with no spending renders an empty track rather than nothing:
+                            a missing column would read as a missing month. */}
+                        <span style={{ height: `${pct(r.essential)}%`, background: IMPORTANCE_META.essential.color }} />
+                        <span style={{ height: `${pct(r.discretionary)}%`, background: IMPORTANCE_META.discretionary.color }} />
+                        <span style={{ height: `${pct(r.optional)}%`, background: IMPORTANCE_META.optional.color }} />
+                      </div>
+                      <span className="mh-rate-lbl">{r.label}</span>
+                    </div>
+                  </HoverTip>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

@@ -16,6 +16,7 @@ import { apiRoutes } from "./_shared.ts";
 import { buildWeekdayAnalytics } from "../../lib/finance/weekday.ts";
 import { buildNetworth } from "../../lib/finance/networth.ts";
 import { collectHabits } from "../../lib/finance/habits.ts";
+import { collectMonthlyHistory } from "../../lib/finance/history.ts";
 import type {
   Overview, MonthlyHistory, SafeToSpend, CapitalTrend, Networth, Compare, Forecast,
   IncomeAnalytics, CashflowCalendar, ReceiptItemsAnalytics, PriceDrift, SpendPatterns,
@@ -80,22 +81,8 @@ analytics.get("/analytics/overview", async (c) => {
 // місяців. Доповнює періодні вкладки Статистики довгим трендом (6-12 міс) для графіка
 // «витрати/надходження/чистий» і норми заощаджень. Останній місяць — поточний (частковий).
 analytics.get("/analytics/monthly-history", async (c) => {
-  const url = new URL(c.req.url);
-  const rates = await getRates(c.env.DB);
-  const { mult } = valueMode(rates, null);
-  const months = Math.min(24, Math.max(3, Number(url.searchParams.get("months") ?? 6)));
-  const now = Math.floor(Date.now() / 1000);
-  const from = localMonthStart(now, -(months - 1));
-  const rows = await analyticsRepo.monthlyHistory(c.env.DB, { mult }, now, from);
-  // Пропущені місяці (без операцій) заповнюємо нулями — щоб вісь була рівна й безперервна.
-  const map = new Map(rows.map((r) => [r.month, r]));
-  const out: { month: string; spend: number; income: number }[] = [];
-  for (let i = months - 1; i >= 0; i--) {
-    const key = localYm(localMonthStart(now, -i));
-    const r = map.get(key);
-    out.push({ month: key, spend: r?.spend ?? 0, income: r?.income ?? 0 });
-  }
-  return c.json({ months: out } satisfies MonthlyHistory);
+  const months = Math.min(24, Math.max(3, Number(new URL(c.req.url).searchParams.get("months") ?? 6)));
+  return c.json(await collectMonthlyHistory(c.env, months) satisfies MonthlyHistory);
 });
 
 // §4 Safe-to-spend: скільки вільно до кінця календарного місяця.

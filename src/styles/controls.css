@@ -1,0 +1,352 @@
+/* ---- forms / buttons ----------------------------------------------------- */
+
+.btn {
+  /* §11.5: центрований inline-flex за замовч. — іконка+лейбл завжди рівно вирівняні */
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: var(--radius-sm);
+  padding: 10px 15px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  transition: background var(--dur-1) var(--ease-out),
+              border-color var(--dur-1) var(--ease-out),
+              transform var(--dur-1) var(--ease-out);
+}
+.btn > svg { display: block; flex-shrink: 0; }
+.btn:hover { background: var(--surface-2); border-color: var(--muted); }
+/* tactile press — deliberate action snaps down (review-animations §9) */
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Primary = ink/near-black, not saturated cobalt (DESIGN.md §10.2). Cobalt is
+   reserved for links, current selection, and focus rings — never "the button
+   colour". Inverts cleanly in dark theme (light button on dark surface). */
+.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.btn.primary:hover { background: color-mix(in srgb, var(--ink) 88%, var(--surface)); border-color: color-mix(in srgb, var(--ink) 88%, var(--surface)); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--surface-2); border-color: transparent; }
+/* Компактний розмір — для дій у заголовках секцій, рядках, чіпах (не переважає текст поруч) */
+.btn.sm { padding: 6px 12px; font-size: 13px; border-radius: var(--radius-xs); gap: 6px; }
+.btn.xs { padding: 4px 10px; font-size: 12px; border-radius: var(--radius-xs); gap: 5px; }
+
+/* ---- reusable Select (проєктний) ---------------------------------------- */
+.sel { position: relative; width: 100%; }
+.sel.disabled { opacity: 0.55; pointer-events: none; }
+.sel-trigger {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
+  text-align: left; transition: border-color 0.14s, box-shadow 0.14s;
+}
+.sel-trigger:hover { border-color: var(--muted); }
+.sel.open .sel-trigger { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.sel-value { display: flex; min-width: 0; flex: 1; }
+.sel-placeholder { color: var(--muted); }
+.sel-caret { color: var(--muted); flex-shrink: 0; transition: transform 0.16s; }
+.sel.open .sel-caret { transform: rotate(180deg); }
+.sel-opt-inner { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.sel-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.sel-ico { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.sel-pop {
+  position: absolute; left: 0; right: 0; z-index: 60; padding: 5px;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card); animation: sel-in 0.12s ease;
+}
+.sel-pop.down { top: calc(100% + 6px); }
+.sel-pop.up { bottom: calc(100% + 6px); }
+@keyframes sel-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.sel-search { padding: 3px 3px 6px; }
+.sel-search input { width: 100%; padding: 8px 10px; font-size: 13.5px; }
+.sel-list { max-height: 260px; overflow-y: auto; }
+.sel-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px;
+}
+.sel-opt.indent { padding-left: 24px; }
+.sel-opt.active { background: var(--surface-2); }
+.sel-opt.sel-selected { color: var(--accent); font-weight: 600; }
+.sel-hint { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.sel-clear, .sel-empty { color: var(--muted); font-size: 13.5px; padding: 2px 0; }
+.sel-empty { padding: 10px; text-align: center; }
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: 15px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  width: 100%;
+}
+/* ⚠️ Правило вище писалось під ТЕКСТОВІ поля, але `input` ловить і чекбокси/радіо: вони
+   отримували `width:100%` + падінг + рамку й розпливались у повноширинний бокс, з якого
+   галочка малювалась десь посередині, а сусідній текст вилітав за межі рядка. Це вилазило
+   щоразу з новим компонентом і кожного разу гасилось локальним `input { width: auto }`
+   (`.rev-learn`, `.doc-toggle`) — тож глушимо в корені. Специфічність 0,1,1 навмисно вища
+   за базове `input`, щоб працювало незалежно від порядку в файлі. */
+input[type="checkbox"], input[type="radio"] {
+  width: auto; padding: 0; border: none; background: none; accent-color: var(--accent);
+}
+input::placeholder, textarea::placeholder { color: var(--muted); }
+textarea { resize: vertical; }
+/* М'який фокус для полів (без жорсткого outline) — border + тонке кільце, як у Select. */
+input:focus, select:focus, textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Полям — свій фокус вище; жорсткий outline лишаємо лише для кнопок/лінків (доступність). */
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: none; }
+
+/* ---- range (`Range.tsx`) -------------------------------------------------- */
+/* Переюзабельний повзунок — `Range` замість native range, як `Select` замість `<select>`.
+   Нативний віджет ігнорував систему: товстий OS-трек + великий сатурований кружок
+   (той самий «дефолтний синій», що прибрали з кнопок у §10.2). Тут: неткий трек 6px,
+   заливка нейтральним ink-2 (акцент лишається за лінками/активним/focus-ring),
+   ink-повзунок. Заливка — `--rng-p` від компонента (WebKit не має range-progress). */
+.rng {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 16px; padding: 0; border: none;
+  background: none; cursor: pointer;
+}
+.rng:disabled { cursor: not-allowed; opacity: 0.45; }
+/* Глобальне `input:focus` малює border+кільце навколо всього боксу — для треку зайве. */
+.rng:focus { outline: none; border: none; box-shadow: none; }
+
+/* Заливка від `--rng-o` (origin) до `--rng-p` (значення) — двобічна шкала фарбується від
+   центра в бік значення. `--rng-o` дефолтом 0% = звична заливка зліва. `::-moz-range-progress`
+   не годиться: він завжди тягне від лівого краю, тож обидва рушії йдуть одним градієнтом.
+   ⚠️ Вендорні псевдоелементи НЕ ГРУПУВАТИ в один список селекторів: невідомий рушію селектор
+   викидає ВСЕ правило (WebKit не знає `-moz-range-track` → трек зникав повністю). Тому два
+   окремі правила, а спільний градієнт живе у `--rng-track`, щоб не дублювався. */
+.rng {
+  --rng-a: min(var(--rng-p, 0%), var(--rng-o, 0%));
+  --rng-b: max(var(--rng-p, 0%), var(--rng-o, 0%));
+  --rng-track: linear-gradient(to right,
+    var(--surface-2) 0 var(--rng-a),
+    var(--ink-2) var(--rng-a) var(--rng-b),
+    var(--surface-2) var(--rng-b) 100%);
+}
+.rng::-webkit-slider-runnable-track {
+  height: 6px; border-radius: var(--radius-pill); background: var(--rng-track);
+}
+.rng::-moz-range-track {
+  height: 6px; border-radius: var(--radius-pill); background: var(--rng-track);
+}
+
+.rng::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -4px; /* (трек 6 − повзунок 14) / 2 */
+  border: none; border-radius: var(--radius-pill); background: var(--ink);
+  transition: transform var(--dur-1) var(--ease-out);
+}
+.rng::-moz-range-thumb {
+  width: 14px; height: 14px; border: none; border-radius: var(--radius-pill);
+  background: var(--ink); transition: transform var(--dur-1) var(--ease-out);
+}
+/* Рух = стан (натиснув/тягну), не декор. Hover — лише там, де курсор реальний. */
+@media (hover: hover) {
+  .rng:hover::-webkit-slider-thumb { transform: scale(1.12); }
+  .rng:hover::-moz-range-thumb { transform: scale(1.12); }
+}
+.rng:active::-webkit-slider-thumb { transform: scale(0.94); }
+.rng:active::-moz-range-thumb { transform: scale(0.94); }
+.rng:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent); }
+.rng:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 4px var(--accent); }
+
+/* ---- переказ між своїми (нейтральна подача, `lib/transfer.ts`) ------------- */
+/* Гроші не покинули власні кошти → ані `--neg`, ані `--pos`: приглушений ink-2 без знака.
+   Червоний «−4 000» був подвійно хибним — stats цю суму витратою й не рахує. */
+.money.neutral { color: var(--ink-2); }
+.amt-neutral { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.amt-swap { color: var(--muted); flex-shrink: 0; }
+.num-hero.neutral { color: var(--ink-2); display: inline-flex; align-items: center; gap: 9px; }
+.hero-swap { color: var(--muted); flex-shrink: 0; }
+
+/* Маршрут у рядку списку — замість слова «переказ». */
+.tx-route-mini { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.tx-route-mini .tr-acc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-route-mini .tr-arrow { color: var(--muted); flex-shrink: 0; }
+
+/* Маршрут у шапці TxDetail — два чипи-рахунки зі стрілкою. */
+.tx-route {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line);
+}
+.tx-route-acc {
+  padding: 5px 10px; border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--ink-2);
+  font-size: var(--fs-sm); white-space: nowrap;
+}
+.tx-route-arrow { color: var(--muted); flex-shrink: 0; }
+
+/* ---- modal --------------------------------------------------------------- */
+
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(10, 16, 13, 0.4);
+  display: flex; align-items: flex-end; justify-content: center;
+  z-index: 50;
+}
+.modal {
+  width: 100%; max-width: 480px;
+  padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  border-radius: var(--radius) var(--radius) 0 0;
+  animation: slide-up 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@media (min-width: 520px) {
+  .modal-backdrop { align-items: center; }
+  .modal { border-radius: var(--radius); margin: 16px; }
+}
+@keyframes slide-up {
+  from { transform: translateY(16px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ---- advisor ------------------------------------------------------------- */
+
+.runway { padding: 16px; margin-bottom: 6px; }
+.runway-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.runway-metric { display: flex; flex-direction: column; gap: 4px; }
+.runway-val { font-size: 20px; letter-spacing: -0.02em; }
+.runway-val.accent { color: var(--accent); }
+.runway-comment { margin: 12px 0 0; font-size: 14px; line-height: 1.5; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* transaction tags (secondary categories) — §R6 redesign: groups + chips */
+.tags-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 999px; font-size: 13px; line-height: 1;
+  border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2);
+  cursor: pointer; transition: background .12s, border-color .12s, color .12s;
+}
+.tag-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--ink); }
+.tag-chip:disabled { opacity: .4; cursor: default; }
+.tag-chip .d { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.tag-chip.sub { font-size: 12.5px; opacity: .92; }
+.tag-chip.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.tag-chip-x { font-size: 15px; line-height: 1; margin-left: 1px; opacity: .8; }
+
+.tag-chosen { display: flex; flex-wrap: wrap; gap: 7px; }
+.tag-groups { display: flex; flex-direction: column; gap: 12px; max-height: 320px; overflow-y: auto; padding: 2px; }
+.tag-group-h { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 7px; }
+.tag-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+
+/* ---- stats --------------------------------------------------------------- */
+
+.seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.seg-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.seg-btn.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+
+/* §11 Статистика: секційні таби = підкреслення (навігація), відмінні від pill-фільтра
+   періоду вище. Активний — ink-текст + акцент-підкреслення (поточний вибір). */
+.stat-tabs {
+  display: flex; gap: 2px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--line-strong);
+  margin-bottom: 20px;
+}
+.stat-tab {
+  border: none; background: none; cursor: pointer;
+  padding: 10px 14px; margin-bottom: -1px;
+  font: inherit; font-size: 14px; font-weight: 500; color: var(--muted);
+  border-bottom: 2px solid transparent;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
+}
+.stat-tab:hover { color: var(--ink-2); }
+.stat-tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+.stat-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-xs); }
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 12px 0 4px;
+}
+.kpi { padding: 14px; }
+.kpi-val { font-size: 22px; letter-spacing: -0.02em; margin-top: 6px; }
+.kpi-val .cur { font-size: 0.6em; color: var(--muted); }
+.kpi-delta { font-size: 11px; margin-top: 4px; color: var(--muted); font-weight: 500; }
+.kpi-delta.pos { color: var(--pos); }
+.kpi-delta.neg { color: var(--neg); }
+
+.cat-split { display: grid; grid-template-columns: 180px 1fr; gap: 16px; align-items: center; }
+@media (max-width: 520px) { .cat-split { grid-template-columns: 1fr; } }
+.cat-list { display: flex; flex-direction: column; gap: 8px; }
+.cat-line { display: grid; grid-template-columns: 10px 1fr auto; gap: 9px; align-items: center; font-size: 13px; }
+.cat-line .dot { width: 10px; height: 10px; border-radius: 3px; }
+.cat-line .val { color: var(--muted); }
+
+.rank {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;         /* clip the fill to the row's rounded corners */
+  isolation: isolate;
+}
+.rank + .rank { margin-top: 2px; }
+.rank-bar {
+  position: absolute; inset: 0 auto 0 0; z-index: -1;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-radius: 0;
+}
+.rank-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rank-val { font-size: 13.5px; color: var(--ink-2); white-space: nowrap; font-weight: 500; }
+
+/* ---- misc ---------------------------------------------------------------- */
+
+.empty {
+  padding: 22px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Empty-state card (components/EmptyCard.tsx): the block has nothing YET. Neutral by design —
+   an error is --neg + cause + retry (.err-note); emptiness must not borrow that vocabulary.
+   Dashed hairline says "a real card will stand here", which a solid one would not. */
+.empty-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  border-style: dashed;
+  background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+}
+.ec-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.ec-title { font-size: var(--fs-md); font-weight: 600; }
+.ec-hint { font-size: 13px; color: var(--muted); line-height: 1.5; margin: 0; max-width: 42ch; }
+.empty-card .btn { margin-top: var(--sp-1); }
+
+/* ===== DASHBOARD REDESIGN (DeliFin-напрямок, DESIGN.md §3) ================= */

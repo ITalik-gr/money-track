@@ -15,6 +15,9 @@ import { useT } from "../../i18n/index.ts";
  * §BUDGET-FORECAST: each envelope also shows where the month CLOSES at the current pace. That is
  * the point of the whole feature — "over budget" arriving on the 28th is a fact you can do nothing
  * about, while "heading for 130%" on the 12th is still a decision.
+ *
+ * A tile links to its CATEGORY page, not to `/plan`: "why is this envelope full" is a question
+ * about the category, and `/plan` only offered the same list again one level up.
  */
 export function EnvelopeGrid() {
   const t = useT();
@@ -54,7 +57,7 @@ export function EnvelopeGrid() {
         const projPct = Math.round(e.projected_ratio * 100);
         const showForecast = !over && !e.lumpy && e.projected_ratio >= 1.05;
         return (
-          <Link to="/plan" key={e.id} className={`env-item ${state}`}>
+          <Link to={`/categories/${e.id}`} key={e.id} className={`env-item ${state}`}>
             <div className="env-top">
               <span className="env-name"><span className="d" style={{ background: e.color }} />{e.name}</span>
               <span className={`env-pct ${state}`}>{pct}%</span>

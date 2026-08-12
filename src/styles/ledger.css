@@ -1,0 +1,404 @@
+/* ---- ledger / transaction rows ------------------------------------------ */
+
+.ledger { padding: 4px 0; overflow: hidden; }
+
+/* Транзакція-рядок. За замовчуванням — компактний STACKED (2 рядки: назва+сума / дата · категорія):
+   годиться для вузького рейла Головної та дрилів Статистики. У широкому контейнері (сторінка
+   Транзакцій) контейнер-запит нижче перемикає на вирівняну КОЛОНКОВУ таблицю (§11.3):
+   Лого · Мерчант · Категорія · Дата · Сума. Ті самі клітинки, різна сітка. */
+/* Стек-рядок операції (§11.9 — «як було раніше, покращено»): сучасний банк-стиль.
+   Сітка logo | body | amount; body — 2 рядки (назва+група / категорія·дата).
+   Сума вертикально центрована праворуч. КАТЕГОРІЯ завжди стартує одразу за лого
+   (фіксована колонка логотипа) → вирівняна на КОЖНОМУ рядку незалежно від довжини
+   назви — без content-залежних треків, що «плавали» у колонковому варіанті. */
+.tx {
+  display: grid;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--line);
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+}
+.tx:last-child { border-bottom: none; }
+
+.tx > .cat-ico { flex-shrink: 0; }
+.tx .tx-body   { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tx .tx-line1  { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tx .tx-line2  { display: flex; align-items: center; min-width: 0; font-size: 12.5px; color: var(--muted); }
+.tx .amt       { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; font-size: 16px; white-space: nowrap; letter-spacing: -0.01em; }
+
+.tx .tx-line1 .who-name { min-width: 0; font-size: 15px; font-weight: 500; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx .tx-line1 .m-sub { font-size: 12px; flex-shrink: 0; }
+.tx .tx-line1 .m-group { display: inline-flex; align-items: center; gap: 5px; font-weight: 500; font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+.tx .tx-line1 .m-group .d { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tx .tx-line2 .tx-cat { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.tx .tx-line2 .tx-cat .d { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.tx .tx-line2 .tx-cat-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx .tx-line2 .tx-date { white-space: nowrap; flex-shrink: 0; }
+.tx .tx-line2 .tx-date::before { content: "·"; margin: 0 6px; color: var(--line-strong); }
+.tx .amt .cur { font-size: 0.62em; }
+
+.tx .cat-ico {
+  width: 40px; height: 40px;
+  border-radius: 10px;
+  display: grid; place-items: center;
+  font-size: 17px; font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* Список операцій: суцільний список з hairline-роздільниками в одній поверхні (DESIGN.md §10.1).
+   `container-type` вмикає адаптацію рядка до ШИРИНИ контейнера, не вікна (layout-скіл). */
+.ledger.rows { display: flex; flex-direction: column; gap: 0; padding: 0; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  container-type: inline-size; }
+.ledger.rows .tx {
+  border: none; border-bottom: 1px solid var(--line);
+  border-radius: 0; background: transparent; box-shadow: none;
+}
+.ledger.rows .tx:last-child { border-bottom: none; }
+.ledger.rows .tx.tappable:hover { background: var(--surface-2); }
+
+/* ── Широкий контейнер (сторінка Транзакцій) → той самий стек-рядок, лише
+   просторіший: більше лого, повітря й трохи більший шрифт суми. Структура й
+   вирівнювання категорій незмінні (стек), тож нічого не «плаває». */
+@container (min-width: 620px) {
+  .ledger.rows .tx:not(.tx-sm) { gap: 15px; padding: 14px 20px; }
+  .ledger.rows .tx:not(.tx-sm) .cat-ico { width: 44px; height: 44px; }
+  .ledger.rows .tx:not(.tx-sm) .tx-line1 .who-name { font-size: 15.5px; }
+  .ledger.rows .tx:not(.tx-sm) .tx-line2 { font-size: 13px; }
+  .ledger.rows .tx:not(.tx-sm) .amt { font-size: 17px; }
+  .ledger.rows .tx:not(.tx-sm):has(.tx-check) { grid-template-columns: 22px 44px minmax(0, 1fr) auto; }
+}
+
+/* компактний варіант рядка (§1 — дрили Статистики, вузький рейл): менша висота/лого/шрифт */
+.tx.tx-sm { grid-template-columns: 32px minmax(0, 1fr) auto; gap: 10px; padding: 8px 10px; }
+.tx.tx-sm .cat-ico { width: 32px; height: 32px; border-radius: 9px; font-size: 14px; }
+.tx.tx-sm .tx-line1 .who-name { font-size: 13.5px; }
+.tx.tx-sm .tx-line2 { font-size: 11.5px; }
+.tx.tx-sm .amt { font-size: 14px; }
+.tx.tx-sm:has(.tx-check) { grid-template-columns: 22px 32px minmax(0, 1fr) auto; }
+.drill-note { font-size: 11px; line-height: 1.4; margin-top: 5px; opacity: .8; }
+/* Drill list (Stats modal): compact separated tiles — override the flat-surface
+   base above so tiles keep their own rounding/spacing inside the drill panel. */
+.ledger.rows.drill-txs {
+  gap: 3px; margin-top: 6px; padding: 3px;
+  background: transparent; border: none; border-radius: 0;
+  max-height: 46vh; overflow-y: auto; overscroll-behavior: contain;
+}
+.ledger.rows.drill-txs::-webkit-scrollbar { width: 8px; }
+.ledger.rows.drill-txs::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+.ledger.rows.drill-txs .tx { box-shadow: none; background: var(--surface-2); border: none; border-radius: var(--radius-sm); padding: 7px 11px; }
+.ledger.rows.drill-txs .tx:hover { background: var(--surface); }
+
+/* group membership: decorative left strip (rounded pill, group colour) — не бордер */
+.tx.in-group { position: relative; }
+.tx.in-group::before {
+  content: ""; position: absolute; left: 5px; top: 11px; bottom: 11px; width: 3px;
+  border-radius: 999px; background: var(--group-color, var(--accent));
+}
+
+/* multi-select mode — додаємо колонку чекбокса перед лого (стек-сітка: chk|logo|body|amt) */
+.tx:has(.tx-check) {
+  grid-template-columns: 22px 40px minmax(0, 1fr) auto;
+}
+.tx .tx-check {
+  width: 20px; height: 20px; border-radius: 6px; border: 1.6px solid var(--line-strong);
+  display: grid; place-items: center; color: #fff; background: var(--surface);
+  transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
+}
+.tx .tx-check.on { background: var(--accent); border-color: var(--accent); }
+.tx.tx-selected { background: var(--accent-soft); }
+
+/* bulk action bar (sticky bottom on /tx) */
+.bulkbar { position: sticky; bottom: 12px; z-index: 40; margin-top: 12px; display: flex; justify-content: center; }
+.bulkbar-inner {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-card);
+  max-width: 100%;
+}
+.bulk-count { font-weight: 600; font-size: 13.5px; white-space: nowrap; }
+.bulk-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bulk-field { width: 190px; }
+
+/* modal (popup) */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100; background: rgba(10, 16, 24, 0.5);
+  backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 20px;
+  animation: sel-in 0.14s ease;
+}
+.modal {
+  width: 100%; max-width: 460px; background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: 20px; max-height: 90vh; overflow-y: auto;
+}
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal-head h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
+/* §R2-ST4: рев'ю переказів — широка модалка + рядки (дані не обрізаємо) */
+.modal-wide { max-width: 960px; }
+.rev-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.rev-row {
+  display: flex; align-items: center; gap: 18px; padding: 12px 14px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+.rev-row.attn { border-color: var(--warn); background: var(--warn-soft); }
+.rev-info { flex: 1; min-width: 0; }
+/* повна назва — переносимо, не ріжемо еліпсисом; бейдж лишається поруч */
+.rev-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rev-badge { font-size: 10.5px; font-weight: 600; color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 1px 7px; text-transform: uppercase; letter-spacing: 0.02em; flex-shrink: 0; white-space: nowrap; }
+.rev-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.rev-meta .rev-sum { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.rev-note { font-style: italic; }
+.rev-pick { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 5px; }
+.rev-learn { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); cursor: pointer; }
+.rev-learn input { width: auto; }
+@media (max-width: 680px) {
+  .rev-row { flex-direction: column; align-items: stretch; gap: 9px; }
+  .rev-pick { width: 100%; }
+}
+/* §C1/§C2: велика 2-колонкова модалка рев'ю (картки замість рядків).
+   ВАЖЛИВО: специфічність .modal.modal-review — бо нижче в файлі є друга декларація
+   .modal { max-width: 480px } (мобільний bottom-sheet), яка інакше перебиває ширину. */
+.modal.modal-review { max-width: 1120px; border-radius: var(--radius-lg); }
+.rev-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 8px; }
+@media (max-width: 760px) { .rev-grid { grid-template-columns: 1fr; } }
+.rev-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 14px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--surface); min-width: 0;
+}
+.rev-card.attn { border-color: var(--warn); background: var(--warn-soft); }
+.rev-card-head { display: flex; align-items: flex-start; gap: 11px; }
+.rev-card-title { flex: 1; min-width: 0; }
+.rev-card .rev-name { font-size: 15px; }
+.rev-card .rev-meta { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.rev-desc { font-size: 12.5px; color: var(--ink-2); line-height: 1.4; background: var(--surface-2); border-radius: 8px; padding: 7px 10px; }
+.rev-card .rev-note { font-size: 12.5px; color: var(--ink-2); }
+.rev-card .rev-pick { width: 100%; }
+.rev-hint { display: flex; gap: 7px; }
+.rev-hint input { flex: 1; min-width: 0; font-size: 13px; }
+.rev-hint .btn { flex-shrink: 0; padding: 7px 12px; }
+.rev-foot { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 14px;
+  position: sticky; bottom: -20px; background: var(--surface); padding: 12px 0 2px; border-top: 1px solid var(--line); }
+.modal-x { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
+.modal-x:hover { background: var(--surface-2); color: var(--ink); }
+.color-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatch { width: 28px; height: 28px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; }
+.swatch.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+
+/* group cards grid */
+.group-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.group-card {
+  position: relative; padding: 16px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line);
+
+  display: flex; flex-direction: column; gap: 6px;
+  transition: border-color var(--dur-2) var(--ease-out), transform var(--dur-2) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) { .group-card:hover { border-color: var(--line-strong); transform: translateY(-1px); } }
+.group-top { display: flex; align-items: flex-start; justify-content: space-between; }
+.group-ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; }
+.group-del { border: none; background: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; }
+.group-del:hover { color: var(--neg); background: var(--surface-2); }
+.group-name { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; }
+.group-kind { font-size: 12.5px; color: var(--muted); }
+.group-note { font-size: 13px; color: var(--ink-2); line-height: 1.4; margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.group-foot { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.group-spent { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; }
+.group-link { text-decoration: none; }
+/* текстова кнопка-посилання (напр. «дозволити AI оновлювати») */
+.link-btn { background: none; border: none; padding: 0; font: inherit; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.link-btn:hover { color: var(--accent-strong); }
+
+/* savings goals grid */
+.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.goal-card {
+  padding: 16px; border-radius: var(--radius); background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 10px;
+}
+.goal-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.goal-name { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: center; gap: 7px; min-width: 0; }
+.goal-done { color: var(--pos); }
+.goal-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.goal-amounts { display: flex; align-items: baseline; gap: 7px; }
+.goal-cur { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.goal-target { font-size: 13px; color: var(--muted); }
+.goal-bar { height: 9px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.goal-fill { height: 100%; border-radius: 999px; background: var(--goal-color, var(--accent)); }
+.goal-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.goal-pct { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.goal-meta { font-size: 12.5px; color: var(--muted); }
+.goal-meta.pos { color: var(--pos); }
+/* §GOAL-PACE — whether the goal will make it. Sits NEXT TO the percentage because it qualifies
+   that very number: "42%" on its own says nothing until you know how much of the time those 42%
+   took. The tone is deliberately quiet in the normal case and visible only in deviation —
+   otherwise a screen of six goals becomes six coloured blobs and none of them stands out any
+   more. `flex-shrink: 0` because this is a fixed-length label beside an amount that grows (the
+   `.cb-val` rule: a number broken over two lines reads as a different number). */
+.goal-pace {
+  flex-shrink: 0; margin-right: auto;
+  font-size: 11.5px; line-height: 1.4; padding: 2px 7px;
+  border-radius: 6px; background: var(--surface-2); color: var(--muted);
+}
+.goal-pace.behind { color: var(--warn); }
+.goal-pace.at_risk, .goal-pace.overdue { color: var(--neg); }
+/* §P5: скільки відкладати на місяць, щоб устигнути до дедлайну */
+.goal-need { font-size: 12.5px; color: var(--ink-2); background: var(--surface-2); border-radius: var(--radius-sm); padding: 7px 10px; }
+.goal-need b { color: var(--accent); font-variant-numeric: tabular-nums; }
+.goal-need.urgent b { color: var(--neg); }
+.goal-sub { display: flex; flex-wrap: wrap; gap: 6px; }
+.goal-tag { font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 6px; padding: 3px 8px; }
+.goal-tag.neg { color: var(--neg); }
+/* §P2.1 — авто-поповнення. Акцент, бо це єдиний тег, який означає ДІЮ, що станеться сама:
+   решта тегів описують те, що вже є (джерело прогресу, дедлайн, тип). */
+.goal-tag.auto { color: var(--accent); background: var(--accent-soft); }
+.goal-note { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+
+/* icon picker (category editor) */
+.icon-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 7px; max-height: 168px; overflow-y: auto; padding: 2px; }
+.icon-opt {
+  height: 40px; border-radius: 9px; border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--ink-2); cursor: pointer;
+  display: grid; place-items: center; transition: border-color 0.12s, background 0.12s;
+}
+.icon-opt:hover { border-color: var(--muted); background: var(--surface-2); }
+.cat-preview { width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0; }
+
+/* categories management grid */
+.cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(244px, 1fr)); gap: 10px; align-items: start; }
+.cat-card {
+  padding: 12px; border-radius: var(--radius); background: var(--surface);
+  border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 9px;
+}
+.cat-card-name { font-size: 14px; }
+.cat-card .cat-ico { width: 34px; height: 34px; }
+.cat-card-head { display: flex; align-items: flex-start; gap: 11px; }
+.cat-card .cat-ico { margin-top: 1px; }
+.cat-card-title { flex: 1; min-width: 0; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.cat-card-name {
+  font-size: 15px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25;
+  /* повна назва: до 2 рядків замість обрізання «…» */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; overflow-wrap: anywhere;
+}
+.cat-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 5px; padding: 1px 5px; flex-shrink: 0; }
+.cat-card-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.icon-mini { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.icon-mini:hover { background: var(--surface-2); color: var(--ink); }
+.cat-subs { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-sub {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 9px 4px 5px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: var(--surface);
+  font-size: 12.5px; color: var(--ink-2); cursor: pointer;
+}
+.cat-sub:hover { border-color: var(--muted); background: var(--surface-2); }
+.cat-sub-dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.cat-sub-x { color: var(--muted); font-size: 11px; margin-left: 1px; }
+.cat-sub-x:hover { color: var(--neg); }
+.cat-sub-add { border-style: dashed; color: var(--muted); }
+.cat-sub-add:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
+/* transactions layout: left filter sidebar + list */
+.tx-layout { display: grid; grid-template-columns: 288px 1fr; gap: 18px; align-items: start; }
+@media (max-width: 900px) { .tx-layout { grid-template-columns: 1fr; } }
+.tx-filters {
+  /* Топбар — sticky, height:64px, z-index:20. Сайдбар липне НИЖЧЕ нього (64 + 14),
+     інакше кнопка «Вибрати» й верх дерева категорій заходять під топбар. */
+  position: sticky; top: 78px; background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--radius); padding: 14px 16px;
+  max-height: calc(100vh - 90px); overflow-y: auto;
+  /* §11.5: тонкий скролбар замість дефолтного товстого */
+  scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
+}
+.tx-filters::-webkit-scrollbar { width: 7px; }
+.tx-filters::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+.tx-filters::-webkit-scrollbar-track { background: transparent; }
+@media (max-width: 900px) { .tx-filters { position: static; } }
+.tx-main { min-width: 0; }
+/* §R6 «Показати більше» */
+.tx-more { display: flex; justify-content: center; margin-top: 14px; }
+.tx-more-btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 9px 18px; border-radius: 999px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line); color: var(--ink-2);
+  font-size: 13.5px; font-weight: 500;
+  transition: background .15s, color .15s, border-color .15s, transform .05s;
+}
+.tx-more-btn:hover:not(:disabled) { background: var(--bg); color: var(--ink); border-color: var(--ink-3, var(--muted)); }
+.tx-more-btn:active:not(:disabled) { transform: translateY(1px); }
+.tx-more-btn:disabled { opacity: .6; cursor: default; }
+.tx-more-chev { transform: rotate(90deg); opacity: .7; }
+.tx-more-spin {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--muted);
+  animation: tx-more-spin .7s linear infinite;
+}
+@keyframes tx-more-spin { to { transform: rotate(360deg); } }
+.filt-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+
+/* §11.4: акордеон-секції фільтрів */
+.filt-sec { border-top: 1px solid var(--line); }
+.filt-sec-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 12px 0; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 13.5px; font-weight: 500; color: var(--ink-2); text-align: left;
+}
+.filt-sec-head:hover { color: var(--ink); }
+.filt-sec-right { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.filt-sec-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.filt-sec-chev { color: var(--muted); transition: transform var(--dur-2) var(--ease-out); }
+.filt-sec.open .filt-sec-chev { transform: rotate(90deg); }
+.filt-sec-body { padding-bottom: 12px; }
+.cat-tree { display: flex; flex-direction: column; gap: 1px; }
+.cat-tree-row { display: flex; align-items: center; width: 100%; border: none; background: none; cursor: pointer; border-radius: 8px; color: var(--ink-2); font-size: 13.5px; text-align: left; }
+.cat-tree-row:hover { background: var(--surface-2); }
+.cat-tree-row.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
+.cat-tree-row .ctr-main { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; padding: 8px 8px; background: none; border: none; cursor: pointer; color: inherit; font: inherit; }
+.cat-tree-row > .ctr-name { padding: 8px; }
+.ctr-ico { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.ctr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-left: 4px; }
+.ctr-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ctr-caret { border: none; background: none; color: var(--muted); cursor: pointer; padding: 6px; display: grid; place-items: center; }
+.cat-tree-row.sub { padding: 7px 8px 7px 30px; gap: 8px; font-size: 13px; }
+.filt-clear { width: 100%; margin-top: 12px; border: 1px solid var(--line); font-size: 13px; }
+/* діапазон-фільтри (сума / період) у сайдбарі транзакцій */
+.filt-range { display: flex; align-items: center; gap: 6px; }
+.filt-range input { flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; }
+.filt-range .dash { color: var(--muted); flex-shrink: 0; }
+
+/* search bar + category chips (transactions filter) */
+.searchbar { position: relative; margin-bottom: 10px; }
+.searchbar .ico { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; display: flex; }
+.searchbar input { padding-left: 40px; border-radius: 999px; }
+.chips { display: flex; gap: 7px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--surface-2);
+  font-size: 13px; color: var(--ink-2); white-space: nowrap; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.chip:hover { border-color: var(--line-strong); }
+.chip .d { width: 8px; height: 8px; border-radius: 50%; }
+/* Активний чип фарбується у колір своєї категорії (--chip-color). */
+.chip.on {
+  border-color: var(--chip-color, var(--accent));
+  background: color-mix(in srgb, var(--chip-color, var(--accent)) 14%, var(--surface));
+  color: var(--ink); font-weight: 500;
+}
+
+/* кнопка «Вибрати» на /tx */
+.select-btn { display: inline-flex; align-items: center; gap: 7px; }
+.tx.tappable { cursor: pointer; }
+.tx.tappable:hover { background: var(--surface-2); }
+.tx.is-transfer .amt { color: var(--muted); }
+.tx .pill-transfer {
+  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--muted); border: 1px solid var(--line-strong); border-radius: 5px; padding: 1px 5px; margin-left: 6px;
+}
+

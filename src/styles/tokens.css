@@ -1,0 +1,150 @@
+/* Money Track — світлий фінтех-дашборд (напрямок DeliFin, DESIGN.md §1).
+   Кобальт-акцент, нейтральна прохолодна база, дані-герой. Гібридна типографіка:
+   герой-суми — Geist sans; таблиці/списки — Geist Mono (tabular). Світла тема —
+   основна; темна — опція через тумблер. Свідомо не AI-дефолт. */
+
+:root {
+  color-scheme: light;
+
+  --bg: #f3f5f8;
+  --surface: #ffffff;
+  --surface-2: #eef1f6;
+  --ink: #0f1620;
+  --ink-2: #3b4656;
+  /* AA-safe secondary: ≥4.5:1 on surface for metadata text (was #7a8797, ~3.6:1) */
+  --muted: #5f6b79;
+  --line: #e9edf3;
+  --line-strong: #dbe1ea;
+
+  --accent: #2e6be6;
+  --accent-strong: #1f57cc;
+  --accent-soft: #eaf1fd;
+  --pos: #14915f;
+  --pos-soft: #e6f5ee;
+  --neg: #dd4b39;
+  --neg-soft: #fdecea;
+  --warn: #b5790f;
+  --warn-soft: #fbf1dc;
+
+  /* категорії (конверти) */
+  --c-pine: #1f6e4c;
+  --c-cobalt: #2e6be6;
+  --c-plum: #7a3e9d;
+  --c-ochre: #c9871a;
+  --c-brick: #b23a2e;
+  --c-teal: #127c86;
+
+  /* графік cashflow — системні тони (DESIGN.md §10.3): cobalt-витрата (домінує) +
+     green-дохід (тихо). Прибрано бурштин #e8a13c — «recharts з коробки». */
+  --chart-expense: var(--accent);
+  --chart-income: var(--pos);
+
+  /* ── Fonts (unified: one sans family; numbers use sans tabular figures,
+        mono is reserved for codes/PAN/MCC only). DESIGN.md §2 rev. 2026-07-11 ── */
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", monospace;
+  --font-num: var(--font-sans);
+
+  /* ── Radius scale — tightened (DESIGN.md §10.1: "точний інструмент, не бульбашки").
+        Cards = 12 (default --radius); floating (modal/popover) steps up to 14;
+        controls/tiles = 10; badges = 6. One monotonic scale, no puffy 18px. ── */
+  --radius-xs: 6px;
+  --radius-sm: 9px;    /* buttons, inputs, chips, nav items, inner tiles */
+  --radius: 10px;      /* cards + panels — the default working radius (§11.2: чуть менше) */
+  --radius-lg: 12px;   /* modals / floating — one deliberate step up (max) */
+  --radius-xl: 16px;   /* widest modal only */
+  --radius-pill: 999px;
+
+  /* ── Spacing scale (4pt grid) ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* ── Type scale (fixed rem — product UI, never fluid) ── */
+  --fs-xs: 0.6875rem;   /* 11 */
+  --fs-sm: 0.75rem;     /* 12 */
+  --fs-base: 0.8125rem; /* 13 */
+  --fs-md: 0.875rem;    /* 14 */
+  --fs-lg: 0.9375rem;   /* 15 */
+  --fs-xl: 1.125rem;    /* 18 */
+  --fs-2xl: 1.375rem;   /* 22 */
+  --fs-3xl: 1.75rem;    /* 28 */
+  --fs-4xl: 2.25rem;    /* 36 */
+
+  /* ── One elevation model (calmer, cooler than before) ── */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.05);
+
+  /* ── Motion tokens (product: 120–240ms, ease-out only) ── */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-std: cubic-bezier(0.2, 0, 0, 1);
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 240ms;
+
+  --sidebar-w: 248px;
+  --content-w: 1240px;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #0b0f14;
+  --surface: #141a22;
+  --surface-2: #1b232d;
+  --ink: #eaf0f6;
+  --ink-2: #b7c2ce;
+  --muted: #8493a2;
+  --line: #232d38;
+  --line-strong: #2f3b48;
+
+  --accent: #5a97ff;
+  --accent-strong: #7aabff;
+  --accent-soft: #182740;
+  --pos: #35b37e;
+  --pos-soft: #12281f;
+  --neg: #f0674a;
+  --neg-soft: #2c1a17;
+  --warn: #dda43a;
+  --warn-soft: #2a2213;
+
+  --c-pine: #35b37e;
+  --c-cobalt: #5a97ff;
+  --c-plum: #b07fd0;
+  --c-ochre: #dda43a;
+  --c-brick: #e26a5c;
+  --c-teal: #35b0bb;
+
+  --chart-expense: var(--accent);
+  --chart-income: var(--pos);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 20px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+/* Безпечник від випадкового горизонтального зсуву. `html` тут обовʼязковий, а не «про всяк
+   випадок»: на iOS Safari `overflow-x` лише на `body` не заважає пальцем відтягнути сторінку
+   вбік, і будь-який елемент, що на пару пікселів ширший за viewport, читається як зламана
+   верстка. Клип на обох — і корінь, і тіло. Це СІТКА БЕЗПЕКИ, а не спосіб ховати переповнення:
+   широкий контент (таблиці, графіки) має скролитись у власному `overflow-x: auto`. */
+html, body { overflow-x: hidden; }
+html { max-width: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+

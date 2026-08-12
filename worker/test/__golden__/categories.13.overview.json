@@ -1,0 +1,64 @@
+{
+  "status": 200,
+  "body": {
+    "id": 13,
+    "name": "Перекази і зняття",
+    "color": "#6B7A74",
+    "importance": "discretionary",
+    "children": [],
+    "level": null,
+    "trend": [
+      {
+        "month": "2025-06",
+        "spent": 0
+      },
+      {
+        "month": "2025-07",
+        "spent": 0
+      },
+      {
+        "month": "2025-08",
+        "spent": 0
+      },
+      {
+        "month": "2025-09",
+        "spent": 0
+      },
+      {
+        "month": "2025-10",
+        "spent": 0
+      },
+      {
+        "month": "2025-11",
+        "spent": 0
+      },
+      {
+        "month": "2025-12",
+        "spent": 0
+      },
+      {
+        "month": "2026-01",
+        "spent": 0
+      },
+      {
+        "month": "2026-02",
+        "spent": 0
+      },
+      {
+        "month": "2026-03",
+        "spent": 0
+      },
+      {
+        "month": "2026-04",
+        "spent": 0
+      },
+      {
+        "month": "2026-05",
+        "spent": 0
+      }
+    ],
+    "budget": null,
+    "recurring": 0,
+    "oneoff": 0
+  }
+}

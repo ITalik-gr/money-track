@@ -1,0 +1,86 @@
+{
+  "status": 200,
+  "body": {
+    "id": 1,
+    "name": "Продукти",
+    "color": "#1F6E4C",
+    "importance": "essential",
+    "children": [
+      {
+        "id": 31,
+        "name": "Ринок",
+        "color": "#1F6E4C"
+      },
+      {
+        "id": 30,
+        "name": "Супермаркет",
+        "color": "#1F6E4C"
+      }
+    ],
+    "level": {
+      "level": 254000,
+      "mean": 222667,
+      "last": 252000,
+      "active_months": 6,
+      "fixed": true
+    },
+    "trend": [
+      {
+        "month": "2025-06",
+        "spent": 0
+      },
+      {
+        "month": "2025-07",
+        "spent": 0
+      },
+      {
+        "month": "2025-08",
+        "spent": 0
+      },
+      {
+        "month": "2025-09",
+        "spent": 172800
+      },
+      {
+        "month": "2025-10",
+        "spent": 228700
+      },
+      {
+        "month": "2025-11",
+        "spent": 187200
+      },
+      {
+        "month": "2025-12",
+        "spent": 241700
+      },
+      {
+        "month": "2026-01",
+        "spent": 145100
+      },
+      {
+        "month": "2026-02",
+        "spent": 274100
+      },
+      {
+        "month": "2026-03",
+        "spent": 235900
+      },
+      {
+        "month": "2026-04",
+        "spent": 252000
+      },
+      {
+        "month": "2026-05",
+        "spent": 287600
+      }
+    ],
+    "budget": {
+      "amount": 1500000,
+      "spent": 287600,
+      "projected": 530899,
+      "lumpy": false
+    },
+    "recurring": 147600,
+    "oneoff": 140000
+  }
+}

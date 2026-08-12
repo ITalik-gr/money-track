@@ -5,6 +5,7 @@ import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
 import type { Category } from "../../../shared/types.ts";
+import type { CategoryOverview } from "../../../shared/api/analytics.ts";
 import { normImportance } from "../../lib/finance/importance.ts";
 import { deleteCategory } from "../../services/categories.ts";
 
@@ -75,4 +76,73 @@ categories.delete("/categories/:id", async (c) => {
   } catch (e) {
     return c.json({ error: String(e instanceof Error ? e.message : e) }, 500);
   }
+});
+
+/**
+ * §CATEGORY-PAGE — everything the category permalink needs that the Stats drill does not carry.
+ *
+ * ⚠️ Declared ABOVE `PATCH`/`DELETE /categories/:id` is not required (different methods), but it
+ * IS above nothing that would shadow it — `overview` is a literal segment after the parameter, so
+ * lint C7 is satisfied either way.
+ *
+ * Every number comes from the canon: the monthly level from `categoryMonthlyLevels`, the envelope
+ * from `budgetStatus`, the trend and the split from `STATS_JOINS` + `SPEND_WHERE`. A page that
+ * recomputed any of them would be the §CUR-PLAN mechanism starting over on a new screen.
+ */
+categories.get("/categories/:id/overview", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
+  const url = new URL(c.req.url);
+  const now = Math.floor(Date.now() / 1000);
+  const to = Number(url.searchParams.get("to") ?? now);
+
+  const { getRates } = await import("../../lib/finance/finance.ts");
+  const stats = await import("../../lib/finance/stats.ts");
+  const { budgetStatus } = await import("../../lib/finance/budgets.ts");
+  const rates = await getRates(c.env.DB);
+  const { mult } = stats.valueMode(rates, null);
+  const loc = c.get("locale");
+
+  /**
+   * The default window is the MONTH, not a rolling 30 days.
+   *
+   * `budgetStatus` is month-to-date by definition, so with a 30-day default the two halves of this
+   * one response would describe different periods — the tile would say "this month" over a window
+   * that started in the previous one. The client passes the month start explicitly; this makes the
+   * endpoint agree with itself for anyone who does not.
+   */
+  const from = Number(url.searchParams.get("from") ?? stats.localMonthStart(to));
+
+  const row = await categoriesRepo.byId(c.env.DB, id);
+  if (!row) return c.json({ error: "not_found" }, 404);
+
+  const [levels, budgets, trend, split, children] = await Promise.all([
+    stats.categoryMonthlyLevels(c.env, mult, { now: to }),
+    budgetStatus(c.env, mult, now),
+    categoriesRepo.monthlyTrend(c.env.DB, mult, id, stats.localMonthStart(to, -11), to),
+    categoriesRepo.recurringSplit(c.env.DB, mult, id, from, to, stats.isRecurringExpr(stats.defaultRefFrom(to), to)),
+    categoriesRepo.childrenOf(c.env.DB, loc, id),
+  ]);
+
+  // Zero-fill so the axis is continuous: a month with no spending is a real data point, and a gap
+  // would make the line jump between distant months as though they were adjacent.
+  const byMonth = new Map(trend.map((r) => [r.month, r.spent]));
+  const months: { month: string; spent: number }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const key = stats.localYm(stats.localMonthStart(to, -i));
+    months.push({ month: key, spent: byMonth.get(key) ?? 0 });
+  }
+
+  const lv = levels.get(id);
+  const b = budgets.find((x) => x.id === id);
+  return c.json({
+    id, name: localizeCatName(loc, row.name), color: row.color,
+    importance: row.importance ?? "discretionary",
+    children,
+    level: lv ? { level: lv.level, mean: lv.mean, last: lv.last, active_months: lv.active_months, fixed: lv.fixed } : null,
+    trend: months,
+    budget: b ? { amount: b.amount, spent: b.spent, projected: b.projected, lumpy: b.lumpy } : null,
+    recurring: split.recurring,
+    oneoff: split.oneoff,
+  } satisfies CategoryOverview);
 });

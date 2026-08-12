@@ -1,0 +1,1155 @@
+/* ---- sidebar group labels + theme toggle --------------------------------- */
+.side-group {
+  font-family: var(--font-sans); font-size: 11.5px; font-weight: 600; letter-spacing: 0;
+  text-transform: none; color: var(--muted); padding: 16px 12px 6px;
+}
+.theme-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 11px; border-radius: var(--radius-sm); color: var(--ink-2);
+  font-size: 14px; font-weight: 500; cursor: pointer; user-select: none;
+}
+.theme-toggle:hover { background: var(--surface-2); color: var(--ink); }
+.theme-toggle .row { display: flex; align-items: center; gap: 11px; }
+.switch { width: 38px; height: 22px; border-radius: 999px; background: var(--line-strong); position: relative; transition: background 0.15s; flex-shrink: 0; }
+.switch.on { background: var(--accent); }
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+}
+.switch.on::after { transform: translateX(16px); }
+
+/* Language switch (UA/EN) in the sidebar foot — segmented, so the active language reads at a
+   glance instead of a toggle that would have to label the OTHER language. */
+.lang-seg {
+  display: flex; gap: 2px; padding: 3px; margin: 2px 0;
+  background: var(--surface-2); border-radius: var(--radius-sm);
+  /* Border is load-bearing, not decoration: --surface-2 sits ~5/channel away from --bg, so on the
+     landing (which has no neighbouring surfaces to give context) the track vanished and the active
+     chip read as a stray white blob. The line is what makes this read as a segmented control. */
+  border: 1px solid var(--line-strong);
+}
+.lang-seg button {
+  /* Inner radius = outer − padding, or the corners visibly disagree. */
+  flex: 1; padding: 4px 8px; border: 0; border-radius: calc(var(--radius-sm) - 3px);
+  background: transparent; color: var(--ink-2); font-size: 12px; font-weight: 600;
+  letter-spacing: 0.04em; cursor: pointer; transition: background 0.15s, color 0.15s;
+}
+.lang-seg button:hover { color: var(--ink); }
+.lang-seg button.on { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+/* Global :focus-visible uses outline-offset 2px, which would draw the ring outside the track;
+   pull it inward so the focused segment stays inside the control. */
+.lang-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* (Прибрано застарілий «R6 fix»-блок tx-рядка — конфліктував з новою колонковою
+   таблицею §11.3: повертав radius/тінь на .tx, стилював неіснуючі .meta/.m-card/.pill-hold.) */
+.tx .amt { font-weight: 500; }
+
+/* базова плитка операції (працює і поза списком .tx — напр. у топ-мерчантах) */
+.cat-ico {
+  width: 40px; height: 40px; border-radius: 12px;
+  display: grid; place-items: center;
+  font-size: 17px; font-weight: 600; color: #fff;
+  flex-shrink: 0; overflow: hidden;
+}
+/* локальні бренд-плитки мерчантів (DESIGN.md §7 F2; brands.tsx, без зовнішніх запитів) */
+.cat-ico.brand-tile svg { display: block; }
+.cat-ico.brand-mono { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
+
+/* бейдж фізичної картки — чорна/біла/FOP/банка (фідбек #2) */
+.card-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2);
+}
+.card-badge .sq { width: 11px; height: 8px; border-radius: 2.5px; background: var(--muted); flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
+.card-badge.black .sq { background: #14171a; }
+.card-badge.white .sq { background: #f4f5f6; box-shadow: inset 0 0 0 1px #c7cdd4; }
+.card-badge.fop .sq { background: #12251d; }
+.card-badge.jar .sq { background: var(--c-teal); }
+
+/* §1: «По картках» (Статистика→Мерчанти) — велика плитка-картка замість голого рядка тексту. */
+.acct-badge { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; color: #fff; }
+.acct-badge.black { background: #14171a; }
+.acct-badge.white { background: #f4f5f6; color: #4a5560; box-shadow: inset 0 0 0 1px #c7cdd4; }
+.acct-badge.fop { background: #12251d; }
+.acct-badge.jar { background: var(--c-teal, #127c86); }
+.acct-badge.other { background: var(--muted); }
+.acct-pan {
+  font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 400;
+  margin-left: 7px; letter-spacing: 0.01em;
+}
+
+/* прибрати focus-outline з усіх графіків (фідбек #2) */
+.recharts-wrapper,
+.recharts-surface,
+.recharts-wrapper:focus,
+.recharts-surface:focus,
+.recharts-wrapper *:focus,
+.recharts-surface *:focus,
+.recharts-sector,
+.recharts-rectangle { outline: none !important; }
+
+/* ===== STATISTICS REDESIGN (DESIGN.md §7 F5/F1/F6) ======================== */
+
+/* вшитий AI-коментар */
+.ai-card {
+  padding: 18px 20px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 20%, var(--line));
+}
+.ai-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+.ai-badge {
+  width: 36px; height: 36px; border-radius: var(--radius-sm); flex-shrink: 0;
+  background: var(--accent);
+  color: #fff; display: grid; place-items: center;
+}
+.ai-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.ai-text { font-size: 14.5px; line-height: 1.6; color: var(--ink); margin: 0; }
+.hl-amt {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600;
+  color: var(--accent); background: var(--accent-soft);
+  padding: 0 5px; border-radius: 5px; white-space: nowrap;
+}
+
+/* структурований AI-вивід (RichFacts) */
+.rich-headline { font-size: 14.5px; font-weight: 600; line-height: 1.5; margin-bottom: 12px; }
+.rich-facts { display: flex; flex-direction: column; }
+.fact-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.fact-row:first-child { padding-top: 0; }
+.fact-row:last-child { border-bottom: none; padding-bottom: 0; }
+.fact-label { font-size: 13.5px; color: var(--ink-2); min-width: 0; }
+.fact-amt.muted-dash { color: var(--muted); font-weight: 500; }
+.fact-vals { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.fact-cat { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); white-space: nowrap; }
+.fact-cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.fact-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; white-space: nowrap; }
+.fact-amt.pos { color: var(--pos); }
+.fact-amt.neg { color: var(--neg); }
+.fact-amt.neutral { color: var(--ink); }
+.fact-delta { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--muted); }
+.rich-note { margin: 12px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); padding-top: 10px; border-top: 1px solid var(--line); }
+
+/* KPI-сітка сторінки статистики */
+.stat-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+@media (max-width: 860px) { .stat-kpis { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 460px) { .stat-kpis { grid-template-columns: 1fr; } }
+
+.stats-2col { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; }
+@media (min-width: 900px) { .stats-2col { grid-template-columns: 1fr 1fr; } }
+.stats-2col > section { min-width: 0; }
+/* Same safety net as `.dash-pair` (ROADMAP L3): lone survivor spans both columns. */
+.stats-2col > :only-child { grid-column: 1 / -1; }
+
+/* month-end forecast card */
+.forecast-card { padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.fc-main { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.fc-range { margin-top: 2px; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.fc-net { text-align: right; }
+.fc-bar { height: 9px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.fc-fill { height: 100%; border-radius: 999px; background: var(--accent); }
+.fc-legend { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--ink-2); }
+.fc-legend b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
+.fc-upcoming { border-top: 1px solid var(--line); padding-top: 12px; }
+.fc-plan-list { display: flex; flex-direction: column; gap: 7px; }
+.fc-plan { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; font-size: 13px; }
+.fc-plan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-plan-date { color: var(--muted); font-size: 12px; }
+.fc-plan-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+/* quick facts strip (stats) */
+.stat-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 640px) { .stat-facts { grid-template-columns: 1fr; } }
+.stat-facts .fact {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+  width: 100%; text-align: left;
+}
+/* §1: клікабельний факт (напр. «Найдорожчий день ›» — розкриває операції того дня) */
+.fact.fact-click { cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .fact.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); } }
+.fact.fact-click.open { border-color: var(--accent); }
+.fact.fact-click:disabled { cursor: default; opacity: 0.65; }
+.stat-facts .fact-label-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.stat-facts .fact-label { font-size: 12px; color: var(--muted); }
+/* §1: без від'ємних side-margin — інакше іконка тулиться до правого краю картки (без падінгу) */
+.stat-facts .fact-label-row .info-tip { width: 17px; height: 17px; margin: -3px 0; flex-shrink: 0; }
+.stat-facts .fact-val { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 7px; min-width: 0; }
+.stat-facts .fact-val.pos { color: var(--pos); }
+.stat-facts .fact-val.neg { color: var(--neg); }
+.stat-facts .fact-cat { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-facts .fact-cat .d { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.catbar-link { text-decoration: none; color: inherit; border-radius: 8px; padding: 4px; margin: -4px; transition: background 0.12s; }
+.catbar-link:hover { background: var(--surface-2); }
+
+/* глибша аналітика (F1) */
+.deep-card { padding: 16px; }
+.deep-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+/* §1 heat-map витрат за числом місяця */
+.dom-heat { display: grid; grid-template-columns: repeat(auto-fill, minmax(30px, 1fr)); gap: 5px; }
+.dom-cell { aspect-ratio: 1; border-radius: 7px; display: grid; place-items: center; border: 1px solid var(--line); cursor: pointer; padding: 0; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
+.dom-cell:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); }
+.dom-cell.open { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.dom-cell:disabled { cursor: default; }
+.dom-num { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.wd-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
+.wd-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; border: none; background: none; cursor: pointer; padding: 0; border-radius: 8px; transition: background 0.12s; }
+.wd-col:hover { background: var(--surface-2); }
+.wd-col.open .wd-lbl { color: var(--accent); font-weight: 600; }
+.wd-drill { margin-top: 12px; }
+.wd-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+/* Стовпчик росте scaleY від низу — height анімує layout. */
+.wd-bar { width: 100%; height: 100%; border-radius: 6px 6px 0 0;
+  transform-origin: bottom center; transition: transform var(--dur-3, .3s) var(--ease-out, ease); }
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
+
+/* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
+   `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
+   як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
+/* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
+
+@media (max-width: 720px) {
+  .hb-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) { .wd-bar { transition: none; } }
+.wd-lbl { font-size: 11px; color: var(--muted); }
+.deep-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 14px 0 0; }
+.deep-desc b { color: var(--ink); }
+/* Сегментований бар частки (Будні/Вихідні, Разові/Регулярні) — ЄДИНЕ визначення
+   (раніше було два конфліктні `.split-bar`). Сегменти заповнюють 100%; surface-2 —
+   тло на випадок неповної суми. */
+.split-bar { display: flex; height: 26px; border-radius: 8px; overflow: hidden; background: var(--surface-2); margin-bottom: 12px; }
+.split-bar > span { display: block; height: 100%; }
+.split-seg { display: grid; place-items: center; color: #fff; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 28px; }
+.split-legend { display: flex; flex-direction: column; gap: 6px; font-size: 12.5px; color: var(--ink-2); }
+.split-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.split-legend .d { width: 9px; height: 9px; border-radius: 50%; }
+/* клікабельний бар категорії (drill-down) */
+.catbar-btn { position: relative; width: 100%; border: none; background: none; cursor: pointer; border-radius: 8px; padding: 6px 24px 6px 8px; margin: -1px 0; text-align: left; transition: background 0.12s; }
+.catbar-btn:hover { background: var(--surface-2); }
+.catbar-btn.open { background: var(--surface-2); }
+/* каретка-індикатор «можна розкрити» — обертається у відкритому стані */
+.catbar-btn::after, .mrow-btn::after {
+  content: ""; position: absolute; top: 50%; right: 8px;
+  width: 6px; height: 6px; border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted);
+  transform: translateY(-70%) rotate(45deg); transition: transform 0.16s, border-color 0.16s; opacity: 0.65;
+}
+.catbar-btn:hover::after, .mrow-btn:hover::after { opacity: 1; }
+.catbar-btn.open::after, .mrow-btn.open::after { transform: translateY(-30%) rotate(-135deg); border-color: var(--accent); opacity: 1; }
+.catbar-btn:disabled { cursor: default; }
+.catbar-btn:disabled::after { display: none; }
+.cat-secondary { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--line-strong); }
+/* Виділений callout фічі «AI реальна категорія переказів» (§S2) */
+.cat-ai-callout {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
+  padding: 12px 14px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  border: 1px solid var(--accent-soft);
+}
+:root[data-theme="dark"] .cat-ai-callout { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cat-ai-callout { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); } }
+.cat-ai-body { min-width: 0; flex: 1; }
+.cat-ai-title { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
+.cat-ai-title svg { color: var(--accent); flex-shrink: 0; }
+.cat-ai-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+.cat-ai-btn { white-space: nowrap; flex-shrink: 0; }
+/* §1: «голий» .card, що розкривається під KPI/фактом (embedded SliceDrillPanel) — .card сам
+   по собі без падінгу, тож без цього класу контент прилипає впритул до країв картки. */
+.drill-open-card { padding: 14px 16px 16px; }
+/* панель деталізації категорії — виділена як вкладений блок, щоб розкриття було помітним */
+.cat-drill {
+  display: flex; flex-direction: column; gap: 14px;
+  padding: 14px 14px 12px 18px; margin: 4px 0 8px;
+  background: var(--surface-2); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+.cat-drill-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cat-drill-grid.single { grid-template-columns: 1fr; }
+@media (max-width: 560px) { .cat-drill-grid { grid-template-columns: 1fr; } }
+.cat-drill-block { display: flex; flex-direction: column; gap: 6px; }
+/* підкатегорії/топ-мерчантів — власна панель у дрилі, щоб не зливались із фоном */
+.cat-drill-panel {
+  display: flex; flex-direction: column; gap: 7px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 13px 12px;
+}
+.cat-drill-panel-h { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 1px; }
+/* §R2-ST5: список операцій зрізу */
+.cat-drill-txs { border-top: 1px solid var(--line); padding-top: 10px; }
+.drill-tx-list { display: flex; flex-direction: column; }
+.drill-tx {
+  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px;
+  padding: 7px 8px; font-size: 12.5px; border-radius: 8px; color: inherit; text-decoration: none;
+}
+.drill-tx:hover { background: var(--surface-2); }
+.drill-tx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drill-tx-date { color: var(--muted); font-size: 11.5px; }
+.drill-tx-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); }
+.drill-row { display: grid; grid-template-columns: 1fr 50px 72px; align-items: center; gap: 8px; font-size: 12.5px; }
+.drill-name { display: inline-flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drill-name .d { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.drill-track { height: 5px; border-radius: 999px; background: var(--surface); overflow: hidden; }
+.drill-track span { display: block; height: 100%; border-radius: 999px; }
+.drill-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); white-space: nowrap; }
+
+/* категорії — горизонтальні бари (Finexa R3) */
+.catbars { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; }
+.catbar { display: flex; align-items: center; gap: 12px; }
+.catbar .cb-name { width: 150px; display: flex; align-items: center; gap: 8px; font-size: 13.5px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.catbar .cb-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.catbar .cb-track { display: block; flex: 1; height: 10px; border-radius: 999px; background: var(--surface-2); overflow: hidden; min-width: 40px; }
+.catbar .cb-fill { display: block; height: 100%; border-radius: 999px; min-width: 4px; }
+/* `flex-shrink: 0` — сума НІКОЛИ не переносить розряди на другий рядок: без нього у вузькому
+   контейнері колонка стискалась нижче своїх 92px і «2 295 ₴» ламалось надвоє. Зрізана або
+   переламана сума виглядає як інше число — те саме правило, що для ширини осі Y на графіках. */
+.catbar .cb-val { width: 92px; flex-shrink: 0; white-space: nowrap; text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; }
+/* Спарклайн у рядках списків — фіксована ширина, ховаємо на вузьких (щоб не тіснити суму). */
+.spark { flex-shrink: 0; display: block; }
+@media (max-width: 640px) { .spark { display: none; } }
+/* §1: min-width, не фіксована — дельта-пігулка (+4862% буває в репортах) не вміщається
+   у 40px і вилазила за межі картки; flex-shrink:0 не дає їй стиснутись/накластись. */
+.catbar .cb-pct { min-width: 40px; flex-shrink: 0; text-align: right; color: var(--muted); font-size: 12.5px; }
+@media (max-width: 520px) { .catbar .cb-name { width: 110px; } .catbar .cb-val { width: 74px; } }
+
+/* топ-мерчанти з лого */
+.mrows { display: flex; flex-direction: column; padding: 6px 14px; }
+.mrow { display: flex; align-items: center; gap: 12px; padding: 10px 6px; }
+.mrow + .mrow { border-top: 1px solid var(--line); }
+.mrow .m-body { flex: 1; min-width: 0; }
+.mrow .m-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mrow .m-track { height: 6px; border-radius: 999px; background: var(--surface-2); margin-top: 6px; overflow: hidden; }
+.mrow .m-fill { height: 100%; border-radius: 999px; background: var(--accent); }
+.mrow .m-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13.5px; white-space: nowrap; }
+.mrow .m-sub { font-size: 12px; color: var(--muted); }
+/* §R2-ST5(б): рядок-мерчант як кнопка (розкриває операції) */
+.mrows > div + div { border-top: 1px solid var(--line); }
+.mrow-btn { position: relative; width: 100%; border: none; background: none; cursor: pointer; text-align: left; border-radius: 8px; padding-right: 24px; transition: background 0.12s; }
+.mrow-btn:hover { background: var(--surface-2); }
+.mrow-btn.open { background: var(--surface-2); }
+/* §P3: рядок-лінк на сторінку мерчанта (стрілка-вправо замість каре-тогла) */
+.mrow-link { position: relative; width: 100%; border-radius: 8px; padding-right: 26px; text-decoration: none; color: inherit; transition: background var(--dur-1) var(--ease-out); }
+.mrow-link:hover { background: var(--surface-2); }
+.mrow-link::after {
+  content: ""; position: absolute; right: 12px; top: 50%; width: 6px; height: 6px;
+  border-right: 1.6px solid var(--muted); border-top: 1.6px solid var(--muted);
+  transform: translateY(-50%) rotate(45deg); opacity: 0; transition: opacity var(--dur-1) var(--ease-out);
+}
+.mrow-link:hover::after { opacity: 1; border-color: var(--accent); }
+.drill-open-link { margin-left: auto; font-size: 11.5px; color: var(--accent); text-decoration: none; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.drill-open-link:hover { text-decoration: underline; }
+.cat-drill-txs .label { display: flex; align-items: center; gap: 8px; }
+
+/* ===== ADVISOR (runway + gauge) ========================================== */
+/* GRID, not flex (fixed 2026-07-26 — B5). The card has three children: gauge, KPI strip and the
+   runway comment. The comment already carried `grid-column: 1 / -1`, but the card was `flex`,
+   where that declaration means nothing — so the comment stayed a third flex sibling, took width
+   from the KPI strip, squeezed it to its `min-width`, and `auto-fit minmax(148px)` then resolved
+   to a SINGLE column: five metrics stacked down the left with half the card empty. Two columns
+   with an explicit full-width second row say the intended layout instead of hoping flex-wrap
+   lands on it. (Same failure as `.advisor-grid.single` — a layout declaration with no container
+   to honour it.) */
+.runway-card {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px 28px; align-items: center; padding: 20px 22px;
+}
+/* Метрики — щільна авто-fit KPI-стрічка (заповнює ширину, без порожнеч праворуч на десктопі). */
+.runway-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 16px 24px; min-width: 0; }
+.runway-metric .label { margin-bottom: 3px; }
+.runway-val { font-size: 22px; }
+.runway-comment { grid-column: 1 / -1; margin: 6px 0 0; font-size: 14px; line-height: 1.55; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-2); }
+/* Narrow: the gauge stops being a column of its own and sits above the metrics. */
+@media (max-width: 640px) {
+  .runway-card { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .runway-metrics { width: 100%; }
+}
+.gauge { position: relative; flex-shrink: 0; line-height: 0; }
+.gauge-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.gauge-val { font-size: 30px; line-height: 1; }
+
+/* §R6 Advisor — 2 колонки: головна (поради, ширша для читабельності) + рейл (розбивка/огляд/історія) */
+.advisor-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+.advisor-grid > * { min-width: 0; }
+.advisor-rail { position: sticky; top: 84px; }
+@media (max-width: 980px) { .advisor-grid { grid-template-columns: 1fr; } .advisor-rail { position: static; } }
+
+/* Таб «Стан фінансів»: індекс на всю ширину (gauge+складові), під ним Факти | Корпус знань. */
+.advisor-state { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; margin-top: 18px; }
+.advisor-state > * { min-width: 0; }
+/* Індекс здоров'я, календар потоку і НЕТВОРТ — на всю ширину: це графіки з віссю часу,
+   у півколонці підписи місяців зливались, а нетворт узагалі стояв на 50% (фідбек користувача). */
+.advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card { grid-column: 1 / -1; }
+@media (max-width: 760px) { .advisor-state { grid-template-columns: 1fr; } }
+
+/* §SPLIT: редактор поділу транзакції на категорії */
+.split-card { padding: 16px 18px; }
+.split-empty { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+.split-empty-t { font-size: var(--fs-md); font-weight: 500; }
+.split-empty-s { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top: 2px; }
+.split-view { display: flex; flex-direction: column; }
+.split-vrow { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.split-vrow:first-child { border-top: none; }
+.split-cat { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-md); min-width: 0; }
+.split-cat .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.split-amt { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.split-rows { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
+.split-row { display: grid; grid-template-columns: 1fr 116px auto; gap: 8px; align-items: center; }
+.split-amt-in { position: relative; }
+.split-amt-in input { width: 100%; padding: 8px 24px 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); font: inherit; font-variant-numeric: tabular-nums; text-align: right; }
+.split-amt-in input:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.split-sign { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: var(--fs-sm); pointer-events: none; }
+/* «решта» — досипати незакритий залишок у цей рядок (3+ частин, де автодоведення неоднозначне) */
+.split-rest { position: absolute; right: 4px; bottom: -17px; padding: 0 4px; border: none; background: none; color: var(--accent); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+.split-rest:hover { text-decoration: underline; }
+.split-rows:has(.split-rest) { gap: 22px; }
+
+/* Повзунок пропорції (лише для двох частин): рухає одну межу, тож сума сходиться завжди. */
+.split-slider { margin: 2px 0 12px; }
+.split-slider input[type="range"] { width: 100%; accent-color: var(--accent); }
+.split-slider-marks { display: flex; gap: 6px; margin-top: 4px; }
+.split-slider-marks button { padding: 3px 9px; border-radius: var(--radius-pill); border: 1px solid var(--line); background: var(--surface); color: var(--muted); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+.split-slider-marks button:hover { border-color: var(--muted); color: var(--ink); }
+.split-remainder { margin: 10px 0; font-size: var(--fs-sm); color: var(--neg); font-variant-numeric: tabular-nums; }
+.split-remainder.ok { color: var(--pos); }
+/* «ще нічого не введено» — не помилка й не успіх; зелений тут читався б як «готово». */
+.split-remainder.idle { color: var(--muted); }
+.split-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+
+/* §COMPENSATION: «тобі компенсували» — своя частина vs повернене. Ділить сумку картки
+   `.split-card`, бо це той самий жанр: «ця операція не така проста, як виглядає». */
+.rb-summary { display: flex; gap: 28px; margin-bottom: 10px; }
+.rb-fig { display: flex; flex-direction: column; gap: 2px; }
+.rb-mine, .rb-back { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; }
+.rb-back { color: var(--pos); }
+.rb-bar { height: 8px; border-radius: var(--radius-pill); background: color-mix(in srgb, var(--pos) 28%, var(--surface-2)); overflow: hidden; }
+.rb-bar-mine { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--ink); }
+.rb-cands { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 4px; }
+.rb-cand { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: var(--fs-sm); }
+.rb-cand:hover { background: var(--surface-2); }
+.rb-cand.on { border-color: var(--accent); background: var(--accent-soft); }
+.rb-cand-pick { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.rb-cand-pick > input { flex: none; }
+/* Скільки взяти саме з цього надходження (v2: одне надходження — на кілька витрат) */
+.rb-take { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px 26px; }
+.rb-take .split-amt-in { width: 120px; }
+.rb-take .split-amt-in input { padding: 6px 22px 6px 8px; font-size: var(--fs-sm); }
+.rb-take-err { font-size: var(--fs-xs); color: var(--neg); }
+/* Назва+дата однією колонкою: раніше вони були окремими флекс-дітьми, і коли мерчант
+   порожній (типово для вхідного P2P) рядок лишався з самим чекбоксом посеред пустоти. */
+.rb-cand-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.rb-cand-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rb-cand-sub { font-size: var(--fs-xs); color: var(--muted); }
+.rb-cand-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--pos); flex-shrink: 0; }
+.rb-modes { display: flex; gap: 4px; margin: 4px 0 12px; padding: 3px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.rb-mode { flex: 1; padding: 6px 10px; border: none; border-radius: var(--radius-xs); background: none; color: var(--muted); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
+.rb-mode.on { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: var(--shadow-sm); }
+.rb-preview { margin: 12px 0 2px; }
+.rb-preview .split-remainder { margin-bottom: 0; }
+
+/* Інлайн-помилка завантаження (ErrorNote) — ставиться замість мовчазної порожнечі. */
+.err-note { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 16px; padding: 11px 13px;
+  border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.45; color: var(--ink);
+  background: color-mix(in srgb, var(--neg) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--neg) 26%, transparent); }
+.err-note > svg { color: var(--neg); flex-shrink: 0; margin-top: 1px; }
+.err-note-body { min-width: 0; flex: 1; }
+.err-note-title { font-weight: 500; }
+.err-note-msg { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; overflow-wrap: anywhere; }
+.err-note > .btn { flex-shrink: 0; align-self: center; }
+
+/* Cashflow-календар */
+.cf-card { padding: 18px 20px; }
+.cf-nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.cf-month { font-size: var(--fs-md); font-weight: 500; min-width: 116px; text-align: center; text-transform: capitalize; }
+.cf-warn { margin: 4px 0 12px; padding: 9px 12px; border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.4;
+  background: color-mix(in srgb, var(--neg) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--neg) 28%, transparent); color: var(--ink); }
+.cf-wd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+.cf-wd span { text-align: center; font-size: var(--fs-xs); color: var(--muted); }
+.cf-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cf-day { position: relative; min-height: 72px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 6px;
+  display: flex; flex-direction: column; gap: 4px; text-align: left; }
+.cf-day.empty { border: none; background: none; }
+.cf-day.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.cf-day.danger { border-color: color-mix(in srgb, var(--neg) 55%, transparent); }
+/* День зі списаннями — інтерактивний (button): відкриває поповер із повним списком. */
+.cf-day.has { cursor: pointer; font: inherit; color: inherit; }
+.cf-day.has:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .cf-day.has:hover { border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
+}
+.cf-day.open { z-index: 3; } /* поповер має лягати поверх сусідніх днів */
+.cf-dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.cf-dnum { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.cf-damt { font-size: var(--fs-xs); font-weight: 600; color: var(--neg); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Списання прямо в клітинці — щоб «що це за платіж» читалось без наведення. */
+.cf-items { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cf-item { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; font-size: 10.5px; line-height: 1.3; }
+.cf-item-name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cf-item-amt { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cf-item.more { color: var(--muted); }
+
+/* Поповер дня — повний список списань + проєкція подушки на кінець дня. */
+.cf-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 210px; max-width: 280px;
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; cursor: default;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card); font-size: var(--fs-xs); text-align: left; }
+.cf-pop.left { left: auto; right: 0; } /* біля правого краю тижня — розкриваємо вліво */
+.cf-pop-head { font-weight: 600; color: var(--ink); text-transform: capitalize; }
+.cf-pop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cf-pop-name { color: var(--ink-2); overflow-wrap: anywhere; }
+.cf-pop-amt { color: var(--neg); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cf-pop-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.cf-pop-orig { color: var(--muted); }
+.cf-pop-bal { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cf-pop-bal.neg { color: var(--neg); }
+
+.cf-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 12px; font-size: var(--fs-sm); }
+/* Вузькі екрани: назви не влазять — лишаємо число дня + суму, деталі в поповері. */
+@media (max-width: 720px) {
+  .cf-day { min-height: 50px; padding: 4px; }
+  .cf-items { display: none; }
+  .cf-damt { font-size: 10px; }
+  .cf-pop { min-width: 180px; }
+}
+/* Шапка календаря на телефоні — У ДВА РЯДКИ.
+   Було: `.ai-head` — один flex-рядок, де `.cf-nav` забирає ~190px (дві кнопки + назва місяця з
+   `min-width: 116px`), а текстовий блок стискається до того, що лишилось. На 390px екрані це
+   ~120px: заголовок ламався на «Cashflow-» / «календар», підзаголовок — на чотири рядки, і
+   шапка ставала вищою за перший тиждень сітки. Тому: заголовок бере весь рядок, навігація
+   спускається під нього окремою смугою (там їй місця вистачає з запасом).
+   ⚠️ Скоуп саме `.cf-card`: `.ai-head` — спільний патерн AI-карток, і в них шапка не має нав-групи. */
+@media (max-width: 620px) {
+  .cf-card { padding: 14px; }
+  .cf-card .ai-head { flex-wrap: wrap; row-gap: 10px; }
+  /* `:not(.cf-nav)` — саме текстовий блок: навігація теж `div`, і без винятку вона б теж
+     поїхала в другий рядок на всю ширину. */
+  .cf-card .ai-head > div:not(.cf-nav) { flex: 1 1 100%; order: 2; }
+  .cf-card .ai-badge { order: 1; }
+  .cf-card .cf-nav { order: 1; }
+  /* Число дня й сума в один рядок не влазять на вузьких клітинках (390px ÷ 7 ≈ 47px): сума
+     переносилась під число й розпирала клітинку. Стовпчик — свідомо, а не як побічний ефект. */
+  .cf-dhead { flex-direction: column; align-items: flex-start; gap: 1px; }
+  .cf-damt { text-align: left; }
+  .cf-wd, .cf-grid { gap: 4px; }
+  .cf-day { padding: 3px 4px; }
+  /* Підсумок теж у стовпчик: два числа поруч на 390px тиснуться до нечитабельного. */
+  .cf-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
+}
+
+/* §P4: What-if симулятор */
+.whatif-body { display: grid; grid-template-columns: minmax(0, 1fr) 264px; gap: 22px; align-items: start; margin-top: 6px; }
+/* Одна колонка — і РЕЗУЛЬТАТ НАГОРІ. Інакше повзунки штовхають його під вісім рядків: рухаєш
+   і не бачиш, що змінилось, тобто симулятор перестає симулювати. Заразом зі стрічки підказки
+   прибрано стрілку «↑» — напрямок тепер залежить від ширини екрана, а текст один. */
+@media (max-width: 720px) {
+  .whatif-body { grid-template-columns: 1fr; }
+  .whatif-result { order: -1; }
+}
+/* Повзунки — auto-fit колонки, НЕ один стовпчик (трек тягнувся через увесь екран, а
+   лейбл/сума/−N% розліталися по краях — та сама «порожнеча в центрі рядка», що й §11.3).
+   Мінімум 320px, а не 240: на 240 виходило 3-4 колонки й довгі назви різались
+   («Відсотки по кредиту та с:»). 320 дає 2 колонки на типовому десктопі — назви влазять,
+   трек лишається достатньо довгим, щоб у нього можна було цілитись. */
+.whatif-sliders { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px 28px; align-content: start; }
+/* Тісно ВСЕРЕДИНІ рядка, вільніше МІЖ рядками (gap вище) — інакше пари «назва/повзунок»
+   зливаються в суцільну сітку фрагментів. */
+.whatif-row { display: flex; flex-direction: column; gap: 5px; }
+.whatif-row-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+.whatif-cat { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.whatif-cat .d { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+.whatif-usual { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.whatif-slider-line { display: flex; align-items: center; gap: 10px; }
+.whatif-slider-line .rng { flex: 1; }
+/* Ширина під найдовше «+100%», щоб трек не стрибав при перетягуванні. */
+.whatif-cut { width: 48px; text-align: right; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Зрізати витрату — краще (pos), додати — гірше (neg): та сама семантика, що в дельті runway. */
+.whatif-cut.cut { color: var(--pos); font-weight: 600; }
+.whatif-cut.raise { color: var(--neg); font-weight: 600; }
+.whatif-result { display: flex; flex-direction: column; gap: 11px; padding: 16px; border-radius: var(--radius); background: var(--surface-2); }
+.whatif-runway-big { display: flex; flex-direction: column; gap: 2px; }
+.wr-label { font-size: 12px; color: var(--muted); }
+.wr-nums { display: flex; align-items: baseline; gap: 7px; }
+.wr-base { font-size: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wr-arrow { color: var(--muted); }
+.wr-new { font-size: 26px; letter-spacing: -0.02em; }
+.wr-new.pos { color: var(--pos); }
+.wr-unit { font-size: 13px; color: var(--muted); }
+.whatif-delta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.whatif-delta.pos { color: var(--pos); }
+.whatif-stat { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; border-top: 1px solid var(--line); padding-top: 9px; }
+.whatif-stat span { color: var(--muted); }
+.whatif-stat b { font-variant-numeric: tabular-nums; }
+.advisor-ask { position: sticky; top: 78px; }
+@media (max-width: 900px) { .advisor-ask { position: static; } }
+.advisor-ask-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.advisor-ask-log { display: flex; flex-direction: column; gap: 10px; padding: 16px; min-height: 220px; max-height: 460px; overflow-y: auto; }
+.advisor-ask-log .chat-msg { max-width: 90%; animation: chat-in 0.22s ease; }
+.advisor-ask-empty { color: var(--muted); font-size: 13.5px; display: flex; flex-direction: column; gap: 12px; margin: auto 0; }
+.advisor-ask-empty p { margin: 0; }
+.advisor-ask-empty .chat-suggest { justify-content: flex-start; }
+.advisor-ask-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--surface); }
+.advisor-ask-input input { flex: 1; }
+.advisor-ask-more { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--muted); text-decoration: none; }
+.advisor-ask-more:hover { color: var(--accent); }
+
+.advice-card { display: flex; gap: 14px; padding: 16px 18px; align-items: flex-start; }
+.advice-num { width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 600; font-size: 13px; flex-shrink: 0; }
+.advice-title { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
+.advice-detail { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
+
+/* чат-порадник */
+.chat-log { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding: 2px; }
+.chat-msg { max-width: 86%; padding: 9px 13px; border-radius: 15px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.chat-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.chat-msg.assistant { align-self: flex-start; background: var(--surface-2); color: var(--ink); border-bottom-left-radius: 5px; }
+.chat-typing { color: var(--muted); letter-spacing: 2px; }
+
+/* dedicated chat page — рейл розмов + основна колонка.
+   Фіксована висота = в'юпорт мінус topbar+паддинги контенту → сам БЛОК чату скролиться
+   всередині (лог + рейл), сторінка НЕ росте. */
+.chat-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 16px; align-items: stretch; height: calc(100dvh - 140px); }
+.chat-page { display: flex; flex-direction: column; min-height: 0; }
+.chat-head { align-items: flex-start; flex-shrink: 0; }
+.chat-rail-toggle { display: none; }
+
+/* Рейл розмов (desktop: власний скрол, лишається на місці; mobile: drawer) */
+.chat-rail { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.chat-new { width: 100%; justify-content: center; }
+.chat-rail-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; padding-right: 2px; }
+.chat-rail-item {
+  display: flex; align-items: center; gap: 6px; padding: 9px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; color: var(--ink-2); font-size: 13px; transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-rail-item:hover { background: var(--surface-2); }
+.chat-rail-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.cri-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cri-del {
+  flex-shrink: 0; width: 20px; height: 20px; border: none; background: none; color: var(--muted);
+  font-size: 17px; line-height: 1; border-radius: var(--radius-xs); cursor: pointer; opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+.chat-rail-item:hover .cri-del, .chat-rail-item.active .cri-del { opacity: 1; }
+.cri-del:hover { background: var(--surface); color: var(--neg); }
+.chat-rail-scrim { display: none; }
+
+.chat-shell {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  overflow: hidden;
+}
+.chat-log2 { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px 18px 22px; min-height: 0; scroll-padding-top: 12px; }
+.chat-msg-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 82%; animation: chat-in 0.22s ease; }
+.chat-msg-wrap.user { align-self: flex-end; align-items: flex-end; }
+.chat-msg-wrap.assistant { align-self: flex-start; align-items: flex-start; }
+.chat-msg-wrap .chat-msg { max-width: 100%; }
+@keyframes chat-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.chat-msg-actions { display: flex; gap: 4px; padding-left: 4px; }
+.chat-msg-actions button {
+  display: inline-flex; align-items: center; gap: 4px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 11.5px; padding: 3px 6px; border-radius: var(--radius-xs);
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-msg-actions button:hover { background: var(--surface-2); color: var(--ink-2); }
+.chat-log2 .chat-typing { display: inline-flex; gap: 4px; align-items: center; }
+.chat-log2 .chat-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); display: inline-block; animation: chat-dot 1s infinite ease-in-out; }
+.chat-log2 .chat-typing span:nth-child(2) { animation-delay: 0.15s; }
+.chat-log2 .chat-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-dot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+/* Курсора в кінці відповіді, що пишеться, тут свідомо НЕМА (прибрано 2026-08-07 за скаргою).
+   Ідея була позначити третій стан («текст іде далі»), але сам текст, що прибуває, і є цією
+   ознакою — а миготлива смужка стрибала разом із перерозміткою markdown і тягнула око на себе
+   рівно там, де людина читає. Стан «ще нічого не сказано» лишається за крапками (.chat-typing). */
+.chat-retry { align-self: flex-start; margin-top: 2px; font-size: 12.5px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 2px; }
+.chat-retry:hover { text-decoration: underline; }
+.chat-empty { margin: auto; text-align: center; color: var(--muted); max-width: 460px; }
+.chat-empty p { margin-bottom: 14px; font-size: 14px; }
+.chat-suggest { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chat-chip {
+  padding: 9px 14px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--ink-2); font-size: 13px; cursor: pointer; transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.chat-input { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surface); align-items: flex-end; }
+.chat-input textarea {
+  flex: 1; resize: none; font: inherit; line-height: 1.5; min-height: 42px; max-height: 160px; overflow-y: hidden;
+  padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-2); color: var(--ink); box-sizing: border-box;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+.chat-input textarea::placeholder { color: var(--muted); }
+.chat-input textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+/* Тонкий скролбар у полі вводу (лише коли текст сягає максимуму) */
+.chat-input textarea { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.chat-input textarea::-webkit-scrollbar { width: 8px; }
+.chat-input textarea::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid var(--surface); }
+.chat-input textarea::-webkit-scrollbar-track { background: transparent; }
+.chat-send { padding: 0; width: 42px; height: 42px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; border-radius: var(--radius); }
+
+/* Мобілка: рейл розмов — off-canvas шухляда */
+@media (max-width: 860px) {
+  .chat-layout { grid-template-columns: 1fr; height: calc(100dvh - 176px); }
+  .chat-rail-toggle {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 38px; height: 38px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink-2); cursor: pointer; margin-right: 2px;
+  }
+  .chat-head { align-items: center; }
+  .chat-rail {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 268px; z-index: 60;
+    background: var(--surface); border-right: 1px solid var(--line-strong); padding: 16px;
+    transform: translateX(-100%); transition: transform var(--dur-2) var(--ease-out);
+    box-shadow: var(--shadow-card);
+  }
+  .chat-layout.rail-open .chat-rail { transform: translateX(0); }
+  .chat-layout.rail-open .chat-rail-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(15, 22, 32, 0.4); }
+}
+
+/* §P3: сторінка мерчанта */
+.merchant-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.merchant-stat { padding: 16px 18px; display: flex; flex-direction: column; gap: 4px; }
+.merchant-stat-v { font-size: 22px; letter-spacing: -0.02em; }
+.merchant-stat-v .cur { font-size: 14px; color: var(--muted); margin-left: 2px; }
+.merchant-stat-sub { font-size: 12.5px; color: var(--muted); }
+.merchant-link { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--line-strong); transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out); }
+.merchant-link:hover { color: var(--accent); border-color: var(--accent); }
+
+/* advisor → chat CTA */
+.chat-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; text-decoration: none; color: inherit; transition: border-color 0.12s, background 0.12s; }
+.chat-cta:hover { border-color: var(--accent); background: var(--accent-soft); }
+.chat-cta-title { font-size: 15px; font-weight: 600; }
+.chat-cta-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+.chat-cta-arrow { font-size: 22px; color: var(--accent); flex-shrink: 0; }
+
+/* вартість AI-виклику */
+.usage-cost { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* ===== AI BUDGET PLANNER ================================================= */
+.bp-list { display: flex; flex-direction: column; gap: 4px; }
+.bp-item { padding: 10px 4px; border-bottom: 1px solid var(--line); }
+.bp-item:last-child { border-bottom: none; }
+.bp-item.done { opacity: 0.6; }
+.bp-item-main { display: flex; align-items: center; gap: 10px; }
+.bp-name { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bp-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.bp-figs { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
+.bp-avg { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.bp-arrow { color: var(--muted); font-size: 13px; }
+.bp-sug { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 650; color: var(--ink); white-space: nowrap; }
+.bp-accept { padding: 5px 12px; font-size: 13px; flex-shrink: 0; }
+.bp-reason { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin-top: 5px; padding-left: 17px; }
+@media (max-width: 520px) {
+  .bp-item-main { flex-wrap: wrap; }
+  .bp-name { flex-basis: 100%; }
+  .bp-figs { flex: 1; }
+}
+
+/* §3 бюджет-діалог (чат) */
+.bch-starters { display: flex; flex-wrap: wrap; gap: 7px; }
+.bch-starter { border: 1px solid var(--line-strong); background: var(--surface); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+.bch-starter:hover { border-color: var(--accent); color: var(--accent); }
+.bch-msgs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; max-height: 340px; overflow-y: auto; }
+.bch-msg { max-width: 88%; padding: 9px 13px; border-radius: 14px; font-size: 13.5px; line-height: 1.5; }
+.bch-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.bch-msg.assistant { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 4px; }
+.bch-proposals { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; background: var(--surface-2); }
+.bch-prop { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
+.bch-prop:first-of-type { border-top: none; }
+.bch-prop-name { font-size: 13.5px; }
+.bch-prop-name b { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.bch-prop-reason { font-size: 12px; color: var(--muted); line-height: 1.4; margin-top: 2px; }
+/* §1: рамка-роздільник зверху — інакше інпут «висить» у порожнечі без візуального зв'язку
+   з підказкою/чипами чи історією повідомлень вище (нема жодного розділювача). */
+.bch-input { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.bch-input input { flex: 1; }
+
+/* §3 бюджет-конверти: картки з прогрес-баром (ліміт/факт/залишок/стан) */
+.budget-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px; }
+/* §11.1: більше повітря в бюджет-картках */
+.budget-card {
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  padding: 18px 18px 16px; display: flex; flex-direction: column; gap: 13px;
+}
+.budget-card.over { border-color: color-mix(in srgb, var(--neg) 45%, var(--line)); }
+.budget-card.none { opacity: 0.72; }
+.budget-card.none:hover { opacity: 1; }
+.bc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bc-name { display: inline-flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 500; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Перенесений залишок (rollover): бейдж у шапці конверта — він піднімає ліміт місяця. */
+.bc-carry { flex-shrink: 0; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap;
+  color: var(--c-teal, #2f7d6b); background: color-mix(in srgb, var(--c-teal, #2f7d6b) 12%, transparent);
+  border-radius: var(--radius-pill, 999px); padding: 2px 8px; }
+.bc-name .d { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.bc-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; color: var(--muted); }
+.bc-pct.warn { color: var(--warn, #c9871a); }
+.bc-pct.over { color: var(--neg); }
+.bc-set { border: 1px dashed var(--line-strong); background: none; color: var(--muted); font-size: 12px; border-radius: 8px; padding: 3px 9px; cursor: pointer; }
+.bc-set:hover { color: var(--ink); border-color: var(--muted); }
+.bc-bar { position: relative; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+/* Заливка через transform:scaleX, НЕ width — width анімує layout (thrash), scaleX іде на GPU. */
+.bc-bar span { display: block; width: 100%; height: 100%; border-radius: 999px;
+  transform-origin: left center; transition: transform var(--dur-2, 0.25s) var(--ease-out, ease); }
+/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
+   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
+   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
+.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
+.wd-bar {
+  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
+  background: var(--accent); opacity: .85; transition: opacity .15s;
+}
+/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+
+@media (max-width: 480px) {
+  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
+     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
+  .wd-val { display: none; }
+  .wd-bar-wrap { height: 72px; }
+}
+
+/* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
+   `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
+   як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
+/* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
+
+@media (max-width: 720px) {
+  .hb-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) { .bc-bar span { transition: none; } }
+/* Засічка базового ліміту — межа «свій місяць ∣ перенесене». */
+.bc-tick { position: absolute; top: -2px; bottom: -2px; width: 2px; border-radius: 1px;
+  background: var(--surface); opacity: 0.85; pointer-events: none; }
+.bc-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 12.5px; }
+.bc-spent { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.bc-limit { background: none; border: none; padding: 0; cursor: pointer; color: var(--muted); font-size: 12.5px; text-align: right; }
+.bc-limit:hover { color: var(--ink); }
+.bc-limit b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+.bc-limit b.neg { color: var(--neg); }
+.bc-of { color: var(--muted); }
+.bc-edit input { width: 108px; text-align: right; padding: 5px 8px; font-size: 13px; }
+.bc-roll { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); cursor: pointer; margin-top: 2px; }
+.bc-roll input { width: 14px; height: 14px; accent-color: var(--accent); }
+.bc-roll b { font-family: var(--font-mono); color: var(--ink-2); }
+
+/* AI-модель перемикач у Налаштуваннях */
+.ai-model-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.ai-model-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ai-model-label { font-size: 13.5px; font-weight: 500; }
+.ai-model-hint { font-size: 11.5px; color: var(--muted); }
+
+/* §4 Safe-to-spend — «вільно до кінця місяця» */
+.sts-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+.sts-hero { display: flex; flex-direction: column; gap: 2px; }
+.sts-label { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.sts-num { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; color: var(--pos, #1f6e4c); line-height: 1.1; }
+.sts-card.neg .sts-num { color: var(--neg); }
+.sts-sub { font-size: 12px; color: var(--muted); }
+.sts-break { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.sts-line { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
+.sts-line b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
+.sts-line b.pos { color: var(--pos, #1f6e4c); }
+.sts-line b.neg { color: var(--neg); }
+.sts-line.total { padding-top: 6px; border-top: 1px dashed var(--line); font-weight: 600; color: var(--ink); }
+.sts-imp { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.sts-imp .lg { display: inline-flex; align-items: center; gap: 6px; }
+.sts-imp .lg .d { width: 9px; height: 9px; border-radius: 3px; }
+.sts-imp .lg b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+
+/* §2 Історія порад — компактні знімки runway/burn */
+.adv-hist-row { display: grid; grid-template-columns: 62px 1fr auto; gap: 10px; align-items: baseline; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+.adv-hist-row:last-child { border-bottom: none; }
+.adv-hist-date { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.adv-hist-sum { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adv-hist-nums { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.adv-hist-nums b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+/* `white-space: normal` без стелі розгортав КОЖНУ минулу пораду на повний абзац — сторінка
+   Порадника на телефоні перетворювалась на стіну старого тексту, у якій свіжу пораду не
+   знайти. Історія — це орієнтир, а не читання: три рядки + повний текст у `title`. */
+@media (max-width: 560px) {
+  .adv-hist-row { grid-template-columns: 1fr; gap: 2px; }
+  .adv-hist-sum {
+    white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+}
+.adv-hist-nums .cmp-delta { margin-left: 2px; }
+/* §+1: смуга «зміни від минулого разу» над порадами */
+.since-last { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
+.since-metric { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+
+/* §1b Топ-рухи категорій (зросли/впали vs минулий період) */
+.movers { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+@media (max-width: 560px) { .movers { grid-template-columns: 1fr; } }
+.mv-col { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
+.mv-head { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
+.mv-head.up { color: var(--neg); }
+.mv-head.down { color: var(--pos, #1f6e4c); }
+.mv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; }
+.mv-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mv-name .d { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
+.mv-delta { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+.mv-delta.up { color: var(--neg); }
+.mv-delta.down { color: var(--pos, #1f6e4c); }
+.mv-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
+
+/* §6 Вагомість — пікер (категорія/операція) + смуга частки у Статистиці */
+.imp-picker { display: flex; gap: 8px; flex-wrap: wrap; }
+.imp-opt { display: inline-flex; align-items: center; gap: 7px; padding: 7px 12px; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink-2); cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), background-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
+.imp-opt:hover { border-color: var(--muted); }
+.imp-opt .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.imp-opt.on { font-weight: 600; }
+.imp-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--surface-2); }
+.imp-bar span { display: block; height: 100%; }
+.imp-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; }
+.imp-legend .lg { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+.imp-legend .lg .d { width: 9px; height: 9px; border-radius: 3px; }
+.imp-legend .lg b { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+/* §E5 — збільшений блок Вагомості: вищий бар з підписами + картки-рівні */
+.imp-bar-lg { height: 26px; border-radius: 8px; }
+.imp-bar-lg span { display: flex; align-items: center; justify-content: center; }
+.imp-seg-lbl { font-size: 11.5px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+.imp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
+.imp-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-width: 0; text-align: left; font: inherit; cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
+@media (hover: hover) and (pointer: fine) { .imp-card.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); } }
+.imp-card.fact-click.open { border-color: var(--accent); }
+.imp-card:disabled { cursor: default; opacity: 0.6; }
+.imp-card-top { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+.imp-card-top .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.imp-card-amt { font-size: 18px; }
+.imp-card-pct { font-size: 11.5px; }
+@media (max-width: 560px) { .imp-cards { grid-template-columns: 1fr; } }
+
+/* §E1 — разові vs регулярні (бар — через спільний `.split-bar` вище) */
+.oneoff-list { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.oneoff-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items: center; padding: 6px 0; font-size: 13px; }
+.oneoff-row + .oneoff-row { border-top: 1px solid var(--line); }
+.oor-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.oor-cat { font-size: 12px; }
+.oor-date { font-size: 12px; }
+.oor-amt { font-weight: 600; white-space: nowrap; }
+
+/* §E3 — темп по категоріях */
+.pace-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 8px 4px; font-size: 13px; }
+.pace-row + .pace-row { border-top: 1px solid var(--line); }
+.pace-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pace-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+/* «разове» — нейтральний інфо-тег; teal (як one-off у split-барах), theme-aware через токен */
+.pace-tag { flex-shrink: 0; font-size: 10.5px; font-weight: 500; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-teal) 16%, transparent); color: var(--c-teal); }
+.pace-nums { white-space: nowrap; font-size: 12.5px; }
+/* Три колонки не вміщаються в телефон: назва обрізалась на «Дім і побут.», а бейдж «не щ…»
+   зрізало навпіл. Розкладаємо на два рядки — назва цілком, числа під нею. */
+@media (max-width: 620px) {
+  .pace-row { grid-template-columns: 1fr auto; gap: 4px 10px; }
+  .pace-name { grid-column: 1 / -1; white-space: normal; }
+  .pace-nums { justify-self: start; }
+}
+.num-mono { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+
+/* §E4 — дрейф цін / персональна інфляція */
+.drift-index { display: flex; align-items: baseline; gap: 10px; padding-bottom: 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.drift-index-val { font-size: 22px; }
+.drift-list { margin-top: 10px; }
+.drift-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 7px 0; font-size: 13px; }
+.drift-row + .drift-row { border-top: 1px solid var(--line); }
+.drift-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; text-transform: capitalize; }
+.drift-units { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+
+/* §5/§2 — цитата операції в тексті AI (клікабельний чип → /tx/:id) */
+.tx-cite {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; margin: 0 1px; vertical-align: baseline;
+  font-size: 10px; font-weight: 700; line-height: 1; text-decoration: none;
+  color: var(--accent); background: var(--accent-soft); border-radius: 5px;
+  transform: translateY(1px);
+}
+.tx-cite:hover { background: var(--accent); color: #fff; }
+
+/* §5 РЕПОРТИ — окрема сторінка (список карток + деталь) */
+.report-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.report-card {
+  position: relative;
+  display: flex; flex-direction: column; gap: 8px; padding: 15px 16px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+ text-decoration: none; color: inherit; transition: border-color .12s, transform .12s;
+}
+@media (hover: hover) and (pointer: fine) { .report-card:hover { border-color: var(--muted); transform: translateY(-1px); } }
+.rc-del {
+  position: absolute; top: 10px; right: 10px; display: grid; place-items: center;
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer; opacity: 0.5;
+  transition: opacity .12s, background .12s, color .12s;
+}
+.report-card:hover .rc-del, .rc-del:focus-visible { opacity: 1; }
+.rc-del:hover { background: var(--neg-soft, color-mix(in srgb, var(--neg) 14%, transparent)); color: var(--neg); }
+.rc-top { display: flex; align-items: center; gap: 8px; }
+.rc-badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
+.rc-badge.week { background: var(--accent-soft); color: var(--accent); }
+.rc-badge.month { background: color-mix(in srgb, var(--c-teal, #127c86) 16%, transparent); color: var(--c-teal, #127c86); }
+/* Кастомний діапазон — нейтральний бейдж: він не третій «ранг» поруч із тижнем і місяцем,
+   а просто «межі обрав користувач», тож акцентного кольору не заслуговує. */
+.rc-badge.custom { background: var(--surface-2); color: var(--ink-2); }
+
+/* Картка генерації репорту: пресети + власний діапазон дат. */
+.rep-presets { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.rep-custom { margin-top: var(--sp-4); padding-top: var(--sp-4); border-top: 1px solid var(--line); }
+.rep-custom .label { margin-bottom: var(--sp-2); }
+/* Діапазон дат у Репортах — ВЛАСНА смуга, а не переозначений `.filt-range` (той належить
+   вузькій панелі фільтрів і має `flex: 1` на полях). Кожне поле — самостійна пара «підпис +
+   ввід» фіксованої ширини, тож смуга однаково читається і в рядок, і перенесеною: поля не
+   розтягуються на всю картку й не залежать від тире між ними (його тут нема — див. Reports.tsx).
+   Кнопка притиснута до низу групи, бо поля вищі за неї на висоту свого підпису. */
+.rep-range { display: flex; align-items: flex-end; flex-wrap: wrap; justify-content: flex-start; gap: var(--sp-2) var(--sp-3); }
+.rep-field { display: flex; flex-direction: column; gap: 4px; flex: 0 0 auto; min-width: 0; }
+.rep-field > span { font-size: 11.5px; color: var(--muted); }
+.rep-field input { width: 168px; min-width: 0; padding: 8px 10px; font-size: 13px; }
+.rep-range .btn { flex: none; }
+/* На телефоні два поля по 168 + кнопка не влазять у рядок: поля стають половинками, кнопка —
+   окремим рядком на всю ширину (кнопка-обрізок збоку — найгірший варіант із трьох). */
+@media (max-width: 560px) {
+  .rep-field { flex: 1 1 40%; }
+  .rep-field input { width: 100%; }
+  .rep-range .btn { flex: 1 0 100%; }
+}
+.rc-date { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); }
+.rc-summary { font-size: 13.5px; line-height: 1.45; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.rc-foot { display: flex; align-items: baseline; justify-content: space-between; margin-top: auto; font-size: 11.5px; color: var(--muted); }
+.rc-open { color: var(--accent); font-weight: 500; }
+
+/* §1: без border-radius на самому рядку — з border-top-роздільником це давало дивний
+   «зрізаний» кут біля округлених країв зовнішньої картки, коли її padding замалий. */
+.anomaly { display: flex; gap: 10px; align-items: flex-start; padding: 10px 4px; }
+.anomaly + .anomaly { border-top: 1px solid var(--line); }
+.anomaly .an-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; background: var(--muted); }
+.anomaly.warn .an-dot { background: var(--warn, #c9871a); }
+.anomaly.high .an-dot { background: var(--neg); }
+.report-meta { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); text-align: right; }
+.report-cat-grid { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: center; }
+@media (max-width: 620px) { .report-cat-grid { grid-template-columns: 1fr; } }
+
+/* §B: hero-блок прогнозу — великі числа нагорі репорту */
+/* Прогноз-hero: пласка акцент-тонована поверхня (без діагонального градієнта — AI-tell, §10) */
+.forecast-hero { padding: 18px 20px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 22%, var(--line)); }
+.fh-nums { display: flex; flex-wrap: wrap; gap: 32px; }
+.fh-item { display: flex; flex-direction: column; gap: 4px; }
+.fh-label { font-size: 12.5px; color: var(--muted); }
+.fh-val { font-family: var(--font-sans); font-weight: 650; font-size: 30px; line-height: 1.05; font-variant-numeric: tabular-nums; color: var(--ink); }
+.fh-unit { font-size: 16px; font-weight: 500; color: var(--ink-2); }
+.fh-note { margin: 14px 0 0; font-size: 13.5px; line-height: 1.5; color: var(--ink-2); }
+.report-donut { position: relative; }
+/* Центр-лейбл — під тултіпом. Він у DOM ПІСЛЯ графіка, тож без z-index малювався б поверх
+   темного тултіпа (герой-сума проступала крізь нього). Тултіп recharts підіймаємо вище. */
+.donut-center { position: absolute; inset: 0; z-index: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.report-donut .recharts-tooltip-wrapper { z-index: 5; }
+.donut-center .dc-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.donut-center .dc-lbl { font-size: 11px; color: var(--muted); }
+
+/* ===== SUBSCRIPTIONS ===================================================== */
+.sub-hero { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; }
+.sub-hero .num-hero { font-size: 30px; }
+.sub-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.sub-row:last-child { border-bottom: none; }
+/* Автознайдені кандидати — 2-колонкова сітка карток (§SUB1) */
+.sub-detected { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.sub-detected .sub-row { border-bottom: none; padding: 12px 14px; }
+.sub-detected .sub-row:last-child { border-bottom: none; }
+/* AI-кандидати всередині блоку пошуку — теж сітка */
+.sub-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 12px; }
+.sub-cands .sub-row { border: 1px solid var(--line); border-radius: var(--radius); }
+.sub-row .s-body { flex: 1; min-width: 0; }
+.sub-row .s-name { font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-row .s-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.sub-row .s-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; text-align: right; white-space: nowrap; }
+.sub-row .s-per { font-size: 11px; color: var(--muted); }
+/* §R5: «це не підписка» — закрити кандидата */
+.sub-row .s-dismiss { padding: 6px 9px; color: var(--muted); font-size: 13px; }
+.sub-row .s-dismiss:hover { color: var(--neg, #d64545); }
+/* §R5: опис підписки для AI */
+.sub-card-cat { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
+.sub-card-cat .label { text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.sub-note {
+  width: 100%; margin-top: 10px; resize: vertical; min-height: 38px;
+  font-size: 12.5px; padding: 7px 9px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+.sub-note::placeholder { color: var(--muted); }
+
+/* subscriptions — card grid */
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.sub-card {
+  position: relative; padding: 15px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.sub-card.is-finished { opacity: 0.62; }
+.sub-card-x { position: absolute; top: 10px; right: 10px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 3px 6px; border-radius: 6px; }
+.sub-card-x:hover { color: var(--neg); background: var(--surface-2); }
+.sub-card-top { display: flex; align-items: center; gap: 11px; min-width: 0; padding-right: 20px; }
+.sub-card-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-card-kind { font-size: 12px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-card-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.sub-card-per { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+.sub-card-fx { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: -6px; }
+.sub-card-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+.sub-badge { font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 6px; padding: 3px 8px; }
+.sub-badge.done { color: var(--muted); }
+.sub-rem { font-size: 11.5px; color: var(--muted); }
+
+/* tx detail — 2 columns + compact tags */
+/* Шапка деталей операції: мерчант ліворуч, сума праворуч. */
+.txd-hero { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
+.txd-hero-who { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.txd-hero-amt { text-align: right; white-space: nowrap; flex-shrink: 0; }
+/* На телефоні — у стовпчик. Сума з `nowrap` тримала свою повну ширину, тож колонці з назвою
+   лишалось стільки, що «Хвиля здоров'я | Доставка води» ламалось на три рядки поруч із
+   однорядковою сумою. Ім'я мерчанта важливіше за економію висоти. */
+@media (max-width: 560px) {
+  .txd-hero { flex-direction: column; align-items: stretch; gap: 10px; }
+  .txd-hero-amt { text-align: left; }
+}
+
+.txd-grid { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; }
+@media (min-width: 900px) { .txd-grid { grid-template-columns: 1fr 1fr; } }
+.txd-grid > * { min-width: 0; }
+.tag-search { font-size: 13px; }
+.tags-box { display: flex; flex-wrap: wrap; gap: 6px; max-height: 148px; overflow-y: auto; padding: 2px; }
+
+/* факти tx — чисті рядки без важких бордерів */
+.facts { padding: 6px 16px; }
+.fact-line { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.fact-line:last-child { border-bottom: none; }
+.fact-k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; flex-shrink: 0; }
+.fact-v { font-size: 14px; display: flex; align-items: center; gap: 8px; text-align: right; min-width: 0; }
+.fact-v.mono { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.fact-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+
+/* AI-блок у деталі транзакції */
+.ai-block { padding: 16px; display: flex; flex-direction: column; gap: 12px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.ai-block-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ai-block-title { font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+.ai-block-title svg { color: var(--accent); flex-shrink: 0; }
+/* Іконка на початку заголовка секції/модалки (замість емоджі-префікса) — вирівнювання + акцент. */
+.h-ico { display: inline-flex; align-items: center; gap: 8px; }
+.h-ico svg { color: var(--accent); flex-shrink: 0; }
+.ai-recognize { padding: 7px 14px; border-color: var(--accent); color: var(--accent); background: var(--surface); font-weight: 500; }
+.ai-recognize:hover:not(:disabled) { background: var(--accent-soft); }
+.ai-block-hint { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 0; }
+.ai-block-sub { font-size: 12px; color: var(--muted); }
+

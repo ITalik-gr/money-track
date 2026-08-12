@@ -3,6 +3,7 @@ import type { AppDb } from "../lib/platform/db-shim.ts";
 import type { Category } from "../../shared/types.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
+import { STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, amountSum, localYmSql } from "../lib/finance/stats.ts";
 
 /** A row of `categories` — `SELECT *`, so this IS the contract type (see `repo/accounts.ts`). */
 export type CategoryRow = Category;
@@ -231,4 +232,61 @@ export async function topLevelExpense(db: AppDb, excludeId?: number): Promise<{ 
 export async function nameById(db: AppDb, id: number): Promise<string | null> {
   const r = await db.prepare("SELECT name FROM categories WHERE id = ?").bind(id).first<{ name: string }>();
   return r?.name ?? null;
+}
+
+// ---- §CATEGORY-PAGE: the permalink's own reads ------------------------------------------------
+//
+// Kept here rather than in `repo/analytics.ts` because they are all keyed by ONE category and are
+// only ever asked for by its page; the analytics repo answers questions about a period.
+
+export async function byId(
+  db: AppDb, id: number,
+): Promise<{ id: number; name: string; color: string | null; importance: string | null } | null> {
+  return await db.prepare("SELECT id, name, color, importance FROM categories WHERE id = ?")
+    .bind(id).first<{ id: number; name: string; color: string | null; importance: string | null }>();
+}
+
+export async function childrenOf(
+  db: AppDb, loc: NotifLocale, id: number,
+): Promise<{ id: number; name: string; color: string | null }[]> {
+  const r = await db.prepare(
+    `SELECT id, ${catNameSql(loc, "name")} AS name, color FROM categories WHERE parent_id = ? ORDER BY name`,
+  ).bind(id).all<{ id: number; name: string; color: string | null }>();
+  return r.results ?? [];
+}
+
+/**
+ * Monthly spending ON this category, rolled up — the same `EFF_CAT_ID` every other screen uses, so
+ * the page cannot disagree with the donut it was opened from.
+ *
+ * ⚠️ `localYmSql`, not a bare `strftime`: keys are built in JS by the caller, and a month grouped
+ * in UTC while the key is built in Kyiv misses silently and reads as a ZERO month (§APP_TZ).
+ */
+export async function monthlyTrend(
+  db: AppDb, mult: string, id: number, from: number, to: number,
+): Promise<{ month: string; spent: number }[]> {
+  const r = await db.prepare(
+    `SELECT ${localYmSql(to)} AS month, ${amountSum(mult)} AS spent
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?
+     GROUP BY month ORDER BY month`,
+  ).bind(from, to, id).all<{ month: string; spent: number }>();
+  return r.results ?? [];
+}
+
+/** §E1 — how much of this category's spending repeats, and how much happened once. */
+export async function recurringSplit(
+  db: AppDb, mult: string, id: number, from: number, to: number, recurExpr: string,
+): Promise<{ recurring: number; oneoff: number }> {
+  const r = await db.prepare(
+    `SELECT CASE WHEN ${recurExpr} THEN 'recurring' ELSE 'oneoff' END AS kind, ${amountSum(mult)} AS spent
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?
+     GROUP BY kind`,
+  ).bind(from, to, id).all<{ kind: string; spent: number }>();
+  const out = { recurring: 0, oneoff: 0 };
+  for (const row of r.results ?? []) {
+    if (row.kind === "recurring") out.recurring = row.spent; else out.oneoff = row.spent;
+  }
+  return out;
 }

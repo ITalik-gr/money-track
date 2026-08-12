@@ -8,8 +8,10 @@
 > journal live in `DESIGN.md`, and that file stays the source of truth for how things should LOOK.
 > This one is only about where the rules live and what stops them sprawling again.
 >
-> Written 2026-08-12. Status: **phase 0 done** (76 dead blocks removed, verified, build green);
-> phases 0.5 onward not started — see §6.
+> Written 2026-08-12. Status: **phase 0 done** (76 dead blocks removed) and **the file is split**
+> into nine parts under `src/styles/`, proved byte-identical; lint C8 keeps it that way.
+> Phase 0.5 (the 8 conflicting duplicates) and phase 4 (true domain grouping) still need the
+> owner's eye — see §6.
 
 ---
 
@@ -267,12 +269,12 @@ Each phase ends green (`npm run check` + `npm run build`) and is independently r
 | ~~0~~ | ✅ **DONE 2026-08-12 — 76 dead blocks removed** (4 258 → 4 182 lines) | See the note below on how it was verified, and on what deliberately stayed. |
 | 0.5 | **Resolve the 8 conflicting duplicates** one at a time | §2.4. Each one changes rendering when collapsed, so each needs the owner's eye. Do NOT batch. |
 | 1 | `@layer base, components, overrides` + move `:root`/theme blocks into `tokens.css` | Cascade becomes explicit BEFORE anything moves. Highest risk-reduction per line changed. |
-| 2 | Extract `base.css`, `layout.css`, `animations.css`, `utilities.css` | The least entangled parts; proves the `@import` pipeline. |
+| ~~2~~ | ✅ **DONE 2026-08-12 — split into nine parts** (`src/styles/*.css`), `index.css` is imports only | See §6.1. Boundaries are the file's OWN section banners, so the concatenation is byte-identical; Vite inlines the imports (one CSS asset in `dist`, zero `@import` left). |
 | 3 | Extract `ui.css` (primitives) | Mirrors `components/ui/`. Everything downstream depends on these, so they move before domains. |
 | 4 | Domains, ONE per step: landing → settings → planning → accounts → advisor → transactions → dashboard → stats | Landing first: it is self-contained and touches nothing else, so it is the honest rehearsal. Stats last: biggest and most entangled. |
 | 5 | Move each domain's `@media` blocks next to their rules | Done per domain, during its own step in phase 4, not as a separate pass. |
 | 6 | Convert the ~60 colour literals to tokens | Also per domain, during its own step. |
-| 7 | Add lint C8, document in `ARCHITECTURE.md` | Only now — the check must be added when it can pass. |
+| ~~7~~ | ✅ **DONE — `scripts/check-styles.mjs` in `npm run check`** | Index is imports only, every part is imported, per-part line ceiling with two named exceptions. |
 
 **Estimated size:** phases 0–3 are small. Phase 4 is the bulk — eight steps, mechanical but
 requiring visual verification of each domain (which needs the owner, since live checking is their
@@ -290,3 +292,23 @@ routine per `CLAUDE.md` §Ops).
   is unused needs runtime evidence, and a wrong guess deletes something that only appears in a
   state nobody tested. Worth its own task, after the split, when each file is small enough for the
   question to be answerable.
+
+---
+
+## 6.1 What the split actually did (2026-08-12)
+
+Nine parts under `src/styles/`, `index.css` reduced to nine `@import` lines and a comment.
+
+**The boundaries are the file's own section banners, not a domain map.** That is a deliberate
+compromise and the reason the move could be made at all: cutting at existing boundaries keeps every
+rule in its original position relative to every other, so the concatenation of the parts is
+**byte-identical** to the file that shipped — which is what was asserted before writing anything to
+disk. Regrouping rules by domain (phase 4) moves rules ACROSS those boundaries, changes which rule
+wins, and therefore needs a visual check that only the owner can do.
+
+So two parts are still large and honestly named for what they are rather than for a domain they do
+not have: `domains-a.css` (1 156 lines) and `settings.css` (675). They carry named exceptions in
+C8 — an exception is a debt with a name on it; a raised limit is a limit nobody believes.
+
+**Verified:** the build emits ONE css asset with zero `@import` remaining, so the split costs
+nothing at runtime.

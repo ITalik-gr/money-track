@@ -5,32 +5,50 @@
       {
         "month": "2025-12",
         "spend": 1471600,
-        "income": 4500000
+        "income": 4500000,
+        "essential": 271600,
+        "discretionary": 1200000,
+        "optional": 0
       },
       {
         "month": "2026-01",
         "spend": 1360400,
-        "income": 4500000
+        "income": 4500000,
+        "essential": 160400,
+        "discretionary": 1200000,
+        "optional": 0
       },
       {
         "month": "2026-02",
         "spend": 1496500,
-        "income": 4500000
+        "income": 4500000,
+        "essential": 296500,
+        "discretionary": 1200000,
+        "optional": 0
       },
       {
         "month": "2026-03",
         "spend": 1449000,
-        "income": 4500000
+        "income": 4500000,
+        "essential": 249000,
+        "discretionary": 1200000,
+        "optional": 0
       },
       {
         "month": "2026-04",
         "spend": 1475900,
-        "income": 4500000
+        "income": 4500000,
+        "essential": 275900,
+        "discretionary": 1200000,
+        "optional": 0
       },
       {
         "month": "2026-05",
         "spend": 2250400,
-        "income": 4770000
+        "income": 4770000,
+        "essential": 390400,
+        "discretionary": 1400000,
+        "optional": 460000
       }
     ]
   }
