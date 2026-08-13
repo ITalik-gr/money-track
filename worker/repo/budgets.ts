@@ -52,3 +52,64 @@ export async function setMonthlyBatch(
       .bind(i.category_id, i.amount),
   ]));
 }
+
+// ---- §BUDGET-MEMORY: closed months -----------------------------------------
+
+export interface BudgetMonth {
+  ym: string;
+  category_id: number;
+  limit_minor: number;
+  carry_in_minor: number;
+  spent_minor: number;
+}
+
+/** Monthly limits AND their rollover flag — what `budgetStatus` needs to open a month. */
+export async function monthlyEnvelopes(
+  db: AppDb,
+): Promise<Map<number, { amount: number; rollover: boolean }>> {
+  const r = await db.prepare(
+    "SELECT category_id, amount, COALESCE(rollover, 0) AS rollover FROM budgets WHERE period = 'month' AND amount > 0",
+  ).all<{ category_id: number; amount: number; rollover: number }>();
+  return new Map((r.results ?? []).map((b) => [b.category_id, { amount: b.amount, rollover: !!b.rollover }]));
+}
+
+/** The closed row for ONE month, keyed by category — the carry-in lookup. */
+export async function closedMonth(db: AppDb, ym: string): Promise<Map<number, BudgetMonth>> {
+  const r = await db.prepare(
+    `SELECT ym, category_id, limit_minor, carry_in_minor, spent_minor
+     FROM budget_months WHERE ym = ?`,
+  ).bind(ym).all<BudgetMonth>();
+  return new Map((r.results ?? []).map((m) => [m.category_id, m]));
+}
+
+/** One envelope's recent closed months, oldest first — the history strip reads left to right. */
+export async function monthsForCategory(
+  db: AppDb, categoryId: number, limit = 6,
+): Promise<BudgetMonth[]> {
+  const r = await db.prepare(
+    `SELECT ym, category_id, limit_minor, carry_in_minor, spent_minor
+     FROM budget_months WHERE category_id = ? ORDER BY ym DESC LIMIT ?`,
+  ).bind(categoryId, limit).all<BudgetMonth>();
+  return (r.results ?? []).reverse();
+}
+
+/** True once ANY envelope has a row for this month — the close is a no-op after that. */
+export async function monthIsClosed(db: AppDb, ym: string): Promise<boolean> {
+  const r = await db.prepare("SELECT 1 FROM budget_months WHERE ym = ? LIMIT 1").bind(ym).first();
+  return r != null;
+}
+
+/**
+ * Record a closed month. `INSERT OR IGNORE`, so the daily pass that runs the close can run any
+ * number of times: the first one after the month turns over writes the row, every later one is a
+ * no-op. Re-closing would be worse than not closing — the spend of a finished month keeps moving
+ * as old rows get re-categorised, and the carry chain is built on this number.
+ */
+export async function closeMonth(db: AppDb, rows: BudgetMonth[], closedAt: number): Promise<void> {
+  if (!rows.length) return;
+  await db.batch(rows.map((m) => db.prepare(
+    `INSERT OR IGNORE INTO budget_months
+       (ym, category_id, limit_minor, carry_in_minor, spent_minor, closed_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(m.ym, m.category_id, m.limit_minor, m.carry_in_minor, m.spent_minor, closedAt)));
+}

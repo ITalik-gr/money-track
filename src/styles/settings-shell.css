@@ -1,0 +1,24 @@
+/* The settings page SHELL: how its cards are laid out (2026-08-14).
+ *
+ * Split out of `settings.css` because that part hit its C8 ceiling and an exception may never
+ * rise. This is a clean seam rather than an arbitrary cut: everything here answers "where does a
+ * card go", while what stayed behind answers "what does a card look like inside".
+ *
+ * Imported IMMEDIATELY after `settings.css`, so no rule that used to sit between these and the
+ * rest changed its position in the cascade.
+ */
+
+/* ---- Налаштування (Setup) — картки-групи у 2-колонковій сітці --------------- */
+/* COLUMNS, not a grid (2026-08-14). A grid puts card N+1 beside card N whatever their heights, so
+   a 3-line card next to a 20-line one leaves a hole — and no ordering fixes it, because the
+   heights depend on the account's data (six backups or none, one bank or three). Multi-column
+   flows cards down a column instead, so the gaps cannot form. `break-inside: avoid` keeps a card
+   whole; `column-span: all` is what `set-full` becomes. */
+.settings-grid { columns: 2; column-gap: 14px; margin-bottom: 18px; }
+.settings-grid > * { break-inside: avoid; margin-bottom: 14px; }
+.settings-grid > .set-full { column-span: all; padding: 16px; }
+/* A spanner needs its OWN top margin: the `margin-bottom` above belongs to the last card in each
+   column, and a column box trims that trailing margin when it balances — so the full-width card
+   (bank keys at the top, the danger zone at the bottom) sat flush against the columns while every
+   other pair had a 14px gap. Not on the first child: there the margin would only pad the page. */
+.settings-grid > .set-full:not(:first-child) { margin-top: 14px; }

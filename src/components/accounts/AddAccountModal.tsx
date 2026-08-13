@@ -75,7 +75,10 @@ export function AddAccountModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      {/* Wider (2026-08-14): the kind picker is a grid of cards and the form is nine fields, which
+          at the default 420px meant a scroll for a dialog whose whole job is "answer four things
+          and press add". Same treatment as the goal dialog. */}
+      <div className="modal modal-wide" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{t("acctAdd.title")}</h3>
           <button className="modal-x" onClick={onClose} aria-label={t("common.close")}>✕</button>

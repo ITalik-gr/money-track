@@ -71,11 +71,17 @@ export function TelegramCard({ isOwner }: { isOwner: boolean }) {
               ? t("setup.tgLinked")
               : state?.owner_fallback ? t("setup.tgOwnerFallback") : t("setup.tgNotLinked")}
           </p>
-          <div className="stack">
-            <button className="btn primary" disabled={linkState.isLoading} onClick={connect}>
+          {/*
+            The primary slot belongs to the action that matches the STATE (2026-08-14). While a
+            chat was connected the loudest button on the card was "connect a different chat" — the
+            one action you would take almost never — and it sat above four more buttons of equal
+            weight. Connected: relinking and unlinking are both maintenance, so neither is primary.
+          */}
+          <div className={linked ? "row tg-actions" : "stack"}>
+            <button className={linked ? "btn sm" : "btn primary"} disabled={linkState.isLoading} onClick={connect}>
               {linked ? t("setup.tgRelink") : t("setup.tgConnectMine")}
             </button>
-            {linked && <button className="btn" onClick={disconnect}>{t("setup.tgUnlink")}</button>}
+            {linked && <button className="btn sm" onClick={disconnect}>{t("setup.tgUnlink")}</button>}
           </div>
           {deepLink && (
             <p className="set-card-sub" style={{ marginTop: 10 }}>
@@ -90,9 +96,17 @@ export function TelegramCard({ isOwner }: { isOwner: boolean }) {
       {/* Помилка окремо: без неї «не налаштовано» і «запит упав» виглядають однаково. */}
       {error != null && <p className="set-card-sub" style={{ color: "var(--neg)" }}>{errText(error)}</p>}
 
+      {/*
+        Folded (2026-08-14). Two test buttons and — for the owner — a global webhook registration
+        are things you press once while setting up or when something looks broken. Stacked open at
+        full width they made a five-button wall whose subject ("where do my pushes go") was the
+        one line of text above it.
+      */}
+      <details className="tg-more">
+        <summary className="disclose">{t("setup.tgMore")}</summary>
       <div className="stack" style={{ marginTop: 12 }}>
         <button
-          className="btn"
+          className="btn sm"
           disabled={tgPushState.isLoading}
           onClick={async () => {
             const r = await tgProactive().unwrap();
@@ -103,7 +117,7 @@ export function TelegramCard({ isOwner }: { isOwner: boolean }) {
           {t("setup.tgTestSummary")}
         </button>
         <button
-          className="btn"
+          className="btn sm"
           disabled={scanState.isLoading}
           onClick={async () => {
             const r = await scanAlerts().unwrap();
@@ -117,7 +131,7 @@ export function TelegramCard({ isOwner }: { isOwner: boolean }) {
             налаштування чату конкретної людини. */}
         {isOwner && (
           <button
-            className="btn"
+            className="btn sm"
             disabled={tgState.isLoading}
             onClick={async () => {
               const r = await registerTelegram().unwrap();
@@ -128,6 +142,7 @@ export function TelegramCard({ isOwner }: { isOwner: boolean }) {
           </button>
         )}
       </div>
+      </details>
     </div>
   );
 }

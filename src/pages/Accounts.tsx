@@ -146,7 +146,10 @@ function buildGroups(src: Account[], rates: Record<string, number>, t: ReturnTyp
   const banks = new Map<string, Account[]>();
   const rest: Account[] = [];
   for (const a of src) {
-    if (a.provider && BANK_LABEL[a.provider]) {
+    // `!a.is_manual` as well as the provider: a hand-added account must never land in a bank's
+    // group even if its `provider` column says otherwise (it did — migration 0042). The column is
+    // the bank's claim about itself; `is_manual` is the fact that a person typed this in.
+    if (a.provider && BANK_LABEL[a.provider] && !a.is_manual) {
       const arr = banks.get(a.provider) ?? [];
       arr.push(a);
       banks.set(a.provider, arr);
@@ -396,7 +399,9 @@ function AccountEditor({ a, onClose, cls, manual, renameable }: {
   }
 
   return (
-    <div className={cls} style={{ padding: 14 }}>
+    // `editing`: an eight-field form does not fit the footprint of a balance card, and squeezing
+    // it there is what made editing feel cramped. The class lets it take the row.
+    <div className={`${cls} editing`} style={{ padding: 14 }}>
       <div className="acct-edit-form">
         {canTitle && <input value={title} onChange={(e) => setTitleVal(e.target.value)} placeholder={t("acct.namePlaceholder")} />}
         {manual && <input type="number" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder={t("acct.balancePlaceholder")} />}

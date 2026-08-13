@@ -10,6 +10,8 @@
 >
 > Written 2026-08-12. Status: **phase 0 done** (76 dead blocks removed) and **the file is split**
 > into nine parts under `src/styles/`, proved byte-identical; lint C8 keeps it that way.
+> Two parts have been added since (`settings-shell.css`, `budgets.css`) — see §6.1: a NEW part is
+> how an overflowing one is relieved, because an exception may not grow.
 > Phase 0.5 (the 8 conflicting duplicates) and phase 4 (true domain grouping) still need the
 > owner's eye — see §6.
 

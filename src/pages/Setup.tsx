@@ -106,6 +106,7 @@ export function Setup() {
               а форма, доступна лише після реєстрації, збирає відгуки від тих, хто вже проминув
               зламане місце. */}
           <FeedbackCard />
+          {!isDemo && <SessionsCard />}
           {!isDemo && <DangerZone />}
         </div>
       )}
@@ -114,8 +115,9 @@ export function Setup() {
         <div className="settings-grid">
           {/* Keys first: every step of the first run needs them, so a page that opened on the
               checklist would be asking for actions that cannot succeed yet. */}
-          <CredentialsCard />
+          <CredentialsCard kind="bank" />
           <BankConnectionsCard />
+          <CredentialsCard kind="ai" />
           <FirstRun />
           <div className="card set-card">
             <div className="set-card-h"><Icon name="stats" size={16} />{t("setup.dbState")}</div>
@@ -202,12 +204,46 @@ export function Setup() {
  * Typed confirmation rather than a modal with an OK button: this drops a bank history and cannot
  * be undone, and the cost of typing six letters is the point.
  */
+/**
+ * Revoking every session is a SAFETY action, and it used to live inside the red "delete
+ * everything" card (2026-08-14).
+ *
+ * Colour is a claim: inside that card the button read as a step of deletion, so the one control a
+ * person reaches for when they think somebody else has their session sat in the place they are
+ * most afraid to touch. It is an ordinary card now, next to the other account controls; the red
+ * card keeps exactly one thing in it, which is what makes red mean something.
+ */
+function SessionsCard() {
+  const t = useT();
+  const [logoutAll, logoutAllState] = useLogoutAllMutation();
+  return (
+    <div className="card set-card">
+      <div className="set-card-h"><Icon name="settings" size={16} />{t("setup.sessionsTitle")}</div>
+      <p className="set-card-sub">{t("setup.logoutAllHint")}</p>
+      <div className="stack" style={{ marginTop: 12 }}>
+        <button
+          className="btn"
+          disabled={logoutAllState.isLoading}
+          onClick={async () => {
+            try {
+              await logoutAll().unwrap();
+              clearLocalUserData();
+              window.location.href = "/";
+            } catch (e) { toast.error(errText(e)); }
+          }}
+        >
+          {t("setup.logoutAll")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function DangerZone() {
   const t = useT();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [eraseMyData, delState] = useEraseMyDataMutation();
-  const [logoutAll, logoutAllState] = useLogoutAllMutation();
 
   async function run() {
     try {
@@ -224,24 +260,6 @@ function DangerZone() {
     <div className="card set-card set-full danger-zone">
       <div className="set-card-h"><Icon name="alert" size={16} />{t("setup.dangerTitle")}</div>
       <p className="set-card-sub">{t("setup.dangerBody")}</p>
-      {/* Не в самому «небезпечному» блоці за змістом, але поруч із ним за призначенням: це
-          те, що робиш, коли підозрюєш, що твоєю сесією користується хтось інший. */}
-      <div className="stack" style={{ marginBottom: 12 }}>
-        <button
-          className="btn sm"
-          disabled={logoutAllState.isLoading}
-          onClick={async () => {
-            try {
-              await logoutAll().unwrap();
-              clearLocalUserData();
-              window.location.href = "/";
-            } catch (e) { toast.error(errText(e)); }
-          }}
-        >
-          {t("setup.logoutAll")}
-        </button>
-        <p className="set-card-sub" style={{ margin: 0 }}>{t("setup.logoutAllHint")}</p>
-      </div>
       {!open ? (
         <button className="btn sm ghost danger-text" onClick={() => setOpen(true)}>{t("setup.deleteAccount")}</button>
       ) : (

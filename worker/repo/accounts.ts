@@ -99,8 +99,11 @@ export interface NewManualAccount {
 
 export async function createManual(db: AppDb, a: NewManualAccount): Promise<void> {
   await db.prepare(
-    `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, role, ai_note, is_manual, is_active, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?)`,
+    // `provider` is stated, never left to the column DEFAULT ('mono' — see migration 0042): a
+    // default that was harmless with one bank silently marked every hand-added account as a
+    // monobank one, and the Accounts page groups by exactly this column.
+    `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, role, ai_note, provider, is_manual, is_active, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', 1, 1, ?)`,
   ).bind(a.id, a.type, a.title, a.currency_code, a.balance, a.credit_limit, a.role, a.ai_note, a.updated_at).run();
 }
 

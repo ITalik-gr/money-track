@@ -1,0 +1,67 @@
+/* Budgets and the category permalink (2026-08-14).
+ *
+ * A NEW part rather than three more lines in `domains-a.css`: that file sits at its C8 exception
+ * (1 156 lines), and the rule attached to an exception is that it may not grow — the next overflow
+ * gets a seam, not a raised cap. This is that seam.
+ *
+ * Imported LAST, so nothing that already existed can change which rule wins (same argument as
+ * `transactions.css`, STYLES.md §6.1).
+ *
+ * Two things live here:
+ *  1. §BUDGET-MEMORY — the carried balance and the "how the months closed" strip.
+ *  2. The category page's own layout classes. They shipped with the page (§CATEGORY-PAGE) and had
+ *     NO rules at all — `.cat-page-stats` was a plain block, so three stat cards meant to sit in a
+ *     row stacked full-width down the screen. A class name that matches nothing looks exactly like
+ *     a class name that matches something, which is why it survived a review.
+ */
+
+/* ---- §BUDGET-MEMORY: carried balance --------------------------------------- */
+/* A carried DEBT is the same badge in the negative colour, not a different shape: it is the same
+   fact about the same month with the sign flipped, and a second form would read as a second
+   mechanism. */
+.bc-carry.neg { color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent); }
+/* In the envelope grid the carry is an inline aside on the amounts line, not a badge: the tile is
+   already carrying a percentage, a bar and a forecast, and a fourth emphasised element would leave
+   nothing emphasised. */
+.env-carry { color: var(--muted); }
+.env-carry.neg { color: var(--neg); }
+
+/* ---- §BUDGET-MEMORY: how the months closed --------------------------------- */
+.bh-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.bh-row { display: grid; grid-template-columns: 44px 1fr auto auto; align-items: center; gap: 10px;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.bh-month { color: var(--muted); text-transform: capitalize; }
+.bh-bar { position: relative; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bh-bar > i { position: absolute; inset: 0; transform-origin: left center; border-radius: 999px;
+  background: var(--c-teal, #2f7d6b); }
+.bh-row.over .bh-bar > i { background: var(--neg); }
+/* Overspend gets a cap at the END of the track instead of a longer bar. A bar allowed to exceed
+   its own container stops reading as a proportion, and a proportion is the only thing this row is
+   for — the exact number is one column to the right. */
+.bh-bar > b { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: var(--neg); }
+.bh-num { color: var(--ink); white-space: nowrap; }
+.bh-of { color: var(--muted); }
+.bh-verdict { font-family: var(--font-sans); font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.bh-verdict.neg { color: var(--neg); }
+
+@media (max-width: 560px) {
+  /* The verdict word is the first thing to go: the bar and the numbers already say it, and on a
+     narrow screen the row would otherwise wrap into two lines to keep a redundant label. */
+  .bh-row { grid-template-columns: 40px 1fr auto; }
+  .bh-verdict { display: none; }
+}
+
+/* ---- §CATEGORY-PAGE layout (was entirely unstyled) ------------------------- */
+/* Same grid as `.merchant-kpis`, whose `.merchant-stat` cards this page reuses. Repeated rather
+   than shared: the two pages happen to want the same measurements today, and a single class named
+   after one of them would make the next change to either one a change to both. */
+.cat-page-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+.cat-page-dot { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
+.cat-page-children { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Also unstyled until now: a sub-category link rendered as bare underlined text in a row of them. */
+.cat-chip { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-pill, 999px);
+  background: var(--surface); color: var(--ink); text-decoration: none; font-size: 12.5px;
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
+.cat-chip:hover { border-color: var(--accent); color: var(--accent); }
+.cat-chip .d { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }

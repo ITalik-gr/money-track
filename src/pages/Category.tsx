@@ -118,6 +118,57 @@ export function Category() {
         )}
       </div>
 
+      {/*
+        §BUDGET-MEMORY — the question a budget could never answer before: not "how am I doing right
+        now" but "am I getting better at this". The strip is deliberately NOT derived from the
+        12-month trend above it: that is what was spent, while staying inside an envelope also
+        depends on the limit in force at the time, and only these rows remember it.
+
+        Rendered whenever the category HAS an envelope, empty state included — a section that
+        appears out of nowhere in a month's time is a feature nobody knows to wait for.
+      */}
+      {data.budget && (
+        <section>
+          <div className="section-head">
+            <h2>{t("cat.budgetHistory")}</h2>
+            <span className="label">{t("cat.budgetHistoryHint")}</span>
+          </div>
+          <div className="card">
+            {data.budget_history.length === 0
+              ? <p className="label" style={{ margin: 0 }}>{t("cat.budgetHistoryEmpty")}</p>
+              : (
+                <ul className="bh-list">
+                  {data.budget_history.map((m) => {
+                    // The limit can be zero for a month the envelope carried no allowance into
+                    // (a full overspend consumed it). Dividing by it would print Infinity%.
+                    const ratio = m.limit > 0 ? m.spent / m.limit : (m.spent > 0 ? 1.5 : 0);
+                    const over = m.spent > m.limit;
+                    return (
+                      <li key={m.month} className={`bh-row ${over ? "over" : "ok"}`}>
+                        <span className="bh-month">{monthLabel(m.month)}</span>
+                        <span className="bh-bar">
+                          <i style={{ transform: `scaleX(${Math.min(ratio, 1)})` }} />
+                          {/* Overspend gets its OWN mark past the end of the track rather than a
+                              longer bar: a bar that can exceed its container stops being readable
+                              as a proportion, which is the only thing this row is for. */}
+                          {over && <b />}
+                        </span>
+                        <span className="bh-num">
+                          <Money minor={m.spent} decimals={false} />
+                          <span className="bh-of"> / <Money minor={m.limit} decimals={false} /></span>
+                        </span>
+                        <span className={`bh-verdict ${over ? "neg" : ""}`}>
+                          {over ? t("cat.monthOver") : t("cat.monthWithin")}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+          </div>
+        </section>
+      )}
+
       <section>
         <div className="section-head"><h2>{t("cat.trendTitle")}</h2></div>
         <div className="card chart-card">

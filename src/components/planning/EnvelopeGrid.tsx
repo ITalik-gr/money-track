@@ -71,7 +71,19 @@ export function EnvelopeGrid() {
               )}
             </div>
             <div className="env-sub">
-              <span><Money minor={e.spent} decimals={false} /> {t("common.of")} <Money minor={e.amount} decimals={false} /></span>
+              <span>
+                <Money minor={e.spent} decimals={false} /> {t("common.of")} <Money minor={e.amount} decimals={false} />
+                {/* §BUDGET-MEMORY: a limit that grew by 800 ₴ on its own reads as a bug in the
+                    app, so the envelope names the reason inline. The canon hands over `carried`
+                    and `base_amount` precisely so this does not have to be worked out here. */}
+                {e.carried !== 0 && (
+                  <span className={`env-carry ${e.carried < 0 ? "neg" : ""}`}>
+                    {" "}({<Money minor={e.base_amount} decimals={false} />}{e.carried > 0 ? " + " : " − "}
+                    <Money minor={Math.abs(e.carried)} decimals={false} />{" "}
+                    {e.carried > 0 ? t("eg.carried") : t("eg.carriedDebt")})
+                  </span>
+                )}
+              </span>
               <span className="env-remain">
                 {remain >= 0 ? <>{t("eg.left")} <Money minor={remain} decimals={false} /></> : <>{t("eg.exceeded")}</>}
               </span>

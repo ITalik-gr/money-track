@@ -39,11 +39,33 @@
 
 /* Згорнуті факти. `summary` лишається кнопкою браузера, тільки без стрілки-маркера:
    курсор і фокус-кільце отримуємо задарма. */
-.ai-details > .ai-details-sum { cursor: pointer; font-size: 12px; color: var(--muted); list-style: none; padding: 2px 0; }
+/* ONE disclosure control (2026-08-14). There are three of these now — recognised details, the tag
+   picker, Telegram maintenance — and the first was 12px muted text with a ▸ in front, which the
+   owner could not see. Anything you are meant to click has to look clickable: a border, a hit area
+   and a hover. Same shape everywhere, so learning it once is enough. */
+.disclose,
+.ai-details > .ai-details-sum {
+  cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 11px; border: 1px solid var(--line-strong); border-radius: 999px;
+  font-size: 13px; color: var(--ink-2); background: var(--surface);
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.disclose::-webkit-details-marker,
 .ai-details > .ai-details-sum::-webkit-details-marker { display: none; }
-.ai-details > .ai-details-sum::before { content: "▸ "; }
-.ai-details[open] > .ai-details-sum::before { content: "▾ "; }
-.ai-details[open] > .ai-details-sum { margin-bottom: 8px; }
+.disclose:hover,
+.ai-details > .ai-details-sum:hover { background: var(--surface-2); color: var(--ink); }
+/* The caret is the state, so it rotates rather than swapping character — a ▸ turning into a ▾ is
+   two glyphs of different widths and the label jumps sideways on every toggle. */
+.disclose::before,
+.ai-details > .ai-details-sum::before {
+  content: "›"; display: inline-block; font-size: 15px; line-height: 1;
+  color: var(--muted); transition: transform var(--dur-1) var(--ease-out);
+}
+details[open] > .disclose::before,
+.ai-details[open] > .ai-details-sum::before { transform: rotate(90deg); }
+.ai-details[open] > .ai-details-sum,
+details[open] > .disclose { margin-bottom: 10px; }
 
 /* The lone-child guard for the settings grid (2026-08-14).
    Lives here rather than in `settings.css` only because that part is at its C8 ceiling and an
@@ -61,3 +83,178 @@
 @media (min-width: 720px) {
   .cred-cols { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
 }
+
+/* The card head and what follows it had NO gap when the body was an `EmptyCard` (2026-08-14):
+   the list variants carry their own top margin, the empty state did not, so the dashed box sat
+   flush under the subtitle and read as part of it. Put on the HEAD, so every body — list, empty
+   state or anything added later — inherits the same separation instead of each remembering. */
+.card > .set-head { margin-bottom: 12px; }
+
+/* Linked banks: the rows were unstyled text ("mono рахунків: 6" on its own line). A connection is
+   a NAME, a state and a count — three different weights, so they get three. */
+.conn-row { display: flex; flex-direction: column; gap: 2px; padding: 9px 0; }
+.conn-row + .conn-row { border-top: 1px solid var(--line); }
+.conn-top { display: flex; align-items: baseline; gap: 8px; }
+.conn-name { font-size: 14px; font-weight: 600; }
+.conn-count { font-size: 12.5px; color: var(--muted); }
+.conn-when { font-size: 12.5px; color: var(--muted); }
+/* A failure is stated in the negative colour but WITHOUT a box: it is information about a
+   background job, not something the reader must act on this second. */
+.conn-error { font-size: 12.5px; color: var(--neg); }
+
+/* ---- the operation page, brought back in line with the rest of the app (2026-08-14) ----------
+   Owner's verdict: the page stopped matching the dashboard, and the AI block was the loudest part
+   of it. It was the ONLY card in the product with a tinted background and an accent-coloured
+   border — a treatment nothing else uses — so on a page whose subject is one payment, the block
+   about the software shouted over the money. It is a card now, like every other card; what marks
+   it as the AI section is its title and icon, which is how the rest of the app does it. */
+.ai-block {
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+/* Same for the button: an outlined accent button appears nowhere else on this page, and
+   "recognise" is not the primary action of the screen — saving is. */
+.ai-recognize {
+  border-color: var(--line-strong);
+  color: var(--ink-2);
+  background: var(--surface);
+  font-weight: 500;
+}
+.ai-recognize:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
+
+/* The tag picker was ~40 chips in a scrolling box — taller than everything else on the page put
+   together, permanently open, for a field capped at THREE tags and usually left empty. Folded
+   behind its own summary: the chosen tags stay visible above it, so nothing is hidden that has
+   actually been set. */
+/* The tag picker uses the same control; `.disclose` carries everything. */
+
+/* Telegram: relink / unlink side by side — both are maintenance, neither is the card's subject. */
+.tg-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* The chat head became an icon + label, so it needs the same inline-flex the other heads use. */
+.tx-chat-head { display: inline-flex; align-items: center; gap: 7px; }
+.tx-chat-head svg { color: var(--muted); flex-shrink: 0; }
+
+/* 2px under a 30px numeral is not a gap — "31" and "зі 100" read as one glued block (owner, at
+   the health widget). The caption is a separate fact about the number above it, so it needs the
+   space to say so. */
+.gauge-sub { margin-top: 5px; }
+.gauge.sm .gauge-sub { margin-top: 4px; }
+
+/* The AI insight card, brought in line (2026-08-14) — the same treatment the operation page's AI
+   block got, and for the same reason: a tinted panel with a solid accent badge was the loudest
+   thing on Statistics, above the numbers the page exists to show. A card like the others; the
+   icon still marks it as AI, it just stops shouting. */
+.ai-card {
+  background: var(--surface);
+  border-color: var(--line);
+}
+.ai-badge {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* Mobile: an insight row is `label — [category chip] — amount — delta` on one line, and a long
+   category name ("Відсотки по кредиту та схоже") squeezed the label into a three-line column with
+   the money floating beside it. Below 700px the label takes the full width and the values move to
+   their own line underneath, right-aligned — the sentence reads as a sentence and the numbers
+   stay together. */
+@media (max-width: 700px) {
+  .fact-row { flex-direction: column; align-items: stretch; gap: 4px; }
+  .fact-label { padding-right: 0; }
+  .fact-vals { justify-content: flex-end; }
+  .fact-cat { max-width: 100%; }
+}
+
+/* Goals: the cards were sized for a dense list, but a goal is a thing you look AT — a number, a
+   bar and a deadline — and three of them across a 1440px screen left the content cramped while the
+   page had room to spare. ~+30% via the track's minimum, so the count per row falls out of the
+   width instead of being fixed. */
+.goal-grid { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+
+/* The goal dialog was a single 420px column, so a form of eight fields became a scroll. Wider,
+   and two columns once there is room for them — the pairs that belong together (target/deadline,
+   kind/source) then sit on one line. Still one column on a phone. */
+.modal.modal-goal { max-width: 680px; }
+@media (min-width: 620px) {
+  .modal-goal .goal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .modal-goal .goal-form > .span-2 { grid-column: 1 / -1; }
+}
+
+/* Settings, account tab: the Telegram buttons and the disclosure under them had no separation,
+   so a row of controls ran straight into another control. */
+.tg-actions { margin-bottom: 10px; }
+
+/* A connection row reads left to right: state, who, how much, what you can do about it. The dot
+   carries the state so the sentence underneath does not have to be read to know things are fine. */
+.conn-row { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: start; }
+.conn-row > .conn-top, .conn-row > .conn-when, .conn-row > .conn-error { grid-column: 2; }
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--muted); }
+.conn-dot.ok { background: var(--pos); }
+.conn-dot.bad { background: var(--neg); }
+/* "Never reported" is not a failure — it is the state every connection starts in. */
+.conn-dot.idle { background: var(--line-strong); }
+.conn-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.conn-sync { margin-left: auto; }
+
+/* ---- Accounts: sections flow instead of standing in fixed columns (2026-08-14) --------------
+   `.acct-sections` was a two-track grid, so a section with one card ("Готівка та ручні") sat
+   beside a section with six and left a column-height of nothing. Same defect as the settings grid
+   and the same fix: multi-column flow, where a short section is simply short and the next one
+   starts under it. */
+.acct-sections { display: block; columns: 2; column-gap: 24px; }
+.acct-sections > .acct-sec { break-inside: avoid; margin-bottom: 18px; }
+@media (max-width: 860px) { .acct-sections { columns: 1; } }
+
+/* Cards a size up: an account card carries a name, a balance, a currency equivalent and sometimes
+   a sparkline, and at 210px those were stacking into five short lines. */
+.acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+@media (min-width: 1200px) {
+  .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+}
+
+/* Editing an account: the form replaced the card's contents and pushed the card into a shape
+   twice its neighbours' — inputs at full card width with a textarea scrolling inside 3 lines.
+   Give the editing card room and let the fields breathe; it is a state, not a layout. */
+.acct-card.editing { grid-column: 1 / -1; }
+.acct-card.editing textarea { min-height: 68px; }
+.acct-edit-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.acct-edit-row > * { flex: 1 1 180px; min-width: 0; }
+
+/* Subscriptions: the two ways to add one are a CHOICE, so they sit side by side. */
+.sub-add-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+/* And the AI half stops being a tinted panel — the third one in the app to get this treatment,
+   for the same reason as the other two: it is a tool, not an announcement. All three themes are
+   restated, because the original set the tint in each of them separately. */
+.sub-ai-block { background: var(--surface); border-color: var(--line); }
+:root[data-theme="dark"] .sub-ai-block { background: var(--surface); border-color: var(--line); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sub-ai-block { background: var(--surface); border-color: var(--line); }
+}
+
+/* "What changed in your recurring spending" (owner: "this block is so-so"). It was one flat line
+   per merchant — name, month, amount, two equally loud buttons — so the row read as a form, and
+   the ANSWER it is asking for ("is this a subscription?") was invisible among the parts.
+   The amount is the fact, so it leads on its own; the actions retreat to the end and only the
+   affirmative one keeps a border. */
+/* FLEX, not the 4-track grid it was: the tracks forced every row to the same column widths, so a
+   long merchant name and a short one were laid out for the longest one and the actions floated far
+   from the amount they belong to. */
+.hb-row { display: flex; align-items: center; gap: 10px 14px; padding: 11px 0; }
+.hb-name { font-weight: 500; }
+.hb-amt { font-weight: 600; }
+.hb-acts { display: flex; gap: 6px; margin-left: auto; flex-shrink: 0; }
+/* "Not a subscription" is a dismissal — it should not compete with the action that does something. */
+.hb-acts .btn.ghost { border-color: transparent; color: var(--muted); }
+.hb-acts .btn.ghost:hover { color: var(--ink-2); background: var(--surface-2); }
+@media (max-width: 640px) {
+  /* On a phone the four parts wrapped into a ragged block; the name owns the first line and the
+     numbers and actions share the second. */
+  .hb-row { flex-wrap: wrap; }
+  .hb-name { flex: 1 1 100%; }
+}
+
+/* A form dialog gets room; a confirmation dialog does not. Both were 420px, so the form ones
+   scrolled. Still one column on a phone — the width is a maximum, not a demand. */
+.modal.modal-wide { max-width: 620px; }
+.modal-wide .kind-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }

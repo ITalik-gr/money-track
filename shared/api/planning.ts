@@ -56,7 +56,14 @@ export interface BudgetChatReply {
  */
 export interface BudgetStatusRow {
   id: number; name: string;
-  amount: number; spent: number; ratio: number;
+  /** §BUDGET-MEMORY: the EFFECTIVE limit — `base_amount + carried`. Ratios are against this. */
+  amount: number;
+  /** The limit as typed on the Plan page. */
+  base_amount: number;
+  /** Carried in from the month that just closed; NEGATIVE when it was overspent. */
+  carried: number;
+  rollover: boolean;
+  spent: number; ratio: number;
   /** §BUDGET-FORECAST: where the month closes at this pace, ₴ minor. */
   projected: number;
   projected_ratio: number;

@@ -472,6 +472,15 @@ export function TxDetail() {
                   </div>
                 )}
 
+                {/*
+                  Folded (2026-08-14). Forty category chips in a scrolling box were the tallest
+                  thing on the page — for a field that takes at most THREE tags and is usually
+                  left empty. The chosen ones stay above, outside the fold, so nothing already set
+                  is hidden. `<details>` keeps keyboard and screen-reader behaviour for free.
+                */}
+                <details className="tag-pick">
+                  <summary className="disclose">{t("tx.tagsPick")}</summary>
+
                 <input className="tag-search" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} placeholder={t("tx.placeholder.tagSearch")} />
 
                 {(() => {
@@ -502,6 +511,7 @@ export function TxDetail() {
                     </div>
                   );
                 })()}
+                </details>
               </div>
 
               {isMono && (
@@ -586,7 +596,9 @@ function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
 
   return (
     <div className="tx-chat">
-      <div className="tx-chat-head">💬 {t("tx.chatHead")}</div>
+      {/* An `Icon`, not an emoji: every other section head in the app uses one, and the emoji
+          rendered glued to the text because the head is a flex row that collapses the space. */}
+      <div className="tx-chat-head"><Icon name="advisor" size={15} />{t("tx.chatHead")}</div>
       {messages.length === 0 && !chatting && (
         <div className="tx-chat-hint">
           {t("tx.chatHint")}

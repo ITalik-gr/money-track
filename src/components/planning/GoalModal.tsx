@@ -90,7 +90,7 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
 
   return (
     <div className="modal-overlay" onMouseDown={onClose}>
-      <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="modal modal-goal" onMouseDown={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{editing ? t("goalModal.editTitle") : t("goalModal.newTitle")}</h3>
           <button className="modal-x" onClick={onClose} aria-label={t("common.close")}>✕</button>

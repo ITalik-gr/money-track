@@ -40,12 +40,6 @@
 .add-chip .ac-name { font-weight: 500; }
 .add-chip .ac-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
 
-/* ---- Налаштування (Setup) — картки-групи у 2-колонковій сітці --------------- */
-.settings-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; margin-bottom: 18px; }
-.settings-grid > .set-full { grid-column: 1 / -1; padding: 16px; }
-/* NB: no `:last-child:nth-child(odd)` trick here — `nth-child` counts the full-width cards too,
-   so it fires on column parity it cannot actually see. Evenness is kept by hand instead: if you
-   add a half-width card, add a second one or make one `set-full`. */
 .ai-model-note { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin: 0 0 10px; }
 
 /* ROADMAP L5: прев'ю перейменувань мерчантів (кирилиця → латиниця) перед застосуванням. */
@@ -56,7 +50,7 @@
 .tl-from { color: var(--muted); text-decoration: line-through; }
 .tl-to { font-weight: 500; }
 .tl-n { margin-left: auto; color: var(--muted); font-size: var(--fs-sm); white-space: nowrap; }
-@media (max-width: 760px) { .settings-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .settings-grid { columns: 1; } }
 .set-card { padding: 16px; display: flex; flex-direction: column; }
 .set-card-h { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 .set-card-h svg { color: var(--muted); flex-shrink: 0; }
@@ -240,9 +234,9 @@
 .cred-cols { display: grid; grid-template-columns: 1fr; gap: 18px; }
 @media (min-width: 720px) {
   .cred-cols { grid-template-columns: 1fr 1fr; gap: 24px; }
-  /* Hairline between the two keys: the blocks are text-heavy and similar in shape, so without a
-     divider the eye reads them as one wrapped column. */
-  .cred-cols > .cred-col + .cred-col { padding-left: 24px; border-left: 1px solid var(--line); }
+  /* No hairline between keys (2026-08-14): it worked for exactly two columns, but the third key
+     wraps and leaves the border dangling beside empty space — a broken frame, not a separator. */
+  .cred-cols > .cred-col + .cred-col { padding-left: 0; }
 }
 .cred-col { min-width: 0; display: flex; flex-direction: column; }
 .cred-col .cred-guide { margin-top: auto; }

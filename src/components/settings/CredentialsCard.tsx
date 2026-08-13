@@ -58,7 +58,22 @@ function when(ts: number | null): string {
   return new Date(ts * 1000).toLocaleDateString(localeTag(getLocale()), { day: "numeric", month: "short", year: "numeric" });
 }
 
-export function CredentialsCard() {
+/**
+ * A BANK key and an AI key are different things (2026-08-14, owner).
+ *
+ * They shared one card because they shared one storage mechanism — which is a fact about our code,
+ * not about the reader. On the screen it meant "where my money comes from" and "who pays for the
+ * model" sat in one list, and the card had to carry the union of both explanations, which is most
+ * of why that tab reads as a wall of text.
+ *
+ * One component, two instances: everything below — verification, the guides, the drafts — is
+ * identical, and forking it would give two copies of the one part that must not drift (a key is
+ * NEVER shown back).
+ */
+export type CredKind = "bank" | "ai";
+const AI_SECRETS = new Set(["anthropic_api_key"]);
+
+export function CredentialsCard({ kind = "bank" }: { kind?: CredKind } = {}) {
   const t = useT();
   const { data, isLoading, error, refetch } = useGetCredentialsQuery();
   const [put, putState] = usePutCredentialMutation();
@@ -85,18 +100,20 @@ export function CredentialsCard() {
   }
 
   return (
-    // Full width (`set-full`): the two keys sit side by side with their step-by-step guides, which
-    // half a column could not hold without wrapping every line. This is also the card a new user
-    // has to act on first, so it earns the room.
-    <div className="card set-card set-full">
-      <div className="set-card-h"><Icon name="settings" size={16} />{t("cred.title")}</div>
-      <p className="set-card-sub">{t("cred.subtitle")}</p>
+    // Full width (`set-full`) for the BANK card only: it holds several keys side by side with
+    // their step-by-step guides. The AI card holds exactly one and does not need the room.
+    <div className={`card set-card${kind === "bank" ? " set-full" : ""}`}>
+      <div className="set-card-h">
+        <Icon name={kind === "ai" ? "spark" : "settings"} size={16} />
+        {kind === "ai" ? t("cred.aiTitle") : t("cred.bankTitle")}
+      </div>
+      <p className="set-card-sub">{kind === "ai" ? t("cred.aiSubtitle") : t("cred.bankSubtitle")}</p>
 
       {error && <ErrorNote error={error} what={t("cred.errorWhat")} onRetry={refetch} />}
       {isLoading && <div className="muted" style={{ fontSize: 13 }}>{t("common.loading")}</div>}
 
       <div className="cred-cols">
-        {(data?.secrets ?? []).map((s) => {
+        {(data?.secrets ?? []).filter((s) => AI_SECRETS.has(s.name) === (kind === "ai")).map((s) => {
           const meta = LABELS[s.name];
           const title = meta ? t(meta.titleKey) : s.name;
           const hint = meta ? t(meta.hintKey) : "";
@@ -160,10 +177,12 @@ export function CredentialsCard() {
 
       {/* The three questions every new user asks before pasting a key (ROADMAP L4). Stated here
           rather than on the landing only, because this is the moment the key is handed over. */}
+      {/* Each card carries only the facts about ITS key — the union of both was a third of the
+          text on this tab, and half of it answered a question the reader was not asking here. */}
       <ul className="cred-facts">
         <li>{t("cred.factEncrypted")}</li>
-        <li>{t("cred.factOwnBilling")}</li>
-        <li>{t("cred.factNoAiKey")}</li>
+        {kind === "ai" && <li>{t("cred.factOwnBilling")}</li>}
+        {kind === "ai" && <li>{t("cred.factNoAiKey")}</li>}
       </ul>
 
       {note && <p className="set-card-sub" style={{ marginBottom: 0 }}>{note}</p>}

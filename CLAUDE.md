@@ -3,24 +3,27 @@
 > **Цей файл = єдина точка входу.** Claude Code вантажить його автоматично щосесії.
 > Тут — усе глобальне, що треба знати ЗАВЖДИ: стек, інваріанти, як працює статистика,
 > категоризація, AI-модель, ops. Історія «раунд-за-раундом» тут НЕ живе (вона в git/пам'яті).
-> Оновлено 2026-08-07. Стан: **у проді**, платформа-фаза закрита, **структурний рефактор
-> (ARCH, фази 0–5) закритий**, вхід тільки Google, **реєстрація ВІДКРИТА** (§Ops п.4).
-> Міграції: `finance` до **0039**, `directory` до **0007**. Тестів — **297**.
+> Оновлено 2026-08-14. Стан: **у проді**, платформа-фаза закрита, **структурний рефактор
+> (ARCH, фази 0–5) закритий**, стилі розділені на десять файлів (лінт C8), вхід тільки Google,
+> **реєстрація ВІДКРИТА** (§Ops п.4).
+> Міграції: `finance` до **0043**, `directory` до **0007**. Тестів — **433**.
 > Черга — `ROADMAP.md`, архів — `HISTORY.md`.
 
 ## 📁 Система документів (як усе влаштовано)
 - **`CLAUDE.md`** (цей файл) — durable-довідник. Глобальні налаштування, інваріанти, «як усе працює зараз». Сюди **виписуй важливе, коли доробив фічу** (див. робочий процес).
-- **`DESIGN.md`** — дизайн-система (живий документ). **Читай ПЕРШИМ перед будь-якою роботою над UI/UX.** Токени, патерни, референси, «Журнал рішень». Код токенів — `src/index.css`.
-- **`STYLES.md`** — the client's style architecture: why one 4 237-line `src/index.css` hurts,
-  which of the obvious fixes (Tailwind / Sass / CSS Modules) were rejected and WHY, and the phased
-  plan for splitting it by domain. Read it before any structural CSS work. **How things should
-  LOOK is not here — that is `DESIGN.md`.**
+- **`DESIGN.md`** — дизайн-система (живий документ). **Читай ПЕРШИМ перед будь-якою роботою над UI/UX.** Токени, патерни, референси, «Журнал рішень». Код токенів — `src/styles/tokens.css`.
+- **`STYLES.md`** — the client's style architecture. The single 4 237-line `src/index.css` is GONE:
+  it is ten files under `src/styles/`, `index.css` is imports only, and lint **C8** keeps it that
+  way. What the document still carries is why Tailwind / Sass / CSS Modules were rejected, and the
+  two phases left (0.5 — eight quietly conflicting selectors; 4 — true domain grouping), both of
+  which change rendering and need a live eye. Read it before any structural CSS work. **How things
+  should LOOK is not here — that is `DESIGN.md`.**
 - **`BANKS.md`** — the bank edge: what PrivatBank actually offers (no personal-card API since 2023;
   AutoClient reaches the ФОП account; open banking needs an NBU licence), what its data shape breaks
   in our canon, and which parts of `BankProvider` are still declarations with no caller. **Read it
   before writing any bank integration** — including the third one.
 - **`ROADMAP.md`** — жива черга задач/фіч. **Тільки невиконане**; доробив — видаляй картку.
-- **`ARCHITECTURE.md`** — шари (`routes → services → lib → repo`), лінти C1–C7 і те, що свідомо
+- **`ARCHITECTURE.md`** — шари (`routes → services → lib → repo`), лінти C1–C8 і те, що свідомо
   НЕ робимо. Читай перед структурною зміною або перед новим лінтом.
 - **`SECURITY.md`** / **`CONTRIBUTING.md`** — публічні (англійською): канал репорту + свідомо
   прийняті межі; green-бар і 5 непорушних правил із ціною кожного.
@@ -51,7 +54,7 @@ Rules:
 3. **Доробив задачу** → (а) видали пункт з `ROADMAP.md`; (б) якщо це змінює «як усе працює» (новий інваріант, нове канонічне визначення, новий ops-крок) — онови відповідний розділ `CLAUDE.md`.
 4. **Гроші/статистика** → будь-яка нова аналітика рахується ТІЛЬКИ через `worker/lib/finance/stats.ts` (єдине джерело). Не дублюй SQL-фільтри в ендпоінтах.
 5. **Green-бар перед «готово»:** `npm run check` (tsc app+worker **+ SQL-лінт + тести канону**) + `npm run build`. Канонічний SQL — валідуй на D1.
-   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/check-repo-layer.mjs` (C1: `.prepare()` лише в `repo/` — з 2026-08-08 ПОВНА заборона, бюджет порожній) + `scripts/check-route-size.mjs` (C3: ≤400 рядків на файл у `routes/`+`services/`) + `scripts/check-route-order.mjs` (C7: літерал не нижче параметризованого роута, що його перекриває; один префікс — один файл) + `scripts/check-api-contract.mjs` (C2/C4: форма відповіді оголошена ОДИН раз, у `shared/api/`) + `scripts/gen-migrations.mjs --check` + `npm test`.
+   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/check-repo-layer.mjs` (C1: `.prepare()` лише в `repo/` — з 2026-08-08 ПОВНА заборона, бюджет порожній) + `scripts/check-route-size.mjs` (C3: ≤400 рядків на файл у `routes/`+`services/`) + `scripts/check-route-order.mjs` (C7: літерал не нижче параметризованого роута, що його перекриває; один префікс — один файл) + `scripts/check-api-contract.mjs` (C2/C4: форма відповіді оголошена ОДИН раз, у `shared/api/`) + `scripts/check-styles.mjs` (C8: `src/index.css` — лише `@import`, кожна частина імпортована, стеля рядків на частину) + `scripts/gen-migrations.mjs --check` + `npm test`.
    Остання (2026-07-24, платформа-фаза) падає, якщо `migrations/*.sql` змінились, а ембед для
    Durable Object (`worker/do/migrations.generated.ts`) не перегенеровано — інакше нова міграція
    мовчки не доїхала б у БД юзера. Перегенерувати: `node scripts/gen-migrations.mjs`.
@@ -179,7 +182,9 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   `accounts/` · `settings/` — доменні блоки відповідних екранів.
 - `src/store/` (RTK Query), `src/lib/` (`errors`, `format`, `brands`, `markdown`, `toast`),
   `src/i18n/`.
-- `migrations/*` (0001→0037) · `wrangler.jsonc` · `.dev.vars` (локальні секрети, у .gitignore).
+- `migrations/*` (0001→0043) · `wrangler.jsonc` · `.dev.vars` (локальні секрети, у .gitignore).
+- `src/styles/*` — десять доменних файлів; `src/index.css` — ЛИШЕ імпорти (лінт C8). Токени —
+  `styles/tokens.css`.
 - **`shared/api/*`** (2026-08-07) — ЄДИНЕ оголошення форми КОЖНОЇ відповіді API; файли дзеркалять
   `worker/routes/api/*`. Клієнт (`src/store/api.ts`) їх імпортує й ре-експортує і **власних типів
   відповідей не оголошує**; воркер анотує ними свої ПОВЕРНЕННЯ (`satisfies`, а `repo/` повертає
@@ -259,6 +264,13 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   ⚠️ **A deployment-wide secret is the OWNER'S, never everyone's fallback** (§Безпека — shipped
   twice, gave one user another user's statement). **A new provider gets NO deployment fallback at
   all, owner included:** there is no single-user history to stay compatible with.
+- **§SET-FLOW (2026-08-14): картки Налаштувань розкладає БАГАТОКОЛОНКОВИЙ потік, не grid.**
+  `columns: 2` + `break-inside: avoid`; `set-full` → `column-span: all`. Grid ставить сусіда за
+  індексом, а не за висотою, тож будь-яка пара «коротка + висока» лишає діру, і впорядкуванням це
+  не лікується — висоти залежать від даних акаунта. ⚠️ Порядок читання стає «згори вниз по
+  колонці», а не «зліва направо»: додаючи картку, дивись, у яку колонку вона впаде.
+  Шел сторінки живе в `styles/settings-shell.css` (виділено, бо `settings.css` уперлась у стелю
+  C8, а виняток рости не може).
 - **§WHY-CATEGORY (2026-08-14): AI-блок нарешті каже ЧОМУ.** `GET /transactions/:id/why` →
   `services/tx-insight.ts` `explainCategory`, який ПРОГАНЯЄ `categorize()`, а не відтворює те,
   що вона сказала б: одна реалізація вирішує і та сама пояснює, тож пояснення не може розійтись із
@@ -508,6 +520,34 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   ⚠️ **Клієнт більше НЕ виводить його сам** (2026-08-12): `EnvelopeGrid` склеював `/budgets` з
   `/analytics/by-category` — третє визначення того, чим уже володіє сервер. Тепер компонент лише
   малює.
+  - **§BUDGET-MEMORY (2026-08-14, міграція 0043): конверт ПАМʼЯТАЄ минулий місяць.**
+    `budgets` — один рядок на категорію, без місяця й без історії, тож конверт умів сказати лише
+    «зараз 70%»: ні «ти закрив липень із запасом», ні — головне — «стало краще». Нова таблиця
+    `budget_months(ym, category_id, limit_minor, carry_in_minor, spent_minor)`: рядок на закритий
+    місяць, `closeBudgetMonths` у ДОБОВОМУ проході, `INSERT OR IGNORE`.
+    ⚠️ **`budgets.rollover` існував із міграції 0017 і НІЧОГО не робив** — `budgetStatus` його не
+    читав, а сторінка Плану виводила перенесення в КЛІЄНТІ з `/analytics/by-category` минулого
+    місяця. Тобто План показував один ефективний ліміт, а сітка конвертів, стрічка й пуш у Telegram
+    — інший, для того самого конверта (§CUR-PLAN у чистому вигляді). Тепер перенесення живе в
+    `budgetStatus`: `amount` = ЕФЕКТИВНИЙ ліміт (`base_amount + carried`), тож усі читачі
+    отримують його, не знаючи правила. **Не рахувати перенесення в компоненті.**
+    ⚠️ **Перевитрата переноситься так само, як залишок** (`carried` буває ВІДʼЄМНИМ). Клієнтська
+    версія робила `max(0, …)`: зекономлене переносилось, перевитрачене — ні, і конверт ставав грою,
+    у якій не можна програти.
+    ⚠️ **Стеля ±базовий ліміт, симетрична.** Без верхньої шість ощадливих місяців роздувають конверт
+    до суми, яка вже нічого не обмежує; без нижньої один зрив ховає конверт на пів року, і в нього
+    просто перестають дивитись.
+    ⚠️ **Немає закритого місяця — немає перенесення, і воно НЕ виводиться з транзакцій.** Ліміт
+    минулого місяця ніде не зберігався, тож «перенесено 800 ₴» означало б «за СЬОГОДНІШНІМ лімітом»,
+    і кожна правка ліміту мовчки переписувала б історію. З тієї ж причини старіші місяці не
+    добираються заднім числом: смуга історії наростає з моменту ввімкнення.
+    ⚠️ **Закриття — у ДОБОВОМУ крон-проході, не в місячному.** Місячний ходить рівно раз, 1-го: якщо
+    саме той прогін упав, місяць не закрився б ніколи, а ланцюг обірвався б назавжди — при тому що
+    обидва конверти виглядали б нормально. Стоїть ПЕРЕД `notifications`: події бюджету читають
+    `budgetStatus`, і 1-го числа інакше оголошували б конверт до того, як він отримав перенесення.
+    ⚠️ **Закритий місяць — ЗАПИС, а не живий запит:** повторне закриття не переписує `spent_minor`,
+    бо стара операція, перекатегоризована через місяці, зрушила б ланцюг перенесень заднім числом.
+    Тримається `budget-memory.test.ts` (10 сценаріїв).
   - **§BUDGET-FORECAST (2026-08-12): конверт каже, де місяць ЗАКРИЄТЬСЯ.** `projected` рахує той
     самий `projectSpend`, що «Радар темпу», тож конверт і радар не можуть розійтись; лумп-правило
     теж спільне (`n ≤ 1 OR biggest ≥ 55%`, або несплачений fixed-кост). Доти бюджет був дзеркалом
@@ -1099,7 +1139,7 @@ owner-шляху), заголовки безпеки на КОЖНІЙ відп�
 ## 🔴 Ops / деплой (рутина КОРИСТУВАЧА)
 
 **✅ ЗАПУЩЕНО В ПРОДІ 2026-07-26 — `https://money.italik.dev`.**
-Стан на 2026-08-12: міграції `finance` **до 0039**, `directory` **до 0007** (0036-0039 і directory
+Стан на 2026-08-14: міграції `finance` **до 0043**, `directory` **до 0007** (0036–0043 і directory
 0006/0007 — накотити перед деплоєм),
 D1 `directory` = `c72e2571-1fbb-44b2-8308-5a961aef9670`, секрети на місці,
 **Google-застосунок ОПУБЛІКОВАНО** (не Testing) — отже відкрита реєстрація діє для будь-кого,
@@ -1177,9 +1217,13 @@ D1 `directory` = `c72e2571-1fbb-44b2-8308-5a961aef9670`, секрети на м�
 **Платформа-фаза ЗАКРИТА, проєкт у проді з 2026-07-26** (публічне портфоліо «зроблено за
 допомоги AI»). **Структурна фаза (ARCH) теж закрита 2026-08-07:** `api.ts` більше не існує,
 SQL лише в `repo/`, форма кожної відповіді оголошена один раз у `shared/api/`, `ai.ts` — лише
-транспорт; тримається лінтами C1–C7 (`ARCHITECTURE.md §3`). Журнали фаз — `HISTORY.md`.
+транспорт; тримається лінтами C1–C8 (`ARCHITECTURE.md §3`). Журнали фаз — `HISTORY.md`.
+**Банківська фаза закрита 2026-08-13** (`BANKS.md §5`): один писар інжесту, спільна нормалізація,
+пейсинг і вибірка від провайдера, резолвер креденшелів, полінг, `bank_connections` із читачем і
+сам провайдер ПриватБанку. ⚠️ Приват НЕ перевірений на живому API — перший синк, найімовірніше,
+потребує раунду правок (`ROADMAP.md`).
 Жива черга — **`ROADMAP.md`**.
-**⏸ Свідомо відкладено:** level-up Goals (P2.1) і реальні нові банки (P1.3 PrivatBank).
+**⏸ Свідомо відкладено:** хвости Goals (графік для цілі-банки, звʼязок події з ціллю).
 **UI/UX — читати `DESIGN.md` ПЕРШИМ** (там §2 «🔒 Падінг картки» — правило системи), зміни
 фіксувати в його «Журналі рішень».
 **Перед деплоєм:** `npm run check` + `npm run build`, міграції на remote — див. §Ops.

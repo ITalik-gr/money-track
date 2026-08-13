@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import {
   useGetBudgetsQuery,
   useGetByCategoryQuery,
+  useGetBudgetStatusQuery,
   useGetCategoriesQuery,
   useBudgetChatMutation,
   useSetBudgetMutation,
@@ -225,13 +226,27 @@ function Budgets() {
   const { data: budgets } = useGetBudgetsQuery();
   const [setBudget] = useSetBudgetMutation();
 
-  // §3: факт за поточний місяць — канонічний by-category (₴, рол-ап у батька).
+  // §3: факт за поточний місяць — канонічний by-category (₴, рол-ап у батька). Потрібен і далі:
+  // категорія БЕЗ конверта не має рядка в `/budgets/status`, а картка все одно показує її факт.
   const from = startOfMonthUnix();
   const to = Math.floor(Date.now() / 1000);
   const { data: spend } = useGetByCategoryQuery({ from, to });
-  // §3 rollover: факт минулого місяця — щоб перенести невитрачений залишок.
-  const lastFrom = useMemo(() => { const d = new Date(from * 1000); return Math.floor(new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime() / 1000); }, [from]);
-  const { data: lastSpend } = useGetByCategoryQuery({ from: lastFrom, to: from });
+  /**
+   * §BUDGET-MEMORY — перенесений залишок приходить ГОТОВИМ із канону.
+   *
+   * Раніше він рахувався тут: `max(0, ліміт − витрати минулого місяця)` з окремого запиту. Три
+   * помилки в одному рядку. (1) Це було ЧЕТВЕРТЕ визначення числа, яким володіє `budgetStatus`,
+   * тож сторінка Плану показувала один ефективний ліміт, а сітка конвертів, стрічка й пуш у
+   * Telegram — інший, для того самого конверта. (2) `max(0, …)` мовчки викидав ПЕРЕВИТРАТУ:
+   * зекономлене переносилось, перевитрачене — ні, і конверт ставав грою, у якій не можна програти.
+   * (3) За «ліміт минулого місяця» бралося сьогоднішнє значення, тож правка ліміту заднім числом
+   * переписувала те, що нібито перенеслось у липні.
+   */
+  const { data: status } = useGetBudgetStatusQuery();
+  const statusById = useMemo(
+    () => new Map((status ?? []).map((s) => [s.id, s])),
+    [status],
+  );
 
   const limits = useMemo(() => {
     const m = new Map<number, number>();
@@ -249,11 +264,6 @@ function Budgets() {
     for (const s of spend ?? []) if (s.category_id != null) m.set(s.category_id, (m.get(s.category_id) ?? 0) + Math.abs(s.spent));
     return m;
   }, [spend]);
-  const lastSpentByCat = useMemo(() => {
-    const m = new Map<number, number>();
-    for (const s of lastSpend ?? []) if (s.category_id != null) m.set(s.category_id, (m.get(s.category_id) ?? 0) + Math.abs(s.spent));
-    return m;
-  }, [lastSpend]);
 
   // Верхньорівневі витратні категорії (бюджет тримаємо на батьках — узгоджено з рол-апом).
   const topCats = (cats ?? []).filter((c) => !c.is_income && c.parent_id == null);
@@ -273,16 +283,18 @@ function Budgets() {
     <div className="budget-cards">
       {ordered.map((c) => {
         const limit = limits.get(c.id) ?? 0;
-        const carried = Math.max(0, limit - (lastSpentByCat.get(c.id) ?? 0));
+        const st = statusById.get(c.id);
         return (
           <BudgetCard
             key={c.id}
             name={c.name}
             color={c.color}
             limit={limit}
-            spent={spentByCat.get(c.id) ?? 0}
+            // Витрата з конверта, коли він є, — те саме число, що в сітці конвертів; інакше
+            // канонічний by-category. Обидва рахує сервер.
+            spent={st?.spent ?? spentByCat.get(c.id) ?? 0}
             rollover={rollovers.has(c.id)}
-            carried={carried}
+            carried={st?.carried ?? 0}
             onSave={(minor, rollover) => setBudget({ category_id: c.id, period: "month", amount: minor, rollover })}
           />
         );
@@ -299,7 +311,9 @@ function BudgetCard({
   const [val, setVal] = useState(limit ? String(limit / 100) : "");
   const dot = color ?? "#8A948F";
 
-  // §3 rollover: ефективний ліміт = базовий + перенесений залишок минулого місяця.
+  // §BUDGET-MEMORY: ефективний ліміт = базовий + перенесене. `carried` приходить із канону й
+  // може бути ВІД'ЄМНИМ — перевитрачений місяць з'їдає наступний рівно так само, як зекономлений
+  // його наповнює. Без цієї симетрії конверт обіцяє наслідки, яких не настає.
   const carry = rollover ? carried : 0;
   const effLimit = limit + carry;
   const ratio = effLimit > 0 ? spent / effLimit : 0;
@@ -320,9 +334,10 @@ function BudgetCard({
         <span className="bc-name"><span className="d" style={{ background: dot }} />{name}</span>
         {/* Перенесений залишок — видимий бейдж, а не рядок у лейблі чекбокса:
             він змінює ліміт цього місяця, тож має читатись відразу. */}
-        {carry > 0 && (
-          <span className="bc-carry" title={t("plan.carryTitle")}>
-            +<Money minor={carry} decimals={false} /> {t("plan.carryFromLast")}
+        {carry !== 0 && (
+          <span className={`bc-carry ${carry < 0 ? "neg" : ""}`} title={t("plan.carryTitle")}>
+            {carry > 0 ? "+" : "−"}<Money minor={Math.abs(carry)} decimals={false} />{" "}
+            {carry > 0 ? t("plan.carryFromLast") : t("plan.carryDebtFromLast")}
           </span>
         )}
         {limit > 0

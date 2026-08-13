@@ -237,7 +237,17 @@ export interface CategoryOverview {
   /** Twelve complete months, oldest first. Gaps are zeros, so the axis is continuous. */
   trend: { month: string; spent: number }[];
   /** §BUDGET-FORECAST — the envelope for this category, when one exists. */
-  budget: { amount: number; spent: number; projected: number; lumpy: boolean } | null;
+  budget: {
+    amount: number; base_amount: number; carried: number; rollover: boolean;
+    spent: number; projected: number; lumpy: boolean;
+  } | null;
+  /**
+   * §BUDGET-MEMORY — up to six CLOSED months, oldest first. `limit` is the effective limit that
+   * month actually had (its own limit plus whatever it carried in), so the ratio is against what
+   * was truly available at the time and not against today's setting. Empty until the first month
+   * closes; months before the feature existed are deliberately never back-filled.
+   */
+  budget_history: { month: string; limit: number; spent: number }[];
   /** §E1 — spending that repeats versus spending that happened once, this period. */
   recurring: number;
   oneoff: number;

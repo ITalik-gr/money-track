@@ -23,7 +23,7 @@ export function Gauge({
       </svg>
       <div className="gauge-center">
         <div className="gauge-val num-hero">{center}</div>
-        <div className="label" style={{ marginTop: 2 }}>{sub}</div>
+        <div className="label gauge-sub">{sub}</div>
       </div>
     </div>
   );

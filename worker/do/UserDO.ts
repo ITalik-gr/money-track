@@ -179,6 +179,18 @@ export class UserDO extends DurableObject<Env> {
         const { runGoalAutofill } = await import("../lib/finance/goals.ts");
         await runGoalAutofill(env);
       });
+      // §BUDGET-MEMORY: close the month that just ended, so its leftover (or its overspend) can
+      // reach the envelope now open. BEFORE the notification pass on purpose — the feed's budget
+      // events read `budgetStatus`, and on the 1st of the month they would otherwise announce the
+      // new envelopes against a limit that has not yet received its carry. Idempotent, so the
+      // other 30 days of the month this costs one indexed lookup.
+      await step("close_budget_month", async () => {
+        const { closeBudgetMonths } = await import("../lib/finance/budgets.ts");
+        const { getRates } = await import("../lib/finance/finance.ts");
+        const { valueMode } = await import("../lib/finance/stats.ts");
+        const { mult } = valueMode(await getRates(env.DB), null);
+        await closeBudgetMonths(env, mult);
+      });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
         await generateNotifications(env);

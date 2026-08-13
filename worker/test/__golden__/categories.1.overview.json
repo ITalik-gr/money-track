@@ -76,10 +76,14 @@
     ],
     "budget": {
       "amount": 1500000,
+      "base_amount": 1500000,
+      "carried": 0,
+      "rollover": false,
       "spent": 287600,
       "projected": 530899,
       "lumpy": false
     },
+    "budget_history": [],
     "recurring": 147600,
     "oneoff": 140000
   }

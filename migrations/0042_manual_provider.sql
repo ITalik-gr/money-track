@@ -1,0 +1,11 @@
+-- A hand-added account was filed under Monobank (owner's screenshot, 2026-08-14).
+--
+-- Migration 0032 added `accounts.provider TEXT NOT NULL DEFAULT 'mono'` and backfilled the manual
+-- rows that existed AT THAT MOMENT. Every manual account created since inherited the default, so
+-- the app believed a card the owner typed in by hand came from monobank — and the Accounts page,
+-- which groups by provider, put a Raiffeisen card inside the Monobank group.
+--
+-- The default is the trap: it was right when there was exactly one bank and nothing else could
+-- create an account. `createManual` now states `'manual'` explicitly, and this repairs the rows
+-- written while it did not.
+UPDATE accounts SET provider = 'manual' WHERE is_manual = 1 AND provider = 'mono';

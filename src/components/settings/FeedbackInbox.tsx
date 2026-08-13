@@ -31,9 +31,13 @@ export function FeedbackInbox() {
   const total = days.reduce((s, d) => s + d.sandboxes, 0);
 
   return (
+    // TWO cards, not one (2026-08-14, owner). The file header already argued they belong side by
+    // side — "40 demos, zero messages" is information only when both are visible at once — and a
+    // single card cannot sit beside itself. The fragment keeps ONE query feeding both.
+    <>
     <div className="card set-card">
-      <div className="set-card-h"><Icon name="bell" size={16} />{t("feedback.inboxTitle")}</div>
-      <p className="set-card-sub">{t("feedback.inboxSub")}</p>
+      <div className="set-card-h"><Icon name="stats" size={16} />{t("feedback.demoTitle")}</div>
+      <p className="set-card-sub">{t("feedback.demoCardSub")}</p>
 
       {isError && <ErrorNote error={error} what={t("feedback.inboxTitle")} onRetry={refetch} />}
 
@@ -68,7 +72,11 @@ export function FeedbackInbox() {
           </div>
         )}
       </div>
+    </div>
 
+    <div className="card set-card">
+      <div className="set-card-h"><Icon name="bell" size={16} />{t("feedback.inboxTitle")}</div>
+      <p className="set-card-sub">{t("feedback.inboxSub")}</p>
       <div className="fb-list">
         {(data?.feedback ?? []).length === 0 && !isError && (
           <div className="muted" style={{ fontSize: 12.5 }}>{t("feedback.inboxEmpty")}</div>
@@ -97,5 +105,6 @@ export function FeedbackInbox() {
         ))}
       </div>
     </div>
+    </>
   );
 }

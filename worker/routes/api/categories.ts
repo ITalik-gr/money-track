@@ -1,6 +1,7 @@
 // `/categories/*` — the category tree. The delete is a CASCADE and its step ORDER is the
 // behaviour: the harness enforces foreign keys, so a step moved after the row is deleted fails.
 import * as categoriesRepo from "../../repo/categories.ts";
+import * as budgetsRepo from "../../repo/budgets.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
@@ -116,12 +117,17 @@ categories.get("/categories/:id/overview", async (c) => {
   const row = await categoriesRepo.byId(c.env.DB, id);
   if (!row) return c.json({ error: "not_found" }, 404);
 
-  const [levels, budgets, trend, split, children] = await Promise.all([
+  const [levels, budgets, trend, split, children, closed] = await Promise.all([
     stats.categoryMonthlyLevels(c.env, mult, { now: to }),
     budgetStatus(c.env, mult, now),
     categoriesRepo.monthlyTrend(c.env.DB, mult, id, stats.localMonthStart(to, -11), to),
     categoriesRepo.recurringSplit(c.env.DB, mult, id, from, to, stats.isRecurringExpr(stats.defaultRefFrom(to), to)),
     categoriesRepo.childrenOf(c.env.DB, loc, id),
+    // §BUDGET-MEMORY. NOT derived from `trend` above: that is what was SPENT, and whether a month
+    // was closed inside its envelope also depends on the limit that was in force at the time —
+    // which exists nowhere except this row. Comparing today's limit against last spring's spending
+    // would be a verdict the data cannot support.
+    budgetsRepo.monthsForCategory(c.env.DB, id, 6),
   ]);
 
   // Zero-fill so the axis is continuous: a month with no spending is a real data point, and a gap
@@ -141,7 +147,17 @@ categories.get("/categories/:id/overview", async (c) => {
     children,
     level: lv ? { level: lv.level, mean: lv.mean, last: lv.last, active_months: lv.active_months, fixed: lv.fixed } : null,
     trend: months,
-    budget: b ? { amount: b.amount, spent: b.spent, projected: b.projected, lumpy: b.lumpy } : null,
+    budget: b
+      ? {
+        amount: b.amount, base_amount: b.base_amount, carried: b.carried, rollover: b.rollover,
+        spent: b.spent, projected: b.projected, lumpy: b.lumpy,
+      }
+      : null,
+    budget_history: closed.map((m) => ({
+      month: m.ym,
+      limit: m.limit_minor + m.carry_in_minor,
+      spent: m.spent_minor,
+    })),
     recurring: split.recurring,
     oneoff: split.oneoff,
   } satisfies CategoryOverview);

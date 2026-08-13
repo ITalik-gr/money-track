@@ -275,9 +275,17 @@ export function Subscriptions() {
 
         <CashflowCalendar />
 
-        <AiDetect />
+        {/*
+          Two ways to add one thing, so they stand SIDE BY SIDE (2026-08-14, owner: "these two
+          blocks are very wide and no longer match the design"). Each was a full-width band, which
+          made "describe it and let AI find it" and "type it in" read as two unrelated stages of a
+          wizard rather than as a choice between two doors to the same room.
+        */}
         <Detected />
-        <AddForm />
+        <div className="sub-add-pair">
+          <AiDetect />
+          <AddForm />
+        </div>
       </div>
     </>
   );
