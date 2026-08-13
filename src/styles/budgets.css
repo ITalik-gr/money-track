@@ -26,6 +26,12 @@
 .env-carry { color: var(--muted); }
 .env-carry.neg { color: var(--neg); }
 
+/* §BUDGET-MEMORY in the auto-budget: "never kept" is a WARNING tone, not a negative one. It
+   reports a fact about the past, and the row it sits on is a proposal being made more achievable —
+   colouring it like an error would read as the app telling someone off. */
+.ab-tag.warn { color: var(--warn, #c9871a); border-color: color-mix(in srgb, var(--warn, #c9871a) 40%, var(--line)); }
+.bp-reason.neg { color: var(--warn, #c9871a); }
+
 /* ---- §BUDGET-MEMORY: how the months closed --------------------------------- */
 .bh-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .bh-row { display: grid; grid-template-columns: 44px 1fr auto auto; align-items: center; gap: 10px;
@@ -65,3 +71,39 @@
   transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
 .cat-chip:hover { border-color: var(--accent); color: var(--accent); }
 .cat-chip .d { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+/* The merchant list was three unstyled spans per row, so the name, the operation count and the
+   amount ran together as one line of prose. A grid instead of a flex row because the amount column
+   must ALIGN down the list — a column of sums that does not line up cannot be compared at a
+   glance, which is the entire reason to list merchants by spend. */
+.cat-merch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.cat-merch-list > li { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline;
+  gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.cat-merch-list > li:last-child { border-bottom: none; }
+.cat-merch-list > li:first-child { padding-top: 0; }
+/* `min-width: 0` + ellipsis: a long merchant name must not push the amount column out of the
+   card — a wrapped number reads as a different number (DESIGN §правила). */
+.cat-merch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink); text-decoration: none; }
+.cat-merch-name:hover { color: var(--accent); }
+.cat-merch-n { white-space: nowrap; }
+.cat-merch-list .num-mono { white-space: nowrap; }
+
+.chart-card { padding: 14px 12px 6px; }
+
+/* ⚠️ The vertical rhythm between this page's blocks, and WHY it needs saying here.
+   `.section-head` carries `margin: 26px 2px 10px` — that is the app's gap between sections. But
+   `.section-head:first-child` zeroes it to 4px so the first heading does not push the page away
+   from its header, and inside a `<section>` wrapper EVERY heading is a first child. So the moment
+   a page groups its blocks in `<section>` elements — which is the semantic thing to do — it loses
+   the spacing the design system says it has. Restored here for the sections that follow the stat
+   row, and a little wider than 26px because this page stacks five unrelated blocks.
+   ⚠️ Scoped, not global: the same defect is on every page using `<section>`, but fixing it there
+   changes spacing on screens I cannot see (STYLES phase 0.5 — needs a live eye). Noted in ROADMAP. */
+.cat-page-stats ~ section > .section-head:first-child { margin-top: 34px; }
+
+@media (max-width: 560px) {
+  /* The operation count is the first thing to go — the name and the sum are what the row is for. */
+  .cat-merch-list > li { grid-template-columns: 1fr auto; }
+  .cat-merch-n { display: none; }
+}

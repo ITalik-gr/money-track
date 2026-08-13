@@ -55,17 +55,6 @@
 .cat-ico.brand-tile svg { display: block; }
 .cat-ico.brand-mono { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
 
-/* бейдж фізичної картки — чорна/біла/FOP/банка (фідбек #2) */
-.card-badge {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-2);
-}
-.card-badge .sq { width: 11px; height: 8px; border-radius: 2.5px; background: var(--muted); flex-shrink: 0; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12); }
-.card-badge.black .sq { background: #14171a; }
-.card-badge.white .sq { background: #f4f5f6; box-shadow: inset 0 0 0 1px #c7cdd4; }
-.card-badge.fop .sq { background: #12251d; }
-.card-badge.jar .sq { background: var(--c-teal); }
-
 /* §1: «По картках» (Статистика→Мерчанти) — велика плитка-картка замість голого рядка тексту. */
 .acct-badge { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; color: #fff; }
 .acct-badge.black { background: #14171a; }
@@ -149,11 +138,6 @@
 .fc-legend { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--ink-2); }
 .fc-legend b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
 .fc-upcoming { border-top: 1px solid var(--line); padding-top: 12px; }
-.fc-plan-list { display: flex; flex-direction: column; gap: 7px; }
-.fc-plan { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; font-size: 13px; }
-.fc-plan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fc-plan-date { color: var(--muted); font-size: 12px; }
-.fc-plan-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
 /* quick facts strip (stats) */
 .stat-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
@@ -177,8 +161,6 @@
 .stat-facts .fact-val.neg { color: var(--neg); }
 .stat-facts .fact-cat { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stat-facts .fact-cat .d { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.catbar-link { text-decoration: none; color: inherit; border-radius: 8px; padding: 4px; margin: -4px; transition: background 0.12s; }
-.catbar-link:hover { background: var(--surface-2); }
 
 /* глибша аналітика (F1) */
 .deep-card { padding: 16px; }
@@ -291,15 +273,6 @@
 .cat-drill-panel-h { font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 1px; }
 /* §R2-ST5: список операцій зрізу */
 .cat-drill-txs { border-top: 1px solid var(--line); padding-top: 10px; }
-.drill-tx-list { display: flex; flex-direction: column; }
-.drill-tx {
-  display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px;
-  padding: 7px 8px; font-size: 12.5px; border-radius: 8px; color: inherit; text-decoration: none;
-}
-.drill-tx:hover { background: var(--surface-2); }
-.drill-tx-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drill-tx-date { color: var(--muted); font-size: 11.5px; }
-.drill-tx-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; text-align: right; color: var(--ink-2); }
 .drill-row { display: grid; grid-template-columns: 1fr 50px 72px; align-items: center; gap: 8px; font-size: 12.5px; }
 .drill-name { display: inline-flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .drill-name .d { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
@@ -595,26 +568,11 @@
 .whatif-stat { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; border-top: 1px solid var(--line); padding-top: 9px; }
 .whatif-stat span { color: var(--muted); }
 .whatif-stat b { font-variant-numeric: tabular-nums; }
-.advisor-ask { position: sticky; top: 78px; }
-@media (max-width: 900px) { .advisor-ask { position: static; } }
-.advisor-ask-card { display: flex; flex-direction: column; padding: 0; overflow: hidden; }
-.advisor-ask-log { display: flex; flex-direction: column; gap: 10px; padding: 16px; min-height: 220px; max-height: 460px; overflow-y: auto; }
-.advisor-ask-log .chat-msg { max-width: 90%; animation: chat-in 0.22s ease; }
-.advisor-ask-empty { color: var(--muted); font-size: 13.5px; display: flex; flex-direction: column; gap: 12px; margin: auto 0; }
-.advisor-ask-empty p { margin: 0; }
-.advisor-ask-empty .chat-suggest { justify-content: flex-start; }
-.advisor-ask-input { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); background: var(--surface); }
-.advisor-ask-input input { flex: 1; }
-.advisor-ask-more { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--muted); text-decoration: none; }
-.advisor-ask-more:hover { color: var(--accent); }
 
 .advice-card { display: flex; gap: 14px; padding: 16px 18px; align-items: flex-start; }
 .advice-num { width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-weight: 600; font-size: 13px; flex-shrink: 0; }
 .advice-title { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 4px; }
 .advice-detail { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; }
-
-/* чат-порадник */
-.chat-log { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; padding: 2px; }
 .chat-msg { max-width: 86%; padding: 9px 13px; border-radius: 15px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
 .chat-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
 .chat-msg.assistant { align-self: flex-start; background: var(--surface-2); color: var(--ink); border-bottom-left-radius: 5px; }
@@ -729,13 +687,6 @@
 .merchant-stat-sub { font-size: 12.5px; color: var(--muted); }
 .merchant-link { color: inherit; text-decoration: none; border-bottom: 1px dashed var(--line-strong); transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out); }
 .merchant-link:hover { color: var(--accent); border-color: var(--accent); }
-
-/* advisor → chat CTA */
-.chat-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; text-decoration: none; color: inherit; transition: border-color 0.12s, background 0.12s; }
-.chat-cta:hover { border-color: var(--accent); background: var(--accent-soft); }
-.chat-cta-title { font-size: 15px; font-weight: 600; }
-.chat-cta-sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
-.chat-cta-arrow { font-size: 22px; color: var(--accent); flex-shrink: 0; }
 
 /* вартість AI-виклику */
 .usage-cost { font-family: var(--font-mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
@@ -1077,7 +1028,6 @@
 .sub-row .s-name { font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub-row .s-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
 .sub-row .s-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; text-align: right; white-space: nowrap; }
-.sub-row .s-per { font-size: 11px; color: var(--muted); }
 /* §R5: «це не підписка» — закрити кандидата */
 .sub-row .s-dismiss { padding: 6px 9px; color: var(--muted); font-size: 13px; }
 .sub-row .s-dismiss:hover { color: var(--neg, #d64545); }
@@ -1129,7 +1079,6 @@
 @media (min-width: 900px) { .txd-grid { grid-template-columns: 1fr 1fr; } }
 .txd-grid > * { min-width: 0; }
 .tag-search { font-size: 13px; }
-.tags-box { display: flex; flex-wrap: wrap; gap: 6px; max-height: 148px; overflow-y: auto; padding: 2px; }
 
 /* факти tx — чисті рядки без важких бордерів */
 .facts { padding: 6px 16px; }

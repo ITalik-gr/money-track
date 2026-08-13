@@ -33,7 +33,16 @@ const DIR = "src/styles";
  * a name on it, a raised limit is a limit nobody believes.
  */
 const MAX_LINES = 700;
-const EXCEPTIONS = { "domains-a.css": 1156, "settings.css": 675 };
+/**
+ * An exception is a debt with a name on it, so it RATCHETS: when the file shrinks, the number
+ * comes down with it and the slack is gone for good.
+ *
+ * 2026-08-14: the C9 dead-rule sweep took `domains-a.css` 1 156 → 1 104 and `settings.css`
+ * 675 → 637 — the second is now under the cap on its own, so **its exception is deleted rather
+ * than kept as headroom.** That is the point of the mechanism: an exception nobody needs is an
+ * invitation to grow back into it.
+ */
+const EXCEPTIONS = { "domains-a.css": 1105 };
 
 const problems = [];
 

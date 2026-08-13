@@ -42,15 +42,51 @@ export async function clear(db: AppDb, categoryId: number, period: string): Prom
     .bind(categoryId, period).run();
 }
 
-/** Apply several monthly envelopes at once, with the same replace semantics as `set`. */
+/**
+ * Apply several monthly envelopes at once, with the same replace semantics as `set`.
+ *
+ * ⚠️ **The rollover flag SURVIVES.** This used to write a literal `0`, so accepting an auto-budget
+ * silently switched off §BUDGET-MEMORY on every envelope it touched — the limit changed, which is
+ * what the user asked for, and the carry-over quietly stopped, which they never did. A batch that
+ * replaces a row is not permission to reset the settings that row was carrying.
+ */
 export async function setMonthlyBatch(
   db: AppDb, items: { category_id: number; amount: number }[],
 ): Promise<void> {
+  const existing = await monthlyEnvelopes(db);
   await db.batch(items.flatMap((i) => [
     db.prepare("DELETE FROM budgets WHERE category_id = ? AND period = 'month'").bind(i.category_id),
-    db.prepare("INSERT INTO budgets (category_id, period, amount, currency_code, rollover) VALUES (?, 'month', ?, 980, 0)")
-      .bind(i.category_id, i.amount),
+    db.prepare("INSERT INTO budgets (category_id, period, amount, currency_code, rollover) VALUES (?, 'month', ?, 980, ?)")
+      .bind(i.category_id, i.amount, existing.get(i.category_id)?.rollover ? 1 : 0),
   ]));
+}
+
+/**
+ * §BUDGET-MEMORY — the TRACK RECORD of each envelope: how many closed months it had, how many it
+ * blew, and what it actually spent on average.
+ *
+ * This is the thing an auto-budget could never know. Proposing a limit from spending alone means
+ * proposing the same "level − 10%" to someone who has missed that target four months running —
+ * the app repeating a number already proven unachievable, which is how a budget stops being read.
+ */
+export async function trackRecord(
+  db: AppDb, sinceYm: string,
+): Promise<Map<number, { closed: number; over: number; avg_spent: number; avg_limit: number }>> {
+  // Bounded by the MONTH KEY, not by a row count: `LIMIT n` would have to guess how many
+  // categories carry envelopes, and the guess decides how far back the window really reaches.
+  const r = await db.prepare(
+    `SELECT category_id,
+            COUNT(*)                                                          AS closed,
+            SUM(CASE WHEN spent_minor > limit_minor + carry_in_minor THEN 1 ELSE 0 END) AS over,
+            AVG(spent_minor)                                                  AS avg_spent,
+            AVG(limit_minor + carry_in_minor)                                 AS avg_limit
+     FROM budget_months WHERE ym >= ?
+     GROUP BY category_id`,
+  ).bind(sinceYm).all<{ category_id: number; closed: number; over: number; avg_spent: number; avg_limit: number }>();
+  return new Map((r.results ?? []).map((x) => [x.category_id, {
+    closed: x.closed, over: x.over,
+    avg_spent: Math.round(x.avg_spent), avg_limit: Math.round(x.avg_limit),
+  }]));
 }
 
 // ---- §BUDGET-MEMORY: closed months -----------------------------------------

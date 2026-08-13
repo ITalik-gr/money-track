@@ -389,10 +389,6 @@
   display: grid; place-items: center; position: relative; transition: background 0.12s, color 0.12s;
 }
 .icon-btn:hover { background: var(--surface-2); color: var(--ink); }
-.icon-btn .dot-badge {
-  position: absolute; top: 8px; right: 9px; width: 7px; height: 7px; border-radius: 50%;
-  background: var(--neg); border: 1.5px solid var(--surface);
-}
 /* §A6 — індикатор фонової AI-генерації в топбарі. Живе поруч із дзвіночком і зникає, щойно
    робота скінчилась: постійний елемент, який 99% часу нічого не означає, — це шум.
    Акцентна пігулка, а не ще одна `icon-btn`: це СТАН, а не дія, і сплутати їх не має бути як. */

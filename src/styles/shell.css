@@ -278,15 +278,6 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   margin-top: 6px;
   letter-spacing: -0.03em;
 }
-.summary .by-currency {
-  display: flex;
-  gap: 26px;
-  margin-top: 18px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
-  flex-wrap: wrap;
-}
-.summary .by-currency .amt { font-size: 18px; margin-top: 3px; }
 
 /* ---- credit banner (§5) — own vs debt, never merged --------------------- */
 
@@ -361,13 +352,6 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .acct2 .credit-meter { margin-top: 5px; height: 5px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .acct2 .credit-meter span { display: block; height: 100%; border-radius: 999px; background: var(--neg); }
 .acct2 .acct-edit-form { display: flex; flex-direction: column; gap: 8px; }
-.acct-add-grid {
-  display: grid; gap: 8px;
-  grid-template-columns: 1fr 1fr;
-  align-items: center;
-}
-.acct-add-grid > button { grid-column: 1 / -1; }
-@media (max-width: 560px) { .acct-add-grid { grid-template-columns: 1fr; } }
 
 /* ---- envelopes ----------------------------------------------------------- */
 

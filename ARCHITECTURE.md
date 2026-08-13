@@ -89,6 +89,7 @@ runs all of them.
 | C6 | golden DATABASE STATE after every write endpoint | silent regressions in writes, where the response says nothing | `worker/test/writes.test.ts` |
 | C7 | no literal route below a parameterised one that matches it; one prefix, one file | an endpoint silently unreachable — a real past outage | `scripts/check-route-order.mjs` |
 | C8 | `index.css` is imports only; every part imported; line ceiling per part | the 4 182-line stylesheet regrowing | `scripts/check-styles.mjs` |
+| C9 | every `className` has a rule, every rule has a `className` | a block shipping unstyled, and dead CSS reading as live | `scripts/check-styles-used.mjs` |
 
 Two things learned about the checks themselves:
 
@@ -110,6 +111,27 @@ Two things learned about the checks themselves:
   hour it landed: adding `/analytics/weekday` pushed `routes/api/analytics.ts` over its allowance,
   and instead of raising the number the net-worth reconstruction moved to `lib/finance/networth.ts`
   — which is where reconstruction belonged anyway.
+- **C9 is the first check bought by bugs the OWNER found, not by ones a review found** (2026-08-14).
+  Three in one day, all the same shape: `BankConnectionsCard` used `set-card` without `card` and
+  had no background; the category page shipped `cat-page-stats`, `cat-page-dot`,
+  `cat-page-children`, `cat-chip` and `cat-merch-list` with no rules at all. **A class name that
+  matches nothing is indistinguishable from one that matches something** — the join between a
+  component and a stylesheet exists only in a browser, so neither `tsc` nor a CSS parser can see
+  it, and a reviewer sees two plausible strings.
+  It ran in both directions on the first day and that is what made it worth writing: the reverse
+  direction found 59 dead rules — `.advisor-ask*` is seven rules for a feature that no longer
+  exists, `.drill-tx*` and `.chat-log` are a superseded naming generation — and removing them took
+  `domains-a.css` under its C8 exception and let `settings.css` drop its exception entirely.
+  ⚠️ **The false positives are the whole design problem, and both kinds nearly caused damage.**
+  Six `.recharts-*` rules are emitted by the library at runtime and looked exactly as dead as the
+  rest; deleting them would have broken every chart. And `` `toast-${t.type}` `` produces class
+  names that appear nowhere as literals. So the check carries a third-party prefix list and derives
+  dynamic prefixes from the source itself. **A dead-code check without those is a delete button
+  with a plausible explanation attached** — and a check that reports one false positive is a check
+  that gets switched off.
+  It also found a live bug on its way in: `.acct-card.editing` was written for a card whose class
+  is `acct2`, so "the account editor takes the full row" was shipped, listed as done, and never
+  once worked.
 - **C7 exists because the split made a claim that nobody could keep by hand.** "One file owns a
   whole prefix, so route ordering is checkable by reading one file" is true and useless if the
   reading never happens. It found nothing on the day it landed — which is the answer the security

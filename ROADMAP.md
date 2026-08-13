@@ -13,7 +13,7 @@
 
 1. Бери **найвищу невиконану задачу** з «Черги». Не перестрибуй без причини.
 2. Задача = картка: **Ціль · Файли · Кроки · Готово-коли**. Спочатку прочитай згадані файли.
-3. **Green-бар перед «готово»:** `npm run check` (tsc + лінти C1–C8 + тести) + `npm run build`.
+3. **Green-бар перед «готово»:** `npm run check` (tsc + лінти C1–C9 + тести) + `npm run build`.
    Гроші/статистика — лише через `worker/lib/finance/stats.ts`, не дублюй SQL.
 4. **UI/UX** — спершу `DESIGN.md`, зміну фіксуй у його «Журналі рішень». Хук impeccable ганяє
    детектор — знайдене виправляй, не глуши.
@@ -41,32 +41,58 @@
 
 **Не переглянуто вживу після правок**
 - [ ] Порадник, Підписки, Категорії — чек-лист із §Дизайн нижче.
+- [ ] **13 класів-модифікаторів, що НІЧОГО не роблять** — перелічені в `STYLELESS_OK`
+      (`scripts/check-styles-used.mjs`): `advisor-main`, `pulse-cats`, `top-subs-card`,
+      `lp-top-signin`, `goal-jar`, `tip-net`, `alt`… Кожен — або залишок, або намір, який не
+      дописали, і відрізнити одне від іншого можна лише з екраном перед очима. **Список має
+      скорочуватись під час живого проходу, а не рости.**
 
 ## 🔥 Черга (роби згори вниз)
 
-### 1. STYLES phase 0.5 + 4 — needs the owner's EYE (`STYLES.md`)
+### 1. The `.section-head` gap is wrong on EVERY page using `<section>`
 
-The stylesheet is split (nine files under `src/styles/`, `index.css` is imports only, lint **C8**
-keeps it that way) and the 76 byte-identical dead blocks are gone. Two phases stayed behind on
-purpose, because neither can be done blind:
+Found while widening the category page. `.section-head` carries `margin: 26px 2px 10px` — the
+app's gap between sections — but `.section-head:first-child` drops it to 4px so the first heading
+does not push the page away from its header. **Inside a `<section>` wrapper every heading is a
+first child**, so the moment a page groups its blocks semantically it silently loses the spacing
+the design system says it has. That is 20+ files (`Dashboard`, `Stats`, `Subscriptions`, `Reports`,
+`Advisor`, `Categories`, `Plan`, `Merchant`…).
+
+The one-line fix is `section > .section-head:first-child { margin-top: 26px; }`, and it is NOT
+applied yet: it changes vertical rhythm on every screen at once, and some may be tight on purpose.
+Scoped to the category page for now (`budgets.css`, `.cat-page-stats ~ section`).
+**Done when:** the owner has looked at two or three of those pages with the rule on.
+
+### 2. STYLES phase 0.5 + 4 — needs the owner's EYE (`STYLES.md`)
+
+The stylesheet is split (twelve parts under `src/styles/`, `index.css` is imports only, lint **C8**
+keeps it that way), the 76 byte-identical dead blocks are gone and C9 has since removed 59 more.
+Two phases stayed behind on purpose, because neither can be done blind:
 
 - **Phase 0.5 — the 8 quietly conflicting selectors.** What renders today is their MERGE, which
   nobody wrote. Collapsing them CHANGES rendering, so each one needs a live before/after.
 - **Phase 4 — true domain grouping.** It moves rules across cascade boundaries. `@layer` was
   skipped for the same reason.
 
-⚠️ New exception since the split: `settings.css` hit the C8 ceiling and its page shell moved to
-`settings-shell.css` (§SET-FLOW). An exception may not grow — the next overflow gets a seam, not a
-raised cap.
+⚠️ The exception mechanism is now a RATCHET: `settings.css` overflowed, its page shell moved to
+`settings-shell.css` (§SET-FLOW), and after the C9 sweep it dropped under the cap and **lost its
+exception entirely**. `domains-a.css` is down to 1 105. An exception may never grow — the next
+overflow gets a seam, not a raised cap.
 
 **Done when:** the 8 conflicts are resolved against live screens, with no visual change the owner
 did not approve.
 
-### 2. `worker/lib/ai/report.ts` is at its C3 ceiling (450)
+### 3. `worker/lib/ai/report.ts` is at its C3 ceiling (450)
 
 Adding anything to it requires an extraction first. The obvious seam: context assembly and storage
 stay, everything else follows `report-prompt.ts` out. Not urgent — it becomes urgent the moment a
 report feature is asked for.
+
+*(Closed 2026-08-14: **лінт C9** — кожен `className` має правило й навпаки. Куплений трьома
+багами того самого дня (картка без фону, сторінка категорії з чотирма класами без жодного правила).
+Вимів 59 мертвих правил, зняв `domains-a.css` зі стелі винятку C8 і дозволив `settings.css`
+відмовитись від винятку зовсім; заразом знайшов `.acct-card.editing`, написаний під клас `acct2` —
+тобто «редактор рахунку на весь ряд» не працював жодного разу.)*
 
 *(Closed 2026-08-14: §BUDGET-MEMORY — `budget_months` (migration 0043) gives budgets the time
 dimension they never had; the carry is folded into `budgetStatus` so every reader gets it, an

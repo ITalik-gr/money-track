@@ -84,6 +84,10 @@ export function AutoBudget() {
                       <span className="d" style={{ background: i.color ?? "var(--muted)" }} />
                       {i.name}
                       {i.essential && <span className="ab-tag">{tr("ab.essentialTag")}</span>}
+                      {/* §BUDGET-MEMORY: a row that stops being trimmed while its neighbours are
+                          reads as a bug unless it says why. The tag is the visible half of
+                          `basis`; the sentence below carries the actual record. */}
+                      {i.basis === "missed" && <span className="ab-tag warn">{tr("ab.missedTag")}</span>}
                     </span>
                     <span className="bp-figs">
                       <span className="bp-avg">{tr("ab.usualPrefix")} <Money minor={i.level} decimals={false} /></span>
@@ -94,6 +98,16 @@ export function AutoBudget() {
                   </div>
                   {/* Наявний ліміт показуємо явно: застосування його ПЕРЕЗАПИШЕ, і про це
                       треба знати до кліку, а не після. */}
+                  {/* The track record, in words, WHENEVER there is one — not only when it is bad.
+                      "kept 4 of 4" is the sentence that makes the next trim believable, and
+                      showing the record only on failure would make the block feel like a scold. */}
+                  {i.months_closed > 0 && (
+                    <div className={`bp-reason ${i.basis === "missed" ? "neg" : ""}`}>
+                      {i.basis === "missed"
+                        ? tr("ab.missedReason", { over: i.months_over, of: i.months_closed })
+                        : tr("ab.keptReason", { kept: i.months_closed - i.months_over, of: i.months_closed })}
+                    </div>
+                  )}
                   {i.current != null && i.current !== i.suggested && (
                     <div className="bp-reason">{tr("ab.currentPrefix")} <Money minor={i.current} decimals={false} />{tr("ab.willBeReplaced")}</div>
                   )}

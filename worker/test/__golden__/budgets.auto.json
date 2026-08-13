@@ -13,7 +13,10 @@
         "essential": false,
         "level": 1200000,
         "suggested": 1080000,
-        "current": null
+        "current": null,
+        "basis": "level",
+        "months_closed": 0,
+        "months_over": 0
       },
       {
         "category_id": 1,
@@ -23,7 +26,10 @@
         "essential": true,
         "level": 254000,
         "suggested": 255000,
-        "current": 1500000
+        "current": 1500000,
+        "basis": "essential",
+        "months_closed": 0,
+        "months_over": 0
       }
     ]
   }

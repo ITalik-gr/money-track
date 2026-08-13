@@ -136,24 +136,15 @@
 .modal-head h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
 /* §R2-ST4: рев'ю переказів — широка модалка + рядки (дані не обрізаємо) */
 .modal-wide { max-width: 960px; }
-.rev-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-.rev-row {
-  display: flex; align-items: center; gap: 18px; padding: 12px 14px;
-  border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
-}
-.rev-row.attn { border-color: var(--warn); background: var(--warn-soft); }
-.rev-info { flex: 1; min-width: 0; }
 /* повна назва — переносимо, не ріжемо еліпсисом; бейдж лишається поруч */
 .rev-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .rev-badge { font-size: 10.5px; font-weight: 600; color: var(--warn); border: 1px solid var(--warn); border-radius: 999px; padding: 1px 7px; text-transform: uppercase; letter-spacing: 0.02em; flex-shrink: 0; white-space: nowrap; }
 .rev-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
-.rev-meta .rev-sum { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 .rev-note { font-style: italic; }
 .rev-pick { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 5px; }
 .rev-learn { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--muted); cursor: pointer; }
 .rev-learn input { width: auto; }
 @media (max-width: 680px) {
-  .rev-row { flex-direction: column; align-items: stretch; gap: 9px; }
   .rev-pick { width: 100%; }
 }
 /* §C1/§C2: велика 2-колонкова модалка рев'ю (картки замість рядків).
@@ -337,7 +328,6 @@
   animation: tx-more-spin .7s linear infinite;
 }
 @keyframes tx-more-spin { to { transform: rotate(360deg); } }
-.filt-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
 
 /* §11.4: акордеон-секції фільтрів */
 .filt-sec { border-top: 1px solid var(--line); }
@@ -397,8 +387,4 @@
 .tx.tappable { cursor: pointer; }
 .tx.tappable:hover { background: var(--surface-2); }
 .tx.is-transfer .amt { color: var(--muted); }
-.tx .pill-transfer {
-  font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--muted); border: 1px solid var(--line-strong); border-radius: 5px; padding: 1px 5px; margin-left: 6px;
-}
 

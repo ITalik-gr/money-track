@@ -26,7 +26,6 @@
 .sim-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sim-meta { font-size: 12px; color: var(--muted); }
 
-
 /* «Чому саме ця категорія» — провідний рядок AI-блоку (2026-08-14).
    Речення, а не рядок таблиці: воно пояснює, а не звітує, тож і виглядати має як текст.
    Іконка вирівняна по ПЕРШОМУ рядку (`margin-top`), інакше на двох рядках вона від'їжджає
@@ -176,10 +175,6 @@ details[open] > .disclose { margin-bottom: 10px; }
    and two columns once there is room for them — the pairs that belong together (target/deadline,
    kind/source) then sit on one line. Still one column on a phone. */
 .modal.modal-goal { max-width: 680px; }
-@media (min-width: 620px) {
-  .modal-goal .goal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
-  .modal-goal .goal-form > .span-2 { grid-column: 1 / -1; }
-}
 
 /* Settings, account tab: the Telegram buttons and the disclosure under them had no separation,
    so a row of controls ran straight into another control. */
@@ -213,13 +208,14 @@ details[open] > .disclose { margin-bottom: 10px; }
   .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
 }
 
-/* Editing an account: the form replaced the card's contents and pushed the card into a shape
-   twice its neighbours' — inputs at full card width with a textarea scrolling inside 3 lines.
-   Give the editing card room and let the fields breathe; it is a state, not a layout. */
-.acct-card.editing { grid-column: 1 / -1; }
-.acct-card.editing textarea { min-height: 68px; }
-.acct-edit-row { display: flex; gap: 8px; flex-wrap: wrap; }
-.acct-edit-row > * { flex: 1 1 180px; min-width: 0; }
+/* An account card in EDIT mode takes the whole row: an eight-field form does not fit the footprint
+   of a balance card, and squeezing it there is what made editing feel cramped.
+   ⚠️ This rule was written as `.acct-card.editing` and the card's class is `acct2`, so it matched
+   NOTHING and the editor stayed in its narrow column — shipped, listed as done, and never once
+   working. Found by lint C9 (the class `editing` had no reachable rule), which is the whole
+   argument for the check: neither `tsc` nor a CSS parser can see this join. */
+.acct2.editing { grid-column: 1 / -1; }
+.acct2.editing textarea { min-height: 68px; }
 
 /* Subscriptions: the two ways to add one are a CHOICE, so they sit side by side. */
 .sub-add-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }

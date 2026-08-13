@@ -51,7 +51,6 @@
 @media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr) 340px; } }
 .dash-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 .dash-rail { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
-.dash-col { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 
 /* Paired supporting cards within the main column (equal, side by side) */
 .dash-pair { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); }

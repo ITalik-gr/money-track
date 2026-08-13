@@ -2,14 +2,15 @@
 // Limit-versus-spent is `budgetStatus()` in lib/finance/budgets.ts and nowhere else.
 import { getRates } from "../../lib/finance/finance.ts";
 import {
-  valueMode, categoryMonthlyLevels, } from "../../lib/finance/stats.ts";
+  valueMode, categoryMonthlyLevels, localYm, localMonthStart,
+} from "../../lib/finance/stats.ts";
 import * as categoriesRepo from "../../repo/categories.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
 import type { Budget } from "../../../shared/types.ts";
 import { budgetStatus } from "../../lib/finance/budgets.ts";
-import type { AutoBudget, BudgetStatusList } from "../../../shared/api/planning.ts";
+import type { AutoBudget, AutoBudgetItem, BudgetStatusList } from "../../../shared/api/planning.ts";
 
 export const budgets = apiRoutes();
 
@@ -58,6 +59,9 @@ budgets.put("/budgets", async (c) => {
  * ⚠️ Обовʼязкові категорії (`importance='essential'` — оренда, продукти, ліки) НЕ ріжемо:
  * запропонувати «оренду на 10% менше» неможливо виконати, і такий бюджет одразу стає
  * фальшивим червоним. Їм ліміт = рівень як є.
+ * ⚠️ **§BUDGET-MEMORY: не ріжемо й те, чого людина ЖОДНОГО разу не втримала** — якщо конверт
+ * провалено в половині закритих місяців, `trim` знімається (`basis: "missed"`). Доти пропозиція
+ * була «витрачай на 10% менше» тому, хто рівно цю ціль не виконав чотири місяці поспіль.
  * GET віддає ПРОПОЗИЦІЮ (нічого не змінює), POST застосовує обрані — щоб один тап не
  * переписав мовчки вже налаштовані конверти.
  */
@@ -68,10 +72,14 @@ budgets.get("/budgets/auto", async (c) => {
   const { mult } = valueMode(rates, null);
   const now = Math.floor(Date.now() / 1000);
 
-  const [levels, cats, currentByCat] = await Promise.all([
+  const [levels, cats, currentByCat, record] = await Promise.all([
     categoryMonthlyLevels(c.env, mult, { now }),
     categoriesRepo.budgetable(c.env.DB, c.get("locale")),
     budgetsRepo.monthlyAmounts(c.env.DB),
+    // §BUDGET-MEMORY: the last six CLOSED months. Six because that is the same window the rest of
+    // the app reasons over (trends, income stability), and a shorter one would let a single bad
+    // month rewrite the proposal.
+    budgetsRepo.trackRecord(c.env.DB, localYm(localMonthStart(now, -6))),
   ]);
 
   const MIN_LEVEL = 30000; // 300 ₴/міс — дрібним категоріям конверт не потрібен
@@ -80,8 +88,28 @@ budgets.get("/budgets/auto", async (c) => {
       const level = levels.get(cat.id)?.level ?? 0;
       if (level < MIN_LEVEL) return null;
       const essential = cat.importance === "essential";
+      const rec = record.get(cat.id);
+
+      /**
+       * §BUDGET-MEMORY — the proposal now knows whether the last limit was ever KEPT.
+       *
+       * Until now this was `level × (1 − trim)` for everyone: the same "spend 10% less" offered to
+       * someone who has blown that exact target four months running. That is the app restating a
+       * number already proven unachievable, and a limit you have never once met stops being a
+       * budget — it is a permanent red bar you learn to scroll past.
+       *
+       * ⚠️ A missed record does NOT lower the ambition to whatever was spent — that would ratchet
+       * the budget upward every time someone had a bad quarter, which is a spending plan that
+       * agrees with all spending. It removes the TRIM and proposes the honest level, so the number
+       * is achievable and the conversation moves to whether the level itself should change.
+       * ⚠️ Two closed months minimum: one month is an anecdote, and the very first month after
+       * switching an envelope on is the one most likely to be a surprise.
+       */
+      const missed = !!rec && rec.closed >= 2 && rec.over / rec.closed >= 0.5;
+      const basis: AutoBudgetItem["basis"] =
+        essential ? "essential" : missed ? "missed" : rec ? "kept" : "level";
+      const raw = essential || missed ? Math.max(level, rec?.avg_spent ?? 0) : level * (1 - trim);
       // Округлюємо до 50 ₴ — «2 350 ₴» читається як рішення, «2 347 ₴» як шум обчислення.
-      const raw = essential ? level : level * (1 - trim);
       const suggested = Math.max(MIN_LEVEL, Math.round(raw / 5000) * 5000);
       return {
         category_id: cat.id, name: cat.name, color: cat.color,
@@ -89,6 +117,11 @@ budgets.get("/budgets/auto", async (c) => {
         essential,
         level, suggested,
         current: currentByCat.get(cat.id) ?? null,
+        // The record travels WITH the number: a proposal that quietly stops trimming one row and
+        // not another looks like a bug unless it says why (same rule as `carried` on the envelope).
+        basis,
+        months_closed: rec?.closed ?? 0,
+        months_over: rec?.over ?? 0,
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)

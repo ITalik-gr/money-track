@@ -215,7 +215,6 @@
 
 /* Розподіл активів по валютах */
 .cur-split { margin-bottom: 16px; }
-.cur-split-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
 .cur-split-bar { display: flex; height: 10px; border-radius: var(--radius-pill); overflow: hidden; background: var(--surface-2); gap: 2px; }
 .cur-split-bar > span { min-width: 4px; border-radius: 2px; }
 .cur-split-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; }

@@ -187,6 +187,33 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
       assert.equal(april2.carry_in_minor, 0);
     });
 
+    await t.test("the track record counts a month as blown against its EFFECTIVE limit", async () => {
+      const db = migratedDb();
+      seed(db);
+      // 15 000 limit, 1 000 carried in, 15 500 spent — over the base limit, INSIDE the effective
+      // one. Counting it as a miss would punish the user for money the app itself handed them.
+      closed(db, "2026-03", CAT, 15_000_00, 15_500_00, 1_000_00);
+      closed(db, "2026-04", CAT, 15_000_00, 20_000_00);
+
+      const rec = (await budgetsRepo.trackRecord(db as unknown as never, "2026-01")).get(CAT)!;
+      assert.equal(rec.closed, 2);
+      assert.equal(rec.over, 1, "only April; March stayed inside its effective limit");
+    });
+
+    await t.test("applying an auto-budget PRESERVES the rollover flag", async () => {
+      const db = migratedDb();
+      seed(db);
+      setRollover(db, CAT, true);
+
+      await budgetsRepo.setMonthlyBatch(db as unknown as never, [{ category_id: CAT, amount: 9_000_00 }]);
+
+      const env = (await budgetsRepo.monthlyEnvelopes(db as unknown as never)).get(CAT)!;
+      assert.equal(env.amount, 9_000_00, "the limit is what the user asked to change");
+      // …and the setting they did NOT ask to change is still there. The batch used to write a
+      // literal 0, so accepting a proposal quietly switched §BUDGET-MEMORY off.
+      assert.equal(env.rollover, true);
+    });
+
     await t.test("history reads oldest first and never back-fills months it did not measure", async () => {
       const db = migratedDb();
       seed(db);

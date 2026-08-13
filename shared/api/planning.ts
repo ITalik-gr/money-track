@@ -26,6 +26,16 @@ export interface AutoBudgetItem {
   category_id: number; name: string; color: string | null;
   importance: string; essential: boolean;
   level: number; suggested: number; current: number | null;
+  /**
+   * §BUDGET-MEMORY — WHY this number, so the UI never has to guess:
+   *  · `essential` — rent/groceries, never trimmed (a cut you cannot make is a fake red bar);
+   *  · `missed`    — the envelope was blown in half its closed months, so the trim is dropped;
+   *  · `kept`      — there IS a record and it is good, so the trim stands;
+   *  · `level`     — no closed month yet; the canonical monthly level alone.
+   */
+  basis: "essential" | "missed" | "kept" | "level";
+  months_closed: number;
+  months_over: number;
 }
 export interface AutoBudget { trim_pct: number; total_level: number; total_suggested: number; items: AutoBudgetItem[] }
 
