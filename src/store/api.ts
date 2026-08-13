@@ -12,7 +12,7 @@ import type {
   Advice, AdviceHistoryItem, AiJob, AiModelToken, AiTask, AutoBudget, BudgetChatReply,
   BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
   CredentialStatus, CurrenciesList, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
-  FrequentTx, FundsBreakdown, GoalBody, GoalContribution, IncomeAnalytics, Insight,
+  BankConnections, CategoryWhy, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
@@ -202,6 +202,12 @@ export const api = createApi({
     getAiUsage: b.query<AiUsageStats, void>({ query: () => "/ai-usage", providesTags: ["Tx"] }),
     // §PLATFORM P0.4 — свої ключі (mono / Anthropic). Значення НІКОЛИ не приходить назад,
     // лише статус: сервер не має способу віддати секрет клієнту, і це навмисно.
+    // BANKS.md §5 step 4 — which bank credentials are linked and how they are doing. Tagged with
+    // Setup so a sync or a key change refreshes it.
+    getConnections: b.query<BankConnections, void>({
+      query: () => "/setup/connections",
+      providesTags: ["Setup"],
+    }),
     getCredentials: b.query<{ secrets: CredentialStatus[] }, void>({
       query: () => "/credentials",
       providesTags: ["Credentials"],
@@ -218,7 +224,7 @@ export const api = createApi({
     csvPreview: b.mutation<{
       delimiter: string; headers: string[]; sample: string[][]; total_rows: number;
       mapping: { date?: number; amount?: number; description?: number; comment?: number | null; mcc?: number | null };
-      complete: boolean; parsed?: number; duplicates?: number;
+      complete: boolean; parsed?: number; duplicates?: number; preamble_rows?: number;
       skipped?: { line: number; reason: string }[]; skipped_total?: number;
       preview?: { time: number; amount: number; description: string | null }[];
     }, { text: string; account_id?: string; mapping?: Record<string, number | null | undefined> }>({
@@ -372,6 +378,17 @@ export const api = createApi({
       query: ({ id, body }) => ({ url: `/transactions/${id}`, method: "PATCH", body }),
       invalidatesTags: (_r, _e, { id }) => ["Tx", { type: "Tx", id }, "Summary", "Event"],
     }),
+    // "Which other operations look like this one" — read-only; the applying goes through
+    // `bulkEditTransactions` with the ids that were actually ticked.
+    getSimilar: b.query<SimilarTxList, string>({
+      query: (id) => `/transactions/${id}/similar`,
+      providesTags: (_r, _e, id) => ["Tx", { type: "Tx", id }],
+    }),
+    // Why the deterministic chain would file this operation where it does — see `WhyCategory`.
+    getWhy: b.query<CategoryWhy, string>({
+      query: (id) => `/transactions/${id}/why`,
+      providesTags: (_r, _e, id) => ["Tx", { type: "Tx", id }],
+    }),
     bulkEditTransactions: b.mutation<{ ok: boolean; updated: number }, { ids: string[]; event_id?: number | null; category_id?: number | null; is_transfer?: boolean; importance?: string | null; tag_ids?: number[] }>({
       query: (body) => ({ url: "/transactions/bulk", method: "POST", body }),
       invalidatesTags: ["Tx", "Summary", "Event"],
@@ -480,10 +497,10 @@ export const api = createApi({
       query: () => ({ url: "/alerts/scan", method: "POST" }),
       invalidatesTags: ["Tx"],
     }),
-    backfillStart: b.mutation<{ total: number }, void>({
+    backfillStart: b.mutation<{ total: number; next_in_ms?: number }, void>({
       query: () => ({ url: "/setup/backfill/start", method: "POST" }),
     }),
-    backfillStep: b.mutation<{ done: boolean; progress: number; total: number; retry?: boolean }, void>({
+    backfillStep: b.mutation<{ done: boolean; progress: number; total: number; retry?: boolean; next_in_ms?: number }, void>({
       query: () => ({ url: "/setup/backfill/step", method: "POST" }),
       invalidatesTags: ["Tx", "Setup"],
     }),
@@ -853,6 +870,7 @@ export const {
   useGetBudgetStatusQuery,
   useGetPlannedQuery,
   useGetAiUsageQuery,
+  useGetConnectionsQuery,
   useGetCredentialsQuery,
   usePutCredentialMutation,
   useDeleteCredentialMutation,
@@ -894,6 +912,8 @@ export const {
   useGetFrequentTxQuery,
   useEditTransactionMutation,
   useBulkEditTransactionsMutation,
+  useGetSimilarQuery,
+  useGetWhyQuery,
   useSetBudgetMutation,
   useProposeBudgetsMutation,
   useBudgetChatMutation,

@@ -372,7 +372,10 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 /* ---- envelopes ----------------------------------------------------------- */
 
 /* §4: конверти-бюджети на Головній — зрозумілі міні-бари (факт із ліміту, %, залишок) */
-.env-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+/* `auto-fit`, not `auto-fill`: with five envelopes in a three-column row the fill version keeps
+   the sixth track alive and empty, which reads as a missing card rather than as the end of the
+   list. `auto-fit` collapses it and the last row stretches to the full width. */
+.env-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 /* §11.1: більше повітря в конвертах-бюджетах */
 .env-item {
   display: flex; flex-direction: column; gap: 10px; padding: 15px 16px;

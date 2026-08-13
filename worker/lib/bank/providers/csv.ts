@@ -9,6 +9,7 @@
 import type { AppDb } from "../../platform/db-shim.ts";
 import { st, type ServerLocale } from "../../platform/i18n.ts";
 import type { BankProvider, CanonicalTx } from "./provider.ts";
+import { parseAmountMinor, parseStatementDate as parseDateUnix } from "../normalize.ts";
 
 // ---- parsing ---------------------------------------------------------------------------
 
@@ -82,69 +83,12 @@ export function parseCsv(text: string, delimiter = detectDelimiter(text)): strin
 }
 
 // ---- value coercion --------------------------------------------------------------------
-
-/**
- * "-1 234,56" / "1234.56" / "(1 234,56)" → minor units (integer kopecks).
- *
- * Money stays INTEGER everywhere in this project, so the conversion rounds ONCE, here. Parsing
- * to a float and multiplying later is how 1234.56 becomes 123455 kopecks.
- */
-export function parseAmountMinor(raw: string): number | null {
-  let s = raw.trim();
-  if (!s) return null;
-  // Accounting notation for negatives.
-  const parenthesised = /^\((.*)\)$/.exec(s);
-  if (parenthesised) s = `-${parenthesised[1]}`;
-  // Strip currency letters, ordinary spaces, non-breaking spaces and thin spaces used as
-  // thousand separators by Ukrainian exports.
-  s = s.replace(/[\s   ]/g, "").replace(/[^\d.,+-]/g, "");
-  if (!s) return null;
-  // Decide which of `.` and `,` is the decimal separator: the LAST one that appears, since the
-  // other is then a thousands separator ("1.234,56" and "1,234.56" both resolve correctly).
-  const lastComma = s.lastIndexOf(",");
-  const lastDot = s.lastIndexOf(".");
-  const decimalPos = Math.max(lastComma, lastDot);
-  let intPart = s;
-  let fracPart = "";
-  if (decimalPos >= 0) {
-    intPart = s.slice(0, decimalPos);
-    fracPart = s.slice(decimalPos + 1);
-    // More than two digits after the separator means it was a thousands separator after all
-    // ("1.234" is one thousand two hundred, not 1.23).
-    if (!/^\d{1,2}$/.test(fracPart)) {
-      intPart = s;
-      fracPart = "";
-    }
-  }
-  intPart = intPart.replace(/[.,]/g, "");
-  const negative = intPart.startsWith("-");
-  const digits = intPart.replace(/[^\d]/g, "");
-  if (!digits && !fracPart) return null;
-  const minor = Number(digits || "0") * 100 + Number((fracPart + "00").slice(0, 2));
-  return negative ? -minor : minor;
-}
-
-/** Statement date → unix seconds. Returns `null` rather than guessing when the shape is unknown. */
-export function parseDateUnix(raw: string): number | null {
-  const s = raw.trim();
-  if (!s) return null;
-
-  // dd.mm.yyyy [hh:mm[:ss]] — monobank and PrivatBank exports.
-  const dotted = /^(\d{2})\.(\d{2})\.(\d{4})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?$/.exec(s);
-  if (dotted) {
-    const [, d, m, y, hh = "0", mm = "0", ss = "0"] = dotted;
-    return Math.floor(Date.UTC(+y!, +m! - 1, +d!, +hh, +mm, +ss) / 1000);
-  }
-  // yyyy-mm-dd [hh:mm[:ss]]
-  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/.exec(s);
-  if (iso) {
-    const [, y, m, d, hh = "0", mm = "0", ss = "0"] = iso;
-    return Math.floor(Date.UTC(+y!, +m! - 1, +d!, +hh, +mm, +ss) / 1000);
-  }
-  // Unix seconds, already.
-  if (/^\d{9,10}$/.test(s)) return Number(s);
-  return null;
-}
+//
+// Amount and date parsing moved to `lib/bank/normalize.ts` (BANKS.md §5, step 2): they are not
+// CSV questions but BANK questions — PrivatBank hands us the same "1 234,56" and the same
+// zone-less wall clock over an HTTP API. Re-exported here because the import route and its tests
+// have always addressed them through this module.
+export { parseAmountMinor, parseDateUnix };
 
 // ---- column mapping --------------------------------------------------------------------
 
@@ -164,9 +108,19 @@ export interface ColumnMapping {
 }
 
 const HINTS: Record<keyof ColumnMapping, string[]> = {
-  date: ["дата", "date", "час", "time", "дата i час", "дата і час", "дата та час", "дата операції"],
-  amount: ["сума", "amount", "сума в валюті картки", "сума у валюті картки", "сума операції", "debit", "credit"],
-  description: ["опис", "description", "деталі", "призначення", "контрагент", "merchant", "деталі операції"],
+  // ⚠️ Order matters twice over: an EXACT match is tried against this whole list before any
+  // partial one, so the most specific spelling has to be present, not merely matchable. Real
+  // exports write phrases ("Amount in card currency"), and a bank that offers an English export
+  // is the common case for anyone who ever switched their banking app to English.
+  date: ["дата", "date", "час", "time", "дата i час", "дата і час", "дата та час", "дата операції",
+    "date and time of transaction"],
+  // "Amount in card currency" must win over "Amount in transaction currency": our invariant is
+  // that `amount` is in the ACCOUNT's currency (§R2-CUR1). Partial matching happens to pick the
+  // first of the two, which is the right one by luck — the exact hint makes it right by rule.
+  amount: ["сума", "amount", "сума в валюті картки", "сума у валюті картки", "сума операції", "debit", "credit",
+    "amount in card currency", "сума у валюті рахунку"],
+  description: ["опис", "description", "деталі", "призначення", "контрагент", "merchant", "деталі операції",
+    "details of the operation", "details", "purpose", "призначення платежу"],
   currency: ["валюта", "currency"],
   comment: ["коментар", "comment", "примітка", "note"],
   mcc: ["mcc", "мсс", "код мсс", "mcc-код"],
@@ -200,6 +154,37 @@ export function guessMapping(headers: string[]): Partial<ColumnMapping> {
     if (idx !== undefined) out[key] = idx;
   }
   return out;
+}
+
+/**
+ * Where the TABLE starts — because a bank statement does not start with its table.
+ *
+ * The Raiffeisen export that prompted this opens with 23 lines of preamble: the bank's own
+ * details, the client's full identity, the account, the period and the totals. Treating row 0 as
+ * the header meant handing the guesser `["Raiffeisen Bank JSC"]`, which maps to nothing — so the
+ * app answered "I cannot read these columns" about a perfectly ordinary file, and the only way
+ * forward was for the user to map columns by hand against the wrong row.
+ *
+ * Scored rather than pattern-matched: the header is the row that yields the most mappable
+ * columns, which stays true for a bank whose preamble or wording nobody has seen yet. A file
+ * whose real header is row 0 scores there and nothing changes for it.
+ */
+export function findHeaderRow(rows: string[][], maxScan = 40): { index: number; mapping: Partial<ColumnMapping> } {
+  let best = { index: 0, mapping: guessMapping(rows[0] ?? []), score: -1 };
+  const score = (m: Partial<ColumnMapping>) =>
+    // The three mandatory columns are worth an order of magnitude more than the optional ones: a
+    // row matching "currency" and "mcc" alone is not a header, it is a coincidence.
+    (m.date != null ? 10 : 0) + (m.amount != null ? 10 : 0) + (m.description != null ? 10 : 0) +
+    (m.currency != null ? 1 : 0) + (m.mcc != null ? 1 : 0) + (m.comment != null ? 1 : 0);
+
+  for (let i = 0; i < Math.min(rows.length, maxScan); i++) {
+    const mapping = guessMapping(rows[i]!);
+    const s = score(mapping);
+    // Strictly greater: on a tie the EARLIER row wins, so a data row that happens to contain the
+    // word "date" cannot displace the real header above it.
+    if (s > best.score) best = { index: i, mapping, score: s };
+  }
+  return { index: best.index, mapping: best.mapping };
 }
 
 // ---- conversion + import ----------------------------------------------------------------
@@ -282,47 +267,21 @@ export interface ImportResult {
 }
 
 /**
- * Writes canonical rows, running each through the deterministic categoriser.
+ * Writes canonical rows through the one shared writer (`repo/ingest.ts`).
  *
- * `INSERT OR IGNORE` on the content hash is the whole dedup story — no "have I imported this
- * file before?" bookkeeping, which would be wrong anyway the moment two exports overlap.
+ * Dedup is by the content hash and nothing else — no "have I imported this file before?"
+ * bookkeeping, which would be wrong anyway the moment two exports overlap.
+ *
+ * `onConflict: "ignore"` is the half that belongs to a FILE rather than to a bank: a re-imported
+ * row is a duplicate of something already stored — and possibly re-categorised or renamed by hand
+ * since — so it is left alone. A feed means the opposite by the same id (BANKS.md §4.4).
  */
 export async function importTransactions(db: AppDb, txs: CanonicalTx[]): Promise<ImportResult> {
-  const { categorize } = await import("../../finance/categorize.ts");
-  const now = Math.floor(Date.now() / 1000);
+  const { upsertCanonicalTx } = await import("../../../repo/ingest.ts");
   let inserted = 0;
-
   for (const tx of txs) {
-    const { category_id, display_name, is_transfer, real_category_id, planned_id } = await categorize(db, {
-      mcc: tx.mcc ?? null,
-      description: tx.description ?? null,
-      amount: tx.amount,
-      currency_code: tx.currency_code,
-    });
-    const res = await db
-      .prepare(
-        `INSERT OR IGNORE INTO transactions
-           (id, account_id, source, time, amount, currency_code, mcc, category_id, real_category_id,
-            planned_id, merchant, comment, hold, is_transfer, created_at)
-         VALUES (?, ?, 'import', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`,
-      )
-      .bind(
-        tx.id,
-        tx.account_id,
-        tx.time,
-        tx.amount,
-        tx.currency_code,
-        tx.mcc ?? null,
-        category_id,
-        real_category_id,
-        planned_id,
-        display_name ?? tx.description ?? null,
-        tx.comment ?? null,
-        is_transfer ? 1 : 0,
-        now,
-      )
-      .run();
-    if (res.meta.changes > 0) inserted++;
+    const res = await upsertCanonicalTx(db, tx, { source: "import", onConflict: "ignore" });
+    if (res.inserted) inserted++;
   }
   return { inserted, duplicates: txs.length - inserted };
 }

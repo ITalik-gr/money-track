@@ -3,7 +3,7 @@
 // production long enough to be worth not disturbing.
 import type { BankProvider, CanonicalAccount } from "./provider.ts";
 import type { AppDb } from "../../platform/db-shim.ts";
-import { getClientInfo, setWebhook } from "../mono.ts";
+import { getClientInfo, getStatement, monoToCanonical, MonoRateLimit, setWebhook } from "../mono.ts";
 import { syncAccounts as writeAccounts } from "../../finance/repo.ts";
 
 export const monoProvider: BankProvider = {
@@ -47,5 +47,20 @@ export const monoProvider: BankProvider = {
 
   async registerWebhook(token: string, url: string) {
     await setWebhook(token, url);
+  },
+
+  statement: {
+    pacing: {
+      // Both numbers are monobank's, and they now live where the bank does. The window is a day
+      // short of the documented 31 days + 1 hour, because a request that overshoots is refused
+      // rather than trimmed; the gap is the documented 1 request / 60 s per token.
+      maxWindowSec: 31 * 24 * 60 * 60 - 3600,
+      minGapMs: 60_000,
+    },
+    async fetch(token, accountId, from, to, accountCurrency) {
+      const items = await getStatement(token, accountId, from, to);
+      return items.map((item) => monoToCanonical(item, accountId, accountCurrency));
+    },
+    isRateLimit: (e) => e instanceof MonoRateLimit,
   },
 };

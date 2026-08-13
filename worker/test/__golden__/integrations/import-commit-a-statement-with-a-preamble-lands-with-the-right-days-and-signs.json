@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "body": {
+    "ok": true,
+    "inserted": 2,
+    "duplicates": 0,
+    "skipped": 0
+  },
+  "db": {
+    "imported": [
+      {
+        "id": "csv_185600b1120947150a47f0cd988c8cbf",
+        "account_id": "acc-uah",
+        "source": "import",
+        "time": 1781289600,
+        "amount": -25000,
+        "currency_code": 980,
+        "mcc": 5411,
+        "merchant": "SILPO KYIV",
+        "comment": null,
+        "category_id": 1,
+        "is_transfer": 0
+      },
+      {
+        "id": "csv_d0a738e09a0eaf94bd74adf0c61ae9cf",
+        "account_id": "acc-uah",
+        "source": "import",
+        "time": 1786600323,
+        "amount": 208400,
+        "currency_code": 980,
+        "mcc": null,
+        "merchant": "Salary from EMPLOYER",
+        "comment": null,
+        "category_id": null,
+        "is_transfer": 0
+      }
+    ]
+  }
+}

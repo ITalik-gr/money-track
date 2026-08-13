@@ -73,7 +73,21 @@ export default defineConfig({
             title: "title",
             text: "text",
             url: "url",
-            files: [{ name: "photo", accept: ["image/*"] }],
+            // ONE share target per app, so both kinds of file arrive at the same action and the
+            // service worker decides which field it got. A second `share_target` entry is not a
+            // thing the manifest supports — the second one is simply ignored.
+            files: [
+              { name: "photo", accept: ["image/*"] },
+              // Android matches by MIME and often reports a CSV as text/plain or as an Excel type
+              // depending on which app exported it, so the accept list is deliberately wide. The
+              // parser rejects anything it cannot read, and the preview shows what it understood
+              // before a single row is written.
+              {
+                name: "statement",
+                accept: [".csv", "text/csv", "text/comma-separated-values", "text/plain",
+                  "application/csv", "application/vnd.ms-excel"],
+              },
+            ],
           },
         },
       },

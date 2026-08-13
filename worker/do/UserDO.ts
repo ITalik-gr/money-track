@@ -18,7 +18,7 @@ export class UserDO extends DurableObject<Env> {
   /** `env.DB` replacement for everything running inside this object. */
   readonly db: AppDb;
   private readonly raw: DoDatabase;
-  private credentials: { MONO_TOKEN: string; ANTHROPIC_API_KEY: string } | null = null;
+  private credentials: { MONO_TOKEN: string; ANTHROPIC_API_KEY: string; PRIVAT: string } | null = null;
   /** null = not looked up yet in this isolate. See `rememberOwner`. */
   private ownerFlag: boolean | null = null;
 
@@ -96,6 +96,12 @@ export class UserDO extends DurableObject<Env> {
       ...demoOverride,
       USER_ID: userId,
       IS_OWNER: isOwner,
+      // Bank credentials keyed by provider, resolved once here. A demo has none — `demoOverride`
+      // blanks the token above, and an empty string must not read as "linked".
+      BANK_CREDENTIALS: {
+        ...(!isDemo && creds.MONO_TOKEN ? { mono: creds.MONO_TOKEN } : {}),
+        ...(!isDemo && creds.PRIVAT ? { privat: creds.PRIVAT } : {}),
+      },
       UI_LOCALE: uiLocale,
       onSecretsChanged: () => this.invalidateCredentials(),
       // Both of these used to be `setAlarm` calls at the call site. They now record WHEN the
@@ -332,6 +338,12 @@ export class UserDO extends DurableObject<Env> {
       deadlines.push(at == null ? now : Number(at));
     }
 
+    // Banks that do not push have to be asked (§BANK-POLL). `null` means no such account is
+    // linked, and a deadline nobody needs would wake a paid isolate forever.
+    const { nextPollAt } = await import("../lib/bank/poll.ts");
+    const pollAt = await nextPollAt(await this.appEnv(undefined, await this.storedOwnerFlag()));
+    if (pollAt != null) deadlines.push(pollAt);
+
     const { hasQueuedJobs } = await import("../lib/ai/jobs.ts");
     // Not "now": a job that dies before it can record why would otherwise re-arm the alarm for
     // the next millisecond, and the object would spin. `runNextJob` gives up after MAX_ATTEMPTS,
@@ -398,20 +410,34 @@ export class UserDO extends DurableObject<Env> {
     const { backfillPending } = await import("../lib/bank/backfill.ts");
     const dueAt = await getState(this.db, UserDO.BACKFILL_NEXT_KEY);
     if (await backfillPending(this.db) && now >= (dueAt == null ? now : Number(dueAt))) {
+      const { nextStepGapMs, stepBackfill } = await import("../lib/bank/backfill.ts");
+      // Asked BEFORE the step: the gap belongs to the bank whose window we are about to read, and
+      // after a successful step the cursor has already moved on to the next job.
+      const gap = await nextStepGapMs(env).catch(() => 60_000);
       try {
-        const { stepBackfill } = await import("../lib/bank/backfill.ts");
         const res = await stepBackfill(env);
-        // `retry` means monobank rate-limited us, which is expected pacing rather than an
-        // error — same 60s wait either way.
-        if (res && !res.done) await setState(this.db, UserDO.BACKFILL_NEXT_KEY, String(Date.now() + 60_000));
+        // `retry` means the bank rate-limited us, which is expected pacing rather than an error —
+        // the same wait either way.
+        if (res && !res.done) await setState(this.db, UserDO.BACKFILL_NEXT_KEY, String(Date.now() + gap));
       } catch {
         // Keep the chain alive: dropping the pacing on one bad step would silently abandon a
         // half-finished backfill, and nothing else would ever pick it up.
-        await setState(this.db, UserDO.BACKFILL_NEXT_KEY, String(Date.now() + 60_000));
+        await setState(this.db, UserDO.BACKFILL_NEXT_KEY, String(Date.now() + gap));
       }
     }
 
-    // 3) Re-arm for whatever is still owed — this is the only exit that keeps the chain alive.
+    // 3) One poll pass for a bank that does not push. After the backfill on purpose: a backfill
+    //    is a user waiting on a progress bar, a poll is nobody waiting at all.
+    try {
+      const { pollOnce } = await import("../lib/bank/poll.ts");
+      await pollOnce(env);
+    } catch (e) {
+      // `pollOnce` records its own failures on the connection row; anything thrown past it is
+      // ours, and it must not take the re-arm below with it.
+      console.error("[poll] alarm pass failed:", e instanceof Error ? e.message : String(e));
+    }
+
+    // 4) Re-arm for whatever is still owed — this is the only exit that keeps the chain alive.
     await this.armAlarm();
   }
 
@@ -437,16 +463,20 @@ export class UserDO extends DurableObject<Env> {
    * The cache is keyed on nothing, because a DO serves exactly one user and `isOwner` is a
    * property of that user — it cannot differ between two requests to the same object.
    */
-  private async userCredentials(isOwner: boolean): Promise<{ MONO_TOKEN: string; ANTHROPIC_API_KEY: string }> {
+  private async userCredentials(isOwner: boolean): Promise<{ MONO_TOKEN: string; ANTHROPIC_API_KEY: string; PRIVAT: string }> {
     if (!this.credentials) {
       const master = this.env.SECRETS_MASTER_KEY;
-      const [mono, anthropic] = await Promise.all([
+      const [mono, anthropic, privat] = await Promise.all([
         getSecret(this.db, master, "mono_token"),
         getSecret(this.db, master, "anthropic_api_key"),
+        getSecret(this.db, master, "privat_credentials"),
       ]);
       this.credentials = {
         MONO_TOKEN: mono ?? (isOwner ? this.env.MONO_TOKEN ?? "" : ""),
         ANTHROPIC_API_KEY: anthropic ?? (isOwner ? this.env.ANTHROPIC_API_KEY ?? "" : ""),
+        // NO owner fallback, by rule (§BANK-CRED): a provider added after the single-user era has
+        // no history to stay compatible with, so the owner stores their key like everyone else.
+        PRIVAT: privat ?? "",
       };
     }
     return this.credentials;

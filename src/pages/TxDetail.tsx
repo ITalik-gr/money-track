@@ -14,6 +14,8 @@ import {
 } from "../store/api.ts";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { Money } from "../components/ui/Money.tsx";
+import { SimilarTx } from "../components/transactions/SimilarTx.tsx";
+import { WhyCategory } from "../components/transactions/WhyCategory.tsx";
 import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { toast } from "../lib/toast.ts";
@@ -279,7 +281,22 @@ export function TxDetail() {
                 }}>{enriching ? t("tx.analyzing") : t("tx.recognize")}</button>
             </div>
 
-            {/* Панель фактів: що AI розпізнав про цю операцію */}
+            {/*
+              The lead: WHAT this is and WHY, in one sentence, before any table. The block used to
+              open with a `status · recognised as · category` grid — eight rows of what the app
+              decided and not one word of what it decided from, which reads as a machine reporting
+              to itself.
+            */}
+            <WhyCategory txId={id} />
+
+            {/*
+              The facts stay, folded. They are reference — the exact MCC, the tags, the plan link —
+              wanted rarely and specifically, and open by default they were the loudest thing on a
+              page whose subject is a single payment. Native `<details>`: it keeps keyboard and
+              screen-reader behaviour that a custom toggle would have to reimplement badly.
+            */}
+            <details className="ai-details">
+              <summary className="ai-details-sum">{t("tx.aiFactsSummary")}</summary>
             <div className="ai-facts">
               <div className="ai-fact">
                 <span className="ai-fact-k">{t("tx.aiFact.status")}</span>
@@ -340,6 +357,7 @@ export function TxDetail() {
                 </div>
               )}
             </div>
+            </details>
 
             <label className="stack" style={{ gap: 4, marginTop: 12 }}>
               <span className="label">{t("tx.label.noteForAi")}</span>
@@ -503,6 +521,14 @@ export function TxDetail() {
               <button className="btn primary" onClick={save} disabled={saving}>{saving ? t("tx.saving") : t("common.save")}</button>
             </div>
           </div>
+
+          {/*
+            Under the editor, not above it: the question "should the others be like this too?" only
+            makes sense once this one is right. Reads the SAVED state (`tx`), never the unsaved form
+            — offering to copy a category that has not been stored yet would apply something the
+            person is still deciding about.
+          */}
+          <SimilarTx txId={id} categoryId={tx.category_id ?? null} isTransfer={!!tx.is_transfer} />
         </div>
       </div>
     </>

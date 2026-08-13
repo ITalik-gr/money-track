@@ -408,7 +408,19 @@ export function localParts(unix: number): LocalParts {
  * літнього часу це і розв'язує ±1 год неоднозначність.
  */
 export function localMidnight(y: number, m: number, d: number): number {
-  const wanted = Math.floor(Date.UTC(y, m - 1, d) / 1000);
+  return localWallTime(y, m, d);
+}
+
+/**
+ * Той самий зворотний перерахунок, але для БУДЬ-ЯКОГО настінного часу, не лише опівночі.
+ *
+ * Потрібен там, де ми ЧИТАЄМО чужу дату: банківська виписка пише київський настінний час без
+ * зони, і зібрати з нього момент — це рівно та сама задача, що в `localMidnight`, тільки з
+ * годинами. Додати години до локальної півночі не можна: у добу переходу на літній час їх 23
+ * або 25, тож саме на цій добі результат зʼїхав би на годину.
+ */
+export function localWallTime(y: number, m: number, d: number, hh = 0, mm = 0, ss = 0): number {
+  const wanted = Math.floor(Date.UTC(y, m - 1, d, hh, mm, ss) / 1000);
   let ts = wanted;
   for (let i = 0; i < 2; i++) {
     const p = localParts(ts);

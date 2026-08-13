@@ -1,0 +1,39 @@
+{
+  "status": 200,
+  "body": {
+    "ok": true,
+    "inserted": 2,
+    "duplicates": 0,
+    "skipped": 0
+  },
+  "db": {
+    "imported": [
+      {
+        "id": "csv_e3f3a79c6bfa600f20119544beb23838",
+        "account_id": "acc-uah",
+        "source": "import",
+        "time": 1777928400,
+        "amount": -50000,
+        "currency_code": 980,
+        "mcc": null,
+        "merchant": "Оплата",
+        "comment": "ігротека, настолки",
+        "category_id": 1,
+        "is_transfer": 0
+      },
+      {
+        "id": "csv_a47d8c99a61c212285ec1ba653cfe49b",
+        "account_id": "acc-uah",
+        "source": "import",
+        "time": 1778014800,
+        "amount": -100000,
+        "currency_code": 980,
+        "mcc": null,
+        "merchant": "Поповнення власного рахунку",
+        "comment": null,
+        "category_id": null,
+        "is_transfer": 1
+      }
+    ]
+  }
+}

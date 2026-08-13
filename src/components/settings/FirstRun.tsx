@@ -48,6 +48,7 @@ import {
  * monobank allows one statement request per 60 seconds, so it is a sequence of ticks spread over
  * minutes, not a request. The chain therefore starts it and returns; the ticking continues here.
  */
+/** Fallback only. The real gap belongs to the BANK and comes back on the response (`next_in_ms`). */
 const STEP_INTERVAL_MS = 60_000;
 
 type StepId = "accounts" | "webhook" | "backfill" | "rates" | "profile";
@@ -68,6 +69,9 @@ export function FirstRun() {
   const [chaining, setChaining] = useState(false);
   const [progress, setProgress] = useState<{ progress: number; total: number } | null>(null);
   const timer = useRef<number | null>(null);
+  // The bank's own pacing, learned from the first response. A ref rather than state: changing it
+  // must not re-render, and the interval reads it once when it is created.
+  const gap = useRef<number>(STEP_INTERVAL_MS);
 
   // `available`, not `set`: the owner's token comes from the deployment secrets and writes no
   // `user_secrets` row, so gating on `set` would tell them to add a key that already works.
@@ -79,12 +83,15 @@ export function FirstRun() {
   const busy = run.active !== null;
 
   /**
-   * Backfill: start, then tick on monobank's 60s rhythm. Resolves as soon as the FIRST page is in
+   * Backfill: start, then tick on the rhythm the SERVER reports (`next_in_ms`) — one statement a
+   * minute is monobank's limit, not a universal one, and the client cannot know which bank it is
+   * reading. Resolves as soon as the FIRST page is in
    * — the chain must not block for the minutes the rest takes, and the remaining pages keep
    * arriving in the background while the user reads the next step.
    */
   async function runBackfill() {
     const started = await backfillStart().unwrap();
+    gap.current = started.next_in_ms ?? STEP_INTERVAL_MS;
     setProgress({ progress: 0, total: started.total });
     const tick = async () => {
       try {
@@ -98,7 +105,7 @@ export function FirstRun() {
       }
     };
     await tick();
-    if (timer.current == null) timer.current = window.setInterval(tick, STEP_INTERVAL_MS);
+    if (timer.current == null) timer.current = window.setInterval(tick, gap.current);
   }
 
   const RUNNERS: Record<StepId, () => Promise<unknown>> = {

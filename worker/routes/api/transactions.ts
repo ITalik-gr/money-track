@@ -8,6 +8,7 @@ import * as accountsRepo from "../../repo/accounts.ts";
 import * as categoriesRepo from "../../repo/categories.ts";
 import * as txRepo from "../../repo/transactions.ts";
 import { st } from "../../lib/platform/i18n.ts";
+import { explainCategory, similarTo } from "../../services/tx-insight.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
 import type {
   TxRow, TxDetail, TxSplit, FrequentTx, Reimbursement, ReimbursementUsage,
@@ -80,6 +81,20 @@ transactions.post("/transactions/bulk", async (c) => {
   if (!Object.keys(patch).length && !validTags.length) return c.json({ ok: true, updated: 0 });
 
   return c.json({ ok: true, updated: await txRepo.bulkApply(c.env.DB, ids, patch, validTags) });
+});
+
+// Two questions ABOUT an operation. Both are sequences, so both live in `services/tx-insight.ts`;
+// what is left here is transport — parse, call, choose the status code.
+//
+// ⚠️ Both must stay ABOVE `GET /transactions/:id` (C7): Hono matches in registration order.
+transactions.get("/transactions/:id/similar", async (c) => {
+  const res = await similarTo(c.env, c.get("locale"), c.req.param("id"));
+  return res ? c.json(res) : c.json({ error: "not_found" }, 404);
+});
+
+transactions.get("/transactions/:id/why", async (c) => {
+  const res = await explainCategory(c.env, c.get("locale"), c.req.param("id"));
+  return res ? c.json(res) : c.json({ error: "not_found" }, 404);
 });
 
 // Single transaction with joined names + attached receipt (for the detail page).

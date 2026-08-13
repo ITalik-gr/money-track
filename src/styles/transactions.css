@@ -1,0 +1,63 @@
+/* Сторінка операції — блоки, додані після розділу стилів (STYLES.md §6).
+ *
+ * Нова ЧАСТИНА, а не дописування в `domains-a.css`: та частина вже на своїй стелі (лінт C8), а
+ * виняток «ніколи не росте» — у цьому вся його суть. Файл підключається ОСТАННІМ, тож нові
+ * селектори не можуть перебити нічого наявного просто через порядок: імена `.sim-*` не
+ * зустрічаються більше ніде, і саме тому додавання в кінець тут безпечне (на відміну від
+ * перенесення наявних правил — фаза 4).
+ */
+
+/* «Схожі операції» на сторінці операції (2026-08-13).
+   Список рішень, а не список фактів: чекбокс попереду кожного рядка, бо кожен рядок — це вибір.
+   Рамка нейтральна (`--line`), а не акцентна, як у AI-блоці: цей блок нічого не стверджує про
+   гроші, він лише пропонує повторити те, що людина щойно вирішила сама. */
+.sim-card { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.sim-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sim-title { font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
+.sim-sub { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.45; }
+.sim-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+/* `min-width: 0` на середній колонці — назва мерчанта буває довшою за екран, і без цього
+   рядок розпирає картку вбік (те саме правило, що для рівномірних flex-стрічок). */
+.sim-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: var(--r-sm, 8px); }
+.sim-row:hover { background: color-mix(in srgb, var(--fg) 4%, transparent); }
+.sim-pick { display: inline-flex; align-items: center; }
+.sim-pick input { width: auto; margin: 0; }
+.sim-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; color: inherit; text-decoration: none; }
+.sim-name { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sim-meta { font-size: 12px; color: var(--muted); }
+
+
+/* «Чому саме ця категорія» — провідний рядок AI-блоку (2026-08-14).
+   Речення, а не рядок таблиці: воно пояснює, а не звітує, тож і виглядати має як текст.
+   Іконка вирівняна по ПЕРШОМУ рядку (`margin-top`), інакше на двох рядках вона від'їжджає
+   в середину й читається як маркер списку. */
+.why { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 1.5; }
+.why-ico { color: var(--muted); flex-shrink: 0; margin-top: 2px; display: inline-flex; }
+.why-text { color: var(--fg-soft, var(--muted)); min-width: 0; }
+/* Розбіжність правил зі збереженою категорією — не помилка, тож `--warn`, а не `--neg`. */
+.why-conflict { color: var(--warn); }
+
+/* Згорнуті факти. `summary` лишається кнопкою браузера, тільки без стрілки-маркера:
+   курсор і фокус-кільце отримуємо задарма. */
+.ai-details > .ai-details-sum { cursor: pointer; font-size: 12px; color: var(--muted); list-style: none; padding: 2px 0; }
+.ai-details > .ai-details-sum::-webkit-details-marker { display: none; }
+.ai-details > .ai-details-sum::before { content: "▸ "; }
+.ai-details[open] > .ai-details-sum::before { content: "▾ "; }
+.ai-details[open] > .ai-details-sum { margin-bottom: 8px; }
+
+/* The lone-child guard for the settings grid (2026-08-14).
+   Lives here rather than in `settings.css` only because that part is at its C8 ceiling and an
+   exception may never rise — the rule itself is the same one that already guards `.dash-pair`,
+   `.stats-2col` and `.cat-with-donut`: a child of a two-column grid does not sit in a 50% column
+   with nothing beside it. Every settings tab that renders a single card showed half an empty
+   screen without it. */
+.settings-grid > :only-child { grid-column: 1 / -1; }
+
+/* Three keys, not two (2026-08-13). `settings.css` declares `.cred-cols` as `1fr 1fr`, which left
+   the third card — PrivatBank — alone on its own row with the entire right half empty. Overridden
+   here rather than edited there because that part is at its C8 ceiling and an exception may never
+   rise; this file is imported after it, so the later declaration wins. With `auto-fit` the number
+   of supported providers stops being a layout decision. */
+@media (min-width: 720px) {
+  .cred-cols { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+}

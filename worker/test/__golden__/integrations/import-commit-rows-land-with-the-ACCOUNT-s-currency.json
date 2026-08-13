@@ -9,10 +9,10 @@
   "db": {
     "imported": [
       {
-        "id": "csv_dff523a67ab89275fb9c1fbf80bba0df",
+        "id": "csv_7daf6c387e8bc7512a5d3ca45402cbf5",
         "account_id": "acc-uah",
         "source": "import",
-        "time": 1777593600,
+        "time": 1777582800,
         "amount": -25000,
         "currency_code": 980,
         "mcc": 5411,
@@ -22,10 +22,10 @@
         "is_transfer": 0
       },
       {
-        "id": "csv_4f1482bf9c28baf0b626e9d0b6cd1ba1",
+        "id": "csv_6884fdaf9562ddebe72f25cc4bb541e0",
         "account_id": "acc-uah",
         "source": "import",
-        "time": 1777680000,
+        "time": 1777669200,
         "amount": 1000000,
         "currency_code": 980,
         "mcc": 4829,

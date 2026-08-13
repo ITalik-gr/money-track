@@ -65,6 +65,53 @@ const CSV = [
 /** Headers a guesser cannot map — the branch that must ask instead of inventing columns. */
 const CSV_UNMAPPABLE = ["col1;col2;col3", "a;b;c"].join("\n");
 
+/**
+ * The two decisions a row from a FILE must make the same way a row from a FEED does. Both were
+ * quietly different until the two writers became one (BANKS.md §4.4), and neither difference was
+ * ever chosen — they were simply written on different days:
+ *   • the comment takes part in categorisation (§RULES-UI: the haystack is description + comment,
+ *     in the engine and in the preview alike — the importer was a third opinion);
+ *   • an obviously-internal description marks the row as a transfer (§Інваріанти lists insert-time
+ *     detection as one of the five paths that set `is_transfer`), so the same "Поповнення власного
+ *     рахунку" counted as spending when it arrived in a file and did not when it arrived by webhook.
+ * Both are observable in the probe (`category_id`, `is_transfer`), so this file is where they are
+ * decided from now on.
+ */
+const CSV_FEED_PARITY = [
+  "Дата;Опис;Сума;MCC;Коментар",
+  // The comment carries the literal pattern; matching is a plain lowercase substring, so a
+  // declined form ("за ігротеку") would NOT match — which is a property of the rule engine the
+  // rule screen shows the user, not something this test should paper over.
+  "05.05.2026;Оплата;-500,00;;ігротека, настолки",
+  "06.05.2026;Поповнення власного рахунку;-1000,00;;",
+].join("\n");
+
+/** A statement that names its own currency — the column the guesser finds but nothing used to read. */
+const CSV_CURRENCY = [
+  "Дата;Опис;Сума;Валюта",
+  "01.05.2026;Steam;-10,00;USD",
+].join("\n");
+
+/**
+ * A statement in the shape a bank actually EXPORTS: a preamble, then the table.
+ *
+ * Modelled on a real Raiffeisen export (2026-08-13), with the identity block replaced — the real
+ * one carries the holder's tax id, passport number and address, and a fixture is committed
+ * forever. What is kept is everything that broke the import: 5 rows above the header, English
+ * column names written as phrases, and a "Details of the operation" column that matched no hint,
+ * so the app declared a perfectly ordinary file unreadable.
+ */
+const CSV_WITH_PREAMBLE = [
+  '"Raiffeisen Bank JSC"',
+  '"Account statement for 13.08.2026 18:32:09"',
+  '"Account: UA000000000000000000000000000"',
+  '"Currency of account: UAH"',
+  '"Balance at the end of period: 11121.930"',
+  '"Date and time of transaction";"Date of transaction execution by the bank";"Card number";"Details of the operation";"MCC";"Amount in card currency";"Amount in transaction currency";"Currency";"Rate";"Fees";"Cashback";"Balance"',
+  '"13.08.2026 08:52:03";"13.08.2026";;"Salary from EMPLOYER";"";"2084.00";"2084.00";;"";"0.00";"";"11121.93"',
+  '"12.06.2026 21:40:00";"12.06.2026";"4149 50** **** 8439";"SILPO KYIV";"5411";"-250.00";"-250.00";"UAH";"";"0.00";"";"9037.93"',
+].join("\n");
+
 interface Scenario {
   name: string;
   app: "import" | "setup";
@@ -130,6 +177,44 @@ const SCENARIOS: Scenario[] = [
     name: "import commit: re-importing the same statement inserts nothing",
     app: "import", path: "/csv/commit", body: { text: CSV, account_id: "acc-uah" },
     before: [{ path: "/csv/commit", body: { text: CSV, account_id: "acc-uah" } }],
+  },
+  {
+    // The file that prompted `findHeaderRow`. Three separate defects met here: the guesser was
+    // handed row 0 ("Raiffeisen Bank JSC") and mapped nothing; the description column is a
+    // phrase no hint covered; and every row above the header would have been fed to the parser
+    // as data. The preamble count is REPORTED, because a row that vanishes without a reason is
+    // the one thing this path refuses to do.
+    name: "import preview: a statement with a preamble finds its own header",
+    app: "import", path: "/csv/preview",
+    body: { text: CSV_WITH_PREAMBLE, account_id: "acc-uah" },
+  },
+  {
+    // And it imports: the evening purchase must keep its own day (§APP_TZ — read as UTC, 21:40
+    // on 12 June lands on the 13th), and the debit must stay negative.
+    name: "import commit: a statement with a preamble lands with the right days and signs",
+    app: "import", path: "/csv/commit",
+    body: { text: CSV_WITH_PREAMBLE, account_id: "acc-uah" },
+  },
+  {
+    // The account stays the authority over what an amount MEANS — but it is not the authority
+    // over whether the right account was picked. A USD statement imported into a hryvnia account
+    // stores every amount as hryvnia: wrong by the exchange rate, and completely ordinary-looking
+    // afterwards. The preview is the last screen where that can still be stopped.
+    name: "import preview: the file names a currency the account does not hold",
+    app: "import", path: "/csv/preview",
+    body: { text: CSV_CURRENCY, account_id: "acc-uah" },
+  },
+  {
+    // The comment half. The rule matches a word that appears ONLY in the comment column, so a
+    // categorised row proves the importer feeds the same haystack to the engine as the webhook
+    // does. Priority 100 beats the seeded MCC rules; the MCC column is empty here anyway.
+    name: "import commit: a rule matches text found only in the comment",
+    app: "import", path: "/csv/commit", body: { text: CSV_FEED_PARITY, account_id: "acc-uah" },
+    setupDb: (db) => {
+      db.raw
+        .prepare("INSERT INTO rules (match_type, pattern, category_id, priority) VALUES ('text', 'ігротека', 1, 100)")
+        .run();
+    },
   },
   {
     name: "import preview: already-imported rows are counted as duplicates",

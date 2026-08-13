@@ -15,6 +15,10 @@
   which of the obvious fixes (Tailwind / Sass / CSS Modules) were rejected and WHY, and the phased
   plan for splitting it by domain. Read it before any structural CSS work. **How things should
   LOOK is not here — that is `DESIGN.md`.**
+- **`BANKS.md`** — the bank edge: what PrivatBank actually offers (no personal-card API since 2023;
+  AutoClient reaches the ФОП account; open banking needs an NBU licence), what its data shape breaks
+  in our canon, and which parts of `BankProvider` are still declarations with no caller. **Read it
+  before writing any bank integration** — including the third one.
 - **`ROADMAP.md`** — жива черга задач/фіч. **Тільки невиконане**; доробив — видаляй картку.
 - **`ARCHITECTURE.md`** — шари (`routes → services → lib → repo`), лінти C1–C7 і те, що свідомо
   НЕ робимо. Читай перед структурною зміною або перед новим лінтом.
@@ -208,6 +212,125 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 - Секрети лише у Worker secrets, ніколи в git/на клієнті. Вебхуки — секретний сегмент шляху.
 - `Select` замість native `<select>`. Тема світла/темна рівноправні. Дизайн свідомо НЕ «аішний» (див. DESIGN.md).
 - **Ручна назва операції авторитетна:** `transactions.name_locked=1` (ставиться при ручній зміні мерчанта в TxDetail) → enrich/ре-світ НЕ перезаписує `merchant` (`merchant = CASE WHEN name_locked=1 THEN merchant ELSE ? END`); категорію/ai_note ще уточнює. Знімається кнопкою «дозволити AI оновлювати». Міграція 0019.
+- **§INGEST-WRITE (2026-08-13): an incoming bank transaction is written by `upsertCanonicalTx`
+  (`repo/ingest.ts`) ALONE.** There were two writers — `repo.upsertMonoTx` for the webhook and
+  `csv.importTransactions` for a file — and a third was about to be written for PrivatBank. They
+  differed in four places, none of them chosen: whether the comment took part in categorisation,
+  whether an internal description set `is_transfer`, which columns were written at all, and what
+  happens when the id already exists. Same shape as §CUR-PLAN and §A1-WRITE.
+  The two differences that were REAL became arguments:
+  ⚠️ **`onConflict`** — a FEED re-sends the same operation as its state changes and must overwrite
+  in place (that is what keeps a hold and its settlement one row); a FILE re-import is a duplicate
+  of something already stored and possibly hand-edited since, so it is left alone. This is a
+  property of the delivery channel, **not of the bank**.
+  ⚠️ **`accountCurrencyForIngest`** — only a feed may mint a §STUB-ACC row: a file's account came
+  from a dropdown, so an unknown id there is a bug, and minting one would bury it.
+  Mono keeps only its NORMALISATION (§R2-CUR1 original_*), which is the rule
+  `providers/provider.ts` already stated. Held by `ingest.test.ts` (10) + `integrations.test.ts`
+  (the two unified behaviours have their own scenario).
+- **§BANK-PARSE (2026-08-13): bank strings are read in `lib/bank/normalize.ts`, once.**
+  `parseAmountMinor` (minor units, ONE rounding), `parseStatementDate`, `currencyNumeric`
+  (letters → the numeric code we store; unknown → `null`, **never** a fallback to 980 — that would
+  silently multiply a balance by the exchange rate).
+  ⚠️ **A zone-less wall clock is KYIV time, not UTC.** The CSV parser handed `dd.mm.yyyy hh:mm` to
+  `Date.UTC`, so every imported evening operation was stored ~3 h late and filed under the NEXT
+  day — §APP_TZ on the import path, and the totals still added up. Now resolved through
+  `localWallTime` (`stats.ts`, generalised from `localMidnight`), so DST handles itself; an
+  explicit offset (`Z`, `+03:00`) is honoured as written. Held by `normalize.test.ts` (15).
+- **§BANK-FETCH (2026-08-13): how a bank is ASKED for history belongs to the PROVIDER.**
+  `BankProvider.statement` = `{ pacing: {maxWindowSec, minGapMs}, fetch(), isRateLimit() }` — all
+  three or none. `backfill.ts` was "monobank's backfill" wearing a general name: a 31-day window,
+  a 60 s gap and a `MonoRateLimit` catch written into the loop, so a second bank would have had to
+  fork it or silently break its own limits (which does not fail loudly — the sync just stalls).
+  ⚠️ **The pacers ask, they do not assume:** `nextStepGapMs()` is read by BOTH the DO alarm and
+  the client interval (`next_in_ms` on the backfill responses). A constant in the client is a
+  second opinion about someone else's rate limit.
+  ⚠️ **`fetch` receives the account currency** instead of reading the database: normalisation is
+  the provider's one job, but a provider that queries stops being an adapter over an HTTP API.
+  ⚠️ **A job that cannot run is skipped, never retried** (credential removed mid-run, provider
+  lost its fetch): the alarm re-arms while the cursor has work, so a job that can neither run nor
+  advance is an alarm that never stops — and a paid one.
+  Held by `worker/test/backfill.test.ts` (8 scenarios, against a FAKE bank whose window and gap
+  are deliberately NOT monobank's — with mono the same test would pass against the old code).
+- **§BANK-CRED (2026-08-13): «which credential feeds this provider» is answered by
+  `bankCredential(env, id)` (`lib/bank/credentials.ts`) ALONE.** `env.MONO_TOKEN` was read by name
+  in four places. Resolution itself stays in `UserDO.appEnv`, which builds `env.BANK_CREDENTIALS`
+  (provider id → resolved value) — that is where the owner gate already lives.
+  ⚠️ **A deployment-wide secret is the OWNER'S, never everyone's fallback** (§Безпека — shipped
+  twice, gave one user another user's statement). **A new provider gets NO deployment fallback at
+  all, owner included:** there is no single-user history to stay compatible with.
+- **§WHY-CATEGORY (2026-08-14): AI-блок нарешті каже ЧОМУ.** `GET /transactions/:id/why` →
+  `services/tx-insight.ts` `explainCategory`, який ПРОГАНЯЄ `categorize()`, а не відтворює те,
+  що вона сказала б: одна реалізація вирішує і та сама пояснює, тож пояснення не може розійтись із
+  поведінкою. `CategorizeResult` тепер несе `source`/`detail` — який саме крок відповів.
+  ⚠️ **Це стан ПРАВИЛ ЗАРАЗ, а не історія.** Що вирішило категорію в момент інжесту, не зберігає
+  ніхто; UI каже це прямо, бо пояснення, яке тихо видає себе за історію, гірше за відсутнє — йому
+  повірять.
+  ⚠️ **Розбіжність показуємо, але не «лагодимо»:** збережена категорія може бути свідомою правкою
+  людини, і мовчазний «ремонт» скасував би її роботу — а інакше про розходження ніяк не дізнатись.
+  ⚠️ Пояснюємо СИРИЙ банківський опис, а не почищений `merchant` (enrich його переписує) — інакше
+  впевнено пояснювали б рішення текстом, якого рушій не бачив. Тримається `similar.test.ts` (4).
+- **§SIMILAR (2026-08-13): «познач схожі так само» — `GET /transactions/:id/similar` + наявний
+  bulk.** Схожість — це `coreToken` (`lib/finance/merchants.ts`), ЄДИНЕ визначення «той самий
+  мерчант, приблизно». ⚠️ Воно існувало ДВІЧІ (там і в `ai/enrich.ts`), байт-у-байт, із коментарем
+  на кожній копії, що вони збігаються: консенсус категорій, злиття транслітерацій і ця фіча
+  вирішують одне питання, і розбіжність двох із них читалась би як застосунок, що групує операції
+  одним способом, а розкладає іншим.
+  ⚠️ **Показуємо лише те, що ЗМІНИТЬСЯ:** рядки, вже оформлені так само, у список не потрапляють —
+  інакше треба вичитати пʼятнадцять рядків, щоб знайти три потрібні.
+  ⚠️ **`suggested` вирішує СЕРВЕР:** без категорії — це прогалина (галочка стоїть), з ІНШОЮ
+  категорією — це чиєсь рішення (пропонуємо, але не позначаємо). Те саме правило, що в
+  §RULES-UI apply: застосунок не сперечається мовчки з уже зробленою роботою.
+  ⚠️ Кнопки «застосувати до всіх схожих» немає навмисно: масова правда наосліп чіпає рівно ті
+  рядки, на які ніхто не дивиться. Тримається `similar.test.ts` (6 сценаріїв).
+- **§SHARE-CSV (2026-08-13): виписку можна ПОДІЛИТИСЬ у застосунок.** Один share-target на застосунок
+  (маніфест другого не підтримує — просто ігнорує), тож обидва види файлу приїжджають на ту саму
+  дію `/share-receipt`, а service worker дивиться, яке поле прийшло: `photo` → `/add`, `statement`
+  → `/setup?shared=statement`. Шлях у CsvImportCard той САМИЙ, що в файл-пікера — інакше поділений
+  файл поводився б інакше за обраний.
+  ⚠️ Список `accept` навмисно широкий (`text/plain`, `application/vnd.ms-excel`): Android
+  повідомляє MIME по-різному залежно від застосунку-експортера, а превʼю все одно показує, що
+  зрозуміло, до запису.
+  ⚠️ Імʼя файлу їде окремим заголовком у Cache API: виписка впізнається саме за імʼям (який
+  рахунок, який період), і «shared.csv» це стирає.
+- **§STALE-IMPORT (2026-08-13): рахунок, який годується ЛИШЕ файлом, нагадує про себе сам.**
+  `drafts-import.ts`: якщо найновішій імпортованій операції >35 днів — подія у стрічці, ≤3 рахунки,
+  один раз на рахунок на КИЇВСЬКИЙ місяць. Ознака «годується файлом» — `provider NOT IN
+  ('mono','privat')` плюс наявність рядків `source='import'`.
+  ⚠️ **Kind — `todo`, а не власний:** це та сама турбота, що «10 операцій без категорії» — застосунок
+  просить людину дороби?ти те, що може лише вона, — тож один перемикач мусить глушити обидва.
+  ⚠️ Веде на `/setup?import=1` (картка сама прокручується до себе), а не на `/accounts`: список
+  рахунків цієї проблеми не розвʼязує.
+  ⚠️ Вирішує НАЙНОВІША імпортована операція, а не найстаріша: виписка покриває місяці, тож
+  дворічний рядок у рахунку — це норма, і читання найстарішої нагадувало б усім і завжди.
+  Тримається `drafts-import.test.ts` (6 сценаріїв).
+- **§CSV-PREAMBLE (2026-08-13): шапка виписки — не заголовок таблиці.** `findHeaderRow`
+  (`providers/csv.ts`) шукає рядок, з якого мапиться найбільше колонок, серед перших 40; усе вище
+  — преамбула (реквізити банку, ПІБ/ІПН/адреса власника, період, підсумки). Реальний експорт
+  Raiffeisen має 23 такі рядки, і застосунок називав звичайний файл нечитабельним.
+  ⚠️ **Кількість пропущених рядків ПОКАЗУЄТЬСЯ** в превʼю: рядок, що зник без причини, — це саме
+  те, чого шлях імпорту не робить ніколи, навіть коли викинути його правильно.
+  ⚠️ Підказки колонок мусять містити ТОЧНЕ написання, а не лише збіжне: «Amount in card currency»
+  має бити «Amount in transaction currency» за правилом, а не тому, що трапилось першим.
+- **§BANK-POLL (2026-08-13): банк, який не пушить, треба ПИТАТИ** — `lib/bank/poll.ts`, четвертий
+  претендент на єдиний alarm обʼєкта (§A6). monobank сюди не потрапляє ніколи: вирішує
+  `provider.mode === "poll"`, а не наявність `statement`, — моно вміє віддати виписку (так працює
+  бекфіл), але полінг зʼїв би його запит-на-хвилину заради даних, які вже прийшли вебхуком.
+  ⚠️ **Вікно ПЕРЕКРИВАЄ попереднє** (6 год): банк постить операцію через хвилини-години після
+  того, як вона сталась, тож запит «від останнього полінгу» мовчки втрачає все, що приїхало із
+  запізненням, — і результат при цьому виглядає нормально.
+  ⚠️ **Один рахунок за прохід** + власний таймстамп останнього ЗАПИТУ (не останнього успіху):
+  спати між запитами всередині alarm — це палити оплачений час, а пейсинг, що рахує лише успіхи,
+  перестає бути пейсингом у циклі відмов.
+  ⚠️ **Жорсткий збій ПОЗНАЧАЄ рахунок опитаним**, ліміт — ні. Інакше зламаний назавжди креденшел
+  вічно лишається «найпростроченішим» і зʼїдає кожен прохід; сам збій видно на картці підключень.
+  Тримається `backfill.test.ts` (7 сценаріїв полінгу).
+- **§BANK-CONN (2026-08-13): `bank_connections` нарешті мають читача.** Рядок на креденшел
+  (`repo/connections.ts`), пишеться на КОЖНУ спробу — синк рахунків, крок бекфілу, прохід полінгу;
+  `accounts.connection_id` проставляється на успіху. Картка «Підключені банки» в Налаштуваннях.
+  ⚠️ **Збій НЕ стирає `last_sync_at`:** «працювало о 09:00, відтоді падає» і «не працювало
+  ніколи» — різні факти, що потребують різної реакції від читача. Успіх, навпаки, чистить
+  `last_error`: свіжий таймстамп поруч зі старою помилкою жене лагодити те, що вже саме одужало.
 - **Роль рахунку (§R3):** `accounts.role` = `liquid` (дефолт/NULL) або `investment`. Ліквідна ПОДУШКА/runway рахуються лише з `liquid`; `investment` (крипта/брокер) — окремий інвест-резерв, НЕ подушка за замовчуванням. `accounts.ai_note` — опис рахунку для AI. Єдине джерело коштів — `fundsBreakdown()` (advisor.ts): `{cushion, debt, investment, net, accounts[]}`. Міграція 0018.
 - **Сума плану в ₴ — лише `plannedUAH()`/`sumPlannedUAH()`** (subscriptions.ts, §CUR-PLAN 2026-07-20).
   `planned_payments.period_amount` — у ВАЛЮТІ ПЛАНУ (`currency_code`), як і в транзакціях. Пʼять місць
@@ -255,18 +378,6 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   Held by `worker/test/goals.test.ts` (10 scenarios).
 - **Фінансовий контекст для AI — лише `collectFinanceSnapshot(env)`** (advisor.ts, ЄДИНЕ джерело, 2026-07-14). І Порадник (`buildAdvice`), і Чат (`chatReply`) беруть ТОЙ САМИЙ знімок: розбивка коштів (`fundsBreakdown`), канонічний burn (`sumLevels`)/runway, підписки, бюджети, вагомість, тренд 6 міс, разові/регулярні, найближчі списання (`upcoming_charges`). → цифри чату = цифри Порадника. НЕ будувати збіднений контекст для чату вручну (це давало баг «домисленої подушки» — модель називала суму, якої не було в жодному запиті, + розсинхрон runway).
 
-- **§LOCK (2026-08-12): локальний код на вхід — це ПРИВАТНІСТЬ, не безпека.** `src/lib/lock.ts` +
-  `LockScreen` поверх оболонки + картка в Налаштуваннях. Зберігається `SHA-256(salt + code)`, сам
-  код — ніде. Ключ `mt-lock:<user_id>` (сховище спільне на браузер).
-  ⚠️ **Межі названі в UI, а не в примітці:** код ховає ЕКРАН на цьому пристрої, нічого не шифрує,
-  не заважає тому, хто вміє відкрити devtools, і не впливає на сесію. Лок, що обіцяє більше, ніж
-  дає, гірший за його відсутність — він міняє те, що людина готова лишити відкритим на столі.
-  ⚠️ Розблокування — у `sessionStorage`, а не `localStorage`: інакше розблокував один раз і більше
-  ніколи його не бачив, тобто лока фактично немає.
-  ⚠️ **Переживає вихід** (на відміну від чат-ключів у `lib/localdata.ts`, як тема): це властивість
-  ПРИСТРОЮ, і тихо вимкнути власний код при виході — протилежне до того, що просили.
-  ⚠️ Ніколи в демо: пісочниця не тримає нічиїх грошей і живе добу, а код на першому ж погляді на
-  продукт читається як «треба акаунт, щоб подивитись».
 - **§AI-AUDIT (2026-08-12, міграція 0041): що змінив AI — записано, і це МОЖНА відкотити.**
   Застосунок дозволяє моделі переписати `category_id`, `is_transfer` і `ai_note` операції з трьох
   шляхів (enrich, ре-світ, розмова на сторінці операції), і жоден із них не лишав сліду: категорія

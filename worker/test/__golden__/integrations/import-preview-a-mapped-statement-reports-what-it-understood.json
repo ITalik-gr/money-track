@@ -42,8 +42,10 @@
       "mcc": 3
     },
     "complete": true,
+    "preamble_rows": 0,
     "parsed": 2,
     "duplicates": 0,
+    "currency_mismatch": null,
     "skipped": [
       {
         "line": 4,
@@ -57,12 +59,12 @@
     "skipped_total": 2,
     "preview": [
       {
-        "time": 1777593600,
+        "time": 1777582800,
         "amount": -25000,
         "description": "Сільпо"
       },
       {
-        "time": 1777680000,
+        "time": 1777669200,
         "amount": 1000000,
         "description": "Зарплата"
       }

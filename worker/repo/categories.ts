@@ -290,3 +290,12 @@ export async function recurringSplit(
   }
   return out;
 }
+
+/** One category's display name, resolved in the reader's locale (§P3.4). */
+export async function nameOf(db: AppDb, locale: NotifLocale, id: number): Promise<string | null> {
+  const row = await db
+    .prepare(`SELECT ${catNameSql(locale, "name")} AS name FROM categories WHERE id = ?`)
+    .bind(id)
+    .first<{ name: string }>();
+  return row?.name ?? null;
+}

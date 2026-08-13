@@ -264,6 +264,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   border-bottom: 1px solid var(--line-strong);
   margin-bottom: 20px;
 }
+/* On a phone five tabs do not fit, and WRAPPING them puts a second row of tabs under the first —
+   which reads as two separate control strips and pushes the content down. A single scrolling row
+   keeps the shape ("these are tabs") and the underline that anchors it. The scrollbar is hidden
+   because a 2px-tall bar under a tab strip looks like a rendering fault, not an affordance. */
+@media (max-width: 700px) {
+  .stat-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .stat-tabs::-webkit-scrollbar { display: none; }
+  .stat-tab { flex: 0 0 auto; }
+}
 .stat-tab {
   border: none; background: none; cursor: pointer;
   padding: 10px 14px; margin-bottom: -1px;

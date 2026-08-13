@@ -2,6 +2,8 @@
 // X-Token header. Rate limit: client-info & statement max 1 req / 60s — callers pace
 // backfill; the webhook keeps us live so we rarely poll. Docs: api.monobank.ua/docs
 
+import type { CanonicalTx } from "./providers/provider.ts";
+
 const BASE = "https://api.monobank.ua";
 
 export interface MonoAccount {
@@ -42,6 +44,42 @@ export interface MonoStatementItem {
   balance: number;
   hold: boolean;
   comment?: string;
+}
+
+/**
+ * A statement item → the canonical row (§R2-CUR1). The ONE place monobank's shape is interpreted.
+ *
+ * Both paths that receive monobank data — the webhook (`repo.upsertMonoTx`) and the paced
+ * statement fetch (`monoProvider.statement`) — go through this. They used to be two copies of the
+ * same decisions, which is precisely how a provider ends up disagreeing with itself about what a
+ * number means, months later and in one currency only.
+ *
+ * `amount` is in the ACCOUNT's currency, so that is what `currency_code` holds; `operationAmount`
+ * + `currencyCode` describe the operation's own currency and become `original_*` — but ONLY when
+ * they actually differ, or every domestic purchase would carry a redundant copy of itself.
+ */
+export function monoToCanonical(
+  item: MonoStatementItem,
+  accountId: string,
+  accountCurrency: number,
+): CanonicalTx {
+  const hasOriginal = item.operationAmount != null && item.currencyCode !== accountCurrency;
+  return {
+    id: item.id,
+    account_id: accountId,
+    time: item.time,
+    amount: item.amount,
+    currency_code: accountCurrency,
+    original_amount: hasOriginal ? item.operationAmount! : null,
+    original_currency: hasOriginal ? item.currencyCode : null,
+    mcc: item.mcc ?? null,
+    description: item.description ?? null,
+    comment: item.comment ?? null,
+    balance_after: item.balance,
+    cashback: item.cashbackAmount ?? null,
+    hold: item.hold,
+    raw: item,
+  };
 }
 
 async function monoGet<T>(token: string, path: string): Promise<T> {

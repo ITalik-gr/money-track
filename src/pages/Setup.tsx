@@ -24,9 +24,9 @@ import type { AiTask, AiModelToken } from "../store/api.ts";
 import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
 import { clearLocalUserData } from "../lib/localdata.ts";
 import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
+import { BankConnectionsCard } from "../components/settings/BankConnectionsCard.tsx";
 import { ExportCard } from "../components/settings/ExportCard.tsx";
 import { AiActivityCard } from "../components/settings/AiActivityCard.tsx";
-import { LockCard } from "../components/settings/LockCard.tsx";
 import { BackupCard } from "../components/settings/BackupCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
@@ -115,7 +115,7 @@ export function Setup() {
           {/* Keys first: every step of the first run needs them, so a page that opened on the
               checklist would be asking for actions that cannot succeed yet. */}
           <CredentialsCard />
-          <LockCard />
+          <BankConnectionsCard />
           <FirstRun />
           <div className="card set-card">
             <div className="set-card-h"><Icon name="stats" size={16} />{t("setup.dbState")}</div>

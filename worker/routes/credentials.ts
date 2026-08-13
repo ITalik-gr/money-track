@@ -48,6 +48,9 @@ credentials.get("/", async (c) => {
   const envValue: Record<string, string | undefined> = {
     mono_token: c.env.MONO_TOKEN,
     anthropic_api_key: c.env.ANTHROPIC_API_KEY,
+    // No deployment-wide fallback exists for PrivatBank and none ever will (§BANK-CRED): the
+    // value is available exactly when this user stored it.
+    privat_credentials: undefined,
   };
   return c.json({
     secrets: statuses.map((s) => ({ ...s, available: s.set || !!envValue[s.name] })),
@@ -69,6 +72,14 @@ credentials.put("/:name", async (c) => {
   try {
     if (name === "mono_token") {
       await getClientInfo(secret);
+      ok = true;
+    } else if (name === "privat_credentials") {
+      // The cheapest call that proves the token is accepted: the server-settings endpoint. It
+      // also reports the working phase, so a credential saved during maintenance is not blamed
+      // for the outage.
+      const { assertWorking } = await import("../lib/bank/privat.ts");
+      const { parseCredential } = await import("../lib/bank/providers/privat.ts");
+      await assertWorking(parseCredential(secret));
       ok = true;
     } else {
       ok = await verifyAnthropic(secret);

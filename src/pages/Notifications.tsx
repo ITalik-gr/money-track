@@ -83,6 +83,10 @@ function linkFor(n: Notification): string | null {
   if (n.entity_type === "tx" && n.entity_id) return `/tx/${n.entity_id}`;
   if (n.entity_type === "planned") return "/subs";
   if (n.entity_type === "account") return "/accounts";
+  // A stale statement is fixed in ONE place — the import card. `?import=1` makes the card scroll
+  // itself into view, because Settings is a long page and landing at its top reads as "nothing
+  // happened" (the same trick the share target uses).
+  if (n.entity_type === "import") return "/setup?import=1";
   if (n.entity_type === "goal") return "/goals";
   if (n.entity_type === "advice") return "/advisor";
   if (n.entity_type === "budget_plan") return "/plan";

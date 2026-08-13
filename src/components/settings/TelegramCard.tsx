@@ -53,7 +53,12 @@ export function TelegramCard({ isOwner }: { isOwner: boolean }) {
   }
 
   return (
-    <div className="card set-card set-full">
+    // NOT `set-full` any more (2026-08-14). The comment on the settings page has said since §PUSH
+    // that this card and "browser notifications" belong side by side — they answer one question
+    // ("tell me when something matters without making me open the app") and a person needs at most
+    // one of them. Full width put Telegram on its own row and left the push card paired with the
+    // feedback form instead: twice the height, and a visible hole under the short one.
+    <div className="card set-card">
       <div className="set-card-h"><Icon name="bell" size={16} />Telegram</div>
       <p className="set-card-sub">{t("setup.telegramSub")}</p>
 

@@ -126,6 +126,14 @@ self.addEventListener("notificationclick", (event) => {
  */
 const SHARE_CACHE = "mt-shared";
 const SHARE_KEY = "/__shared-receipt";
+/**
+ * A bank statement shared in from the exporting app.
+ *
+ * Its own key, not a shared one: the two kinds land on different screens and a single key would
+ * mean a photo and a statement racing to overwrite each other in the one case where someone shares
+ * both in a row.
+ */
+const SHARE_STATEMENT_KEY = "/__shared-statement";
 
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
@@ -134,13 +142,31 @@ self.addEventListener("fetch", (event) => {
   event.respondWith((async () => {
     try {
       const form = await event.request.formData();
-      const file = form.get("photo");
-      if (file instanceof File && file.size > 0) {
-        const cache = await caches.open(SHARE_CACHE);
-        await cache.put(SHARE_KEY, new Response(file, {
-          headers: { "content-type": file.type || "application/octet-stream" },
+      const cache = await caches.open(SHARE_CACHE);
+
+      const photo = form.get("photo");
+      if (photo instanceof File && photo.size > 0) {
+        await cache.put(SHARE_KEY, new Response(photo, {
+          headers: { "content-type": photo.type || "application/octet-stream" },
         }));
         return Response.redirect("/add?shared=receipt", 303);
+      }
+
+      // A statement shared from the banking app. Banks with no API for personal accounts —
+      // Raiffeisen, PrivatBank — are a monthly file forever, so the path from "export" to
+      // "imported" is worth making one tap instead of download → find in Downloads → open the
+      // app → pick the file.
+      const statement = form.get("statement");
+      if (statement instanceof File && statement.size > 0) {
+        await cache.put(SHARE_STATEMENT_KEY, new Response(statement, {
+          headers: {
+            "content-type": statement.type || "text/csv",
+            // The NAME matters here in a way it does not for a photo: it is what the import card
+            // shows so the user can tell which of two exports they are looking at.
+            "x-mt-filename": encodeURIComponent(statement.name || "statement.csv"),
+          },
+        }));
+        return Response.redirect("/setup?shared=statement", 303);
       }
     } catch {
       /* fall through — a share we cannot read must still land somewhere sensible */

@@ -789,3 +789,61 @@ export async function forCsvExport(
   ).bind(...binds).all<CsvRow>();
   return r.results ?? [];
 }
+
+/**
+ * Operations that look like the same KIND of thing as `id` — the data behind "mark the similar
+ * ones too" (2026-08-13).
+ *
+ * Matched on `coreToken`, the project's one answer to "same merchant, roughly" (see
+ * `finance/merchants.ts`). That is what makes it work for the case it was asked for: a Raiffeisen
+ * export writes every card-to-card transfer as "Money transfers: 4441 11** **** 4932", a different
+ * card number each time, so an exact-name match finds nothing and the token "transfers" finds them
+ * all.
+ *
+ * ⚠️ Rows that ALREADY match this one are excluded. The list answers "what would change", and
+ * padding it with rows that need nothing makes the person read fifteen lines to find the three
+ * that matter.
+ *
+ * ⚠️ `suggested` is decided HERE, not in the component: a row with no category is a gap to fill,
+ * while a row that carries a DIFFERENT category is a decision someone already made — the bank's,
+ * the AI's or their own. Both are offered, only the first is pre-ticked. An app that silently
+ * overwrites work already done is the thing §RULES-UI's "apply" was careful not to be.
+ */
+export interface SimilarTx {
+  id: string;
+  time: number;
+  amount: number;
+  currency_code: number;
+  merchant: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  is_transfer: number;
+  suggested: number;
+}
+
+export async function findSimilar(
+  db: AppDb,
+  id: string,
+  token: string,
+  target: { category_id: number | null; is_transfer: number },
+  locale: NotifLocale = "uk",
+  limit = 30,
+): Promise<SimilarTx[]> {
+  const like = `%${token.toLowerCase()}%`;
+  const res = await db
+    .prepare(
+      `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant,
+              t.category_id, ${catNameSql(locale, "c.name")} AS category_name, t.is_transfer,
+              CASE WHEN t.category_id IS NULL THEN 1 ELSE 0 END AS suggested
+         FROM transactions t
+         LEFT JOIN categories c ON c.id = t.category_id
+        WHERE t.id != ?
+          AND (LOWER(t.merchant) LIKE ? OR LOWER(json_extract(t.raw_json, '$.description')) LIKE ?)
+          AND (t.category_id IS NOT ? OR t.is_transfer != ?)
+        ORDER BY t.time DESC
+        LIMIT ?`,
+    )
+    .bind(id, like, like, target.category_id, target.is_transfer, limit)
+    .all<SimilarTx>();
+  return res.results ?? [];
+}

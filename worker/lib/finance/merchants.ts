@@ -26,9 +26,21 @@ export interface TranslitFix {
 const HAS_CYRILLIC = /[а-яїієґё]/i;
 const HAS_LATIN = /[a-z]/i;
 
-/** Longest alphabetic word of ≥4 chars — the same stable key `enrich.coreToken` uses, so both
- *  sides of the merge agree on what "the same merchant" means. */
-function coreToken(raw: string | null): string | null {
+/**
+ * The longest alphabetic word of ≥4 characters — this project's ONE answer to "is this the same
+ * merchant, roughly".
+ *
+ * It was written twice, byte for byte, here and in `ai/enrich.ts`, with a comment on each copy
+ * promising they agree. They did, until someone changed one: the merchant-consensus categoriser,
+ * the transliteration merge and (since 2026-08-13) "apply to similar operations" all decide the
+ * same question, and two of them silently disagreeing would show up as an app that groups
+ * operations one way and files them another. Exported so a fourth caller cannot start a third copy.
+ *
+ * Why the LONGEST word: a bank description is a merchant plus noise ("SILPO 4506 KYIV",
+ * "Money transfers: 4441 11** **** 4932"), and the noise is short — numbers, city codes,
+ * two-letter prefixes. The longest word survives the noise without needing to know the format.
+ */
+export function coreToken(raw: string | null): string | null {
   if (!raw) return null;
   const words = raw.toLowerCase()
     .replace(/[^a-zа-яїієґ0-9]+/gi, " ")

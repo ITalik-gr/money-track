@@ -32,6 +32,17 @@ const LABELS: Record<string, {
     docUrl: "https://api.monobank.ua/",
     docLabel: "api.monobank.ua",
   },
+  // ⚠️ The hint says out loud that this reaches the ФОП account only. PrivatBank closed its
+  // personal-card API in 2023 (BANKS.md §1), and a card that just says "PrivatBank" would promise
+  // a person their cards — the one thing this integration cannot deliver.
+  privat_credentials: {
+    titleKey: "cred.privatTitle",
+    hintKey: "cred.privatHint",
+    placeholder: '{"id":"…","token":"…"}',
+    steps: ["cred.privatStep1", "cred.privatStep2", "cred.privatStep3", "cred.privatStep4"],
+    docUrl: "https://api.privatbank.ua/",
+    docLabel: "api.privatbank.ua",
+  },
   anthropic_api_key: {
     titleKey: "cred.anthropicTitle",
     hintKey: "cred.anthropicHint",

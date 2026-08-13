@@ -226,3 +226,45 @@ export async function recordBalance(
     "INSERT INTO account_balance_history (account_id, balance, recorded_at, created_at) VALUES (?, ?, ?, ?)",
   ).bind(accountId, balance, at, at).run();
 }
+
+/**
+ * Upserts accounts a provider reported (BANKS.md §5, step 7).
+ *
+ * Generic counterpart to `finance/repo.ts` `syncAccounts`, which is monobank-shaped. Two rules
+ * carried over deliberately:
+ *   • **the title is written only on INSERT** (`COALESCE`) — a hand-renamed account must survive
+ *     every later sync, and a bank's own name for an account is often a generic one;
+ *   • **`is_manual` accounts are never touched** — that is the guarantee that a hand-kept cash
+ *     account cannot have its balance overwritten by an API that has never heard of it.
+ */
+export async function upsertProviderAccounts(
+  db: AppDb,
+  providerId: string,
+  accounts: {
+    id: string; type: string | null; title: string | null;
+    currency_code: number | null; balance: number | null; credit_limit: number | null; iban?: string | null;
+  }[],
+): Promise<void> {
+  if (!accounts.length) return;
+  const now = Math.floor(Date.now() / 1000);
+  await db.batch(accounts.map((a) =>
+    db.prepare(
+      `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, iban,
+                             provider, is_manual, is_active, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         type = COALESCE(accounts.type, excluded.type),
+         title = COALESCE(accounts.title, excluded.title),
+         currency_code = excluded.currency_code,
+         balance = excluded.balance,
+         credit_limit = excluded.credit_limit,
+         iban = COALESCE(excluded.iban, accounts.iban),
+         provider = excluded.provider,
+         updated_at = excluded.updated_at
+       WHERE accounts.is_manual = 0`,
+    ).bind(
+      a.id, a.type, a.title, a.currency_code, a.balance ?? 0, a.credit_limit ?? 0,
+      a.iban ?? null, providerId, now,
+    ),
+  ));
+}

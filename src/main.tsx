@@ -7,6 +7,11 @@ import "./index.css";
 import { store } from "./store/index.ts";
 import { App } from "./App.tsx";
 import { LocaleProvider } from "./i18n/index.ts";
+import { sweepRemovedFeatureKeys } from "./lib/localdata.ts";
+
+// Before the first render: the passcode this used to gate on is gone (2026-08-14), and its
+// leftover key should not outlive the feature on anyone's device.
+sweepRemovedFeatureKeys();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

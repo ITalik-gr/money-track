@@ -155,6 +155,7 @@ export async function proposeTransferCategory(
 import { MODEL_SMART, MODEL_FAST } from "./models.ts";
 import { getState } from "../finance/repo.ts";
 import { relatedSubsHint, matchActiveSubscription } from "../finance/subscriptions.ts";
+import { coreToken } from "../finance/merchants.ts";
 
 // Seeded id категорії «Перекази і зняття» (0002). Її діти теж рахуємо через COALESCE(parent_id).
 export const TRANSFER_CAT = 13;
@@ -169,15 +170,6 @@ interface TxRow {
 // §R6 Консенсус мерчанта (детерміністично, без AI): нормалізований «корінь» назви з
 // сирого опису — стабільний ключ, що терпить змінні хвости (номери замовлень, міста).
 // Беремо найдовше буквене слово ≥4 символів (Apple, Glovo, Aromakava...).
-function coreToken(raw: string | null): string | null {
-  if (!raw) return null;
-  const words = raw.toLowerCase()
-    .replace(/[^a-zа-яїієґ0-9]+/gi, " ")
-    .split(" ")
-    .filter((w) => /[a-zа-яїієґ]/i.test(w) && w.length >= 4);
-  if (!words.length) return null;
-  return words.sort((a, b) => b.length - a.length)[0];
-}
 
 // §Хвіст: чи існує РУЧНИЙ (навчений користувачем) alias для сирого опису цієї операції.
 // Ручні правки священні: enrich їх не перетирає, консенсус важить вище.

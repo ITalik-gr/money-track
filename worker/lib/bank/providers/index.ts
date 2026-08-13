@@ -3,9 +3,11 @@
 import { registerProvider } from "./provider.ts";
 import { monoProvider } from "./mono.ts";
 import { csvProvider } from "./csv.ts";
+import { privatProvider } from "./privat.ts";
 import { manualProvider } from "./manual.ts";
 
 registerProvider(monoProvider);
+registerProvider(privatProvider);
 registerProvider(csvProvider);
 registerProvider(manualProvider);
 

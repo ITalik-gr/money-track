@@ -21,3 +21,6 @@
 @import "./styles/domains-a.css";
 @import "./styles/settings.css";
 @import "./styles/domains-b.css";
+/* Added after the split (STYLES.md §6.1). Last on purpose: a new part appended here cannot change
+   which rule wins for anything that already existed. */
+@import "./styles/transactions.css";

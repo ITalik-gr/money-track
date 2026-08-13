@@ -17,3 +17,20 @@ export interface FundsBreakdown { cushion: number; debt: number; investment: num
 
 /** `GET /accounts/history` — per-account monthly balance, in the ACCOUNT's currency, MAJOR units. */
 export interface AccountHistory { history: Record<string, number[]> }
+
+/**
+ * `GET /setup/connections` — one row per linked bank credential (BANKS.md §5, step 4).
+ *
+ * `last_sync_at` survives a failure on purpose: "last worked at 09:00, failing since" is the
+ * fact worth reading, and blanking it would turn a broken connection into one that never ran.
+ */
+export interface BankConnection {
+  id: string;
+  provider: string;
+  label: string | null;
+  status: string;
+  last_sync_at: number | null;
+  last_error: string | null;
+  accounts: number;
+}
+export interface BankConnections { connections: BankConnection[] }

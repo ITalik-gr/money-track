@@ -100,6 +100,24 @@ const SHARE_KEY = "/__shared-receipt";
  * The service worker parked it here and redirected to `/add?shared=receipt`; this takes it and
  * DELETES it, so a reload does not re-upload yesterday's receipt.
  */
+export async function takeSharedStatement(): Promise<File | null> {
+  if (!("caches" in window)) return null;
+  try {
+    const cache = await caches.open(SHARE_CACHE);
+    const res = await cache.match("/__shared-statement");
+    if (!res) return null;
+    await cache.delete("/__shared-statement");
+    const blob = await res.blob();
+    // The name survives the trip in a header — a statement is identified by its filename (which
+    // account, which period), and "shared.csv" would throw that away.
+    const raw = res.headers.get("x-mt-filename");
+    const name = raw ? decodeURIComponent(raw) : "statement.csv";
+    return new File([blob], name, { type: blob.type || "text/csv" });
+  } catch {
+    return null;
+  }
+}
+
 export async function takeSharedReceipt(): Promise<File | null> {
   if (!("caches" in window)) return null;
   try {

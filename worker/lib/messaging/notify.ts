@@ -21,6 +21,7 @@ import {
   localMonthStart, localYm, localYmd,
 } from "../finance/stats.ts";
 import { draftBudgets, draftBudgetForecast } from "./drafts-budget.ts";
+import { draftStaleImports } from "./drafts-import.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams } from "../../../shared/notif-i18n.ts";
 
@@ -911,7 +912,9 @@ export async function generateNotifications(
     ["goal_risk", () => draftGoalRisk(env, now)],
     ["dead_sub", () => draftDeadSubs(env, now)],
     ["win", async () => draftWins(await getPace())],
-    ["todo", () => draftTodo(env, now)],
+    // Both `todo` drafters share one preference: they are the same concern — the app asking a
+    // person to finish something only they can finish — so muting one must mute both.
+    ["todo", async () => [...(await draftTodo(env, now)), ...(await draftStaleImports(env, now))]],
     ["ai", () => draftAiObservations(env, now)],
   ];
 

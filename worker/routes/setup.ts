@@ -9,27 +9,43 @@ import type { SetupStatus } from "../../shared/api/platform.ts";
 import { MonoRateLimit } from "../lib/bank/mono.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
 import { rowCounts } from "../repo/state.ts";
-import { type Cursor, CURSOR_KEY, startBackfill, stepBackfill } from "../lib/bank/backfill.ts";
+import { type Cursor, CURSOR_KEY, nextStepGapMs, startBackfill, stepBackfill } from "../lib/bank/backfill.ts";
+import { bankCredential } from "../lib/bank/credentials.ts";
+import { listConnections, recordSync } from "../repo/connections.ts";
 
 export const setup = new Hono<{ Bindings: Env }>();
 
 setup.post("/sync-accounts", async (c) => {
-  if (!c.env.MONO_TOKEN) return c.json({ error: "MONO_TOKEN not set" }, 400);
+  // The credential comes from the ONE resolver (`lib/bank/credentials.ts`) rather than from
+  // `env.MONO_TOKEN` by name — see the owner-fallback invariant stated there.
+  const token = bankCredential(c.env, "mono");
+  if (!token) return c.json({ error: "MONO_TOKEN not set" }, 400);
   try {
     // Through the registry rather than calling mono directly: the day a second bank exists,
     // this endpoint must not be the place that still knows one bank's name (PLATFORM.md §5).
     const { getProvider } = await import("../lib/bank/providers/index.ts");
     const provider = getProvider("mono")!;
-    const res = await provider.syncAccounts!(c.env.DB, c.env.MONO_TOKEN);
+    const res = await provider.syncAccounts!(c.env.DB, token);
+    // The connection row is written on BOTH outcomes: a sync that fails silently is
+    // indistinguishable from a user who spent nothing (BANKS.md §5, step 4).
+    await recordSync(c.env.DB, provider.id, provider.label, { ok: true });
     return c.json({ ok: true, ...res });
   } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    await recordSync(c.env.DB, "mono", null, { ok: false, error: message });
     if (e instanceof MonoRateLimit) return c.json({ error: "rate_limited", retryAfter: 60 }, 429);
     return c.json({ error: String(e) }, 502);
   }
 });
 
+/** Which credentials are linked and how they are doing. Reads nothing secret. */
+setup.get("/connections", async (c) => {
+  return c.json({ connections: await listConnections(c.env.DB) });
+});
+
 setup.post("/register-webhook", async (c) => {
-  if (!c.env.MONO_TOKEN) return c.json({ error: "MONO_TOKEN not set" }, 400);
+  const token = bankCredential(c.env, "mono");
+  if (!token) return c.json({ error: "MONO_TOKEN not set" }, 400);
   const origin = new URL(c.req.url).origin;
   // Per-user webhook path (PLATFORM.md §5). `USER_ID` is injected by the Durable Object from
   // the header the Worker set; the fallback to the deployment-wide secret keeps this working
@@ -41,7 +57,7 @@ setup.post("/register-webhook", async (c) => {
   const url = `${origin}/webhook/${segment}`;
   try {
     const { getProvider } = await import("../lib/bank/providers/index.ts");
-    await getProvider("mono")!.registerWebhook!(c.env.MONO_TOKEN, url);
+    await getProvider("mono")!.registerWebhook!(token, url);
     await setState(c.env.DB, "webhook_url", url);
     return c.json({ ok: true, url });
   } catch (e) {
@@ -125,11 +141,14 @@ setup.post("/telegram/unlink", async (c) => {
 // The minute-cron also advances it, so it finishes even if the tab is closed.
 setup.post("/backfill/start", async (c) => {
   const cursor = await startBackfill(c.env);
+  // The gap is the BANK's, asked for rather than assumed: monobank allows one statement request
+  // a minute, and the next bank will not have the same number.
+  const gap = await nextStepGapMs(c.env);
   // Hand the pacing to the object's alarm so the run finishes even with the tab closed. The
   // client still steps it too, for immediate feedback — both paths advance the same cursor,
   // and a step that arrives while monobank is rate-limiting simply reports `retry`.
-  c.env.scheduleBackfillStep?.(60_000);
-  return c.json({ ok: true, total: cursor.total, estimateMinutes: cursor.total });
+  c.env.scheduleBackfillStep?.(gap);
+  return c.json({ ok: true, total: cursor.total, estimateMinutes: cursor.total, next_in_ms: gap });
 });
 
 // Perform exactly one statement request and advance. Client calls every 60s.
@@ -137,7 +156,9 @@ setup.post("/backfill/step", async (c) => {
   try {
     const r = await stepBackfill(c.env);
     if (!r) return c.json({ error: "no_backfill_in_progress" }, 400);
-    return c.json(r);
+    // The client paces itself on this rather than on a constant of its own — the interval is a
+    // property of the bank being read, and the client cannot know which bank that is.
+    return c.json({ ...r, next_in_ms: await nextStepGapMs(c.env) });
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }

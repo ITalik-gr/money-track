@@ -17,6 +17,15 @@ export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
   DB: AppDb;
   MONO_TOKEN: string;
   ANTHROPIC_API_KEY: string;
+  /**
+   * This user's bank credentials, keyed by provider id — the resolved values, not the ciphertext.
+   *
+   * Built by `UserDO.appEnv`, which is the one place that applies the owner-only rule to the
+   * deployment-wide secrets (§Безпека). Everything downstream asks `bankCredential(env, id)` and
+   * therefore cannot reach for a global by name — that mistake shipped twice and gave one user
+   * another user's statement.
+   */
+  BANK_CREDENTIALS?: Record<string, string>;
   WEBHOOK_SECRET: string;
   APP_PASSWORD: string;
   // Google OAuth (PLATFORM.md §3). These are APPLICATION secrets, not user secrets — they

@@ -359,37 +359,6 @@
   .audit-wide li { grid-template-columns: minmax(0, 1fr) auto; }
   .audit-wide .audit-move { grid-column: 1 / -1; }
 }
-/* ---- local passcode screen (lib/lock.ts) ------------------------------------------------------
-   Covers everything, opaque: the point is that the screen cannot be READ, so a translucent overlay
-   would defeat it exactly where it matters. `--bg` rather than a scrim for the same reason. */
-.lock-screen { position: fixed; inset: 0; z-index: 200; background: var(--bg);
-  display: flex; align-items: center; justify-content: center; }
-.lock-box { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px; }
-.lock-title { font-size: 15px; font-weight: 600; }
-.lock-dots { display: flex; gap: 12px; }
-.lock-dots span { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid var(--line-strong);
-  transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out); }
-.lock-dots span.on { background: var(--accent); border-color: var(--accent); }
-/* Off-screen but focusable — it summons the numeric keypad on a phone and keeps the browser's own
-   accessibility behaviour, which a grid of custom buttons would have to reimplement badly. */
-.lock-input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
-.lock-hint { font-size: 12px; color: var(--muted); max-width: 32ch; text-align: center; }
-/* The only feedback on a wrong code, so it has to be unmistakable and then gone. */
-.lock-box.wrong { animation: lock-shake 0.4s var(--ease-out); }
-.lock-box.wrong .lock-hint { color: var(--neg); }
-@keyframes lock-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-7px); }
-  40% { transform: translateX(7px); }
-  60% { transform: translateX(-4px); }
-  80% { transform: translateX(4px); }
-}
-@media (prefers-reduced-motion: reduce) { .lock-box.wrong { animation: none; } }
-.lock-field { width: 92px; font-size: 13px; padding: 6px 9px; letter-spacing: 0.3em; }
-.lock-on { font-size: 13px; color: var(--pos); font-weight: 600; }
-/* The limits are stated permanently, not behind a tooltip — see `LockCard`. */
-.lock-facts { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.5; }
-
 /* §IMPORTANCE-TREND — the spending MIX per month, under the savings rate.
    Stacked to 100%, not to amount: the question is share, and stacking by amount would let a big
    month hide a worsening mix. Column order is essential → discretionary → optional, bottom to top,

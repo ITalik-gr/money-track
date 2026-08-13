@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { NavLink, Outlet, Link } from "react-router-dom";
 import { Icon } from "../ui/Icon.tsx";
 import { Toaster } from "../ui/Toaster.tsx";
 import { CommandPalette, openCommandPalette } from "./CommandPalette.tsx";
 import { AiJobChip } from "./AiJobs.tsx";
-import { LockScreen } from "./LockScreen.tsx";
-import { isLockSet, isUnlocked } from "../../lib/lock.ts";
 import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation, useGetPeriodModeQuery, useSetPeriodModeMutation } from "../../store/api.ts";
 import { useLocale, useT } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
@@ -161,23 +159,10 @@ export function Layout() {
   const t = useT();
   const { data: me } = useGetMeQuery();
   const isDemo = me?.demo === true;
-  /**
-   * The local passcode screen (`lib/lock.ts`), gated on a REAL account.
-   *
-   * Never for a demo sandbox: it holds nobody's money, it disappears in 24 hours, and a stranger
-   * meeting a passcode on their first look at the product would reasonably assume they need an
-   * account to get past it.
-   */
-  const userId = me?.user?.id ?? "";
-  const [locked, setLocked] = useState(false);
-  useEffect(() => {
-    setLocked(!!userId && !isDemo && isLockSet(userId) && !isUnlocked());
-  }, [userId, isDemo]);
   const accountName = (me?.user?.name ?? "").trim().split(/\s+/)[0] || t("layout.account");
 
   return (
     <div className={`shell${isDemo ? " has-demo-banner" : ""}`}>
-      {locked && <LockScreen userId={userId} onUnlock={() => setLocked(false)} />}
       <Toaster />
       <CommandPalette />
       <aside className="sidebar">

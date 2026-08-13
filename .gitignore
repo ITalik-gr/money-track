@@ -19,3 +19,7 @@ src/images/
 graphify-out/
 
 HISTORY.md
+# Bank statements dropped in for testing. They carry the account holder's full identity
+# (tax id, passport number, address) — and this repository is public.
+statement_*.csv
+statement_*.xls*

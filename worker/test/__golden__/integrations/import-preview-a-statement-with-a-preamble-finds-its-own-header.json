@@ -1,0 +1,80 @@
+{
+  "status": 200,
+  "body": {
+    "delimiter": ";",
+    "headers": [
+      "Date and time of transaction",
+      "Date of transaction execution by the bank",
+      "Card number",
+      "Details of the operation",
+      "MCC",
+      "Amount in card currency",
+      "Amount in transaction currency",
+      "Currency",
+      "Rate",
+      "Fees",
+      "Cashback",
+      "Balance"
+    ],
+    "sample": [
+      [
+        "13.08.2026 08:52:03",
+        "13.08.2026",
+        "",
+        "Salary from EMPLOYER",
+        "",
+        "2084.00",
+        "2084.00",
+        "",
+        "",
+        "0.00",
+        "",
+        "11121.93"
+      ],
+      [
+        "12.06.2026 21:40:00",
+        "12.06.2026",
+        "4149 50** **** 8439",
+        "SILPO KYIV",
+        "5411",
+        "-250.00",
+        "-250.00",
+        "UAH",
+        "",
+        "0.00",
+        "",
+        "9037.93"
+      ]
+    ],
+    "total_rows": 2,
+    "mapping": {
+      "date": 0,
+      "amount": 5,
+      "description": 3,
+      "currency": 7,
+      "mcc": 4
+    },
+    "complete": true,
+    "preamble_rows": 5,
+    "parsed": 2,
+    "duplicates": 0,
+    "currency_mismatch": null,
+    "skipped": [],
+    "skipped_total": 0,
+    "preview": [
+      {
+        "time": 1786600323,
+        "amount": 208400,
+        "description": "Salary from EMPLOYER"
+      },
+      {
+        "time": 1781289600,
+        "amount": -25000,
+        "description": "SILPO KYIV"
+      }
+    ]
+  },
+  "db": {
+    "imported": []
+  }
+}

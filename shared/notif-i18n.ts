@@ -25,7 +25,8 @@ export type NotifParams = Record<string, string | number | boolean | null>;
 export type NotifTemplateKey =
   | "report" | "deadline_plan" | "deadline_credit" | "anomaly" | "win" | "budget"
   | "price_up" | "liquidity" | "big_tx" | "duplicate" | "health_drop"
-  | "goal_risk" | "dead_sub" | "todo" | "job_done" | "cron_failed" | "budget_forecast";
+  | "goal_risk" | "dead_sub" | "todo" | "job_done" | "cron_failed" | "budget_forecast"
+  | "stale_import";
 
 export interface RenderedNotif { title: string; body: string | null }
 
@@ -268,6 +269,22 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
         body: uk
           ? "За останні 30 днів. Поки вони без категорії — статистика, бюджети й поради рахують не все."
           : "In the last 30 days. While uncategorized, stats, budgets and advice don't count everything.",
+      };
+    }
+
+    /**
+     * A file-fed account has gone quiet — see `drafts-import.ts` for why silence here is the
+     * dangerous kind. The account is NAMED because the reader may keep two, and the age is given
+     * in days rather than as a date: "37 days" is a judgement, "07.07" is homework.
+     */
+    case "stale_import": {
+      const account = String(p?.account ?? "");
+      const days = num(p, "days");
+      return {
+        title: uk ? `Виписка «${account}» застаріла` : `Statement for "${account}" is stale`,
+        body: uk
+          ? `Останню операцію імпортовано ${days} дн. тому. Цей рахунок оновлюється лише файлом — поки виписки немає, витрати, бюджети й поради рахують не все.`
+          : `The newest imported operation is ${days} days old. This account only updates from a file — until a statement is imported, spending, budgets and advice are counting an incomplete picture.`,
       };
     }
 

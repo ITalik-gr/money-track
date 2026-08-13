@@ -104,3 +104,45 @@ export interface TransferReviewRow {
   id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number; time: number;
   real_category_id: number | null; note: string | null; needs_attention: boolean;
 }
+
+/**
+ * `GET /transactions/:id/similar` — operations that look like the same kind of thing, and would
+ * CHANGE if the current one's category / transfer flag were applied to them.
+ *
+ * `suggested` is the server's opinion about what to pre-tick: a row with no category is a gap,
+ * a row with a different one is somebody's decision. Both are listed; only the gap is ticked.
+ */
+export interface SimilarTx {
+  id: string;
+  time: number;
+  amount: number;
+  currency_code: number;
+  merchant: string | null;
+  category_id: number | null;
+  category_name: string | null;
+  is_transfer: number;
+  suggested: number;
+}
+export interface SimilarTxList { token: string | null; items: SimilarTx[] }
+
+/**
+ * `GET /transactions/:id/why` — what the deterministic chain says about this operation TODAY.
+ *
+ * Not a record of what happened when the row arrived (nothing stores that), and it says so: this
+ * is the app re-asking its own rules and reporting the answer, which is the more useful question
+ * anyway — it reveals when the stored category and the rules DISAGREE.
+ */
+export interface CategoryWhy {
+  /** Which step answered: a learned alias, a subscription, an MCC rule, a text rule — or nothing. */
+  source: "alias_desc" | "alias_mcc" | "subscription" | "rule_mcc" | "rule_text" | null;
+  /** The matched thing in the user's own words: the alias key, the MCC, the rule's pattern. */
+  detail: string | null;
+  /** The category those rules point at, and its name for display. */
+  category_id: number | null;
+  category_name: string | null;
+  /** Whether that matches what the operation is actually filed under. */
+  agrees: boolean;
+  /** True when the model wrote this row's category (`ai_enriched`), with its note if there is one. */
+  ai_enriched: boolean;
+  ai_note: string | null;
+}

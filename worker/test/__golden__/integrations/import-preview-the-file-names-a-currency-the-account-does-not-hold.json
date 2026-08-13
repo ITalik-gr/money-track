@@ -1,0 +1,44 @@
+{
+  "status": 200,
+  "body": {
+    "delimiter": ";",
+    "headers": [
+      "Дата",
+      "Опис",
+      "Сума",
+      "Валюта"
+    ],
+    "sample": [
+      [
+        "01.05.2026",
+        "Steam",
+        "-10,00",
+        "USD"
+      ]
+    ],
+    "total_rows": 1,
+    "mapping": {
+      "date": 0,
+      "amount": 2,
+      "description": 1,
+      "currency": 3
+    },
+    "complete": true,
+    "preamble_rows": 0,
+    "parsed": 1,
+    "duplicates": 0,
+    "currency_mismatch": "USD",
+    "skipped": [],
+    "skipped_total": 0,
+    "preview": [
+      {
+        "time": 1777582800,
+        "amount": -1000,
+        "description": "Steam"
+      }
+    ]
+  },
+  "db": {
+    "imported": []
+  }
+}

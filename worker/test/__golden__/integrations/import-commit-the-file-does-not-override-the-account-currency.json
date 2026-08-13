@@ -9,10 +9,10 @@
   "db": {
     "imported": [
       {
-        "id": "csv_76d864931f4a7a42f923fe9976fe978e",
+        "id": "csv_f85950c45f0f577f097e769ae3209fd8",
         "account_id": "acc-usd",
         "source": "import",
-        "time": 1777593600,
+        "time": 1777582800,
         "amount": -25000,
         "currency_code": 840,
         "mcc": 5411,
@@ -22,10 +22,10 @@
         "is_transfer": 0
       },
       {
-        "id": "csv_3a694ba173f723e89a9635140554db1b",
+        "id": "csv_1b324c8f5ba6a0eb49f209a435c268a2",
         "account_id": "acc-usd",
         "source": "import",
-        "time": 1777680000,
+        "time": 1777669200,
         "amount": 1000000,
         "currency_code": 840,
         "mcc": 4829,

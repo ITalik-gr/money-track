@@ -25,3 +25,29 @@ export function clearLocalUserData(): void {
     /* private mode / storage disabled — nothing was stored either */
   }
 }
+
+/**
+ * One-time sweep of keys belonging to features that no longer exist.
+ *
+ * Right now that is the local passcode (`mt-lock:<user_id>`), removed on 2026-08-14: nothing reads
+ * it any more, so it cannot lock anyone out — but it is a hash of a code the owner chose, sitting
+ * on the disk of every device they ever used, and "harmless because unused" is how leftovers stay
+ * forever. Runs at boot rather than at logout, because the point is to reach devices that are
+ * signed IN.
+ */
+const REMOVED_FEATURE_PREFIXES = ["mt-lock"];
+
+export function sweepRemovedFeatureKeys(): void {
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && REMOVED_FEATURE_PREFIXES.some((p) => key === p || key.startsWith(`${p}:`))) doomed.push(key);
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+    // `sessionStorage` held the "unlocked for this tab" marker.
+    sessionStorage.removeItem("mt-unlocked");
+  } catch {
+    /* private mode / storage disabled — nothing was stored either */
+  }
+}

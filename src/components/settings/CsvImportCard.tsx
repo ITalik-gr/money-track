@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { useT, type TranslationKey } from "../../i18n/index.ts";
 import { Icon } from "../ui/Icon.tsx";
@@ -6,6 +7,7 @@ import { Select } from "../ui/Select.tsx";
 import { useGetAccountsQuery, useCsvPreviewMutation, useCsvCommitMutation } from "../../store/api.ts";
 import { errText } from "../../lib/errors.ts";
 import { formatMinor } from "../../lib/format.ts";
+import { takeSharedStatement } from "../../lib/push.ts";
 
 // Імпорт виписки з файлу (P1.2). Свідомо у ДВА кроки: спершу «ось що я зрозумів», і лише потім
 // запис. Одноетапний імпорт означав би, що неправильно вгадану колонку суми видно вже після
@@ -24,6 +26,10 @@ interface Preview {
   skipped?: { line: number; reason: string }[];
   skipped_total?: number;
   preview?: { time: number; amount: number; description: string | null }[];
+  /** The currency the FILE names when it is not the account's. Amounts are stored as the ACCOUNT's. */
+  currency_mismatch?: string | null;
+  /** Rows above the table (bank details, the holder's identity, period totals) that were skipped. */
+  preamble_rows?: number;
 }
 
 const FIELDS: { key: keyof Mapping; labelKey: TranslationKey; required: boolean }[] = [
@@ -48,6 +54,7 @@ export function CsvImportCard() {
   const [result, setPreviewResult] = useState<Preview | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -62,6 +69,41 @@ export function CsvImportCard() {
     setPreviewResult(null);
     setMapping({});
   }
+
+  /**
+   * A statement shared into the app from the banking app's share sheet.
+   *
+   * Same mechanism as the receipt photo (`src/sw.ts`): a POST share target is delivered to the
+   * service worker, never to the server, so the file is parked in a cache and the redirect lands
+   * here with `?shared=statement`. It fills the SAME state the file picker fills — one path, so a
+   * shared file cannot behave differently from a chosen one — and stops there: the account still
+   * has to be picked and the preview still has to be read before anything is written.
+   *
+   * The marker is stripped from the URL first, or a reload would look like a second share.
+   */
+  // Arrived from the "statement is stale" notification: no file to pick up, just show the card.
+  useEffect(() => {
+    if (params.get("import") !== "1") return;
+    setParams((p) => { p.delete("import"); return p; }, { replace: true });
+    document.getElementById("csv-import")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for the link that opened this page
+  }, []);
+
+  useEffect(() => {
+    if (params.get("shared") !== "statement") return;
+    setParams((p) => { p.delete("shared"); return p; }, { replace: true });
+    void takeSharedStatement().then(async (file) => {
+      if (!file) return;
+      setText(await file.text());
+      setFileName(file.name);
+      setPreviewResult(null);
+      setMapping({});
+      // Scrolled into view because the share opens the whole Settings page and this card is far
+      // down it — landing on a page with no sign of the file you just shared reads as a failure.
+      document.getElementById("csv-import")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once for the share that opened this page
+  }, []);
 
   async function runPreview(nextMapping?: Mapping) {
     if (!text) return;
@@ -110,9 +152,16 @@ export function CsvImportCard() {
   const canCommit = !!result?.complete && !!accountId && (result.parsed ?? 0) > 0;
 
   return (
-    <div className="card set-card">
+    <div className="card set-card" id="csv-import">
       <div className="set-card-h"><Icon name="repeat" size={16} />{t("csv.title")}</div>
       <p className="set-card-sub">{t("csv.subtitle")}</p>
+      {/*
+        Said out loud because the alternative is finding out by failing: sharing a file INTO a web
+        app needs the Web Share Target API, which exists on Android and has never existed on iOS —
+        no browser there can offer it, Safari included. Naming the platform is the difference
+        between "this app is broken" and "this is not a thing on iPhone".
+      */}
+      <p className="set-card-sub">{t("csv.shareHint")}</p>
 
       <div className="stack">
         <label className="btn" style={{ justifyContent: "center", cursor: "pointer" }}>
@@ -163,7 +212,22 @@ export function CsvImportCard() {
               {result.complete && t("csv.parsedSuffix", { n: result.parsed ?? 0 })}
               {!!result.duplicates && t("csv.alreadyExistsSuffix", { n: result.duplicates })}
               {!!result.skipped_total && t("csv.skippedSuffix", { n: result.skipped_total })}
+              {/* Said out loud: 23 rows silently disappearing is exactly the kind of thing this
+                  screen exists to prevent, even when dropping them is correct. */}
+              {!!result.preamble_rows && t("csv.preambleSuffix", { n: result.preamble_rows })}
             </div>
+
+            {/*
+              The file says one currency and the chosen account holds another. Not an error and
+              not blocked — but the amounts will be stored as the account's currency, which is
+              wrong by the exchange rate and looks entirely ordinary afterwards. This is the last
+              screen where it can still be stopped.
+            */}
+            {!!result.currency_mismatch && (
+              <div style={{ fontSize: 13, color: "var(--warn)" }}>
+                {t("csv.currencyMismatch", { file: result.currency_mismatch })}
+              </div>
+            )}
 
             {result.complete && !!result.preview?.length && (
               <div className="stack" style={{ gap: 4 }}>

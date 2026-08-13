@@ -20,12 +20,25 @@ export interface CategorizeInput {
   currency_code?: number | null; // валюта РАХУНКУ операції
 }
 
+/**
+ * WHICH step of the chain answered — the data behind "why this category" on the operation page.
+ *
+ * Reported by the function that actually decides, rather than reconstructed next to it: a second
+ * implementation of "what would have matched" is the §CUR-PLAN shape again, and it would drift
+ * into explaining a decision the app no longer makes.
+ */
+export type CategorySource = "alias_desc" | "alias_mcc" | "subscription" | "rule_mcc" | "rule_text" | null;
+
 export interface CategorizeResult {
   category_id: number | null;
   display_name: string | null;
   is_transfer: boolean;
   real_category_id: number | null; // навчена реальна категорія переказу/зняття (§F2 крок 2)
   planned_id: number | null;       // зв'язок із підпискою, якщо операція під неї підпадає (§R5)
+  /** Which rule fired. `null` = nothing deterministic matched (AI or a human decided). */
+  source?: CategorySource;
+  /** The matched thing, in the user's own words: the alias name, the MCC, the rule's pattern. */
+  detail?: string | null;
 }
 
 export async function categorize(
@@ -42,7 +55,7 @@ export async function categorize(
       )
       .bind(desc)
       .first<{ display_name: string | null; category_id: number | null; is_transfer: number; real_category_id: number | null }>();
-    if (byDesc) return { category_id: byDesc.category_id, display_name: byDesc.display_name, is_transfer: !!byDesc.is_transfer, real_category_id: byDesc.real_category_id, planned_id: null };
+    if (byDesc) return { category_id: byDesc.category_id, display_name: byDesc.display_name, is_transfer: !!byDesc.is_transfer, real_category_id: byDesc.real_category_id, planned_id: null, source: "alias_desc", detail: desc };
   }
   if (input.mcc != null) {
     const byMcc = await db
@@ -51,7 +64,7 @@ export async function categorize(
       )
       .bind(String(input.mcc))
       .first<{ display_name: string | null; category_id: number | null; is_transfer: number; real_category_id: number | null }>();
-    if (byMcc) return { category_id: byMcc.category_id, display_name: byMcc.display_name, is_transfer: !!byMcc.is_transfer, real_category_id: byMcc.real_category_id, planned_id: null };
+    if (byMcc) return { category_id: byMcc.category_id, display_name: byMcc.display_name, is_transfer: !!byMcc.is_transfer, real_category_id: byMcc.real_category_id, planned_id: null, source: "alias_mcc", detail: String(input.mcc) };
   }
 
   // 1b. Активна підписка (детерміністично, без AI): той самий мерчант+сума+валюта, що
@@ -60,7 +73,7 @@ export async function categorize(
     const sub = await matchActiveSubscription(db, {
       merchant: null, description: desc || null, amount: input.amount, currency_code: input.currency_code,
     });
-    if (sub) return { category_id: sub.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: sub.planned_id };
+    if (sub) return { category_id: sub.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: sub.planned_id, source: "subscription", detail: sub.title ?? null };
   }
 
   // 2. Rules: mcc match, then text substring. Highest priority wins.
@@ -71,7 +84,7 @@ export async function categorize(
       )
       .bind(String(input.mcc))
       .first<{ category_id: number }>();
-    if (r) return { category_id: r.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null };
+    if (r) return { category_id: r.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null, source: "rule_mcc", detail: String(input.mcc) };
   }
   /**
    * Text rules match the description AND the comment, joined.
@@ -93,10 +106,10 @@ export async function categorize(
     const lower = haystack.toLowerCase();
     for (const rule of textRules.results ?? []) {
       if (lower.includes(rule.pattern.toLowerCase())) {
-        return { category_id: rule.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null };
+        return { category_id: rule.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null, source: "rule_text", detail: rule.pattern };
       }
     }
   }
 
-  return { category_id: null, display_name: null, is_transfer: false, real_category_id: null, planned_id: null };
+  return { category_id: null, display_name: null, is_transfer: false, real_category_id: null, planned_id: null, source: null, detail: null };
 }

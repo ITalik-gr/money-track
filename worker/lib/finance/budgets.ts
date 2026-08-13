@@ -15,6 +15,8 @@
  * Both paths call this function now, so there is nowhere left to diverge.
  */
 import type { Env } from "../../env.ts";
+import { resolveLocale } from "../platform/i18n.ts";
+import { catNameSql } from "./categories-i18n.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_AMOUNT, amountSum,
   categoryMonthlyLevels, projectSpend, localMonthStart,
@@ -51,13 +53,19 @@ export interface BudgetStatus {
 export async function budgetStatus(
   env: Env, mult: string, now = Math.floor(Date.now() / 1000),
 ): Promise<BudgetStatus[]> {
+  // §P3.4 / §LANG-ARCH: a category name leaving for the client is resolved in the READER's
+  // locale. This query shipped without it, and the result was visible: the envelope grid said
+  // «Транспорт» and «Продукти» on a screen that was English everywhere else — including the
+  // donut two blocks above, which reads the same categories through `catNameSql`. One concept,
+  // two resolutions, diverging exactly where the reader can see both at once.
+  const locale = await resolveLocale(env);
   const monthStart = localMonthStart(now);
   const nextMonthStart = localMonthStart(now, 1);
   const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
 
   const [budgets, spend, shape, levels] = await Promise.all([
     env.DB.prepare(
-      `SELECT b.category_id AS id, b.amount AS amount, c.name AS name
+      `SELECT b.category_id AS id, b.amount AS amount, ${catNameSql(locale, "c.name")} AS name
        FROM budgets b JOIN categories c ON c.id = b.category_id
        WHERE b.period = 'month' AND b.amount > 0`,
     ).all<{ id: number; amount: number; name: string }>(),
