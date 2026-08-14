@@ -82,6 +82,17 @@ export interface BudgetStatusRow {
 }
 export type BudgetStatusList = BudgetStatusRow[];
 
+/**
+ * §GOAL-CHART — `GET /goals/:id/progress`. One shape for BOTH goal kinds: a manual goal's
+ * cumulative contributions and a jar's account balance are resolved into the same series on the
+ * server, so the client draws one thing and knows nothing about the difference.
+ */
+export interface GoalProgressSeries {
+  points: { at: number; amount: number }[];
+  /** True when the series came from an account balance rather than from contributions. */
+  is_jar: boolean;
+}
+
 /** `POST /planned/from-habit` — §HABITS row turned into a declared plan. */
 export interface PlanFromHabit { ok: boolean; id: number }
 

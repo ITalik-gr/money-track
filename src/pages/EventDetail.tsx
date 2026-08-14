@@ -8,6 +8,7 @@ import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { EventBudget } from "../components/planning/EventBudget.tsx";
+import { EventGoalLink } from "../components/planning/EventGoalLink.tsx";
 import { GROUP_KINDS } from "../components/planning/GroupModal.tsx";
 import { renderMarkdown } from "../lib/markdown.tsx";
 import { toast } from "../lib/toast.ts";
@@ -57,6 +58,10 @@ export function EventDetail() {
 
       <div style={{ marginTop: 14 }}>
         <EventBudget id={Number(id)} spent={spent} budget={event.budget} />
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <EventGoalLink id={Number(id)} spent={spent} goalId={event.goal_id} />
       </div>
 
       <div style={{ marginTop: 14 }}>

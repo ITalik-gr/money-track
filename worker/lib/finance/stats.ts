@@ -50,6 +50,22 @@ export const EFF_CAT_ID = "COALESCE(scp.id, sc.id, rp.id, rc.id, p.id, c.id)";
 export const EFF_CAT_NAME = "COALESCE(scp.name, sc.name, rp.name, rc.name, p.name, c.name)";
 export const EFF_CAT_COLOR = "COALESCE(scp.color, sc.color, rp.color, rc.color, p.color, c.color)";
 
+/**
+ * §CAT-LEAF — the effective category WITHOUT the roll-up: the row's own sub-category.
+ *
+ * `EFF_CAT_ID` deliberately prefers the PARENT (`scp`/`rp`/`p` come first), because every aggregate
+ * in the app groups by parent. The consequence, found on live data: filtering `EFF_CAT_ID = <a
+ * sub-category id>` matches NOTHING, because rows in "Таксі" report as "Транспорт". So the category
+ * page rendered completely empty for every sub-category — and it links to its own children, so the
+ * app offered a link to a page it guaranteed would be blank.
+ *
+ * ⚠️ This is NOT an alternative canon and must not be used for aggregation. It answers exactly one
+ * question — "which leaf did this row land in" — and exists so a page ABOUT a leaf can find its
+ * rows. Anything summing across categories keeps using `EFF_CAT_ID`, or a split filed under a
+ * sub-category would stop rolling into its parent.
+ */
+export const EFF_CAT_LEAF_ID = "COALESCE(sc.id, rc.id, c.id)";
+
 // §6 Вагомість: override операції → вагомість ефективної категорії (рол-ап; частина спліту має
 // пріоритет) → дефолт 'discretionary'. Потребує STATS_JOINS. Значення: essential|discretionary|optional.
 export const EFF_IMPORTANCE = "COALESCE(t.importance, scp.importance, sc.importance, rp.importance, rc.importance, p.importance, c.importance, 'discretionary')";

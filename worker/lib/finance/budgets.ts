@@ -165,7 +165,7 @@ export async function budgetStatus(
       `SELECT b.category_id AS id, b.amount AS amount, COALESCE(b.rollover, 0) AS rollover,
               ${catNameSql(locale, "c.name")} AS name
        FROM budgets b JOIN categories c ON c.id = b.category_id
-       WHERE b.period = 'month' AND b.amount > 0`,
+       WHERE b.period = 'month' AND b.amount >= 0`,   // §BUDGET-ZERO: a 0 row IS an envelope
     ).all<{ id: number; amount: number; rollover: number; name: string }>(),
     env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS id, ${amountSum(mult)} AS spent
@@ -201,9 +201,18 @@ export async function budgetStatus(
     // The effective limit. `carryFrom` clamps at −base, so this cannot go negative; it CAN be
     // exactly zero, which is the honest reading of "last month you spent this month's money too".
     const amount = b.amount + carried;
-    // Ratio against the effective limit, floored at 1 kopeck so a fully-consumed envelope divides.
-    // At `amount === 0` any spending makes the ratio enormous, which is correct — the envelope is
-    // over before the month starts.
+    /**
+     * §BUDGET-ZERO — a limit of 0 is a real limit, and it needs its own arithmetic.
+     *
+     * Dividing by a floored denominator would make "spent 0 of 0" come out as **0%**, which the UI
+     * draws as an untouched envelope with room in it. But a zero envelope holding at zero is the
+     * only envelope that is perfectly kept, and rendering the best possible outcome as an empty
+     * bar is the opposite of what the user asked the app to track.
+     * So: nothing spent → ratio 0 and the UI reads `base_amount === 0` to say "нічого не
+     * витрачено"; anything spent → ratio 1+, because a single hryvnia has already broken the only
+     * promise this envelope makes. There is no "80% of nothing".
+     */
+    const zero = amount === 0;
     const denom = Math.max(amount, 1);
     // The SAME lump rule as the pace radar (`/analytics/patterns`): spending concentrated in one
     // or two large operations (tax, rent, a tank of fuel) is a fact that already happened, not a
@@ -216,11 +225,16 @@ export async function budgetStatus(
     // much this category usually costs, and a carry-over says nothing about that.
     const usual = lv?.level ?? b.amount;
     const projected = projectSpend(spent, usual, elapsedFrac, lumpy);
+    // A zero envelope has nothing to project INTO: "you are heading for 300 ₴ in a category you
+    // said you would not spend in" is a forecast about a decision, not about a pace. The breach is
+    // already reported by `ratio`, and `draftBudgetForecast` skips anything already at ratio ≥ 0.9,
+    // so this keeps the two from describing the same hryvnia twice.
+    const ratio = zero ? (spent > 0 ? 1 : 0) : spent / denom;
     return {
       id: b.id, name: b.name,
       amount, base_amount: b.amount, carried, rollover,
-      spent, ratio: spent / denom,
-      projected, projected_ratio: projected / denom, lumpy,
+      spent, ratio,
+      projected, projected_ratio: zero ? ratio : projected / denom, lumpy,
     };
   });
 }

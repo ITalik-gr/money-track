@@ -48,12 +48,16 @@ export interface EventPatch {
   budget?: number | null;
   name?: string;
   note?: string | null;
+  /** §EVENT-GOAL: `null` unlinks the goal. */
+  goal_id?: number | null;
 }
 
 export async function update(db: AppDb, id: number, patch: EventPatch): Promise<boolean> {
   const sets: string[] = [];
   const binds: unknown[] = [];
-  for (const col of ["budget", "name", "note"] as const) {
+  // §EVENT-GOAL: `goal_id` joins the list. `null` is a MEANINGFUL value here (unlink), which is
+  // why the loop tests `undefined` rather than falsiness — the same reason `budget` already did.
+  for (const col of ["budget", "name", "note", "goal_id"] as const) {
     const v = patch[col];
     if (v !== undefined) { sets.push(`${col} = ?`); binds.push(v); }
   }

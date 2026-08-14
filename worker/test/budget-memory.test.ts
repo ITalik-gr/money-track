@@ -200,6 +200,69 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
       assert.equal(rec.over, 1, "only April; March stayed inside its effective limit");
     });
 
+    await t.test("§BUDGET-ZERO: a limit of 0 is an envelope, and 'no envelope' is its absence", async () => {
+      const db = migratedDb();
+      seed(db);
+      db.raw.prepare("UPDATE budgets SET amount = 0 WHERE category_id = ?").run(CAT);
+
+      const rows = await budgetStatus(env(db), MULT);
+      const row = rows.find((b) => b.id === CAT);
+      // Before §BUDGET-ZERO the canon filtered `amount > 0`, so this row simply vanished and
+      // «сюди я не витрачаю» was indistinguishable from never having set a budget.
+      assert.ok(row, "a zero envelope is still an envelope");
+      assert.equal(row!.base_amount, 0);
+      assert.equal(row!.amount, 0);
+
+      // …and deleting the row is what "not budgeted" means.
+      await budgetsRepo.clear(db as unknown as never, CAT, "month");
+      const after = await budgetStatus(env(db), MULT);
+      assert.equal(after.find((b) => b.id === CAT), undefined);
+    });
+
+    await t.test("§BUDGET-ZERO: the ratio is binary — kept, or broken", async () => {
+      const db = migratedDb();
+      seed(db);
+      db.raw.prepare("UPDATE budgets SET amount = 0 WHERE category_id = ?").run(CAT);
+      // The fixture spends in category 1 this month, so this envelope is broken.
+      const broken = (await budgetStatus(env(db), MULT)).find((b) => b.id === CAT)!;
+      assert.ok(broken.spent > 0);
+      assert.equal(broken.ratio, 1, "no 'how far over' when the limit is nothing");
+      // The projection must not invent a percentage of zero either — `draftBudgetForecast`
+      // would otherwise announce a forecast for a category the user said they avoid.
+      assert.equal(broken.projected_ratio, broken.ratio);
+      assert.ok(Number.isFinite(broken.ratio) && Number.isFinite(broken.projected_ratio));
+
+      // A zero envelope with nothing spent is the perfectly kept one: 0%, not "over".
+      // A category with no transactions AT ALL, chosen from the data rather than hard-coded, so
+      // the scenario cannot quietly start measuring something else when the fixture grows.
+      const db2 = migratedDb();
+      seed(db2);
+      const quiet = db2.raw.prepare(
+        `SELECT id FROM categories
+         WHERE is_income = 0 AND parent_id IS NULL
+           AND id NOT IN (SELECT COALESCE(category_id, -1) FROM transactions)
+         ORDER BY id LIMIT 1`,
+      ).get() as { id: number };
+      db2.raw.prepare(
+        "INSERT INTO budgets (category_id, period, amount, currency_code, rollover) VALUES (?, 'month', 0, 980, 0)",
+      ).run(quiet.id);
+
+      const kept = (await budgetStatus(env(db2), MULT)).find((b) => b.id === quiet.id)!;
+      assert.equal(kept.spent, 0);
+      assert.equal(kept.ratio, 0, "the best possible outcome is not an 'over' state");
+    });
+
+    await t.test("§BUDGET-ZERO: a closed month counts ANY spend as a miss", async () => {
+      const db = migratedDb();
+      seed(db);
+      closed(db, "2026-03", CAT, 0, 0);          // kept
+      closed(db, "2026-04", CAT, 0, 1_20);       // broken by 1.20 ₴
+
+      const rec = (await budgetsRepo.trackRecord(db as unknown as never, "2026-01")).get(CAT)!;
+      assert.equal(rec.closed, 2);
+      assert.equal(rec.over, 1, "a single hryvnia breaks the only promise a zero envelope makes");
+    });
+
     await t.test("applying an auto-budget PRESERVES the rollover flag", async () => {
       const db = migratedDb();
       seed(db);

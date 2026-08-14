@@ -1,0 +1,26 @@
+-- §INCOME-PLAN — money coming IN gets a schedule, the way money going out already had one.
+--
+-- The defect this closes is an asymmetry inside a single subtraction. Both
+-- `/analytics/safe-to-spend` and `/analytics/forecast` computed
+--     income − spend
+-- where the spend side was a SCHEDULE projected to the end of the month (`chargesBetween`,
+-- `projectSpend`) and the income side was month-to-date HISTORY. So on the 3rd, before a salary or
+-- an invoice lands, the app subtracted a whole month of subscriptions from a few days of income and
+-- reported that almost nothing was free. It was most pessimistic exactly when it was most read, and
+-- for irregular (ФОП) income it stayed wrong until payday.
+--
+-- `planned_payments.kind` already carried 'subscription' | 'installment'. It gains 'income'; the
+-- column is plain TEXT with no constraint, so the schedule machinery (`nextChargeUnix`,
+-- `chargesBetween`, `plannedUAH` — including its currency conversion, which is what makes a USD
+-- invoice work) is reused rather than reimplemented.
+--
+-- ⚠️ `amount_varies` exists because the owner named the real constraint: income in life is neither
+-- the same size nor on time. A flag rather than a range, because a range invites the app to quote
+-- an optimistic end of it. All it does is mark the figure as an ESTIMATE — the UI says "≈" and the
+-- forecast refuses to present it as a promise.
+--
+-- ⚠️ Lateness is NOT stored. It is derived: what was scheduled to have arrived by now, minus what
+-- the canon says actually arrived. Storing "paid/unpaid" per occurrence would need a matcher
+-- between an expected invoice and a real transaction, and a matcher that is wrong marks real money
+-- as missing — the comparison of totals cannot.
+ALTER TABLE planned_payments ADD COLUMN amount_varies INTEGER DEFAULT 0;

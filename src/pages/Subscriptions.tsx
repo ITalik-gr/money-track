@@ -129,7 +129,17 @@ export function Subscriptions() {
     }
     return out;
   }, [cats, t]);
-  const list = (planned ?? []).slice().sort((a, b) => nextCharge(a) - nextCharge(b));
+  /**
+   * §INCOME-PLAN: this page is about money going OUT, so income plans are filtered here.
+   *
+   * `GET /planned` deliberately returns everything (it is the plans table, and the income rows have
+   * to reach the form that manages them), so the exclusion belongs to the reader that means
+   * "subscriptions". Without it a salary would be listed as a subscription AND added to the monthly
+   * burden — a number the advisor, the dashboard and the Telegram push all quote.
+   */
+  const list = (planned ?? []).filter((p) => p.kind !== "income")
+    .slice().sort((a, b) => nextCharge(a) - nextCharge(b));
+  const incomePlans = (planned ?? []).filter((p) => p.kind === "income");
   // Місячний тягар — зводимо кожну підписку в ₴ за її валютою (§F4).
   const burden = Math.round(list.reduce((s, p) => s + (toUAHMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)), 0));
   // Топ-найдорожчі за місячним ₴-еквівалентом (завершені не рахуємо).
@@ -162,6 +172,35 @@ export function Subscriptions() {
           </div>
         </div>
 
+        {/*
+          §INCOME-PLAN — expected inflows get their OWN section, above the subscriptions.
+          They live in the same table and are created by the same form, but mixing them into the
+          grid would put a salary inside "what you pay every month". Kept on this page rather than
+          given a new one: this is where a recurring amount on a schedule is managed, and a second
+          screen for the same table is how two ways to edit one thing appear.
+        */}
+        {incomePlans.length > 0 && (
+          <section>
+            <div className="section-head">
+              <h2>{t("sub.incomeTitle")}</h2>
+              <span className="label">{t("sub.incomeSectionHint")}</span>
+            </div>
+            <div className="inc-list">
+              {incomePlans.map((p) => (
+                <div className="card inc-row" key={p.id}>
+                  <span className="inc-name">{p.title}</span>
+                  <span className="inc-amt">
+                    {p.amount_varies ? "≈" : ""}
+                    <Money minor={p.period_amount ?? 0} decimals={false} />
+                    <span className="inc-per"> / {t(p.period === "week" ? "sub.unitWeek" : "sub.unitMonth")}</span>
+                  </span>
+                  <button className="sub-card-x" onClick={() => deletePlanned(p.id)} aria-label={t("common.delete")}>✕</button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Порожня сітка й «ще не завантажилось» виглядають однаково — а це різні речі. */}
         {loadingPlanned && <SubGridSkeleton />}
 
@@ -178,7 +217,8 @@ export function Subscriptions() {
                     <div style={{ minWidth: 0 }}>
                       <div className="sub-card-name">{p.title}</div>
                       <div className="sub-card-kind">
-                        {p.kind === "installment" ? t("sub.kindInstallment") : t("sub.kindSubscription")}
+                        {p.kind === "installment" ? t("sub.kindInstallment")
+                          : p.kind === "income" ? t("sub.kindIncome") : t("sub.kindSubscription")}
                         {p.category_id ? ` · ${catName.get(p.category_id) ?? ""}` : ""}
                       </div>
                     </div>
@@ -419,7 +459,11 @@ function AddForm() {
   const t = useT();
   const [addPlanned, { isLoading: adding }] = useAddPlannedMutation();
   const [title, setTitle] = useState("");
-  const [kind, setKind] = useState<"subscription" | "installment">("subscription");
+  const [kind, setKind] = useState<"subscription" | "installment" | "income">("subscription");
+  // §INCOME-PLAN: the owner's constraint, made explicit — income in life is neither the same size
+  // nor on time. The flag does not change the schedule, it only stops the app quoting an estimate
+  // as though it were a promise.
+  const [varies, setVaries] = useState(true);
   const [period, setPeriod] = useState<"month" | "week">("month");
   const [periodCount, setPeriodCount] = useState("1");
   const [currency, setCurrency] = useState(980);
@@ -430,7 +474,7 @@ function AddForm() {
     const perMinor = Math.round(Number(periodAmount || 0) * 100);
     const totMinor = Math.round(Number(totalAmount || 0) * 100);
     if (!title.trim()) { toast.error(t("sub.nameRequired")); return; }
-    if (kind === "subscription" && !perMinor) { toast.error(t("sub.amountRequired")); return; }
+    if ((kind === "subscription" || kind === "income") && !perMinor) { toast.error(t("sub.amountRequired")); return; }
     if (kind === "installment" && (!totMinor || !perMinor)) { toast.error(t("sub.installmentRequired")); return; }
     try {
       await addPlanned({
@@ -439,6 +483,7 @@ function AddForm() {
         start_date: Math.floor(Date.now() / 1000),
         period_amount: perMinor || null,
         total_amount: kind === "installment" ? totMinor : null,
+        amount_varies: kind === "income" ? varies : false,
       }).unwrap();
       setTitle(""); setPeriodAmount(""); setTotalAmount(""); setPeriodCount("1");
       toast.success(t("sub.added"));
@@ -452,7 +497,11 @@ function AddForm() {
         <div className="stack">
           <div className="row" style={{ gap: 8 }}>
             <Select value={kind} onChange={(v) => setKind(v as typeof kind)}
-              options={[{ value: "subscription", label: t("sub.typeSubscription") }, { value: "installment", label: t("sub.typeInstallment") }]} />
+              options={[
+                { value: "subscription", label: t("sub.typeSubscription") },
+                { value: "installment", label: t("sub.typeInstallment") },
+                { value: "income", label: t("sub.typeIncome") },
+              ]} />
             <Select value={period} onChange={(v) => setPeriod(v as typeof period)}
               options={[{ value: "month", label: t("sub.optMonth") }, { value: "week", label: t("sub.optWeek") }]} />
             <Select value={currency} onChange={(v) => setCurrency(Number(v))} options={CUR_OPTS} />
@@ -470,6 +519,17 @@ function AddForm() {
           {kind === "installment" && (
             <input type="number" inputMode="decimal" placeholder={t("sub.totalAmount")}
               value={totalAmount} onChange={(e) => setTotalAmount(e.target.value)} />
+          )}
+          {kind === "income" && (
+            <>
+              <label className="row" style={{ gap: 8, alignItems: "center" }}>
+                <input type="checkbox" checked={varies} onChange={(e) => setVaries(e.target.checked)} />
+                <span style={{ fontSize: 13 }}>{t("sub.incomeVaries")}</span>
+              </label>
+              {/* Said at the moment of creation, because this is where the expectation is set:
+                  the figure informs the FORECAST and never the "free to spend" number. */}
+              <p className="muted" style={{ fontSize: 12, margin: 0 }}>{t("sub.incomeHint")}</p>
+            </>
           )}
           {kind === "installment" && Number(totalAmount) > 0 && Number(periodAmount) > 0 && (
             <p className="muted" style={{ fontSize: 12, margin: 0 }}>

@@ -8,6 +8,7 @@ import {
   useGetCategoriesQuery,
   useBudgetChatMutation,
   useSetBudgetMutation,
+  useRemoveBudgetMutation,
   useCreateJobMutation,
   useGetJobsQuery,
 } from "../store/api.ts";
@@ -225,6 +226,7 @@ function Budgets() {
   const { data: cats, isLoading: loadingCats } = useGetCategoriesQuery();
   const { data: budgets } = useGetBudgetsQuery();
   const [setBudget] = useSetBudgetMutation();
+  const [removeBudget] = useRemoveBudgetMutation();
 
   // §3: факт за поточний місяць — канонічний by-category (₴, рол-ап у батька). Потрібен і далі:
   // категорія БЕЗ конверта не має рядка в `/budgets/status`, а картка все одно показує її факт.
@@ -290,12 +292,16 @@ function Budgets() {
             name={c.name}
             color={c.color}
             limit={limit}
+            // §BUDGET-ZERO: presence, not value. `limits.get() ?? 0` cannot tell «конверта немає»
+            // from «конверт на 0», and those are opposite statements about the same category.
+            hasBudget={limits.has(c.id)}
             // Витрата з конверта, коли він є, — те саме число, що в сітці конвертів; інакше
             // канонічний by-category. Обидва рахує сервер.
             spent={st?.spent ?? spentByCat.get(c.id) ?? 0}
             rollover={rollovers.has(c.id)}
             carried={st?.carried ?? 0}
             onSave={(minor, rollover) => setBudget({ category_id: c.id, period: "month", amount: minor, rollover })}
+            onRemove={() => removeBudget({ category_id: c.id, period: "month" })}
           />
         );
       })}
@@ -304,11 +310,21 @@ function Budgets() {
 }
 
 function BudgetCard({
-  name, color, limit, spent, rollover, carried, onSave,
-}: { name: string; color: string | null; limit: number; spent: number; rollover: boolean; carried: number; onSave: (minor: number, rollover: boolean) => void }) {
+  name, color, limit, hasBudget, spent, rollover, carried, onSave, onRemove,
+}: {
+  name: string; color: string | null; limit: number;
+  /**
+   * §BUDGET-ZERO — whether an envelope EXISTS, which `limit` alone cannot say any more.
+   * `limit === 0` used to mean "not budgeted"; it now means "budgeted at zero", and the two are
+   * opposite statements: one is the absence of a plan, the other is a plan.
+   */
+  hasBudget: boolean;
+  spent: number; rollover: boolean; carried: number;
+  onSave: (minor: number, rollover: boolean) => void; onRemove: () => void;
+}) {
   const t = useT();
   const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(limit ? String(limit / 100) : "");
+  const [val, setVal] = useState(hasBudget ? String(limit / 100) : "");
   const dot = color ?? "#8A948F";
 
   // §BUDGET-MEMORY: ефективний ліміт = базовий + перенесене. `carried` приходить із канону й
@@ -316,15 +332,25 @@ function BudgetCard({
   // його наповнює. Без цієї симетрії конверт обіцяє наслідки, яких не настає.
   const carry = rollover ? carried : 0;
   const effLimit = limit + carry;
-  const ratio = effLimit > 0 ? spent / effLimit : 0;
+  // §BUDGET-ZERO: a zero envelope has no percentages — either the promise held or it did not.
+  // «80% від нуля» is not a quantity, and a progress bar drawn from it would be decoration.
+  const zero = hasBudget && effLimit === 0;
+  const ratio = zero ? (spent > 0 ? 1 : 0) : effLimit > 0 ? spent / effLimit : 0;
   const pct = Math.round(ratio * 100);
   const remain = effLimit - spent;
-  const state = limit === 0 ? "none" : ratio > 1 ? "over" : ratio >= 0.8 ? "warn" : "ok";
+  const state = !hasBudget ? "none"
+    : zero ? (spent > 0 ? "over" : "ok")
+    : ratio > 1 ? "over" : ratio >= 0.8 ? "warn" : "ok";
   const barColor = state === "over" ? "var(--neg)" : state === "warn" ? "var(--warn, #c9871a)" : dot;
 
   function save() {
-    const minor = Math.round(Number(val || 0) * 100);
-    if (minor !== limit) onSave(minor, rollover);
+    const raw = val.trim();
+    // An empty field is NOT zero: it is someone who opened the editor and typed nothing, and
+    // reading that as «не витрачаю сюди» would put a promise in their mouth. Zero has to be typed.
+    if (raw === "") { setEditing(false); return; }
+    const minor = Math.round(Number(raw) * 100);
+    if (!Number.isFinite(minor) || minor < 0) { setEditing(false); return; }
+    if (minor !== limit || !hasBudget) onSave(minor, rollover);
     setEditing(false);
   }
 
@@ -340,45 +366,80 @@ function BudgetCard({
             {carry > 0 ? t("plan.carryFromLast") : t("plan.carryDebtFromLast")}
           </span>
         )}
-        {limit > 0
-          ? <span className={`bc-pct ${state}`}>{pct}%</span>
-          : <button className="bc-set" onClick={() => setEditing(true)}>{t("plan.setLimit")}</button>}
+        {/* §BUDGET-ZERO: no percentage on a zero envelope — a word, because the answer is binary. */}
+        {!hasBudget
+          ? <button className="bc-set" onClick={() => setEditing(true)}>{t("plan.setLimit")}</button>
+          : zero
+            ? <span className={`bc-zero ${state}`}>{spent > 0 ? t("plan.zeroBroken") : t("plan.zeroKept")}</span>
+            : <span className={`bc-pct ${state}`}>{pct}%</span>}
       </div>
 
-      <div className="bc-bar">
-        <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: barColor }} />
-        {/* Засічка на межі БАЗОВОГО ліміту — видно, де закінчується «свій» місяць
-            і починається перенесене. Без неї смуга мовчки розтягується. */}
-        {carry > 0 && effLimit > 0 && (
-          <i className="bc-tick" style={{ left: `${Math.min(99, (limit / effLimit) * 100)}%` }}
-            title={t("plan.baseLimitTitle", { amount: Math.round(limit / 100) })} />
-        )}
-      </div>
+      {/* A zero envelope gets no bar: there is no proportion to draw, and a full red bar next to
+          «витрачено 40 ₴» would suggest a limit of 40 ₴ was reached rather than a limit of 0
+          broken. The words above and the amount below say it exactly. */}
+      {!zero && (
+        <div className="bc-bar">
+          <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: barColor }} />
+          {/* Засічка на межі БАЗОВОГО ліміту — видно, де закінчується «свій» місяць
+              і починається перенесене. Без неї смуга мовчки розтягується. */}
+          {carry > 0 && effLimit > 0 && (
+            <i className="bc-tick" style={{ left: `${Math.min(99, (limit / effLimit) * 100)}%` }}
+              title={t("plan.baseLimitTitle", { amount: Math.round(limit / 100) })} />
+          )}
+        </div>
+      )}
 
       <div className="bc-foot">
         <span className="bc-spent"><Money minor={spent} decimals={false} /> {t("plan.spent")}</span>
         {editing ? (
           <span className="bc-edit">
-            <input type="number" inputMode="decimal" autoFocus placeholder={t("plan.limitPlaceholder")}
+            {/* `min={0}`: the API refuses a negative limit rather than clamping it, so the field
+                should not let one be typed in the first place. */}
+            <input type="number" inputMode="decimal" min={0} autoFocus placeholder={t("plan.limitPlaceholder")}
               value={val} onChange={(e) => setVal(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") save(); if (e.key === "Escape") setEditing(false); }}
               onBlur={save} />
           </span>
-        ) : limit > 0 ? (
+        ) : hasBudget ? (
           <button className="bc-limit" onClick={() => { setVal(String(limit / 100)); setEditing(true); }} title={t("plan.changeLimit")}>
-            {remain >= 0
-              ? <>{t("plan.remaining")} <b><Money minor={remain} decimals={false} /></b></>
-              : <>{t("plan.exceededBy")} <b className="neg"><Money minor={-remain} decimals={false} /></b></>}
-            <span className="bc-of"> {t("plan.ofLimit")} <Money minor={effLimit} decimals={false} /></span>
+            {/* §BUDGET-ZERO: «лишилось 0 ₴» about an envelope that was never meant to hold
+                anything is arithmetically true and says nothing. What matters is whether the
+                promise held, and by how much it did not. */}
+            {zero
+              ? (spent > 0
+                ? <>{t("plan.zeroSpentAnyway")} <b className="neg"><Money minor={spent} decimals={false} /></b></>
+                : <>{t("plan.zeroLimitLabel")}</>)
+              : remain >= 0
+                ? <>{t("plan.remaining")} <b><Money minor={remain} decimals={false} /></b></>
+                : <>{t("plan.exceededBy")} <b className="neg"><Money minor={-remain} decimals={false} /></b></>}
+            {!zero && <span className="bc-of"> {t("plan.ofLimit")} <Money minor={effLimit} decimals={false} /></span>}
           </button>
         ) : null}
       </div>
 
-      {limit > 0 && (
-        <label className="bc-roll" title={t("plan.rolloverTitle")}>
-          <input type="checkbox" checked={rollover} onChange={(e) => onSave(limit, e.target.checked)} />
-          <span>{t("plan.rollover")}</span>
-        </label>
+      {/* The hint lives on the editor, not in a help page: a limit of 0 is only discoverable if it
+          is mentioned at the moment someone is typing a number. Shown while editing regardless of
+          whether the envelope already exists — that is exactly when it is actionable. */}
+      {editing && <p className="bc-zero-hint">{t("plan.zeroHint")}</p>}
+
+      {hasBudget && (
+        <div className="bc-actions">
+          {/* Rollover is meaningless on a zero envelope: the carry is clamped to ±the base limit,
+              so ±0. Showing a switch that provably cannot do anything is the `budgets.rollover`
+              mistake all over again — a control that exists and has no effect. */}
+          {!zero && (
+            <label className="bc-roll" title={t("plan.rolloverTitle")}>
+              <input type="checkbox" checked={rollover} onChange={(e) => onSave(limit, e.target.checked)} />
+              <span>{t("plan.rollover")}</span>
+            </label>
+          )}
+          {/* Removing the envelope is its OWN action now that 0 is a value someone may mean.
+              Previously "clear" was spelled by typing 0, which is exactly the sentence this
+              feature exists to let people say. */}
+          <button className="bc-remove" onClick={onRemove} title={t("plan.removeBudgetTitle")}>
+            {t("plan.removeBudget")}
+          </button>
+        </div>
       )}
     </div>
   );

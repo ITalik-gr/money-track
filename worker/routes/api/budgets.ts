@@ -38,14 +38,39 @@ budgets.get("/budgets/status", async (c) => {
   return c.json(await budgetStatus(c.env, mult) satisfies BudgetStatusList);
 });
 
-// Idempotent set: one budget per category+period. amount<=0 clears it.
+/**
+ * Idempotent set: one budget per category+period.
+ *
+ * §BUDGET-ZERO — **0 is a value, not a deletion.** «Конверта тут немає» and «сюди я свідомо не
+ * витрачаю» are different statements about money, and until now the API could only express the
+ * first: `amount <= 0` deleted the row, so the second was unsayable and the two looked identical
+ * on every screen. Removing an envelope is now its own verb (`DELETE` below) because it is its own
+ * intention — a limit of zero is a plan, and no limit is the absence of one.
+ *
+ * A negative amount is still refused rather than clamped: it means the caller computed something
+ * wrong, and silently storing 0 would hide that behind a plausible-looking envelope.
+ */
 budgets.put("/budgets", async (c) => {
   const b = await c.req.json<{ category_id: number; period: "month" | "week"; amount: number; rollover?: boolean }>();
-  if (b.amount > 0) {
-    await budgetsRepo.set(c.env.DB, b.category_id, b.period, b.amount, !!b.rollover);
-  } else {
-    await budgetsRepo.clear(c.env.DB, b.category_id, b.period);
+  const amount = Math.round(Number(b.amount));
+  if (!Number.isFinite(amount) || amount < 0) {
+    return c.json({ error: st(c.get("locale"), "errBudgetNegative") }, 400);
   }
+  await budgetsRepo.set(c.env.DB, b.category_id, b.period, amount, !!b.rollover);
+  return c.json({ ok: true });
+});
+
+/**
+ * Remove the envelope entirely — back to "this category is not budgeted".
+ *
+ * ⚠️ Above nothing that shadows it (lint C7): `/budgets/status` and `/budgets/auto` are literals
+ * declared earlier and this is the only parameterised `/budgets/:…` route, on its own method.
+ */
+budgets.delete("/budgets/:categoryId", async (c) => {
+  const categoryId = Number(c.req.param("categoryId"));
+  if (!Number.isFinite(categoryId)) return c.json({ error: "bad id" }, 400);
+  const period = new URL(c.req.url).searchParams.get("period") === "week" ? "week" : "month";
+  await budgetsRepo.clear(c.env.DB, categoryId, period);
   return c.json({ ok: true });
 });
 

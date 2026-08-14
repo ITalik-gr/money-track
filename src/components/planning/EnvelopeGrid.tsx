@@ -44,9 +44,13 @@ export function EnvelopeGrid() {
   return (
     <div className="env-list">
       {envelopes.map((e) => {
+        // §BUDGET-ZERO: an envelope deliberately set to nothing is binary — the promise held or it
+        // did not. `ratio >= 1` rather than `> 1` here, because the canon reports a broken zero
+        // envelope as exactly 1: there is no "how far over" when the limit is nothing.
+        const zero = e.amount === 0;
         const pct = Math.round(e.ratio * 100);
-        const over = e.ratio > 1;
-        const state = over ? "over" : pct >= 80 ? "warn" : "ok";
+        const over = zero ? e.spent > 0 : e.ratio > 1;
+        const state = over ? "over" : zero ? "ok" : pct >= 80 ? "warn" : "ok";
         const bar = state === "over" ? "var(--neg)" : state === "warn" ? "var(--warn)" : e.color;
         const remain = e.amount - e.spent;
         // The forecast line earns its space only when it says something the bar does not: the
@@ -55,21 +59,28 @@ export function EnvelopeGrid() {
         // deliberately not extrapolated (a rent payment landed, or has not landed yet) — there is
         // no pace to warn about, and claiming one would be a guess dressed as a number.
         const projPct = Math.round(e.projected_ratio * 100);
-        const showForecast = !over && !e.lumpy && e.projected_ratio >= 1.05;
+        // Never on a zero envelope: "heading for 340% of nothing" is a percentage of a decision.
+        const showForecast = !over && !zero && !e.lumpy && e.projected_ratio >= 1.05;
         return (
           <Link to={`/categories/${e.id}`} key={e.id} className={`env-item ${state}`}>
             <div className="env-top">
               <span className="env-name"><span className="d" style={{ background: e.color }} />{e.name}</span>
-              <span className={`env-pct ${state}`}>{pct}%</span>
+              {zero
+                ? <span className={`env-zero ${state}`}>{over ? t("eg.zeroBroken") : t("eg.zeroKept")}</span>
+                : <span className={`env-pct ${state}`}>{pct}%</span>}
             </div>
-            <div className="env-bar">
-              <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: bar }} />
-              {/* A hairline where the projection lands, drawn INSIDE the same track: the gap
-                  between the filled bar and the mark is literally "what is still coming". */}
-              {showForecast && (
-                <i className="env-proj" style={{ left: `${Math.min(projPct, 100)}%` }} aria-hidden />
-              )}
-            </div>
+            {/* No track for a zero envelope: there is no proportion to fill, and a bar drawn full
+                would suggest a limit was reached rather than a limit of nothing broken. */}
+            {!zero && (
+              <div className="env-bar">
+                <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: bar }} />
+                {/* A hairline where the projection lands, drawn INSIDE the same track: the gap
+                    between the filled bar and the mark is literally "what is still coming". */}
+                {showForecast && (
+                  <i className="env-proj" style={{ left: `${Math.min(projPct, 100)}%` }} aria-hidden />
+                )}
+              </div>
+            )}
             <div className="env-sub">
               <span>
                 <Money minor={e.spent} decimals={false} /> {t("common.of")} <Money minor={e.amount} decimals={false} />
@@ -85,7 +96,11 @@ export function EnvelopeGrid() {
                 )}
               </span>
               <span className="env-remain">
-                {remain >= 0 ? <>{t("eg.left")} <Money minor={remain} decimals={false} /></> : <>{t("eg.exceeded")}</>}
+                {/* «ще 0 ₴» about an envelope that was never meant to hold anything is true and
+                    empty; what matters is whether anything was spent at all. */}
+                {zero ? (over ? t("eg.zeroSpentAnyway") : t("eg.zeroKept"))
+                  : remain >= 0 ? <>{t("eg.left")} <Money minor={remain} decimals={false} /></>
+                    : <>{t("eg.exceeded")}</>}
               </span>
             </div>
             {showForecast && (

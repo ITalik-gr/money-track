@@ -88,6 +88,29 @@ Adding anything to it requires an extraction first. The obvious seam: context as
 stay, everything else follows `report-prompt.ts` out. Not urgent — it becomes urgent the moment a
 report feature is asked for.
 
+*(Closed 2026-08-14: **§CAT-PAGE** — the category page rendered empty over real data for three
+independent reasons, all silent: a SUB-category never matched the rolled-up `EFF_CAT_ID`, an INCOME
+bucket had no spending to find, and the window was month-to-date so a quiet month looked like an
+empty category. One `CatScope` now drives every query on the page AND its drill; lifetime stats, a
+period selector and a 24-month trend make the page answer "is there anything here" before "how much
+this month". 9 scenarios in `category-page.test.ts`.)*
+
+*(Closed 2026-08-14: **§INCOME-PLAN** — income has a schedule at last (migration 0044), so
+`safe-to-spend` and `forecast` stop subtracting a month of projected spending from a few days of
+actual income. Expected income stays OUT of `safe` deliberately (it is the number people spend
+against) and drives the FORECAST instead; lateness is derived by comparing totals, which survives
+income that is neither the same size nor on time. `OUTFLOW_ONLY` on every planning selector keeps a
+salary from ever being counted as a subscription. The cashflow calendar and the liquidity drafter
+are no longer outflow-only — that gap was announced for anyone whose salary lands after their rent.
+10 scenarios in `income-plan.test.ts`.)*
+
+*(Closed 2026-08-14: **§GOAL-CHART** + **§EVENT-GOAL** — the last two Goals tails.)*
+
+*(Closed 2026-08-14: **§BUDGET-ZERO** — a limit of 0 is now a plan («сюди я не витрачаю»), not the
+absence of one; removing an envelope became its own verb (`DELETE /budgets/:categoryId`), a negative
+limit is refused rather than clamped, and a zero envelope shows a word instead of a percentage
+because «80% від нуля» is not a quantity.)*
+
 *(Closed 2026-08-14: **лінт C9** — кожен `className` має правило й навпаки. Куплений трьома
 багами того самого дня (картка без фону, сторінка категорії з чотирма класами без жодного правила).
 Вимів 59 мертвих правил, зняв `domains-a.css` зі стелі винятку C8 і дозволив `settings.css`
@@ -132,17 +155,11 @@ statistics-consistency suite; STYLES phase 0 + the split.)*
   **прогнати реальний експорт MyRaif через превʼю** й дописати підказки колонок у `HINTS`
   (`providers/csv.ts`), якщо гадалка їх не вгадає. Потрібен файл, не рішення.
 
-**P2.1 — Goals level-up, what is left** *(contribution history, auto-top-up, goal kinds, the pace
-status and the progress chart are done; §GOAL-PACE in `CLAUDE.md`)*
-- ⬜ The two P2.3 tails: linking an event to a goal, and an AI close-out over the plan's numbers
-  (a one-line extension of `/events/:id/ai`, `context += planned_total`).
-- ⬜ **A chart for a JAR-backed goal.** Today the chart is drawn only for a manual goal, because it
-  grows out of `goal_contributions` — and a jar has none by definition (its progress IS the account
-  balance). A source exists (`account_balance_history`), but that is a DIFFERENT storage of the same
-  idea, so before drawing anything we have to decide whether to fold them into one series on the
-  server or keep two paths.
-- *(Round-up лишився поза межами: він потребує гачка на КОЖНІЙ транзакції, а не місячного проходу —
-  це інша механіка, не варіант того самого поля.)*
+**P2.1 — Goals: CLOSED 2026-08-14.** Contribution history, auto-top-up, goal kinds, §GOAL-PACE,
+§GOAL-CHART (the jar chart, with both kinds resolved into one server-side series) and §EVENT-GOAL
+(an event names the goal it saved toward, and the AI close-out sees it) are all done.
+- *(Round-up лишився поза межами свідомо: він потребує гачка на КОЖНІЙ транзакції, а не місячного
+  проходу — це інша механіка, не варіант того самого поля.)*
 
 **TG-бот — вхідні команди для НЕ-власника**
 Вихідні пуші вже персональні (§D1). Лишились вхідні команди (`/balance`, `/last`, запис витрати

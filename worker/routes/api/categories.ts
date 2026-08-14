@@ -117,34 +117,83 @@ categories.get("/categories/:id/overview", async (c) => {
   const row = await categoriesRepo.byId(c.env.DB, id);
   if (!row) return c.json({ error: "not_found" }, 404);
 
-  const [levels, budgets, trend, split, children, closed] = await Promise.all([
+  /**
+   * §CAT-PAGE — the scope, decided ONCE and handed to every query below.
+   *
+   * Two live bugs came from not having it. A sub-category never matches `EFF_CAT_ID` (that rolls
+   * up to the parent), so every sub-category page was blank — and the parent page links straight
+   * to it. And an income bucket has no spending at all, so "Зарплата" was zeros on a page built
+   * out of `SPEND_WHERE`.
+   */
+  const scope = {
+    id,
+    isParent: row.parent_id == null,
+    isIncome: !!row.is_income,
+  };
+
+  // 24 months, not 12: the owner asked to see the whole history, and a year is exactly the window
+  // in which a yearly rhythm (insurance, tuition, holidays) is invisible — it appears once and
+  // looks like a one-off.
+  const TREND_MONTHS = 24;
+
+  const [levels, budgets, trend, split, children, closed, lifetime, merchants] = await Promise.all([
     stats.categoryMonthlyLevels(c.env, mult, { now: to }),
     budgetStatus(c.env, mult, now),
-    categoriesRepo.monthlyTrend(c.env.DB, mult, id, stats.localMonthStart(to, -11), to),
-    categoriesRepo.recurringSplit(c.env.DB, mult, id, from, to, stats.isRecurringExpr(stats.defaultRefFrom(to), to)),
+    categoriesRepo.monthlyTrend(c.env.DB, mult, scope, stats.localMonthStart(to, -(TREND_MONTHS - 1)), to),
+    categoriesRepo.recurringSplit(c.env.DB, mult, scope, from, to, stats.isRecurringExpr(stats.defaultRefFrom(to), to)),
     categoriesRepo.childrenOf(c.env.DB, loc, id),
     // §BUDGET-MEMORY. NOT derived from `trend` above: that is what was SPENT, and whether a month
     // was closed inside its envelope also depends on the limit that was in force at the time —
     // which exists nowhere except this row. Comparing today's limit against last spring's spending
     // would be a verdict the data cannot support.
     budgetsRepo.monthsForCategory(c.env.DB, id, 6),
+    // §CAT-PAGE: independent of the window, so an empty PERIOD can never look like an empty
+    // CATEGORY — the exact confusion the owner reported.
+    categoriesRepo.lifetimeStats(c.env.DB, mult, scope),
+    categoriesRepo.lifetimeMerchants(c.env.DB, mult, scope, 8),
   ]);
 
   // Zero-fill so the axis is continuous: a month with no spending is a real data point, and a gap
   // would make the line jump between distant months as though they were adjacent.
   const byMonth = new Map(trend.map((r) => [r.month, r.spent]));
   const months: { month: string; spent: number }[] = [];
-  for (let i = 11; i >= 0; i--) {
+  for (let i = TREND_MONTHS - 1; i >= 0; i--) {
     const key = stats.localYm(stats.localMonthStart(to, -i));
     months.push({ month: key, spent: byMonth.get(key) ?? 0 });
   }
 
-  const lv = levels.get(id);
-  const b = budgets.find((x) => x.id === id);
+  /**
+   * The canonical monthly LEVEL is spend-only and rolls up (`categoryMonthlyLevels`), so it applies
+   * to exactly one case: a top-level expense category. For a sub-category or an income bucket it
+   * would be a number about a DIFFERENT category, which is worse than none — so it is null there,
+   * and the lifetime average below carries the "how much a month" question instead.
+   */
+  const lv = scope.isParent && !scope.isIncome ? levels.get(id) : undefined;
+  /**
+   * Likewise the envelope: budgets live on top-level expense categories, and `budgetStatus` is
+   * month-to-date by definition. Showing it beside a window the reader widened to a year would put
+   * two different periods in one response — the §CATEGORY-PAGE bug fixed once already.
+   */
+  const isThisMonth = from === stats.localMonthStart(now) && to >= now - 86400;
+  const b = scope.isParent && !scope.isIncome && isThisMonth
+    ? budgets.find((x) => x.id === id)
+    : undefined;
   return c.json({
     id, name: localizeCatName(loc, row.name), color: row.color,
     importance: row.importance ?? "discretionary",
+    is_income: scope.isIncome,
+    is_sub: !scope.isParent,
     children,
+    lifetime: {
+      total: lifetime.total, n: lifetime.n,
+      first_at: lifetime.first_at, last_at: lifetime.last_at,
+      active_months: lifetime.months,
+      // The honest "per month": total over the months that actually had activity, NOT over the
+      // calendar span. A category used twice a year would otherwise report a monthly figure it has
+      // never once spent.
+      per_active_month: lifetime.months > 0 ? Math.round(lifetime.total / lifetime.months) : 0,
+    },
+    top_merchants: merchants,
     level: lv ? { level: lv.level, mean: lv.mean, last: lv.last, active_months: lv.active_months, fixed: lv.fixed } : null,
     trend: months,
     budget: b

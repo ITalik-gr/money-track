@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
@@ -24,6 +25,8 @@ import { CHART_ANIM } from "../lib/motion.ts";
  * would be how this screen ends up disagreeing with the donut it was opened from.
  */
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
+// `dateFmt` resolves the tag per CALL, so a module-level formatter still follows a language switch.
+const fmtDay = dateFmt({ day: "numeric", month: "short", year: "numeric" });
 const monthShort = dateFmt({ month: "short" });
 const monthLabel = (m: string) => {
   // The month comes from an explicit `YYYY-MM` key, never from a timestamp: formatting a period
@@ -45,11 +48,31 @@ function CTooltip(props: any) {
   );
 }
 
+/**
+ * §CAT-PAGE — the window the page is looking at.
+ *
+ * `month` stays the default because the envelope tile is month-to-date by definition and the two
+ * must describe the same period. The rest exist because the owner opened categories that were
+ * quiet this month and read an empty screen as lost data — the fix is partly the lifetime block
+ * below, and partly simply being able to look further back.
+ */
+const RANGES = ["month", "quarter", "year", "all"] as const;
+type Range = typeof RANGES[number];
+
+function rangeFrom(r: Range, now: number): number {
+  const d = new Date(now * 1000);
+  if (r === "month") return startOfMonthUnix();
+  if (r === "quarter") return Math.floor(new Date(d.getFullYear(), d.getMonth() - 2, 1).getTime() / 1000);
+  if (r === "year") return Math.floor(new Date(d.getFullYear(), d.getMonth() - 11, 1).getTime() / 1000);
+  return 0; // all — the server clamps to the first transaction anyway
+}
+
 export function Category() {
   const t = useT();
   const id = Number(useParams().id);
-  const from = startOfMonthUnix();
+  const [range, setRange] = useState<Range>("month");
   const to = Math.floor(Date.now() / 1000);
+  const from = rangeFrom(range, to);
 
   const { data, isError, error, refetch } = useGetCategoryOverviewQuery({ id, from, to });
   const { data: drill } = useGetCategoryDrillQuery({ category: id, from, to });
@@ -59,6 +82,13 @@ export function Category() {
 
   const chart = data.trend.map((m) => ({ ...m, label: monthLabel(m.month), spent: Math.round(m.spent / 100) }));
   const total = data.recurring + data.oneoff;
+  // §CAT-PAGE: an income bucket has no spending, no envelope and no canonical level — the page
+  // keeps its shape but changes what it claims. Without this it rendered zeros over a category
+  // holding every hryvnia the user earned.
+  const inc = data.is_income;
+  // "Nothing in this window" and "nothing ever" are different sentences, and telling them apart is
+  // the entire bug report. `lifetime` is window-independent precisely so this check is possible.
+  const emptyWindow = total === 0 && data.lifetime.n > 0;
 
   return (
     <>
@@ -71,6 +101,13 @@ export function Category() {
           <div className="sub">{t(`imp.${data.importance}` as "imp.essential")}</div>
         </div>
         <div className="page-head-actions">
+          <div className="seg">
+            {RANGES.map((r) => (
+              <button key={r} className={`seg-btn ${range === r ? "active" : ""}`} onClick={() => setRange(r)}>
+                {t(`cat.range.${r}` as "cat.range.month")}
+              </button>
+            ))}
+          </div>
           <Link className="btn ghost" to="/stats">{t("cat.backToStats")}</Link>
         </div>
       </div>
@@ -78,20 +115,33 @@ export function Category() {
       <div className="cat-page-stats">
         {/* The level FIRST: it is the answer to "how much does this cost me", which is the reason
             anyone opens a category. The period total is secondary — it depends on today's date. */}
+        {/* §CAT-PAGE: the canonical level is spend-only and rolls up, so it exists for exactly one
+            case — a top-level expense category. Everywhere else the lifetime average answers the
+            same question honestly instead of quoting a number about a DIFFERENT category. */}
         <div className="card merchant-stat">
           <div className="label">
-            {t("cat.levelLabel")}
-            <InfoTip>{data.level?.fixed ? t("cat.levelFixed") : t("cat.levelVariable")}</InfoTip>
+            {data.level ? t("cat.levelLabel") : t("cat.perActiveMonth")}
+            <InfoTip>
+              {data.level
+                ? (data.level.fixed ? t("cat.levelFixed") : t("cat.levelVariable"))
+                : t("cat.perActiveMonthHint")}
+            </InfoTip>
           </div>
           <div className="merchant-stat-v num-hero">
-            {data.level ? <Money minor={data.level.level} decimals={false} /> : "—"}
+            {data.level
+              ? <Money minor={data.level.level} decimals={false} />
+              : data.lifetime.per_active_month > 0
+                ? <Money minor={data.lifetime.per_active_month} decimals={false} />
+                : "—"}
           </div>
-          {data.level && (
-            <div className="merchant-stat-sub">{t("cat.levelMonths", { n: data.level.active_months })}</div>
-          )}
+          <div className="merchant-stat-sub">
+            {data.level
+              ? t("cat.levelMonths", { n: data.level.active_months })
+              : t("cat.levelMonths", { n: data.lifetime.active_months })}
+          </div>
         </div>
         <div className="card merchant-stat">
-          <div className="label">{t("cat.periodSpent")}</div>
+          <div className="label">{inc ? t("cat.periodEarned") : t("cat.periodSpent")}</div>
           <div className="merchant-stat-v num-hero"><Money minor={total} decimals={false} /></div>
           {/* §E1: the split is the useful half — a big month made of one purchase means something
               different from the same month made of forty. */}
@@ -117,6 +167,71 @@ export function Category() {
           </div>
         )}
       </div>
+
+      {/*
+        §CAT-PAGE — "there is nothing in THIS window, but the category is not empty".
+        This one line is the direct answer to the report: the window was genuinely empty, the page
+        showed nothing, and nothing is exactly what a never-used category looks like. Now the page
+        says which of the two it is, and offers the range that would show it.
+      */}
+      {emptyWindow && (
+        <div className="card cat-empty-note">
+          {t("cat.emptyWindow", { n: data.lifetime.n })}
+          {range !== "all" && (
+            <button className="cat-empty-cta" onClick={() => setRange("all")}>{t("cat.showAll")}</button>
+          )}
+        </div>
+      )}
+
+      {/* §CAT-PAGE — the whole history, so the page can be read without choosing a window at all. */}
+      {data.lifetime.n > 0 && (
+        <section>
+          <div className="section-head"><h2>{t("cat.lifetimeTitle")}</h2></div>
+          <div className="cat-life">
+            <div className="card merchant-stat">
+              <div className="label">{inc ? t("cat.lifeEarned") : t("cat.lifeSpent")}</div>
+              <div className="merchant-stat-v num-hero"><Money minor={data.lifetime.total} decimals={false} /></div>
+              <div className="merchant-stat-sub">{t("cat.lifeOps", { n: data.lifetime.n })}</div>
+            </div>
+            <div className="card merchant-stat">
+              <div className="label">{t("cat.lifeFirst")}</div>
+              <div className="merchant-stat-v num-hero" style={{ fontSize: 18 }}>
+                {data.lifetime.first_at ? fmtDay.format(data.lifetime.first_at * 1000) : "—"}
+              </div>
+              <div className="merchant-stat-sub">
+                {data.lifetime.last_at ? t("cat.lifeLast", { when: fmtDay.format(data.lifetime.last_at * 1000) }) : ""}
+              </div>
+            </div>
+            <div className="card merchant-stat">
+              <div className="label">{t("cat.perActiveMonth")}</div>
+              <div className="merchant-stat-v num-hero"><Money minor={data.lifetime.per_active_month} decimals={false} /></div>
+              <div className="merchant-stat-sub">{t("cat.levelMonths", { n: data.lifetime.active_months })}</div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Who this category actually IS — over the whole history, not the chosen window, so it
+          stays informative on a page opened during a quiet month. */}
+      {data.top_merchants.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>{t("cat.topMerchantsTitle")}</h2>
+            <span className="label">{t("cat.topMerchantsHint")}</span>
+          </div>
+          <div className="card">
+            <ul className="cat-merch-list">
+              {data.top_merchants.map((m) => (
+                <li key={m.merchant}>
+                  <Link className="cat-merch-name" to={`/merchant/${encodeURIComponent(m.merchant)}`}>{m.merchant}</Link>
+                  <span className="cat-merch-n label">{t("cat.merchantOps", { n: m.n })}</span>
+                  <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} ₴</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </section>
+      )}
 
       {/*
         §BUDGET-MEMORY — the question a budget could never answer before: not "how am I doing right

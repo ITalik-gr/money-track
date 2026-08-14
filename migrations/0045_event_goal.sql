@@ -1,0 +1,15 @@
+-- §EVENT-GOAL — an event (a trip, a renovation, a project) can name the goal it is saving toward.
+--
+-- The two halves of the same plan lived in separate tables with nothing between them: a "Japan"
+-- goal accumulating money, and a "Japan" event accumulating the spending, and the app could not
+-- say they were the same undertaking. So the goal card showed what had been saved, the event page
+-- showed what had been spent, and the one question worth asking — "did the money I set aside
+-- actually cover it" — was left to the person to do in their head.
+--
+-- A column on `event_groups` rather than a join table: an event saves toward at most one goal, and
+-- a many-to-many would let two events claim the same money with no rule for splitting it.
+--
+-- ⚠️ `ON DELETE SET NULL`, not CASCADE. Deleting a goal must not delete the event's spending
+-- history — the trip still happened, and its transactions are the record of it. The link is
+-- metadata about a plan; the transactions are facts.
+ALTER TABLE event_groups ADD COLUMN goal_id INTEGER REFERENCES savings_goals(id) ON DELETE SET NULL;

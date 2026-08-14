@@ -25,8 +25,8 @@ events.get("/events", async (c) => {
 // Бюджет події («скільки закладаю на цю подорож»). amount<=0 або null — прибрати ліміт.
 events.patch("/events/:id", async (c) => {
   const id = Number(c.req.param("id"));
-  const b = await c.req.json<{ budget?: number | null; name?: string; note?: string | null }>()
-    .catch(() => ({} as { budget?: number | null; name?: string; note?: string | null }));
+  type Patch = { budget?: number | null; name?: string; note?: string | null; goal_id?: number | null };
+  const b = await c.req.json<Patch>().catch(() => ({} as Patch));
   await eventsRepo.update(c.env.DB, id, {
     ...(b.budget !== undefined
       ? { budget: b.budget == null || b.budget <= 0 ? null : Math.round(b.budget) } : {}),
@@ -35,6 +35,9 @@ events.patch("/events/:id", async (c) => {
     // would block that.
     ...(b.name !== undefined && b.name.trim() ? { name: b.name.trim() } : {}),
     ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
+    // §EVENT-GOAL: `null` is the unlink, so `undefined` is the only "leave it alone".
+    ...(b.goal_id !== undefined
+      ? { goal_id: b.goal_id == null || !Number.isFinite(b.goal_id) ? null : Math.round(b.goal_id) } : {}),
   });
   return c.json({ ok: true });
 });

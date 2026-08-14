@@ -492,10 +492,29 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["budgets"],
   },
   {
-    name: "budgets: a non-positive amount clears the envelope",
+    // §BUDGET-ZERO: this used to be "a non-positive amount clears the envelope". It now STORES a
+    // zero limit, because «сюди я свідомо не витрачаю» is a plan and deserves to be sayable — the
+    // golden proves the row survives with `amount = 0` instead of disappearing.
+    name: "budgets: a zero amount stores a deliberate zero limit",
     method: "PUT",
     path: () => "/budgets",
     body: () => ({ category_id: 2, period: "month", amount: 0 }),
+    extraProbes: ["budgets"],
+  },
+  {
+    // …and removing an envelope is now its own verb. Two rows in, one row out.
+    name: "budgets: DELETE removes the envelope entirely",
+    method: "DELETE",
+    path: () => "/budgets/2?period=month",
+    extraProbes: ["budgets"],
+  },
+  {
+    // A negative limit is refused rather than clamped to 0: clamping would hide a caller's bug
+    // behind an envelope that looks deliberate.
+    name: "budgets: a negative amount is rejected",
+    method: "PUT",
+    path: () => "/budgets",
+    body: () => ({ category_id: 2, period: "month", amount: -100 }),
     extraProbes: ["budgets"],
   },
   {

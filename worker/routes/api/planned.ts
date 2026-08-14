@@ -24,10 +24,17 @@ planned.get("/planned", async (c) => {
 
 planned.post("/planned", async (c) => {
   const b = await c.req.json<{
-    title: string; kind: "subscription" | "installment"; total_amount?: number;
+    title: string; kind: "subscription" | "installment" | "income"; total_amount?: number;
     period_amount?: number; period: "month" | "week"; period_count?: number; start_date: number;
-    category_id?: number; account_id?: string; currency_code?: number;
+    category_id?: number; account_id?: string; currency_code?: number; amount_varies?: boolean;
   }>();
+  // §INCOME-PLAN: an expected inflow is the same schedule with the sign flipped, so it reuses
+  // everything here. `amount_varies` only marks the figure as an ESTIMATE — the owner's actual
+  // constraint is that income is neither the same size nor on time, and a number presented as
+  // exact when it is not is the thing that makes the forecast untrustworthy.
+  if (b.kind === "income" && !(b.period_amount && b.period_amount > 0)) {
+    return c.json({ error: st(c.get("locale"), "errIncomeAmount") }, 400);
+  }
   const periodCount = Math.max(1, Math.round(b.period_count ?? 1)); // «кожні N періодів» (§SUB4)
   // Installment auto-math (§6.5): derive occurrences/end_date from total & per-period.
   let occurrences: number | null = null;
@@ -44,6 +51,7 @@ planned.post("/planned", async (c) => {
     end_date, occurrences,
     category_id: b.category_id ?? null, account_id: b.account_id ?? null,
     currency_code: b.currency_code ?? 980,
+    amount_varies: !!b.amount_varies,
   });
   return c.json({ ok: true, id, occurrences, end_date });
 });

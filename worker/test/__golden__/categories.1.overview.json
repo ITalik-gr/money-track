@@ -5,6 +5,8 @@
     "name": "Продукти",
     "color": "#1F6E4C",
     "importance": "essential",
+    "is_income": false,
+    "is_sub": false,
     "children": [
       {
         "id": 31,
@@ -17,6 +19,31 @@
         "color": "#1F6E4C"
       }
     ],
+    "lifetime": {
+      "total": 2025100,
+      "n": 37,
+      "first_at": 1756717200,
+      "last_at": 1778749200,
+      "active_months": 9,
+      "per_active_month": 225011
+    },
+    "top_merchants": [
+      {
+        "merchant": "АТБ",
+        "spent": 982700,
+        "n": 18
+      },
+      {
+        "merchant": "Сільпо",
+        "spent": 902400,
+        "n": 18
+      },
+      {
+        "merchant": "Ашан",
+        "spent": 140000,
+        "n": 1
+      }
+    ],
     "level": {
       "level": 254000,
       "mean": 222667,
@@ -25,6 +52,54 @@
       "fixed": true
     },
     "trend": [
+      {
+        "month": "2024-06",
+        "spent": 0
+      },
+      {
+        "month": "2024-07",
+        "spent": 0
+      },
+      {
+        "month": "2024-08",
+        "spent": 0
+      },
+      {
+        "month": "2024-09",
+        "spent": 0
+      },
+      {
+        "month": "2024-10",
+        "spent": 0
+      },
+      {
+        "month": "2024-11",
+        "spent": 0
+      },
+      {
+        "month": "2024-12",
+        "spent": 0
+      },
+      {
+        "month": "2025-01",
+        "spent": 0
+      },
+      {
+        "month": "2025-02",
+        "spent": 0
+      },
+      {
+        "month": "2025-03",
+        "spent": 0
+      },
+      {
+        "month": "2025-04",
+        "spent": 0
+      },
+      {
+        "month": "2025-05",
+        "spent": 0
+      },
       {
         "month": "2025-06",
         "spent": 0

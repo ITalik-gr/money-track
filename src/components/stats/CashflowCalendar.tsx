@@ -127,7 +127,13 @@ export function CashflowCalendar() {
             >
               <span className="cf-dhead">
                 <span className="cf-dnum">{d}</span>
-                <span className="cf-damt">−{formatMinor(cell.total, { decimals: false })}</span>
+                {/* §INCOME-PLAN: the sign is DERIVED, never hardcoded. Income arrives as a
+                    negative `amount` (so the running balance is one subtraction), which means a
+                    day that nets positive must read "+" — a literal "−" in front of it printed
+                    "−−5 000" and turned payday into the worst day of the month. */}
+                <span className={`cf-damt ${cell.total < 0 ? "in" : ""}`}>
+                  {cell.total < 0 ? "+" : "−"}{formatMinor(Math.abs(cell.total), { decimals: false })}
+                </span>
               </span>
 
               {/* Назви списань прямо в дні — щоб не треба було наводити заради «що це». */}
@@ -135,7 +141,9 @@ export function CashflowCalendar() {
                 {inline.map((it, k) => (
                   <span className="cf-item" key={k}>
                     <span className="cf-item-name">{it.title}</span>
-                    <span className="cf-item-amt">{formatMinor(it.amount, { decimals: false })}</span>
+                    <span className={`cf-item-amt ${it.amount < 0 ? "in" : ""}`}>
+                      {it.amount < 0 ? "+" : ""}{formatMinor(Math.abs(it.amount), { decimals: false })}
+                    </span>
                   </span>
                 ))}
                 {rest > 0 && <span className="cf-item more">{t("cfcal.moreItems", { n: rest })}</span>}
@@ -148,15 +156,17 @@ export function CashflowCalendar() {
                     <span className="cf-pop-row" key={k}>
                       <span className="cf-pop-name">{it.title}</span>
                       {/* Валютний план: показуємо суму у валюті + ₴-еквівалент (сітка рахує в ₴). */}
-                      <span className="cf-pop-amt">
-                        −{formatMinor(it.amount, { decimals: false })} ₴
-                        {it.currency !== 980 && <span className="cf-pop-orig"> ({formatMinor(it.amountOrig, { decimals: false })} {currencySign(it.currency)})</span>}
+                      <span className={`cf-pop-amt ${it.amount < 0 ? "in" : ""}`}>
+                        {it.amount < 0 ? "+" : "−"}{formatMinor(Math.abs(it.amount), { decimals: false })} ₴
+                        {it.currency !== 980 && <span className="cf-pop-orig"> ({formatMinor(Math.abs(it.amountOrig), { decimals: false })} {currencySign(it.currency)})</span>}
                       </span>
                     </span>
                   ))}
                   <span className="cf-pop-foot">
                     <span>{t("cfcal.dayTotal")}</span>
-                    <b>−{formatMinor(cell.total, { decimals: false })} ₴</b>
+                    <b className={cell.total < 0 ? "in" : ""}>
+                      {cell.total < 0 ? "+" : "−"}{formatMinor(Math.abs(cell.total), { decimals: false })} ₴
+                    </b>
                   </span>
                   {bal != null && (
                     <span className={`cf-pop-bal ${bal < 0 ? "neg" : ""}`}>

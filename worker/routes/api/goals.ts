@@ -5,7 +5,7 @@ import { recalcGoal, isGoalKind, isAutofillKind, goalPace } from "../../lib/fina
 import { st } from "../../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 import { apiRoutes } from "./_shared.ts";
-import type { SavingsGoal, GoalContribution } from "../../../shared/api/planning.ts";
+import type { SavingsGoal, GoalContribution, GoalProgressSeries } from "../../../shared/api/planning.ts";
 
 export const goals = apiRoutes();
 
@@ -103,6 +103,35 @@ goals.delete("/goals/:id", async (c) => {
 // ⚠️ Ціль, привʼязану до БАНКИ (`account_id`), внески не чіпають: там джерело правди —
 // баланс рахунку, який веде банк. Дозволити ще й ручні внески означало б рахувати ті самі
 // гроші двічі.
+
+/**
+ * §GOAL-CHART — the progress series, resolved server-side for both goal kinds.
+ *
+ * ⚠️ Declared ABOVE `/goals/:id/contributions` is not required (different literal), but it IS a
+ * literal segment after the parameter, so lint C7 is satisfied either way.
+ */
+goals.get("/goals/:id/progress", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
+  const goal = (await goalsRepo.listActive(c.env.DB)).find((g) => g.id === id);
+  if (!goal) return c.json({ error: st(c.get("locale"), "goalNotFound") }, 404);
+
+  const { goalProgressSeries } = await import("../../lib/finance/goals.ts");
+  const isJar = goal.account_id != null;
+  const start = goal.created_at ?? (goal.deadline != null ? goal.deadline - 180 * 86400 : 0);
+  const [contributions, balances] = await Promise.all([
+    isJar ? Promise.resolve([]) : goalsRepo.listContributions(c.env.DB, id),
+    isJar ? goalsRepo.balanceHistory(c.env.DB, goal.account_id!, start) : Promise.resolve([]),
+  ]);
+
+  return c.json({
+    points: goalProgressSeries(
+      { created_at: goal.created_at ?? null, deadline: goal.deadline },
+      contributions, balances, isJar,
+    ),
+    is_jar: isJar,
+  } satisfies GoalProgressSeries);
+});
 
 goals.get("/goals/:id/contributions", async (c) => {
   return c.json(await goalsRepo.listContributions(c.env.DB, Number(c.req.param("id"))) satisfies GoalContribution[]);

@@ -12,6 +12,10 @@
     "projectedSpend": 0,
     "projectedLow": 0,
     "projectedHigh": 0,
+    "projectedIncome": 0,
+    "incomeExpected": 0,
+    "incomeOverdue": 0,
+    "incomeEstimated": false,
     "projectedNet": 0,
     "upcomingPlanned": 0,
     "upcomingItems": []

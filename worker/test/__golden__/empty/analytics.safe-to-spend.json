@@ -8,6 +8,9 @@
     "discretionary": 0,
     "subs_monthly": 0,
     "subs_remaining": 0,
-    "month_start": 1777582800
+    "month_start": 1777582800,
+    "income_expected": 0,
+    "income_overdue": 0,
+    "income_estimated": false
   }
 }

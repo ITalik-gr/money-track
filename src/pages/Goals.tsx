@@ -6,6 +6,7 @@ import { errText } from "../lib/errors.ts";
 import {
   useGetGoalsQuery, useDeleteGoalMutation, useGetAccountsQuery,
   useGetGoalContributionsQuery, useAddGoalContributionMutation, useDeleteGoalContributionMutation,
+  useGetGoalProgressQuery,
 } from "../store/api.ts";
 import { GoalGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Money } from "../components/ui/Money.tsx";
@@ -92,6 +93,42 @@ export function Goals() {
  * Історія згорнута за замовчуванням: на екрані з шістьма цілями шість розгорнутих списків —
  * це стіна, у якій самі цілі губляться. Кнопка «+» завжди видима, бо саме вона тут дія.
  */
+/**
+ * §GOAL-CHART — a jar-backed goal finally gets its line.
+ *
+ * It had none because the chart grew out of `goal_contributions`, and a jar has none by
+ * definition: its progress IS the account balance, kept by the bank. The two were a genuine
+ * design question (the roadmap card refused to draw anything until it was answered), and the
+ * answer is that the SERVER reconciles both into one series — so this component holds no chart
+ * logic at all, only the toggle and the request.
+ *
+ * Collapsed by default and `skip`ped while collapsed, for the same reason as the contribution
+ * history: a page with six jars must not fire six balance-history requests to draw six small lines.
+ */
+function GoalJarChart({ g }: { g: SavingsGoal }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const { data: progress, isFetching } = useGetGoalProgressQuery(g.id, { skip: !open });
+  const points = progress?.points ?? [];
+
+  return (
+    <div className="goal-contrib">
+      <div className="row" style={{ gap: 6 }}>
+        <button className="btn sm ghost" onClick={() => setOpen(!open)}>
+          {open ? t("goal.chartHide") : t("goal.chartShow")}
+        </button>
+      </div>
+      {open && (
+        isFetching && !points.length ? <p className="label" style={{ margin: "8px 0 0" }}>{t("common.loading")}</p>
+          : points.length ? <GoalProgress g={g} points={points} />
+            // A jar whose balance has never been snapshotted is not an error — the history builds
+            // up daily, and saying so is the difference between "wait" and "something broke".
+            : <p className="label" style={{ margin: "8px 0 0" }}>{t("goal.chartNoHistory")}</p>
+      )}
+    </div>
+  );
+}
+
 function GoalContribs({ g }: { g: SavingsGoal }) {
   const t = useT();
   const goalId = g.id;
@@ -101,6 +138,9 @@ function GoalContribs({ g }: { g: SavingsGoal }) {
   // THE SAME data, which is why it lives here and not on the card — otherwise a page with six
   // goals would fire six history requests just to draw six tiny lines.
   const { data: items = [] } = useGetGoalContributionsQuery(goalId, { skip: !open });
+  // §GOAL-CHART: the line comes from the server now, so it is the same series a jar-backed goal
+  // gets — the client no longer accumulates contributions itself.
+  const { data: progress } = useGetGoalProgressQuery(goalId, { skip: !open });
   const [add, { isLoading }] = useAddGoalContributionMutation();
   const [del] = useDeleteGoalContributionMutation();
 
@@ -133,7 +173,7 @@ function GoalContribs({ g }: { g: SavingsGoal }) {
           <>
           {/* The chart goes BEFORE the list: it answers "am I going to make it", the list answers
               "what exactly did I put in". The reader asks the first question first. */}
-          <GoalProgress g={g} items={items} />
+          <GoalProgress g={g} points={progress?.points ?? []} />
           <ul className="gc-list">
             {items.map((c) => (
               <li key={c.id}>
@@ -234,7 +274,7 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
       {g.note && <div className="goal-note">{g.note}</div>}
       {/* Внески — лише для РУЧНОЇ цілі: прогрес цілі-банки веде баланс рахунку, і ручний
           внесок поверх нього рахував би ті самі гроші двічі (сервер це теж відхиляє). */}
-      {!g.account_id && <GoalContribs g={g} />}
+      {g.account_id ? <GoalJarChart g={g} /> : <GoalContribs g={g} />}
     </div>
   );
 }

@@ -29,6 +29,33 @@ export function SafeToSpend() {
           <div className="sts-line"><span>{t("sts.minusSubs")}</span><b><Money minor={data.subs_remaining} decimals={false} /></b></div>
           <div className="sts-line total"><span>{t("sts.eqFree")}</span><b className={neg ? "neg" : "pos"}><Money minor={data.safe} decimals={false} signed /></b></div>
         </div>
+
+        {/*
+          §INCOME-PLAN — expected income sits BELOW the total, outside the sum, on purpose.
+          The figure above is what people spend against, so an unpaid invoice must not be inside
+          it: income is neither the same size nor on time, and a "free to spend" number propped up
+          by money that has not arrived is the one mistake this screen must never make. Shown
+          separately it answers the other real question — "is more coming before the 1st?" — which
+          is exactly what makes a low `safe` early in the month readable instead of alarming.
+        */}
+        {(data.income_expected > 0 || data.income_overdue > 0) && (
+          <div className="sts-expect">
+            {data.income_expected > 0 && (
+              <span className="sts-expect-line">
+                {t("sts.expected")}{" "}
+                <b>{data.income_estimated ? "≈" : ""}<Money minor={data.income_expected} decimals={false} /></b>
+              </span>
+            )}
+            {/* Overdue is its own sentence, not a smaller expected: "should have arrived on the
+                5th and did not" is a question for a client, while "arrives on the 25th" is just
+                the calendar. Folding them together loses the only actionable one. */}
+            {data.income_overdue > 0 && (
+              <span className="sts-expect-line late">
+                {t("sts.overdue")} <b><Money minor={data.income_overdue} decimals={false} /></b>
+              </span>
+            )}
+          </div>
+        )}
         <div className="sts-imp">
           <span className="lg"><span className="d" style={{ background: "var(--c-teal)" }} />{t("imp.essential")} <b><Money minor={data.essential} decimals={false} /></b></span>
           <span className="lg"><span className="d" style={{ background: "var(--c-ochre)" }} />{t("imp.discretionary")} <b><Money minor={data.discretionary} decimals={false} /></b></span>

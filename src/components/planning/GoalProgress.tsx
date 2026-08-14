@@ -1,6 +1,6 @@
 import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
-import type { SavingsGoal, GoalContribution } from "../../store/api.ts";
+import type { SavingsGoal } from "../../store/api.ts";
 
 /**
  * §P2.1 — the climb toward a goal, drawn.
@@ -25,12 +25,21 @@ import type { SavingsGoal, GoalContribution } from "../../store/api.ts";
 const W = 300, H = 72, PAD_T = 6, PAD_B = 14;
 const fmtDay = dateFmt({ day: "numeric", month: "short" });
 
-export function GoalProgress({ g, items }: { g: SavingsGoal; items: GoalContribution[] }) {
+/**
+ * §GOAL-CHART — `points` are LEVELS, already resolved by the server for both goal kinds.
+ *
+ * This component used to receive raw contributions and accumulate them here, which is why a
+ * jar-backed goal had no chart at all: a jar has no contributions by definition, its progress IS
+ * its account balance. Rather than teach the client a second way to build the same line, the
+ * server now hands over one series (`goalProgressSeries`) and this draws it. The jar case is not a
+ * branch here — it is just a series whose points happen to come from a balance.
+ */
+export function GoalProgress({ g, points }: { g: SavingsGoal; points: { at: number; amount: number }[] }) {
   const t = useT();
-  if (!items.length || g.target_amount <= 0) return null;
+  if (!points.length || g.target_amount <= 0) return null;
 
   const now = Date.now() / 1000;
-  const byTime = [...items].sort((a, b) => a.at - b.at);
+  const byTime = [...points].sort((a, b) => a.at - b.at);
 
   // The window. Start is the goal's own beginning, so an empty first half is VISIBLE as a flat
   // stretch — that flat stretch is usually the whole explanation for being behind.
@@ -45,17 +54,18 @@ export function GoalProgress({ g, items }: { g: SavingsGoal; items: GoalContribu
   const x = (unix: number) => ((Math.min(Math.max(unix, start), end) - start) / span) * W;
   const y = (v: number) => H - PAD_B - (Math.min(v, top) / top) * (H - PAD_T - PAD_B);
 
-  // Cumulative money, as a STEP line: savings do not drift upward between contributions, they
-  // jump on the day one lands. A smooth line would draw progress that never happened.
+  // A STEP line, for both kinds: savings do not drift upward between events, they jump the day
+  // money lands (and a jar balance holds flat between the daily snapshots). A smooth line would
+  // draw progress that never happened.
   let running = 0;
   const steps: string[] = [`${x(start).toFixed(1)},${y(0).toFixed(1)}`];
-  for (const c of byTime) {
-    steps.push(`${x(c.at).toFixed(1)},${y(running).toFixed(1)}`);
-    running += c.amount;
-    steps.push(`${x(c.at).toFixed(1)},${y(running).toFixed(1)}`);
+  for (const p of byTime) {
+    steps.push(`${x(p.at).toFixed(1)},${y(running).toFixed(1)}`);
+    running = p.amount;
+    steps.push(`${x(p.at).toFixed(1)},${y(running).toFixed(1)}`);
   }
-  // Carry the last level forward to today, so the gap since the most recent contribution is a
-  // flat run the eye can measure against the pace line.
+  // Carry the last level forward to today, so the gap since the most recent movement is a flat run
+  // the eye can measure against the pace line.
   steps.push(`${x(Math.min(now, end)).toFixed(1)},${y(running).toFixed(1)}`);
 
   const hasPace = g.deadline != null;

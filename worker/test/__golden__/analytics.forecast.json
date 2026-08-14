@@ -12,6 +12,10 @@
     "projectedSpend": 3927704,
     "projectedLow": 3918105,
     "projectedHigh": 3937303,
+    "projectedIncome": 4770000,
+    "incomeExpected": 0,
+    "incomeOverdue": 0,
+    "incomeEstimated": false,
     "projectedNet": 842296,
     "upcomingPlanned": 419900,
     "upcomingItems": [

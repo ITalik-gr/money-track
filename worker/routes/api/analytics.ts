@@ -85,39 +85,14 @@ analytics.get("/analytics/monthly-history", async (c) => {
   return c.json(await collectMonthlyHistory(c.env, months) satisfies MonthlyHistory);
 });
 
-// §4 Safe-to-spend: скільки вільно до кінця календарного місяця.
-// = дохід(міс) − витрачено(міс) − прийдешні підписки(залишок міс). Розбивка по вагомості (§6).
+// §4 Safe-to-spend: скільки вільно до кінця календарного місяця. Розрахунок — `lib/finance/
+// cashflow.ts` `safeToSpend` (винесено під C3): роут дає лише «зараз».
 analytics.get("/analytics/safe-to-spend", async (c) => {
   const rates = await getRates(c.env.DB);
   const { mult } = valueMode(rates, null);
+  const { safeToSpend } = await import("../../lib/finance/cashflow.ts");
   const now = Math.floor(Date.now() / 1000);
-  const monthStart = localMonthStart(now);
-
-  const tot = await analyticsRepo.monthToDate(c.env.DB, { mult }, { from: monthStart, to: now });
-
-  // §SUB-MONTH: «залишок підписок» = РОЗКЛАД списань до кінця місяця, а не «місячна сума
-  // мінус уже сплачене». Стара формула сумувала `period_amount` усіх активних планів як
-  // місячні (квартальний платіж важив повну суму щомісяця, тижневий — лише один тиждень),
-  // і різницю з фактом зменшувала на все, що вже списалось, — тобто помилка розкладу
-  // просочувалась просто в safe-to-spend. Розклад відповідає на питання буквально: що ще
-  // спишеться між зараз і 1-м числом наступного місяця.
-  // §CUR-PLAN: суми в ₴ (`chargesBetween` зводить сам) — вони в одному ряду з витратами місяця.
-  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
-  const monthEnd = localMonthStart(now, 1);
-  const plans = await planningRepo.activeForSchedule(c.env.DB);
-  const sum = (from: number, to: number) =>
-    chargesBetween(plans, rates, from, to).reduce((s, ch) => s + ch.amount, 0);
-
-  const income = tot?.income ?? 0;
-  const spend = tot?.spend ?? 0;
-  const essential = tot?.essential ?? 0;
-  const subsMonthly = sum(monthStart, monthEnd - 1);
-  const subsRemaining = sum(now + 1, monthEnd - 1);
-  const safe = income - spend - subsRemaining;
-  return c.json({
-    safe, income, spend, essential, discretionary: Math.max(0, spend - essential),
-    subs_monthly: subsMonthly, subs_remaining: subsRemaining, month_start: monthStart,
-  } satisfies SafeToSpend);
+  return c.json(await safeToSpend(c.env, rates, mult, now) satisfies SafeToSpend);
 });
 
 // Тренд капіталу: динаміка власних коштів (₴) за N місяців. Історія не зберігається,
@@ -297,10 +272,30 @@ analytics.get("/analytics/forecast", async (c) => {
     .map((ch) => ({ title: ch.plan.title, amount: ch.amount, at: ch.at }));
   const upcomingPlanned = upcomingItems.reduce((s, p) => s + p.amount, 0);
 
+  /**
+   * §INCOME-PLAN — THIS is where the asymmetry gets fixed.
+   *
+   * `projectedNet` used to be `income(month-to-date) − projectedSpend(end of month)`: a fact minus
+   * a forecast, which is guaranteed to look catastrophic on the 3rd and to "improve" as the month
+   * passes without anything actually changing. Both halves now describe the same instant — the end
+   * of the month — so the number finally answers the question it is labelled with.
+   * ⚠️ `projectedIncome` is reported SEPARATELY as well, so the reader can see which half of the
+   * net is money in the bank and which half is a plan. A single net figure would hide exactly the
+   * uncertainty the owner flagged: income is not always the same, and not always on time.
+   */
+  const { incomeOutlook } = await import("../../lib/finance/income.ts");
+  const outlook = await incomeOutlook(c.env, now);
+  const projectedIncome = income + outlook.expected_remaining;
+
   return c.json({
     monthStart, now, daysInMonth, daysElapsed, daysRemaining,
     spend, income, pace: Math.round(pace),
-    projectedSpend, projectedLow, projectedHigh, projectedNet: income - projectedSpend,
+    projectedSpend, projectedLow, projectedHigh,
+    projectedIncome,
+    incomeExpected: outlook.expected_remaining,
+    incomeOverdue: outlook.overdue,
+    incomeEstimated: outlook.estimated,
+    projectedNet: projectedIncome - projectedSpend,
     upcomingPlanned, upcomingItems,
   } satisfies Forecast);
 });
@@ -360,34 +355,25 @@ analytics.get("/analytics/income", async (c) => {
   } satisfies IncomeAnalytics);
 });
 
-// Cashflow-календар: ВСІ очікувані списання (підписки/розстрочки) по днях у вікні [from,to]
-// (на відміну від /planned/upcoming — той дає лише наступне списання на план). + стартова
-// ліквідна подушка для проєкції балансу «наперед» → видно провали ліквідності. Аутфлоу-only
-// (планового доходу в моделі нема; регулярна зарплата — майбутнє покращення).
+// Cashflow-календар: ВСІ очікувані рухи по днях у вікні [from,to] (на відміну від
+// /planned/upcoming — той дає лише наступне списання на план). + стартова ліквідна подушка для
+// проєкції балансу «наперед» → видно провали ліквідності.
+//
+// §INCOME-PLAN: більше НЕ аутфлоу-only. Доти проєкція балансу вміла лише падати, тож «провал
+// ліквідності» був гарантованим для будь-кого, чия зарплата приходить пізніше за оренду — календар
+// оголошував діру, яку закривали гроші, про які він не знав. Надходження приходять ДОДАТНІМИ
+// сумами тим самим `chargesBetween`, тож послідовність днів лишається одним рядом чисел.
 analytics.get("/analytics/cashflow-calendar", async (c) => {
   const url = new URL(c.req.url);
   const now = Math.floor(Date.now() / 1000);
-  const defFrom = localMonthStart(now);
-  const defTo = localMonthStart(now, 2) - 1;
-  const from = Number(url.searchParams.get("from") ?? defFrom);
-  const to = Number(url.searchParams.get("to") ?? defTo);
+  const from = Number(url.searchParams.get("from") ?? localMonthStart(now));
+  const to = Number(url.searchParams.get("to") ?? localMonthStart(now, 2) - 1);
 
-  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
+  const { cashflowMoves } = await import("../../lib/finance/cashflow.ts");
   const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
-  const [planned, funds, rates] = await Promise.all([
-    planningRepo.activeWithCategory(c.env.DB),
-    fundsBreakdown(c.env),
-    getRates(c.env.DB),
-  ]);
+  const [funds, rates] = await Promise.all([fundsBreakdown(c.env), getRates(c.env.DB)]);
+  const items = await cashflowMoves(c.env.DB, rates, from, to);
 
-  // §CUR-PLAN: `amount` — у ₴, бо його сумують по днях і віднімають від подушки (теж ₴).
-  // Оригінал лишаємо в `amount_orig`/`currency_code`, щоб UI показав «$5» поряд.
-  // Розгортання плану в дати — канонічний `chargesBetween` (§SUB-MONTH), а не власний цикл.
-  const items = chargesBetween(planned, rates, from, to).map((ch) => ({
-    at: ch.at, date: localYmd(ch.at), title: ch.plan.title, amount: ch.amount,
-    amount_orig: ch.plan.period_amount ?? 0, currency_code: ch.plan.currency_code ?? 980,
-    category_id: ch.plan.category_id, kind: ch.plan.kind,
-  }));
   return c.json({ from, to, now, cushion: funds.cushion, items } satisfies CashflowCalendar);
 });
 
@@ -538,37 +524,20 @@ analytics.get("/analytics/patterns", async (c) => {
 // топ-мерчанти всередині. Для «відкрити велику категорію й глянути детальніше» (§F5).
 analytics.get("/analytics/category", async (c) => {
   const url = new URL(c.req.url);
-  const parent = Number(url.searchParams.get("category"));
+  const category = Number(url.searchParams.get("category"));
   const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
   const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
   const rates = await getRates(c.env.DB);
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
   const { mult, curFilter } = valueMode(rates, cur);
 
-  const v = { mult, curFilter };
-  const range = { from, to };
-  const loc = c.get("locale");
-
-  const TRANSFER_CAT = 13;
-  if (parent === TRANSFER_CAT) {
-    // Спец-бакет «Перекази і зняття»: незакриті рухи (готівка/зняття без реальної категорії)
-    // + справжні перекази. Інформативно, ПОЗА канонічними витратами. Групуємо за реальною суттю.
-    const [subs, merchants, txs] = await Promise.all([
-      analyticsRepo.transferBucketSubs(c.env.DB, loc, v, range),
-      analyticsRepo.transferBucketMerchants(c.env.DB, v, range),
-      analyticsRepo.transferBucketTransactions(c.env.DB, loc, v, range),
-    ]);
-    return c.json({ subs, merchants, transactions: txs } satisfies CategoryDrill);
-  }
-
-  // Звичайна категорія: канонічні витрати, де ЕФЕКТИВНА категорія (рол-ап) = parent.
-  // Розбивка — по фактичній листовій категорії (реальна для готівки, інакше звичайна).
-  const [subs, merchants, txs] = await Promise.all([
-    analyticsRepo.categorySubs(c.env.DB, loc, v, range, parent),
-    analyticsRepo.categoryMerchants(c.env.DB, v, range, parent),
-    analyticsRepo.categoryTransactions(c.env.DB, v, range, parent),
-  ]);
-  return c.json({ subs, merchants, transactions: txs } satisfies CategoryDrill);
+  // §CAT-PAGE: the scope (sub-category? income?) is resolved inside `categoryDrill`, next to the
+  // queries that depend on it — see that file for why it must not live at the call site.
+  const { categoryDrill } = await import("../../lib/finance/category-drill.ts");
+  const drill = await categoryDrill(
+    c.env.DB, c.get("locale"), { mult, curFilter }, { from, to }, category,
+  );
+  return c.json(drill satisfies CategoryDrill);
 });
 
 // §R2-ST5(б): drill будь-якого зрізу (мерчант / картка / група) — підсумок + самі

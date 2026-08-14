@@ -779,9 +779,27 @@ export async function chatReply(
 
 // §GR2: спільний контекст групи — тотали, категорії всередині, транзакції (з id).
 async function groupPayload(env: Env, eventId: number) {
-  const ev = await env.DB.prepare("SELECT id, name, kind, note FROM event_groups WHERE id = ?").bind(eventId)
-    .first<{ id: number; name: string; kind: string; note: string | null }>();
+  const ev = await env.DB.prepare(
+    "SELECT id, name, kind, note, budget, goal_id FROM event_groups WHERE id = ?",
+  ).bind(eventId)
+    .first<{ id: number; name: string; kind: string; note: string | null; budget: number | null; goal_id: number | null }>();
   if (!ev) return null;
+
+  /**
+   * §EVENT-GOAL — the money SET ASIDE for this undertaking, when a goal is linked.
+   *
+   * Without it the model could only ever say how much was spent, which makes every trip look
+   * expensive. "Spent 61 000 against 70 000 you had saved" is a different sentence from "spent
+   * 61 000", and it is the one the person actually planned around. The goal's own progress is the
+   * canon (`current_amount`, or the jar's account balance — the same rule `/goals` applies), so
+   * the close-out cannot quote a figure the goal card contradicts.
+   */
+  const goal = ev.goal_id == null ? null : await env.DB.prepare(
+    `SELECT g.name, g.target_amount,
+            COALESCE(a.balance, g.current_amount) AS current
+     FROM savings_goals g LEFT JOIN accounts a ON a.id = g.account_id
+     WHERE g.id = ?`,
+  ).bind(ev.goal_id).first<{ name: string; target_amount: number; current: number }>();
   const txs = await env.DB.prepare(
     `SELECT t.id, t.merchant, t.comment, t.amount, t.currency_code,
             COALESCE(c.name, 'uncategorised') AS cat
@@ -812,6 +830,21 @@ async function groupPayload(env: Env, eventId: number) {
       total_spent_uah: Math.round(spent / 100),
       total_income_uah: Math.round(income / 100),
       tx_count: list.length,
+      // §EVENT-GOAL: only present when linked, so the model never has to reason about a null.
+      ...(ev.budget != null ? { budget_uah: Math.round(ev.budget / 100) } : {}),
+      ...(goal
+        ? {
+          goal: {
+            name: goal.name,
+            saved_uah: Math.round(goal.current / 100),
+            target_uah: Math.round(goal.target_amount / 100),
+            // Stated rather than left to arithmetic: this is the whole question the link exists
+            // to answer, and a model asked to subtract two numbers will sometimes not.
+            covered: spent <= goal.current,
+            over_saved_uah: Math.max(0, Math.round((spent - goal.current) / 100)),
+          },
+        }
+        : {}),
       monthly_burn_uah: Math.round(monthlyBurn / 100),
       runway_months: runwayMonths,
       categories: [...byCat.entries()].map(([name, v]) => ({ name, spent_uah: Math.round(v / 100) })).sort((a, b) => b.spent_uah - a.spent_uah),

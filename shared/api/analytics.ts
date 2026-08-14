@@ -54,6 +54,12 @@ export interface Overview {
 export interface MonthlyHistory { months: { month: string; spend: number; income: number; essential: number; discretionary: number; optional: number }[] }
 
 export interface SafeToSpend {
+  /** §INCOME-PLAN — still scheduled to arrive before month end. NOT part of `safe`. */
+  income_expected: number;
+  /** Scheduled to have arrived by now and not seen. */
+  income_overdue: number;
+  /** A contributing income plan is flagged as varying, so the two figures above are estimates. */
+  income_estimated: boolean;
   safe: number; income: number; spend: number; essential: number; discretionary: number;
   subs_monthly: number; subs_remaining: number; month_start: number;
 }
@@ -76,6 +82,11 @@ export interface CompareBucket {
 export interface Compare { a: CompareBucket; b: CompareBucket }
 
 export interface Forecast {
+  /** §INCOME-PLAN — received so far PLUS what is still scheduled this month. */
+  projectedIncome: number;
+  incomeExpected: number;
+  incomeOverdue: number;
+  incomeEstimated: boolean;
   monthStart: number; now: number; daysInMonth: number; daysElapsed: number; daysRemaining: number;
   spend: number; income: number; pace: number;
   projectedSpend: number; projectedLow?: number; projectedHigh?: number; projectedNet: number;
@@ -230,9 +241,41 @@ export interface CategoryOverview {
   color: string | null;
   /** `EFF_IMPORTANCE` of the category itself — essential | discretionary | optional. */
   importance: string;
+  /**
+   * §CAT-PAGE — which SIDE of the ledger this category lives on, and whether it is a leaf.
+   *
+   * Both change what the page means. An income bucket has no spending, no envelope and no
+   * canonical monthly level; a sub-category does not roll other categories up into it. Sent
+   * explicitly rather than inferred from `children.length` — a parent with no children yet is
+   * still a parent, and guessing would make the page change shape when one is added.
+   */
+  is_income: boolean;
+  is_sub: boolean;
   /** Sub-categories rolled INTO this one, so the page can say what it is aggregating. */
   children: { id: number; name: string; color: string | null }[];
-  /** §categoryMonthlyLevels — the canonical "how much a month", and how it was decided. */
+  /**
+   * §CAT-PAGE — the whole history, independent of the selected window.
+   *
+   * Exists because the owner opened categories that were empty for the current month and read that
+   * as "the app lost my spending". A lifetime line answers "is there anything here at all" before
+   * the page answers "how much this month".
+   */
+  lifetime: {
+    total: number; n: number;
+    first_at: number | null; last_at: number | null;
+    /** Months that actually had activity — the denominator of `per_active_month`. */
+    active_months: number;
+    /** Total ÷ ACTIVE months, never ÷ calendar span: a twice-a-year category would otherwise be
+     *  reported with a monthly figure it has never once spent. */
+    per_active_month: number;
+  };
+  /** Who this category actually is, over the whole history rather than the window. */
+  top_merchants: { merchant: string; spent: number; n: number }[];
+  /**
+   * §categoryMonthlyLevels — the canonical "how much a month". NULL for a sub-category or an
+   * income bucket: that canon is spend-only and rolls up, so there it would be a number about a
+   * DIFFERENT category. `lifetime.per_active_month` carries the question instead.
+   */
   level: { level: number; mean: number; last: number; active_months: number; fixed: boolean } | null;
   /** Twelve complete months, oldest first. Gaps are zeros, so the axis is continuous. */
   trend: { month: string; spent: number }[];

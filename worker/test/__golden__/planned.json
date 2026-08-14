@@ -16,7 +16,8 @@
       "is_active": 1,
       "currency_code": 980,
       "period_count": 1,
-      "note": null
+      "note": null,
+      "amount_varies": 0
     },
     {
       "id": 2,
@@ -33,7 +34,8 @@
       "is_active": 1,
       "currency_code": 840,
       "period_count": 1,
-      "note": null
+      "note": null,
+      "amount_varies": 0
     },
     {
       "id": 3,
@@ -50,7 +52,8 @@
       "is_active": 1,
       "currency_code": 980,
       "period_count": 1,
-      "note": null
+      "note": null,
+      "amount_varies": 0
     },
     {
       "id": 4,
@@ -67,7 +70,8 @@
       "is_active": 1,
       "currency_code": 980,
       "period_count": 1,
-      "note": null
+      "note": null,
+      "amount_varies": 0
     }
   ]
 }

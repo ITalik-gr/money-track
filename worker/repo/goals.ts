@@ -108,6 +108,28 @@ export async function listContributions(db: AppDb, goalId: number): Promise<Goal
 }
 
 /** Identity and jar linkage only — enough to decide whether a contribution is allowed. */
+/**
+ * §GOAL-CHART — the balance history of a jar account, oldest first.
+ *
+ * A jar-backed goal has no `goal_contributions` by definition: its progress IS the account balance,
+ * kept by the bank. So the two goal kinds store the same idea in two different tables, and the
+ * roadmap card correctly refused to draw anything until that was decided. It is decided here: the
+ * SERVER resolves both into one series (`goalProgressSeries`), so the client has one shape and one
+ * renderer. Two client paths would be §CUR-PLAN with a chart attached — the same quantity computed
+ * twice, drifting where the reader can see both.
+ */
+export async function balanceHistory(
+  db: AppDb, accountId: string, from: number,
+): Promise<{ at: number; amount: number }[]> {
+  const r = await db.prepare(
+    `SELECT recorded_at AS at, balance AS amount
+     FROM account_balance_history
+     WHERE account_id = ? AND recorded_at >= ?
+     ORDER BY recorded_at ASC`,
+  ).bind(accountId, from).all<{ at: number; amount: number }>();
+  return r.results ?? [];
+}
+
 export async function findActive(db: AppDb, id: number): Promise<{ id: number; account_id: string | null } | null> {
   return await db.prepare("SELECT id, account_id FROM savings_goals WHERE id = ? AND is_active = 1")
     .bind(id).first<{ id: number; account_id: string | null }>();

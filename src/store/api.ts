@@ -12,7 +12,7 @@ import type {
   Advice, AdviceHistoryItem, AiJob, AiModelToken, AiTask, AutoBudget, BudgetChatReply,
   BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
   CredentialStatus, CurrenciesList, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
-  BankConnections, CategoryWhy, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, IncomeAnalytics, Insight,
+  BankConnections, CategoryWhy, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
@@ -164,6 +164,11 @@ export const api = createApi({
     setEventBudget: b.mutation<{ ok: boolean }, { id: number; budget: number | null }>({
       query: ({ id, budget }) => ({ url: `/events/${id}`, method: "PATCH", body: { budget } }),
       invalidatesTags: ["Event"],
+    }),
+    // §EVENT-GOAL: `null` unlinks. Invalidates `Goal` too — the goal's own screens gain a mention.
+    setEventGoal: b.mutation<{ ok: boolean }, { id: number; goal_id: number | null }>({
+      query: ({ id, goal_id }) => ({ url: `/events/${id}`, method: "PATCH", body: { goal_id } }),
+      invalidatesTags: ["Event", "Goal"],
     }),
     getEvent: b.query<{
       event: EventGroup; transactions: TxRow[]; spent: number; income: number;
@@ -393,8 +398,19 @@ export const api = createApi({
       query: (body) => ({ url: "/transactions/bulk", method: "POST", body }),
       invalidatesTags: ["Tx", "Summary", "Event"],
     }),
+    // §GOAL-CHART: one series for both goal kinds, resolved server-side.
+    getGoalProgress: b.query<GoalProgressSeries, number>({
+      query: (id) => `/goals/${id}/progress`,
+      providesTags: ["Goal"],
+    }),
     setBudget: b.mutation<unknown, { category_id: number; period: string; amount: number; rollover?: boolean }>({
       query: (body) => ({ url: "/budgets", method: "PUT", body }),
+      invalidatesTags: ["Budget"],
+    }),
+    // §BUDGET-ZERO: removing an envelope is its own call, because `amount: 0` now means
+    // «сюди я не витрачаю» — a plan — rather than «конверта немає».
+    removeBudget: b.mutation<unknown, { category_id: number; period: string }>({
+      query: ({ category_id, period }) => ({ url: `/budgets/${category_id}?period=${period}`, method: "DELETE" }),
       invalidatesTags: ["Budget"],
     }),
     budgetChat: b.mutation<BudgetChatReply, { messages: { role: "user" | "assistant"; content: string }[] }>({
@@ -914,7 +930,10 @@ export const {
   useBulkEditTransactionsMutation,
   useGetSimilarQuery,
   useGetWhyQuery,
+  useGetGoalProgressQuery,
+  useSetEventGoalMutation,
   useSetBudgetMutation,
+  useRemoveBudgetMutation,
   useProposeBudgetsMutation,
   useBudgetChatMutation,
   useAddPlannedMutation,

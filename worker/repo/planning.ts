@@ -20,10 +20,38 @@ export interface PlanScheduleRow {
   end_date: number | null;
 }
 
+/**
+ * §INCOME-PLAN — **`OUTFLOW_ONLY` is on every selector below, and that is the point.**
+ *
+ * `planned_payments` now also holds `kind = 'income'`, and `chargesBetween` is generic: it expands
+ * whatever rows it is handed. So an income plan reaching any of these callers would be counted as
+ * money LEAVING — quietly inflating "скоро спишеться", the cashflow calendar, the liquidity gap,
+ * the monthly forecast and the advisor's subscription burden, all of which would still look
+ * entirely plausible. Filtering at the call sites would mean five places remembering; filtering
+ * here means a new caller gets it right by default and an income-aware caller has to ASK.
+ */
+const OUTFLOW_ONLY = "is_active = 1 AND COALESCE(kind, '') <> 'income'";
+
 export async function activeForSchedule(db: AppDb): Promise<PlanScheduleRow[]> {
   const r = await db.prepare(
-    "SELECT period_amount, currency_code, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
+    `SELECT period_amount, currency_code, period, period_count, start_date, end_date
+     FROM planned_payments WHERE ${OUTFLOW_ONLY}`,
   ).all<PlanScheduleRow>();
+  return r.results ?? [];
+}
+
+/** The income side, for the one module allowed to reason about it (`lib/finance/income.ts`). */
+export interface IncomePlanRow extends NamedPlanRow {
+  category_id: number | null;
+  amount_varies: number | null;
+}
+
+export async function activeIncomePlans(db: AppDb): Promise<IncomePlanRow[]> {
+  const r = await db.prepare(
+    `SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date,
+            end_date, category_id, COALESCE(amount_varies, 0) AS amount_varies
+     FROM planned_payments WHERE is_active = 1 AND kind = 'income'`,
+  ).all<IncomePlanRow>();
   return r.results ?? [];
 }
 
@@ -36,7 +64,8 @@ export interface NamedPlanRow extends PlanScheduleRow {
 
 export async function activeWithTitles(db: AppDb): Promise<NamedPlanRow[]> {
   const r = await db.prepare(
-    "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date FROM planned_payments WHERE is_active = 1",
+    `SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date
+     FROM planned_payments WHERE ${OUTFLOW_ONLY}`,
   ).all<NamedPlanRow>();
   return r.results ?? [];
 }
@@ -50,7 +79,9 @@ export interface CategorisedPlanRow extends NamedPlanRow {
 
 export async function activeWithCategory(db: AppDb): Promise<CategorisedPlanRow[]> {
   const r = await db.prepare(
-    "SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date, category_id FROM planned_payments WHERE is_active = 1",
+    `SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date,
+            category_id
+     FROM planned_payments WHERE ${OUTFLOW_ONLY}`,
   ).all<CategorisedPlanRow>();
   return r.results ?? [];
 }
@@ -77,14 +108,17 @@ export interface NewPlan {
   category_id: number | null;
   account_id: string | null;
   currency_code: number;
+  /** §INCOME-PLAN — the amount is an estimate, not a promise. */
+  amount_varies?: boolean;
 }
 
 export async function create(db: AppDb, p: NewPlan): Promise<number> {
   const r = await db.prepare(
-    `INSERT INTO planned_payments (title, kind, total_amount, period_amount, period, period_count, start_date, end_date, occurrences, category_id, account_id, currency_code, is_active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+    `INSERT INTO planned_payments (title, kind, total_amount, period_amount, period, period_count, start_date, end_date, occurrences, category_id, account_id, currency_code, amount_varies, is_active)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
   ).bind(p.title, p.kind, p.total_amount, p.period_amount, p.period, p.period_count,
-    p.start_date, p.end_date, p.occurrences, p.category_id, p.account_id, p.currency_code).run();
+    p.start_date, p.end_date, p.occurrences, p.category_id, p.account_id, p.currency_code,
+    p.amount_varies ? 1 : 0).run();
   return r.meta.last_row_id;
 }
 

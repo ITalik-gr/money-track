@@ -202,3 +202,46 @@ export async function runGoalAutofill(
   }
   return { applied, total };
 }
+
+/**
+ * §GOAL-CHART — one progress series for ANY goal, whatever backs it.
+ *
+ * The roadmap card left this open with a real question: a manual goal grows from
+ * `goal_contributions`, a jar-backed one has none — its progress IS the account balance, which
+ * lives in `account_balance_history`. Two storages of the same idea.
+ *
+ * Resolved on the SERVER, into one shape. The alternative was two client paths, which is §CUR-PLAN
+ * with a chart attached: the same quantity derived twice, drifting where the reader sees both at
+ * once. The client now receives `{at, amount}[]` and draws it without knowing which kind it is.
+ *
+ * ⚠️ **A manual goal is CUMULATIVE, a jar is a LEVEL.** Contributions are deltas that must be
+ * summed to become progress; a balance is already the progress. Summing balances would multiply
+ * the jar's own money by the number of days it was recorded — a chart climbing to ten times the
+ * target while the card underneath says 40%.
+ * ⚠️ Both series are clipped to the goal's own start, so the flat stretch before the first money
+ * stays visible: on a goal that is behind, that stretch is usually the entire explanation.
+ */
+export function goalProgressSeries(
+  input: { created_at: number | null; deadline: number | null },
+  contributions: { at: number; amount: number }[],
+  jarBalances: { at: number; amount: number }[],
+  isJar: boolean,
+): { at: number; amount: number }[] {
+  const start = input.created_at
+    ?? (input.deadline != null ? input.deadline - 180 * 86400 : 0);
+
+  if (isJar) {
+    // Already a level: take it as it is, only bounded to the goal's window.
+    return jarBalances.filter((p) => p.at >= start).map((p) => ({ at: p.at, amount: p.amount }));
+  }
+
+  let running = 0;
+  const out: { at: number; amount: number }[] = [];
+  for (const c of [...contributions].sort((a, b) => a.at - b.at)) {
+    running += c.amount;
+    // A withdrawal can push the running total below zero on a badly-kept goal; the chart's Y axis
+    // starts at 0, so clamping here keeps the line inside the box instead of silently vanishing.
+    out.push({ at: c.at, amount: Math.max(0, running) });
+  }
+  return out.filter((p) => p.at >= start);
+}

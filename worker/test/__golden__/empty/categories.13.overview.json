@@ -5,9 +5,68 @@
     "name": "Перекази і зняття",
     "color": "#6B7A74",
     "importance": "discretionary",
+    "is_income": false,
+    "is_sub": false,
     "children": [],
+    "lifetime": {
+      "total": 0,
+      "n": 0,
+      "first_at": null,
+      "last_at": null,
+      "active_months": 0,
+      "per_active_month": 0
+    },
+    "top_merchants": [],
     "level": null,
     "trend": [
+      {
+        "month": "2024-06",
+        "spent": 0
+      },
+      {
+        "month": "2024-07",
+        "spent": 0
+      },
+      {
+        "month": "2024-08",
+        "spent": 0
+      },
+      {
+        "month": "2024-09",
+        "spent": 0
+      },
+      {
+        "month": "2024-10",
+        "spent": 0
+      },
+      {
+        "month": "2024-11",
+        "spent": 0
+      },
+      {
+        "month": "2024-12",
+        "spent": 0
+      },
+      {
+        "month": "2025-01",
+        "spent": 0
+      },
+      {
+        "month": "2025-02",
+        "spent": 0
+      },
+      {
+        "month": "2025-03",
+        "spent": 0
+      },
+      {
+        "month": "2025-04",
+        "spent": 0
+      },
+      {
+        "month": "2025-05",
+        "spent": 0
+      },
       {
         "month": "2025-06",
         "spent": 0

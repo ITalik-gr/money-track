@@ -208,6 +208,8 @@ const S = {
 
   // ---- validation and failure messages -------------------------------------
   errNothingToApply: { uk: "Нема що застосовувати", en: "Nothing to apply" },
+  errBudgetNegative: { uk: "Ліміт не може бути відʼємним", en: "A limit cannot be negative" },
+  errIncomeAmount: { uk: "Вкажи очікувану суму надходження", en: "Give the expected amount of the income" },
   errTransferCatLocked: { uk: "категорію «Перекази і зняття» видаляти не можна", en: "the “Transfers & withdrawals” category cannot be deleted" },
   // ONE phrase for "there is no AI key", used by all ~16 sites that check for it.
   //

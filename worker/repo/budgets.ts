@@ -104,7 +104,10 @@ export async function monthlyEnvelopes(
   db: AppDb,
 ): Promise<Map<number, { amount: number; rollover: boolean }>> {
   const r = await db.prepare(
-    "SELECT category_id, amount, COALESCE(rollover, 0) AS rollover FROM budgets WHERE period = 'month' AND amount > 0",
+    // §BUDGET-ZERO: `>= 0`, not `> 0`. A stored row IS the envelope; its absence is "no envelope".
+    // A zero row is a real, deliberate limit — "I do not spend here" — and filtering it out is how
+    // that statement used to be indistinguishable from never having made one.
+    "SELECT category_id, amount, COALESCE(rollover, 0) AS rollover FROM budgets WHERE period = 'month' AND amount >= 0",
   ).all<{ category_id: number; amount: number; rollover: number }>();
   return new Map((r.results ?? []).map((b) => [b.category_id, { amount: b.amount, rollover: !!b.rollover }]));
 }

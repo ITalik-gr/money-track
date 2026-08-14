@@ -60,6 +60,11 @@ export interface EventGroup {
   created_at: number | null;
   /** Ліміт на подію в ₴-копійках (міграція 0025). NULL = ліміту не задано. */
   budget: number | null;
+  /**
+   * §EVENT-GOAL (міграція 0045): ціль, на яку ця подія відкладалась. NULL = не привʼязано.
+   * Дозволяє відповісти на питання, яке доти лишалось у голові: чи відкладеного вистачило.
+   */
+  goal_id?: number | null;
 }
 
 export interface Transaction {
@@ -89,7 +94,10 @@ export interface Transaction {
 export interface PlannedPayment {
   id: number;
   title: string;
-  kind: "subscription" | "installment";
+  /** §INCOME-PLAN: `income` is an EXPECTED INFLOW on the same schedule machinery. */
+  kind: "subscription" | "installment" | "income";
+  /** §INCOME-PLAN: the amount is an estimate (income is rarely the same size twice). */
+  amount_varies?: number | null;
   total_amount: number | null;
   period_amount: number | null;
   period: "month" | "week";

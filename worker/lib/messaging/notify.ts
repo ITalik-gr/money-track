@@ -510,20 +510,29 @@ async function draftPriceUps(env: Env): Promise<Draft[]> {
 /** Провал ліквідності: подушка мінус усі планові списання йде в мінус у вікні 45 днів. */
 async function draftLiquidity(env: Env, now: number): Promise<Draft[]> {
   const { fundsBreakdown } = await import("../ai/advisor.ts");
-  const [funds, rates, plans] = await Promise.all([
+  const planningRepo = await import("../../repo/planning.ts");
+  const [funds, rates, plans, incomePlans] = await Promise.all([
     fundsBreakdown(env),
     getRates(env.DB),
-    env.DB.prepare(
-      `SELECT id, title, period_amount, currency_code, period, period_count, start_date, end_date
-       FROM planned_payments WHERE is_active = 1`,
-    ).all<{
-      id: number; title: string; period_amount: number | null; currency_code: number | null;
-      period: string; period_count: number | null; start_date: number; end_date: number | null;
-    }>(),
+    // §INCOME-PLAN: through the repo, NOT an inline copy of the same SELECT. The inline version
+    // read every active plan, so the day income plans existed this drafter would have counted a
+    // salary as an outgoing payment and announced a liquidity gap that was the opposite of true.
+    // `activeWithTitles` carries the `OUTFLOW_ONLY` guard, so the mistake is unavailable.
+    planningRepo.activeWithTitles(env.DB),
+    planningRepo.activeIncomePlans(env.DB),
   ]);
 
   // §SUB-MONTH: розклад — канонічний `chargesBetween` (той самий, що в календарі й прогнозі).
-  const charges = chargesBetween(plans.results ?? [], rates, now + 1, now + 45 * 86400);
+  //
+  // §INCOME-PLAN: надходження йдуть у ТОЙ САМИЙ ряд, відсортований за датою, з відʼємним знаком.
+  // Доти проєкція вміла лише падати, тож будь-хто, чия зарплата приходить пізніше за оренду,
+  // отримував «провал ліквідності» гарантовано — і саме тому, що календар не знав про гроші, які
+  // цю діру закривають. Сповіщення про діру, якої не буде, вчить ігнорувати сповіщення про діру.
+  const charges = [
+    ...chargesBetween(plans, rates, now + 1, now + 45 * 86400),
+    ...chargesBetween(incomePlans, rates, now + 1, now + 45 * 86400)
+      .map((ch) => ({ ...ch, amount: -ch.amount })),
+  ].sort((a, b) => a.at - b.at);
 
   // Один прохід: перше падіння проєкції нижче нуля і є провалом.
   let balance = funds.cushion;

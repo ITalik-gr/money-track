@@ -32,6 +32,40 @@
 .ab-tag.warn { color: var(--warn, #c9871a); border-color: color-mix(in srgb, var(--warn, #c9871a) 40%, var(--line)); }
 .bp-reason.neg { color: var(--warn, #c9871a); }
 
+/* ---- §BUDGET-ZERO: an envelope deliberately set to nothing ------------------ */
+/* A word where the percentage would be. Sized like `.bc-pct` so the head keeps its rhythm whether
+   the envelope is a number or a promise. */
+.bc-zero { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; color: var(--c-teal, #2f7d6b); }
+.bc-zero.over { color: var(--neg); }
+/* The hint is deliberately quiet and only appears while the field is open: it teaches ONE thing at
+   the moment it can be acted on, and a permanently visible sentence on every card would be noise
+   on the 95% of envelopes that are ordinary numbers. */
+.bc-zero-hint { margin: 8px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+.bc-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+/* Removing an envelope is destructive-ish but not dangerous, and it is not the card's purpose —
+   quiet until hovered, never a red button competing with the amount above it. */
+.bc-remove { margin-left: auto; padding: 0; border: none; background: none; cursor: pointer;
+  font-size: 11.5px; color: var(--muted); text-decoration: underline; text-underline-offset: 2px;
+  transition: color var(--dur-1) var(--ease-out); }
+.bc-remove:hover { color: var(--neg); }
+/* Same word-instead-of-percentage treatment in the envelope grid, sized to match `.env-pct`. */
+.env-zero { font-size: 11.5px; font-weight: 600; color: var(--c-teal, #2f7d6b); }
+.env-zero.over { color: var(--neg); }
+
+/* ---- §INCOME-PLAN: expected inflow, beside the number but never inside it ---- */
+/* Separated by a rule, not just spacing: the line above is a total and these are not part of it.
+   A gap alone reads as "more of the same list", which is precisely the confusion to avoid. */
+.sts-expect { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; padding-top: 10px;
+  border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+.sts-expect-line b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+/* Late money is a question for someone, so it is warned — not negative. Nothing has been lost. */
+.sts-expect-line.late, .sts-expect-line.late b { color: var(--warn, #c9871a); }
+
+/* §INCOME-PLAN in the cashflow calendar: an inflow day is not a smaller outflow, it is the other
+   direction. `.cf-damt` / `.cf-pop-amt` are `--neg` by default (every item used to be a charge),
+   so the inflow variant has to restate the colour rather than merely lighten it. */
+.cf-damt.in, .cf-pop-amt.in, .cf-item-amt.in, .cf-pop-foot b.in { color: var(--c-teal, #2f7d6b); }
+
 /* ---- §BUDGET-MEMORY: how the months closed --------------------------------- */
 .bh-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 .bh-row { display: grid; grid-template-columns: 44px 1fr auto auto; align-items: center; gap: 10px;
@@ -107,3 +141,34 @@
   .cat-merch-list > li { grid-template-columns: 1fr auto; }
   .cat-merch-n { display: none; }
 }
+
+/* §INCOME-PLAN: expected inflows on the Subscriptions page. A row, not a card grid — there are
+   usually one or two of them, and a grid of two tiles beside a grid of twenty subscription tiles
+   reads as the same kind of thing, which is the confusion the separate section exists to prevent. */
+.inc-list { display: flex; flex-direction: column; gap: 8px; }
+.inc-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.inc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inc-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600;
+  color: var(--c-teal, #2f7d6b); white-space: nowrap; }
+.inc-per { color: var(--muted); font-weight: 400; font-size: 12px; }
+
+/* §EVENT-GOAL: the saving-versus-spending verdict on an event page. No progress bar on purpose —
+   it would be the third bar on the screen and would mean something different from both others
+   (this compares two finished quantities, it does not consume a limit). */
+.evt-goal { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.evt-goal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.evt-goal-verdict { margin: 0; font-size: 14px; }
+.evt-goal-verdict.ok { color: var(--c-teal, #2f7d6b); }
+.evt-goal-verdict.over { color: var(--neg); }
+.evt-goal-verdict b { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.evt-goal-nums { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+.evt-goal-nums b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* §CAT-PAGE: "this window is empty, the category is not". A notice, not an error — nothing has
+   gone wrong, the reader simply looked at a quiet month. */
+.cat-empty-note { display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; font-size: 13px; color: var(--muted); }
+.cat-empty-cta { padding: 0; border: none; background: none; cursor: pointer; font-size: 13px;
+  color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+/* Same measurements as `.cat-page-stats` — it is the same kind of row, one question lower. */
+.cat-life { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }

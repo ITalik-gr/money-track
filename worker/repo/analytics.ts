@@ -7,7 +7,7 @@
 // those three jobs were done in one place and the second copy drifted.
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import {
-  STATS_JOINS, SPEND_WHERE, SPEND_COUNT, INCOME_WHERE, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR,
+  STATS_JOINS, SPEND_WHERE, SPEND_COUNT, INCOME_WHERE, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_LEAF_ID, EFF_CAT_NAME, EFF_CAT_COLOR,
   EFF_IMPORTANCE, spendSum, incomeSum, amountSum, localYmSql,
 } from "../lib/finance/stats.ts";
 import { localDowSql, type WeekdayRow } from "../lib/finance/weekday.ts";
@@ -602,46 +602,57 @@ export async function transferBucketTransactions(
 }
 
 /**
- * The filter for an ordinary category: canonical spending whose EFFECTIVE (rolled-up) category is
- * the requested parent. The breakdown below then splits it by the actual leaf category — the real
- * one for cash, the plain one otherwise.
+ * The filter for an ordinary category drill.
+ *
+ * §CAT-PAGE: it used to be hard-coded to `SPEND_WHERE` + `EFF_CAT_ID` — i.e. to a top-level
+ * EXPENSE category, which is all the Stats donut ever opens. The category permalink can be opened
+ * on anything, so on a sub-category the drill matched nothing (rows report as the parent) and on
+ * an income bucket it matched nothing (there is no spending). Both rendered as an empty list under
+ * a page that was already empty for the same two reasons.
+ *
+ * `scope` defaults to the historical behaviour, so the Stats drill is untouched by construction.
  */
-function categoryDrillWhere(v: ValueScope): string {
-  return `t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?${v.curFilter}`;
+function categoryDrillWhere(v: ValueScope, scope?: { isParent: boolean; isIncome: boolean }): string {
+  const side = scope?.isIncome ? INCOME_WHERE : SPEND_WHERE;
+  const match = scope && !scope.isParent ? EFF_CAT_LEAF_ID : EFF_CAT_ID;
+  return `t.time >= ? AND t.time <= ? AND ${side} AND ${match} = ?${v.curFilter}`;
 }
 
 export async function categorySubs(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range, parent: number,
+  scope?: { isParent: boolean; isIncome: boolean },
 ): Promise<DrillSub[]> {
   const res = await db.prepare(
     `SELECT COALESCE(rc.id, c.id) AS category_id,
             COALESCE(${catNameSql(locale, "COALESCE(rc.name, c.name)")}, ${stLit(locale, "uncategorized")}) AS name,
             COALESCE(rc.color, c.color) AS color, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
-     WHERE ${categoryDrillWhere(v)} GROUP BY COALESCE(rc.id, c.id) ORDER BY spent DESC`,
+     WHERE ${categoryDrillWhere(v, scope)} GROUP BY COALESCE(rc.id, c.id) ORDER BY spent DESC`,
   ).bind(r.from, r.to, parent).all<DrillSub>();
   return res.results ?? [];
 }
 
 export async function categoryMerchants(
   db: AppDb, v: ValueScope, r: Range, parent: number,
+  scope?: { isParent: boolean; isIncome: boolean },
 ): Promise<MerchantSpend[]> {
   const res = await db.prepare(
     `SELECT t.merchant AS merchant, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
-     WHERE ${categoryDrillWhere(v)} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
+     WHERE ${categoryDrillWhere(v, scope)} AND t.merchant IS NOT NULL AND t.merchant <> '' GROUP BY t.merchant ORDER BY spent DESC LIMIT 12`,
   ).bind(r.from, r.to, parent).all<MerchantSpend>();
   return res.results ?? [];
 }
 
 export async function categoryTransactions(
   db: AppDb, v: ValueScope, r: Range, parent: number,
+  scope?: { isParent: boolean; isIncome: boolean },
 ): Promise<DrillTx[]> {
   const res = await db.prepare(
     `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
             COALESCE(rc.name, c.name) AS category_name, COALESCE(rc.color, c.color) AS category_color
      FROM transactions t ${STATS_JOINS}
-     WHERE ${categoryDrillWhere(v)} ORDER BY t.amount ASC LIMIT 60`,
+     WHERE ${categoryDrillWhere(v, scope)} ORDER BY t.amount ASC LIMIT 60`,
   ).bind(r.from, r.to, parent).all<DrillTx>();
   return res.results ?? [];
 }
