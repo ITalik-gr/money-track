@@ -3,6 +3,7 @@ import { numFmt } from "../../i18n/locale.ts";
 import { highlightAmounts } from "../../lib/highlight.tsx";
 import { useGetCategoriesQuery } from "../../store/api.ts";
 import type { AiFact } from "../../store/api.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // Стилізований рендер структурованого AI-виводу: headline + факти (суми/категорії/
 // дельти виділені) + порада. Спільний для інсайту й порад (DESIGN.md §7 F6).
@@ -35,7 +36,7 @@ export function RichFacts({ headline, facts, note }: { headline?: string; facts?
                       {f.category}
                     </span>
                   )}
-                  {f.amount != null && <span className={`fact-amt ${f.tone ?? "neutral"}`}>{fmt0.format(f.amount)} ₴</span>}
+                  {f.amount != null && <span className={`fact-amt ${f.tone ?? "neutral"}`}>{fmt0.format(f.amount)} {baseSign()}</span>}
                   {f.delta_pct != null && (
                     <span className="fact-delta">{f.delta_pct >= 0 ? "+" : ""}{f.delta_pct}%</span>
                   )}

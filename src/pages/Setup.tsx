@@ -31,6 +31,7 @@ import { BackupCard } from "../components/settings/BackupCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
 import { TelegramCard } from "../components/settings/TelegramCard.tsx";
+import { CurrencyCard } from "../components/settings/CurrencyCard.tsx";
 import { FeedbackCard } from "../components/settings/FeedbackCard.tsx";
 import { PushCard } from "../components/settings/PushCard.tsx";
 import { FeedbackInbox } from "../components/settings/FeedbackInbox.tsx";
@@ -96,6 +97,9 @@ export function Setup() {
       {tab === "account" && (
         <div className="settings-grid">
           <ProfileCard />
+          {/* §BASE-CUR: beside the language switch in the shell header, this is the other half of
+              "how the app talks to me" — and the half an English-reading visitor notices first. */}
+          <CurrencyCard />
           {/* §D1: адресат тепер персональний, тож картка — для всіх; owner-only лишилась
               лише реєстрація глобального вебхука (всередині картки). */}
           <TelegramCard isOwner={isOwner} />

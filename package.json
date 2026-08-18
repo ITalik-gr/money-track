@@ -8,7 +8,7 @@
     "build": "npm run types && tsc -b && vite build",
     "preview": "vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "check": "npm run types && tsc -b && node scripts/check-stats-sql.mjs && node scripts/check-i18n.mjs && node scripts/check-repo-layer.mjs && node scripts/check-route-size.mjs && node scripts/check-route-order.mjs && node scripts/check-api-contract.mjs && node scripts/check-styles.mjs && node scripts/check-styles-used.mjs && node scripts/gen-migrations.mjs --check && npm test",
+    "check": "npm run types && tsc -b && node scripts/check-stats-sql.mjs && node scripts/check-i18n.mjs && node scripts/check-repo-layer.mjs && node scripts/check-route-size.mjs && node scripts/check-route-order.mjs && node scripts/check-api-contract.mjs && node scripts/check-styles.mjs && node scripts/check-styles-used.mjs && node scripts/check-currency.mjs && node scripts/gen-migrations.mjs --check && npm test",
     "check:sql": "node scripts/check-stats-sql.mjs",
     "check:i18n": "node scripts/check-i18n.mjs",
     "types": "wrangler types",

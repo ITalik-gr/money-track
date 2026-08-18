@@ -34,6 +34,7 @@ import { formatMinor } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { toast } from "../lib/toast.ts";
 import { errText, errStatus } from "../lib/errors.ts";
+import { baseSign } from "../lib/currency.ts";
 
 // AI-порадник: числа (runway) + структуровані поради + інтерактивне «запитай/опиши».
 // Профіль «про мене» редагується лише в Налаштуваннях — AI його й так знає в усіх викликах.
@@ -237,7 +238,7 @@ function DeltaPill({ cur, prev, goodUp, money, unit }: { cur: number | null; pre
   const diff = cur - prev;
   if (Math.abs(diff) < (money ? 100 : 0.05)) return <span className="cmp-delta flat">{t("adv.noChange")}</span>;
   const good = goodUp ? diff > 0 : diff < 0;
-  const abs = money ? `${formatMinor(Math.abs(diff), { decimals: false })} ₴` : `${Math.abs(Math.round(diff * 10) / 10)}${unit ?? ""}`;
+  const abs = money ? `${formatMinor(Math.abs(diff), { decimals: false })} ${baseSign()}` : `${Math.abs(Math.round(diff * 10) / 10)}${unit ?? ""}`;
   return <span className={`cmp-delta ${good ? "down" : "up"}`}>{diff > 0 ? "+" : "−"}{abs}</span>;
 }
 

@@ -1,15 +1,11 @@
 // Money is minor units (копійки) everywhere; format only for display.
 import { dateFmt, numFmt } from "../i18n/locale.ts";
+import { baseSign } from "./currency.ts";
 
-const CURRENCY: Record<number, { sign: string; code: string }> = {
-  980: { sign: "₴", code: "UAH" },
-  840: { sign: "$", code: "USD" },
-  978: { sign: "€", code: "EUR" },
-};
-
-export function currencySign(code: number): string {
-  return CURRENCY[code]?.sign ?? CURRENCY[code]?.code ?? String(code);
-}
+// The symbol table moved to `shared/currency.ts` (§BASE-CUR): the worker prints signs too — in
+// the deterministic advice and in the notification feed — and two tables would have disagreed
+// about a currency exactly where nobody looks.
+export { currencySign } from "../../shared/currency.ts";
 
 /** minor units -> "1 234,50" (uk grouping). */
 export function formatMinor(minor: number, opts?: { decimals?: boolean }): string {
@@ -21,12 +17,22 @@ export function formatMinor(minor: number, opts?: { decimals?: boolean }): strin
   }).format(major);
 }
 
-/** Convert minor units in `code` to UAH minor units via the cached rates map
- *  (currency code → UAH per unit). Returns null if no rate for a non-UAH code. */
-export function toUAHMinor(minor: number, code: number, rates: Record<string, number>): number | null {
-  if (code === 980) return minor;
-  const rate = rates[String(code)];
+/**
+ * Convert minor units in `code` into the DISPLAY base, using the map `/rates` returned — which
+ * is already expressed in that base and carries its own entry for 980 (§BASE-CUR). Returns null
+ * when we have no rate, so the caller can omit the "≈" line rather than print a zero.
+ *
+ * The `?? (code === 980 ? …)` arm covers the first paint, before `/rates` has answered: an empty
+ * map then means "hryvnia, unconverted", which is what the old client did unconditionally.
+ */
+export function toBaseMinor(minor: number, code: number, rates: Record<string, number>): number | null {
+  const rate = rates[String(code)] ?? (code === 980 && !Object.keys(rates).length ? 1 : undefined);
   return rate ? Math.round(minor * rate) : null;
+}
+
+/** Amount + the sign of the currency the app is currently rolling up into. */
+export function formatBase(minor: number, opts?: { decimals?: boolean }): string {
+  return `${formatMinor(minor, opts)} ${baseSign()}`;
 }
 
 export function formatDate(unix: number): string {

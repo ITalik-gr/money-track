@@ -26,13 +26,13 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import {
   STATS_JOINS, SPEND_WHERE, INCOME_WHERE, EFF_AMOUNT, EFF_CAT_ID, EFF_IMPORTANCE,
-  SPEND_COUNT, SPEND_TX_COUNT, spendSum, incomeSum, amountSum, uahMult,
+  SPEND_COUNT, SPEND_TX_COUNT, spendSum, incomeSum, amountSum, baseMult,
   localYm, localMonthStart, localWeekStart, periodBounds,
 } from "./stats.ts";
 
 // Rates matching the demo dataset, so the numbers below are checkable by hand.
 const RATES = { "840": 41.5, "978": 45 };
-const MULT = uahMult(RATES);
+const MULT = baseMult(RATES);
 
 /**
  * Minimal schema: exactly the columns the canonical expressions touch. Deliberately not the real

@@ -15,6 +15,16 @@ export type Summary = NetWorthSummary;
 export interface AccountFunds { title: string | null; type: string | null; role: "liquid" | "investment"; own_uah: number; note: string | null }
 export interface FundsBreakdown { cushion: number; debt: number; investment: number; net: number; accounts: AccountFunds[] }
 
+/**
+ * `GET /rates` — the conversion table the client shares with the canon (§BASE-CUR).
+ *
+ * `rates` maps a currency code to how many units of `base` one minor unit is worth, including
+ * an entry for 980 itself. `base` is the EFFECTIVE display currency: when the reader asked for
+ * one whose rate is missing, the server answers in hryvnia and says so here, because a client
+ * printing "$" over hryvnia numbers is worse than a client printing "₴".
+ */
+export interface RatesSnapshot { rates: Record<string, number>; base: number; updated: number | null }
+
 /** `GET /accounts/history` — per-account monthly balance, in the ACCOUNT's currency, MAJOR units. */
 export interface AccountHistory { history: Record<string, number[]> }
 

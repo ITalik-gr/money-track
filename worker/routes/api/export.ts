@@ -2,7 +2,7 @@
 //
 // The backup enumerates tables from the SCHEMA, not from a list in code: a dump that silently
 // misses a table added by a later migration is worse than no dump, because it looks like one.
-import { getRates } from "../../lib/finance/finance.ts";
+import { getRates } from "../../lib/finance/money.ts";
 import {
   valueMode, } from "../../lib/finance/stats.ts";
 import * as txRepo from "../../repo/transactions.ts";
@@ -127,7 +127,7 @@ dataExport.get("/export/transactions.csv", async (c) => {
 dataExport.get("/search", async (c) => {
   const q = (new URL(c.req.url).searchParams.get("q") ?? "").trim();
   if (q.length < 2) return c.json({ merchants: [], categories: [], transactions: [] } satisfies SearchResults);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null);
 
   // ⚠️ SQLite згортає регістр ТІЛЬКИ для ASCII: `LOWER('Сільпо')` = `'Сільпо'` (перевірено

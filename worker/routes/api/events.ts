@@ -1,8 +1,8 @@
 // `/events/*` — event groups (a trip, a renovation): a label over transactions plus the plan
 // line items belonging to it, with an AI summary and chat on top.
-import { getRates } from "../../lib/finance/finance.ts";
+import { getRates, uahToBaseMinor, baseToUah } from "../../lib/finance/money.ts";
 import {
-  uahMult, } from "../../lib/finance/stats.ts";
+  baseMult, } from "../../lib/finance/stats.ts";
 import * as eventsRepo from "../../repo/events.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
@@ -18,8 +18,13 @@ events.get("/events", async (c) => {
   // ⚠️ Раніше тут стояв фільтр `currency_code = 980`, тобто валютні витрати групи просто
   // НЕ рахувались. Для подорожі це найгірше можливе місце для такої дірки — саме там
   // валюта і трапляється, і бюджет поїздки виглядав би виконаним. Зводимо в ₴ як усюди.
-  const rates = await getRates(c.env.DB);
-  return c.json(await eventsRepo.listWithTotals(c.env.DB, uahMult(rates)) satisfies EventWithAgg[]);
+  const rates = await getRates(c.env);
+  // §BASE-CUR: `spent` comes through the canon (already in the base) but `budget` is a stored
+  // hryvnia column, so an unconverted pair would report a trip as 2% of its budget.
+  const rows = await eventsRepo.listWithTotals(c.env.DB, baseMult(rates));
+  return c.json(rows.map((e) => ({
+    ...e, budget: e.budget == null ? e.budget : uahToBaseMinor(e.budget, rates),
+  })) satisfies EventWithAgg[]);
 });
 
 // Бюджет події («скільки закладаю на цю подорож»). amount<=0 або null — прибрати ліміт.
@@ -29,7 +34,7 @@ events.patch("/events/:id", async (c) => {
   const b = await c.req.json<Patch>().catch(() => ({} as Patch));
   await eventsRepo.update(c.env.DB, id, {
     ...(b.budget !== undefined
-      ? { budget: b.budget == null || b.budget <= 0 ? null : Math.round(b.budget) } : {}),
+      ? { budget: b.budget == null || b.budget <= 0 ? null : baseToUah(Math.round(b.budget), await getRates(c.env)) } : {}),
     // A blank name is IGNORED rather than rejected: this endpoint is also how the budget alone
     // is set, and failing the whole patch over an empty field the caller did not mean to send
     // would block that.
@@ -70,22 +75,26 @@ events.get("/events/:id", async (c) => {
   // Підсумки рахує СЕРВЕР і зводить у ₴. Раніше сторінка рахувала їх сама, фільтруючи
   // `currency_code === 980`, тож валютні операції випадали — і та сама група показувала
   // на сторінці меншу суму, ніж у списку. Одна цифра має бути одна.
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const loc = c.get("locale");
   const [txs, agg, plannedItems] = await Promise.all([
     eventsRepo.transactions(c.env.DB, loc, id),
-    eventsRepo.totals(c.env.DB, uahMult(rates), id),
+    eventsRepo.totals(c.env.DB, baseMult(rates), id),
     eventsRepo.plannedItems(c.env.DB, loc, id),
   ]);
+  // Plan lines and the event budget are stored in hryvnia (§BASE-CUR); the totals beside them
+  // are canonical. Convert the stored side, once, here.
+  const planned = plannedItems.map((p) => ({ ...p, amount: uahToBaseMinor(p.amount, rates) }));
   return c.json({
-    event, transactions: txs,
+    event: { ...event, budget: event.budget == null ? event.budget : uahToBaseMinor(event.budget, rates) },
+    transactions: txs,
     spent: agg?.spent ?? 0, income: agg?.income ?? 0,
-    planned: plannedItems,
-    planned_total: plannedItems.reduce((s, p) => s + p.amount, 0),
+    planned,
+    planned_total: planned.reduce((s, p) => s + p.amount, 0),
   });
 });
 
-// Plan line items CRUD (P2.3). Amounts arrive in ₴ minor units.
+// Plan line items CRUD (P2.3). Amounts arrive in the READER's base and are stored in hryvnia.
 events.post("/events/:id/planned", async (c) => {
   const id = Number(c.req.param("id"));
   const b = await c.req.json<{ label?: string; amount?: number; category_id?: number | null }>()
@@ -93,7 +102,8 @@ events.post("/events/:id/planned", async (c) => {
   if (!b.label?.trim() || !b.amount || b.amount <= 0) return c.json({ error: "label and positive amount required" }, 400);
   const catId = typeof b.category_id === "number" ? b.category_id : null;
   const newId = await eventsRepo.addPlannedItem(
-    c.env.DB, id, b.label.trim(), Math.round(b.amount), catId, Math.floor(Date.now() / 1000));
+    c.env.DB, id, b.label.trim(), baseToUah(Math.round(b.amount), await getRates(c.env)), catId,
+    Math.floor(Date.now() / 1000));
   return c.json({ ok: true, id: newId });
 });
 

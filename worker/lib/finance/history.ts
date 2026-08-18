@@ -11,13 +11,13 @@
  * in it, and only one of them is a decision anyone can revisit.
  */
 import type { Env } from "../../env.ts";
-import { getRates } from "./finance.ts";
+import { getRates } from "./money.ts";
 import { valueMode, localMonthStart, localYm } from "./stats.ts";
 import type { MonthlyHistory } from "../../../shared/api/analytics.ts";
 
 export async function collectMonthlyHistory(env: Env, months: number): Promise<MonthlyHistory> {
   const analyticsRepo = await import("../../repo/analytics.ts");
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);   // always ₴ — the axis compares months with each other
   const now = Math.floor(Date.now() / 1000);
   const from = localMonthStart(now, -(months - 1));

@@ -160,18 +160,21 @@ const S = {
     en: "A liquid cushion of {cushion} lasts roughly {months} months at the current {burn}/mo of spending.",
   },
   advTopCatTitle: { uk: "«{name}» — найбільша стаття витрат", en: "“{name}” is your largest spending category" },
+  // §BASE-CUR: the symbol is a PARAMETER, not part of the sentence — these lines are the
+  // deterministic advice a reader falls back on, and a hardcoded ₴ would put the hryvnia sign in
+  // front of dollar amounts on exactly the screen that exists to be trusted when the model failed.
   advTopCatDetail: {
-    uk: "У середньому {avg} ₴/міс. Скорочення на 15% дає {cut} ₴/міс — це {year} ₴ за рік.",
-    en: "{avg} ₴/mo on average. Cutting 15% frees {cut} ₴/mo — that is {year} ₴ a year.",
+    uk: "У середньому {avg} {cur}/міс. Скорочення на 15% дає {cut} {cur}/міс — це {year} {cur} за рік.",
+    en: "{cur}{avg}/mo on average. Cutting 15% frees {cur}{cut}/mo — that is {cur}{year} a year.",
   },
-  advTopCatAction: { uk: "Ліміт {amount} ₴ на «{name}»", en: "Set a {amount} ₴ limit on “{name}”" },
+  advTopCatAction: { uk: "Ліміт {amount} {cur} на «{name}»", en: "Set a {cur}{amount} limit on “{name}”" },
   // Shown ON the insight card in place of the insight. §Обробка помилок: it carries the real
   // reason, because "try again" makes a missing key or a rate limit undiagnosable.
   insightFailed: { uk: "Не вдалося згенерувати інсайт: {error}", en: "Could not generate the insight: {error}" },
   advOptionalTitle: { uk: "Необовʼязкові витрати — найбезпечніше скорочення", en: "Optional spending is the safest thing to cut" },
   advOptionalDetail: {
-    uk: "За 90 днів {sum} ₴ (≈ {perMonth} ₴/міс) у категоріях, позначених як необовʼязкові. Це те, що ріжеться без шкоди для базових потреб.",
-    en: "{sum} ₴ over 90 days (≈ {perMonth} ₴/mo) in categories marked optional. This is what you can cut without touching essentials.",
+    uk: "За 90 днів {sum} {cur} (≈ {perMonth} {cur}/міс) у категоріях, позначених як необовʼязкові. Це те, що ріжеться без шкоди для базових потреб.",
+    en: "{cur}{sum} over 90 days (≈ {cur}{perMonth}/mo) in categories marked optional. This is what you can cut without touching essentials.",
   },
   advBudgetOverOne: { uk: "Бюджет «{category}» перевищено", en: "The “{category}” budget is over" },
   advBudgetOverMany: { uk: "Перевищено бюджетів: {n}", en: "Budgets over limit: {n}" },
@@ -181,11 +184,11 @@ const S = {
   },
   advSubsTitle: { uk: "Підписки йдуть фоном", en: "Subscriptions run in the background" },
   advSubsDetail: {
-    uk: "{month} ₴/міс — це {year} ₴ за рік, які списуються без окремого рішення. Перевір, чи всіма користуєшся.",
-    en: "{month} ₴/mo is {year} ₴ a year leaving without a decision each time. Check whether you use them all.",
+    uk: "{month} {cur}/міс — це {year} {cur} за рік, які списуються без окремого рішення. Перевір, чи всіма користуєшся.",
+    en: "{cur}{month}/mo is {cur}{year} a year leaving without a decision each time. Check whether you use them all.",
   },
-  advUpcomingTitle: { uk: "Найближчі 7 днів: {total} ₴ списань", en: "Next 7 days: {total} ₴ in charges" },
-  advUpcomingItem: { uk: "{title} — {amount} ₴ (через {days} дн)", en: "{title} — {amount} ₴ (in {days} d)" },
+  advUpcomingTitle: { uk: "Найближчі 7 днів: {total} {cur} списань", en: "Next 7 days: {cur}{total} in charges" },
+  advUpcomingItem: { uk: "{title} — {amount} {cur} (через {days} дн)", en: "{title} — {cur}{amount} (in {days} d)" },
   advEmptyTitle: { uk: "Даних поки замало", en: "Not enough data yet" },
   advEmptyDetail: {
     uk: "Коли назбирається історія витрат за кілька місяців, тут зʼявляться конкретні кроки на твоїх числах.",
@@ -315,6 +318,12 @@ const S = {
   errMonoRateLimited: {
     uk: "monobank обмежив перевірку (1 запит/60с) — токен збережено без звірки",
     en: "monobank rate-limited the check (1 request/60s) — the token was saved without verification",
+  },
+  // §BASE-CUR: named list, not "invalid": the reader needs to know which units exist, and the
+  // set is short enough to print.
+  errCurrencyUnsupported: {
+    uk: "Непідтримувана валюта. Доступні: ₴ UAH, $ USD, € EUR.",
+    en: "Unsupported currency. Available: ₴ UAH, $ USD, € EUR.",
   },
 } as const;
 

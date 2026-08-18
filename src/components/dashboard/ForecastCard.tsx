@@ -3,6 +3,7 @@ import { Money } from "../ui/Money.tsx";
 import { formatMinor } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { useT } from "../../i18n/index.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // Прогноз кінця місяця (§7): скільки витратимо за поточним темпом + майбутні планові
 // платежі. Сильна фіча для runway — видно ще до кінця місяця, чи вкладаєшся.
@@ -29,13 +30,13 @@ export function ForecastCard() {
             <div className="label">{t("fc.projSpend")}</div>
             <div className="num-hero" style={{ fontSize: 34 }}><Money minor={f.projectedSpend} decimals={false} /></div>
             {f.projectedLow != null && f.projectedHigh != null && f.projectedHigh > f.projectedLow && (
-              <div className="fc-range">≈ {formatMinor(f.projectedLow, { decimals: false })}–{formatMinor(f.projectedHigh, { decimals: false })} ₴</div>
+              <div className="fc-range">≈ {formatMinor(f.projectedLow, { decimals: false })}–{formatMinor(f.projectedHigh, { decimals: false })} {baseSign()}</div>
             )}
           </div>
           <div className="fc-net">
             <div className="label">{t("fc.projNet")}</div>
             <div className={`num-hero ${netTone}`} style={{ fontSize: 22 }}>
-              {f.projectedNet >= 0 ? "+" : ""}{formatMinor(f.projectedNet, { decimals: false })} ₴
+              {f.projectedNet >= 0 ? "+" : ""}{formatMinor(f.projectedNet, { decimals: false })} {baseSign()}
             </div>
           </div>
         </div>

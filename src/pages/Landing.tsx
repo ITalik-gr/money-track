@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocale, useT } from "../i18n/index.ts";
 import type { Locale } from "../i18n/index.ts";
 import { Icon } from "../components/ui/Icon.tsx";
+import { baseSign } from "../lib/currency.ts";
 
 const LOCALES: Locale[] = ["uk", "en"];
 
@@ -61,7 +62,7 @@ export function Landing() {
     <div className="landing">
       <header className="lp-top">
         <div className="lp-brand">
-          <span className="mark">₴</span>
+          <span className="mark">{baseSign()}</span>
           <span className="name">money<span className="dot">·</span>track</span>
         </div>
         <div className="lp-top-right">

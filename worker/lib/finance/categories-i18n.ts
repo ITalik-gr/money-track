@@ -8,7 +8,7 @@
 // needs no migration and no threading of a key through the ~40 places that already select the
 // name. Resolution happens SERVER-SIDE in the owner's locale (client is unchanged), via a SQL
 // CASE expression built here — the same inline-CASE technique the canon already uses for
-// currency (`uahMult` in stats.ts).
+// currency (`baseMult` in stats.ts).
 //
 // Trade-off, stated plainly: value-keyed resolution mistranslates only if a user renames a
 // category to another seed's EXACT Ukrainian string — negligible, and it only affects a display

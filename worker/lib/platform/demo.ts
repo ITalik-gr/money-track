@@ -97,7 +97,11 @@ const monthKey = () => new Date().toISOString().slice(0, 7);
  * the dataset JSON, which makes it unloadable from a plain Node test — and this is exactly the
  * rule most worth testing.
  */
-export const DEMO_EXCLUDED_STATE_KEYS = new Set(["locale"]);
+// §BASE-CUR joins `locale` here for the identical reason: the fixture is a dump of the OWNER's
+// object, so it carries the owner's display currency — making a sandbox the one account holding
+// a preference for someone who never expressed one, and giving `resolveBaseCurrency` a stored
+// answer to prefer over the visitor's own header.
+export const DEMO_EXCLUDED_STATE_KEYS = new Set(["locale", "display_currency"]);
 
 export const DEMO_DAILY_NEW_SANDBOXES = 300;
 

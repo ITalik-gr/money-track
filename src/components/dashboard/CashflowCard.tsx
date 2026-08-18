@@ -4,6 +4,7 @@ import { CashflowChart } from "../stats/CashflowChart.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { monthShort } from "../../lib/format.ts";
 import { useT } from "../../i18n/index.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // Огляд: грошовий потік за 6 місяців (DESIGN.md §7 F1, DeliFin R1).
 
@@ -31,7 +32,7 @@ export function CashflowCard() {
             <InfoTip>{t("cf.info")}</InfoTip>
           </span>
           <div className={`cf-total num-hero ${net < 0 ? "neg" : "pos"}`}>
-            {net >= 0 ? "+" : "−"}{fmt0.format(Math.abs(net) / 100)}<span className="cur">₴</span>
+            {net >= 0 ? "+" : "−"}{fmt0.format(Math.abs(net) / 100)}<span className="cur">{baseSign()}</span>
           </div>
         </div>
         <div className="legend">

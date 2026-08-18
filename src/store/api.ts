@@ -1,6 +1,7 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { Account, Budget, Category, EventGroup, PlannedPayment, AiUsageStats, PlannedActual } from "../../shared/types.ts";
 import { getLocale } from "../i18n/locale.ts";
+import { getBaseCurrency } from "../lib/currency.ts";
 
 // The API contract lives in `shared/api/` and is imported, not re-declared (phase 2, defect D2).
 // It is RE-EXPORTED from here because 66 files already import these names from `store/api.ts`;
@@ -19,7 +20,7 @@ import type {
   SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
-  BackupList, RestoreResult, PushStatus, PushSendResult,
+  BackupList, RestoreResult, PushStatus, PushSendResult, RatesSnapshot,
 } from "../../shared/api/index.ts";
 
 export const api = createApi({
@@ -33,7 +34,14 @@ export const api = createApi({
   // мови МИТТЄВИМ: не треба зберігати профіль, щоб модель почала відповідати інакше.
   baseQuery: fetchBaseQuery({
     baseUrl: "/api",
-    prepareHeaders: (headers) => { headers.set("x-mt-locale", getLocale()); return headers; },
+    // §BASE-CUR travels with the language, and for the same reason: the stored preference is
+    // empty for everyone who never opened Settings and for every demo sandbox, and empty read as
+    // hryvnia — so the audience the English UI exists for saw ₴ on every screen.
+    prepareHeaders: (headers) => {
+      headers.set("x-mt-locale", getLocale());
+      headers.set("x-mt-currency", String(getBaseCurrency()));
+      return headers;
+    },
   }),
   tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule"],
   endpoints: (b) => ({
@@ -94,8 +102,18 @@ export const api = createApi({
       query: ({ id, ...body }) => ({ url: `/accounts/${id}/meta`, method: "PATCH", body }),
       invalidatesTags: ["Account", "Summary"],
     }),
-    getRates: b.query<{ rates: Record<string, number>; updated: number | null }, void>({
+    // The rate table AND the base the server actually answered in (§BASE-CUR). `Layout` keeps
+    // this subscribed so the sign the whole app prints follows the server's answer rather than
+    // the client's request — a base with no rate falls back to hryvnia there.
+    getRates: b.query<RatesSnapshot, void>({
       query: () => "/rates", providesTags: ["Summary"],
+    }),
+    getBaseCurrency: b.query<{ currency: number; stored: number | null; options: number[] }, void>({
+      query: () => "/settings/base-currency", providesTags: ["Setup"],
+    }),
+    setBaseCurrency: b.mutation<{ ok: boolean; currency: number }, { currency: number | null }>({
+      query: (body) => ({ url: "/settings/base-currency", method: "PUT", body }),
+      invalidatesTags: ["Setup"],
     }),
     // Categorisation RULES — the deterministic layer (`categorize()` step 4). Writable from the
     // UI since 2026-08-12; before that the table could only be changed in the database by hand.
@@ -860,6 +878,8 @@ export const {
   useSetAccountActiveMutation,
   useDeleteAccountMutation,
   useGetRatesQuery,
+  useGetBaseCurrencyQuery,
+  useSetBaseCurrencyMutation,
   useGetCategoriesQuery,
   useGetTxChatQuery,
   useGetCategoryOverviewQuery,

@@ -4,6 +4,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { Range } from "../ui/Range.tsx";
 import { useT } from "../../i18n/index.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // §P4: What-if симулятор — «що якщо зрізати категорію на N%». Клієнтський розрахунок від
 // наявних агрегатів: cushion/burn з Порадника (`/advisor`) + місячні рівні категорій
@@ -54,7 +55,7 @@ export function WhatIf() {
               <div key={c.category} className="whatif-row">
                 <div className="whatif-row-head">
                   <span className="whatif-cat"><span className="d" style={{ background: c.color ?? "var(--muted)" }} />{c.category}</span>
-                  <span className="whatif-usual">{fmt(c.usual)} ₴/{t("adv.monthsUnit")}</span>
+                  <span className="whatif-usual">{fmt(c.usual)} {baseSign()}/{t("adv.monthsUnit")}</span>
                 </div>
                 <div className="whatif-slider-line">
                   <Range value={cut} min={-100} max={100} step={5} origin={0}
@@ -85,13 +86,13 @@ export function WhatIf() {
           {/* Від'ємні заощадження — це перевитрата: називаємо річ своїм ім'ям, не «−3 068». */}
           <div className="whatif-stat">
             <span>{savings < 0 ? t("wif.extraSpending") : t("wif.savings")}</span>
-            <b className={savings < 0 ? "neg" : ""}>{changed ? `${fmt(Math.abs(savings))} ₴/${t("adv.monthsUnit")}` : "—"}</b>
+            <b className={savings < 0 ? "neg" : ""}>{changed ? `${fmt(Math.abs(savings))} ${baseSign()}/${t("adv.monthsUnit")}` : "—"}</b>
           </div>
-          <div className="whatif-stat"><span>{t("wif.newBurnLabel")}</span><b>{fmt(newBurn)} ₴/{t("adv.monthsUnit")}</b></div>
+          <div className="whatif-stat"><span>{t("wif.newBurnLabel")}</span><b>{fmt(newBurn)} {baseSign()}/{t("adv.monthsUnit")}</b></div>
           {changed && (
             <div className="whatif-stat">
               <span>{t("wif.perYearLabel")}</span>
-              <b className={savings < 0 ? "neg" : ""}>{fmt(Math.abs(savings) * 12)} ₴</b>
+              <b className={savings < 0 ? "neg" : ""}>{fmt(Math.abs(savings) * 12)} {baseSign()}</b>
             </div>
           )}
         </div>

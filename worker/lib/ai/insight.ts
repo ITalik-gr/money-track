@@ -5,7 +5,7 @@ import type { Env } from "../../env.ts";
 // its own feature file — already existed. ARCHITECTURE.md §3 D3 called that the anomaly: no
 // rule decided which of the two files a feature went into, so features were smeared across both.
 import { callHaikuJson } from "./json.ts";
-import { replyLangDirective } from "./prompt.ts";
+import { replyLangDirective, moneyUnitDirective } from "./prompt.ts";
 import { getTaskModel } from "./models.ts";
 import type { AnthropicContentBlock } from "./ai.ts";
 import type { AiFact } from "./generate.ts";
@@ -41,13 +41,13 @@ export async function generateInsight(
         "period, +/- number or null), tone ('pos'|'neg'|'neutral')}] (2-5 facts — where most went, notable changes, " +
         "anomalies, the split by importance), note (one short concrete piece of advice, or null)}. Amounts in " +
         "hryvnia." +
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];
   return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "insight"));
 }
 import { getState, setState } from "../finance/repo.ts";
-import { getRates } from "../finance/finance.ts";
+import { getRates } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "../finance/stats.ts";
@@ -93,7 +93,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
   const now = Math.floor(Date.now() / 1000);
   const from = now - days * DAY;
   const prevFrom = from - days * DAY;
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
 
   const [thisWeek, prevWeek, merchants, notes, totalRow, events, importanceRows, split, profile] = await Promise.all([

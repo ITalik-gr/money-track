@@ -14,6 +14,7 @@ import { renderMarkdown } from "../lib/markdown.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { useT, translate } from "../i18n/index.ts";
+import { baseSign } from "../lib/currency.ts";
 
 const kindLabel = (k: string | null) => {
   const found = GROUP_KINDS.find((x) => x.value === k);
@@ -213,7 +214,7 @@ function GroupAiPanel({ eventId, groupName }: { eventId: number; groupName: stri
               <div key={i} className="grp-fact">
                 <span className={`grp-fact-dot ${f.tone ?? "neutral"}`} />
                 <span className="grp-fact-label">{renderMarkdown(f.label)}</span>
-                {f.amount != null && <span className="grp-fact-amt">{f.amount.toLocaleString(localeTag(getLocale()))} ₴</span>}
+                {f.amount != null && <span className="grp-fact-amt">{f.amount.toLocaleString(localeTag(getLocale()))} {baseSign()}</span>}
               </div>
             ))}
           </div>

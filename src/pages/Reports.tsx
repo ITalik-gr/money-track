@@ -17,6 +17,7 @@ import { CashflowChart } from "../components/stats/CashflowChart.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
+import { baseSign } from "../lib/currency.ts";
 
 const rDate = dateFmt({ day: "numeric", month: "short" });
 const rDateTime = dateFmt({ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -251,7 +252,7 @@ export function ReportDetail() {
                       <div key={i} className="catbar">
                         <span className="cb-name" title={c.note ?? undefined}><span className="d" style={{ background: barColor(i), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} />{c.name}</span>
                         <span className="cb-track"><span className="cb-fill" style={{ width: `${(Math.abs(c.amount_uah) / catMax) * 100}%`, background: barColor(i) }} /></span>
-                        <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} ₴</span>
+                        <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} {baseSign()}</span>
                         <span className="cb-pct">{isNew ? <span className="cmp-delta new">{t("stats.compare.newLabel")}</span> : <Delta pct={c.delta_pct} />}</span>
                       </div>
                     );
@@ -326,7 +327,7 @@ function ForecastHero({ p }: { p: FinancialReport["predictions"] }) {
           {p.next_period_spend_uah != null && (
             <div className="fh-item">
               <span className="fh-label">{t("report.expectedSpend")}</span>
-              <span className="fh-val">{formatMinor(p.next_period_spend_uah * 100, { decimals: false })} ₴</span>
+              <span className="fh-val">{formatMinor(p.next_period_spend_uah * 100, { decimals: false })} {baseSign()}</span>
             </div>
           )}
           {p.runway_months != null && (
@@ -366,7 +367,7 @@ function ImportanceSection({ data }: { data: NonNullable<FinancialReport["import
             return (
               <span key={lv} className="lg">
                 <span className="d" style={{ background: IMPORTANCE_META[lv].color }} />
-                {t(IMPORTANCE_META[lv].labelKey)} · <b>{row.pct}%</b> <span className="muted">({formatMinor(row.amount_uah * 100, { decimals: false })} ₴)</span>
+                {t(IMPORTANCE_META[lv].labelKey)} · <b>{row.pct}%</b> <span className="muted">({formatMinor(row.amount_uah * 100, { decimals: false })} {baseSign()})</span>
               </span>
             );
           })}
@@ -389,7 +390,7 @@ function DonutTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{d.name}</div>
-      <div className="r"><span className="d" style={{ background: d.payload.color }} />{formatMinor(d.value * 100, { decimals: false })} ₴</div>
+      <div className="r"><span className="d" style={{ background: d.payload.color }} />{formatMinor(d.value * 100, { decimals: false })} {baseSign()}</div>
       <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{d.payload.pct}{translate(getLocale(), "report.ofTotal")}</div>
     </div>
   );
@@ -415,7 +416,7 @@ function CategoryDonut({ cats }: { cats: { name: string; amount_uah: number }[] 
         </PieChart>
       </ResponsiveContainer>
       <div className="donut-center">
-        <span className="dc-val">{formatMinor(total * 100, { decimals: false })} ₴</span>
+        <span className="dc-val">{formatMinor(total * 100, { decimals: false })} {baseSign()}</span>
         <span className="dc-lbl">{t("report.spendLabel")}</span>
       </div>
     </div>

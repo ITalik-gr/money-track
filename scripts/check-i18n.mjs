@@ -55,6 +55,23 @@ const ukKeys = new Set(Object.keys(uk));
 for (const k of enKeys) if (!ukKeys.has(k)) problems.push(`uk.json missing key present in en.json: "${k}"`);
 for (const k of ukKeys) if (!enKeys.has(k)) problems.push(`en.json missing key present in uk.json: "${k}"`);
 
+// 3. §BASE-CUR — no currency symbol spelled out in a UI string.
+//
+// Twenty-eight entries said "₴" while the server had already converted the number beside it into
+// the reader's currency, which is exactly the "everything is in hryvnia" the English UI was
+// reported for. `translate()` fills `{cur}` into every string automatically, so the fix at a call
+// site is nothing at all — but only if the string uses the placeholder.
+for (const [name, dict] of [["en.json", en], ["uk.json", uk]]) {
+  for (const [k, v] of Object.entries(dict)) {
+    // Only the hryvnia. "$" and "€" do appear legitimately — Anthropic bills in dollars, and an
+    // FX account hint names the currencies it means. The hryvnia is the one that was standing in
+    // for "whatever unit this app rolls up into", which is now a setting.
+    if (typeof v === "string" && v.includes("₴") && !v.includes("{cur}")) {
+      problems.push(`${name}: "${k}" spells out ₴ — use {cur}, which translate() fills in:\n    ${v}`);
+    }
+  }
+}
+
 if (problems.length) {
   console.error(`✗ i18n lint: ${problems.length} problem(s)\n`);
   for (const p of problems) console.error("  " + p);

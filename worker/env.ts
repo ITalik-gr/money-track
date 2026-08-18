@@ -89,6 +89,16 @@ export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
    */
   UI_LOCALE?: "uk" | "en";
   /**
+   * Currency the reader wants every rolled-up number EXPRESSED in on THIS request
+   * (`x-mt-currency`). Same shape and same reasoning as `UI_LOCALE`: not a binding, set by
+   * `UserDO.appEnv` from the header, beats the stored `app_state.display_currency`, and is
+   * absent exactly where there is no reader (cron, Telegram, the alarm).
+   *
+   * Never read directly — `lib/finance/money.ts` `resolveBaseCurrency` is the single answer,
+   * because a base whose rate is missing has to fall back rather than zero every foreign row.
+   */
+  UI_CURRENCY?: number;
+  /**
    * Internal wiring, NOT a Cloudflare binding: set by `UserDO.fetch` so a handler that
    * rewrites this user's credentials can drop the object's in-memory copy. Optional, because
    * code paths outside the Durable Object (login, OAuth, cron) have no object to notify.

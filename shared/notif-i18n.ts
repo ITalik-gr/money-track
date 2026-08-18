@@ -15,6 +15,8 @@
 // minor-amount integers and unix timestamps, never pre-formatted strings, so "₴1,234" vs
 // "1 234 ₴" follows the viewer's locale rather than whatever the cron happened to pick.
 
+import { currencySign } from "./currency.ts";
+
 export type NotifLocale = "uk" | "en";
 
 // Params are a flat JSON bag (serialized into `notifications.notif_params`). Entity names
@@ -32,13 +34,19 @@ export interface RenderedNotif { title: string; body: string | null }
 
 // ---- locale-aware primitives -------------------------------------------------
 
-// Money is always UAH here (canonical roll-up to ₴ happened upstream). The symbol side
-// follows the locale convention: trailing "₴" in Ukrainian, leading "₴" in English.
-function money(locale: NotifLocale, minor: number): string {
+// Money arrives already rolled up into ONE unit; which unit is `cur` in the params (§BASE-CUR),
+// defaulting to the hryvnia for every row written before the setting existed. The symbol side
+// follows the locale convention: trailing in Ukrainian, leading in English.
+//
+// ⚠️ The unit travels WITH the row rather than being resolved at render time. A feed entry states
+// a number computed months ago; re-labelling it with today's currency would leave the sign of one
+// currency in front of the amount of another — a lie that renders perfectly.
+function money(locale: NotifLocale, minor: number, cur: number): string {
   const n = Math.round((minor ?? 0) / 100);
+  const sign = currencySign(cur);
   return locale === "uk"
-    ? `${n.toLocaleString("uk-UA")} ₴`
-    : `₴${n.toLocaleString("en-US")}`;
+    ? `${n.toLocaleString("uk-UA")} ${sign}`
+    : `${sign}${n.toLocaleString("en-US")}`;
 }
 
 function dayMonth(locale: NotifLocale, unix: number): string {
@@ -63,7 +71,8 @@ const bool = (p: NotifParams, k: string): boolean => p[k] === true;
 
 export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: NotifParams): RenderedNotif {
   const uk = locale === "uk";
-  const m = (minor: number) => money(locale, minor);
+  const cur = num(p, "cur") || 980;
+  const m = (minor: number) => money(locale, minor, cur);
   const dm = (unix: number) => dayMonth(locale, unix);
 
   switch (key) {
@@ -304,8 +313,8 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
           ? `«${name}» іде на ${pct}% бюджету`
           : `“${name}” is heading for ${pct}% of its budget`,
         body: uk
-          ? `За поточним темпом місяць закриється на ${money(locale, num(p, "projected"))} при ліміті ${money(locale, num(p, "amount"))}. Витрачено поки що ${money(locale, num(p, "spent"))} — час іще є.`
-          : `At the current pace the month closes at ${money(locale, num(p, "projected"))} against a ${money(locale, num(p, "amount"))} limit. Spent so far: ${money(locale, num(p, "spent"))} — there is still time.`,
+          ? `За поточним темпом місяць закриється на ${m(num(p, "projected"))} при ліміті ${m(num(p, "amount"))}. Витрачено поки що ${m(num(p, "spent"))} — час іще є.`
+          : `At the current pace the month closes at ${m(num(p, "projected"))} against a ${m(num(p, "amount"))} limit. Spent so far: ${m(num(p, "spent"))} — there is still time.`,
       };
     }
 

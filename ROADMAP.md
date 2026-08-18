@@ -5,15 +5,15 @@
 > `HISTORY.md`. Довідник/інваріанти → `CLAUDE.md`. Дизайн → `DESIGN.md`. Шари й лінти →
 > `ARCHITECTURE.md`.
 >
-> Останнє прибирання: **2026-08-14** — знято весь session log за 12 серпня (кожен рядок `DONE`,
-> результати вже в `CLAUDE.md`), три закриті картки черги (звіти, сторінка категорії, розділення
-> `index.css`) і закриті пункти UI-черги. **Правило: картка зі статусом ✅ тут не живе.**
+> Last sweep: **2026-08-18** — the display-currency card, the `.section-head` gap and the stale
+> `report.ts` ceiling card are out of the queue (the first two left behind a look-at-it card, which
+> is not the same as work). **Rule: a card marked ✅ does not live here.**
 
 ## 🚦 Як працювати з цим файлом
 
 1. Бери **найвищу невиконану задачу** з «Черги». Не перестрибуй без причини.
 2. Задача = картка: **Ціль · Файли · Кроки · Готово-коли**. Спочатку прочитай згадані файли.
-3. **Green-бар перед «готово»:** `npm run check` (tsc + лінти C1–C9 + тести) + `npm run build`.
+3. **Green-бар перед «готово»:** `npm run check` (tsc + лінти C1–C10 + тести) + `npm run build`.
    Гроші/статистика — лише через `worker/lib/finance/stats.ts`, не дублюй SQL.
 4. **UI/UX** — спершу `DESIGN.md`, зміну фіксуй у його «Журналі рішень». Хук impeccable ганяє
    детектор — знайдене виправляй, не глуши.
@@ -49,21 +49,7 @@
 
 ## 🔥 Черга (роби згори вниз)
 
-### 1. The `.section-head` gap is wrong on EVERY page using `<section>`
-
-Found while widening the category page. `.section-head` carries `margin: 26px 2px 10px` — the
-app's gap between sections — but `.section-head:first-child` drops it to 4px so the first heading
-does not push the page away from its header. **Inside a `<section>` wrapper every heading is a
-first child**, so the moment a page groups its blocks semantically it silently loses the spacing
-the design system says it has. That is 20+ files (`Dashboard`, `Stats`, `Subscriptions`, `Reports`,
-`Advisor`, `Categories`, `Plan`, `Merchant`…).
-
-The one-line fix is `section > .section-head:first-child { margin-top: 26px; }`, and it is NOT
-applied yet: it changes vertical rhythm on every screen at once, and some may be tight on purpose.
-Scoped to the category page for now (`budgets.css`, `.cat-page-stats ~ section`).
-**Done when:** the owner has looked at two or three of those pages with the rule on.
-
-### 2. STYLES phase 0.5 + 4 — needs the owner's EYE (`STYLES.md`)
+### 1. STYLES phase 0.5 + 4 — needs the owner's EYE (`STYLES.md`)
 
 The stylesheet is split (twelve parts under `src/styles/`, `index.css` is imports only, lint **C8**
 keeps it that way), the 76 byte-identical dead blocks are gone and C9 has since removed 59 more.
@@ -82,11 +68,59 @@ overflow gets a seam, not a raised cap.
 **Done when:** the 8 conflicts are resolved against live screens, with no visual change the owner
 did not approve.
 
-### 3. `worker/lib/ai/report.ts` is at its C3 ceiling (450)
+### 2. §BASE-CUR — three screens to look at with dollars selected
 
-Adding anything to it requires an extraction first. The obvious seam: context assembly and storage
-stay, everything else follows `report-prompt.ts` out. Not urgent — it becomes urgent the moment a
-report feature is asked for.
+The display currency is in (`CLAUDE.md §BASE-CUR`): Settings → Account → «Валюта показу», and an
+account that never chose one follows its language, so an English visitor and the demo land on USD.
+The numbers are covered by tests and by lint C10; what is NOT covered is how they LOOK, and three
+places are the likely offenders because their layout was sized around hryvnia figures:
+
+- **Dashboard hero + KPI row** — a hryvnia total is 4–5 digits, a dollar total is 3. Columns sized
+  for the long form will look empty, and `useCountUp` animates a much shorter number.
+- **`/plan` envelopes** — the limits round to a whole unit in a foreign base (50 ₴ converts to
+  $1.21, which is not a round number in either currency). Worth checking that the proposals read as
+  decisions rather than as arithmetic.
+- **Charts with a ₴-shaped Y axis** — `width="auto"` should handle it, but the axis is the one
+  place where a shorter number changes the plot area rather than just the label.
+
+⚠️ Also NOT verified live: the very first paint of a fresh English account, where the language
+default applies before `/rates` has answered.
+
+**Done when:** the owner has switched to USD and looked at those three.
+
+### 3. The `.section-head` gap fix is APPLIED — it needs eyes, not work
+
+`section > .section-head:first-child { margin-top: 26px }` is now global (`styles/shell.css`), and
+the scoped workaround on the category page kept only its wider 34px. This restores the design
+system's section gap on the 67 blocks that group themselves semantically and had silently lost it —
+which means **vertical rhythm changed on every page using `<section>` at once**. Two rules were
+given explicit `:first-child` to keep winning (`.acct-sec`, cards), because their spacing is
+deliberate.
+
+**Done when:** the owner has looked at Dashboard, Stats and Accounts and confirmed nothing got
+loose. Revert is one line.
+
+*(Closed 2026-08-18: **§BASE-CUR** — every rolled-up number is expressed in a currency the reader
+chooses (`x-mt-currency` → stored choice → language), instead of the hryvnia the canon had nailed
+into `uahMult`/`toUAHMinor`. `getRates(env)` answers in that base, so forty call sites converted
+without being edited; lint **C10** is what keeps the raw table from creeping back, because the
+wrong version renders a plausible number. Stored plan amounts (budgets, goals, event budgets, fact
+deltas) stay in hryvnia and convert at the edge; a closed budget month stays hryvnia because an
+archive whose unit moves is not a history. 11 scenarios in `currency.test.ts`.)*
+
+*(Closed 2026-08-18: the AI group verdict counted only hryvnia rows (`AND t.currency_code = 980`).
+The same hole had been found and closed twice, in `/events` and `/events/:id`, each time with the
+note that a trip is the worst place for it — abroad is where another currency appears. The close-out
+was the third copy and the one nobody had read: it told the owner a trip came in under budget by
+ignoring everything paid in euros.)*
+
+*(Closed 2026-08-18: category names leaked Ukrainian into the Statistics drill — `categoryTransactions`
+was the one query on that page without `catNameSql`, so an English reader got English headings over
+a Ukrainian list. Same for `recurringOneoffSplit`, which three AI context builders read raw.)*
+
+*(Closed 2026-08-18: `worker/lib/ai/report.ts` and its C3 ceiling — the extraction the card asked
+for had already happened with `report-prompt.ts`; the file is 360 lines and holds context assembly
+and storage, which is exactly the end state the card described.)*
 
 *(Closed 2026-08-14: **§CAT-PAGE** — the category page rendered empty over real data for three
 independent reasons, all silent: a SUB-category never matched the rolled-up `EFF_CAT_ID`, an INCOME

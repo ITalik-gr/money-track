@@ -136,7 +136,7 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
     await t.test("writes one row per envelope, for the month that just ended", async () => {
       const db = migratedDb();
       seed(db);
-      const r = await closeBudgetMonths(env(db), MULT);
+      const r = await closeBudgetMonths(env(db));
       assert.equal(r.ym, "2026-04");
       assert.equal(r.closed, 2, "the fixture has two monthly envelopes");
 
@@ -150,7 +150,7 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
     await t.test("running it again changes NOTHING — the daily pass is idempotent", async () => {
       const db = migratedDb();
       seed(db);
-      await closeBudgetMonths(env(db), MULT);
+      await closeBudgetMonths(env(db));
       const before = (await budgetsRepo.closedMonth(db as unknown as never, "2026-04")).get(CAT)!;
 
       // Spending appears afterwards, as it does when an old row is re-categorised months later.
@@ -159,7 +159,7 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
          VALUES ('late-april', 'acc-uah', 'manual', ?, -900000, 980, 1, 0)`,
       ).run(Math.floor(new Date("2026-04-20T10:00:00.000Z").getTime() / 1000));
 
-      const second = await closeBudgetMonths(env(db), MULT);
+      const second = await closeBudgetMonths(env(db));
       assert.equal(second.closed, 0, "already closed → no work at all");
       const after = (await budgetsRepo.closedMonth(db as unknown as never, "2026-04")).get(CAT)!;
       // A closed month is a RECORD, not a live query: the carry chain is built on this number, and
@@ -173,7 +173,7 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
       setRollover(db, CAT, true);
       closed(db, "2026-03", CAT, 15_000_00, 14_000_00);   // 1 000 ₴ into April
 
-      await closeBudgetMonths(env(db), MULT);
+      await closeBudgetMonths(env(db));
       const april = (await budgetsRepo.closedMonth(db as unknown as never, "2026-04")).get(CAT)!;
       assert.equal(april.carry_in_minor, 1_000_00);
 
@@ -182,7 +182,7 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
       seed(db2);
       setRollover(db2, CAT, false);
       closed(db2, "2026-03", CAT, 15_000_00, 14_000_00);
-      await closeBudgetMonths(env(db2), MULT);
+      await closeBudgetMonths(env(db2));
       const april2 = (await budgetsRepo.closedMonth(db2 as unknown as never, "2026-04")).get(CAT)!;
       assert.equal(april2.carry_in_minor, 0);
     });
@@ -282,7 +282,7 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
       seed(db);
       closed(db, "2026-02", CAT, 10_000_00, 9_000_00);
       closed(db, "2026-03", CAT, 12_000_00, 13_000_00);
-      await closeBudgetMonths(env(db), MULT);
+      await closeBudgetMonths(env(db));
 
       const hist = await budgetsRepo.monthsForCategory(db as unknown as never, CAT, 6);
       assert.deepEqual(hist.map((m) => m.ym), ["2026-02", "2026-03", "2026-04"]);

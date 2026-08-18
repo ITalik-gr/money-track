@@ -11,7 +11,7 @@
 //  • Ліміт на прохід (`MAX_PER_RUN`) — стрічка не має перетворюватись на спам.
 import type { Env } from "../../env.ts";
 import { debtMinor } from "../finance/own-funds.ts";
-import { getRates } from "../finance/finance.ts";
+import { getRates, resolveBaseCurrency, uahToBaseMinor } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
 import { goalPace, goalNeedsAttention } from "../finance/goals.ts";
@@ -165,6 +165,10 @@ async function insertDrafts(env: Env, drafts: Draft[], now: number, max = MAX_PE
   // Fallback title/body are composed in the owner's locale at insert (P3.3): they serve
   // legacy/`ai` rows and TG. The client re-renders templated rows live from key/params.
   const locale = await resolveLocale(env);
+  // §BASE-CUR: stamp the unit the amounts were computed in onto the row itself. The feed renders
+  // stored numbers, so a row that only said "1 240" would be re-labelled with whatever currency
+  // the reader picks later — the sign of one currency over the amount of another.
+  const cur = await resolveBaseCurrency(env);
   let created = 0;
   for (const d of drafts) {
     // Ліміт рахуємо по СТВОРЕНИХ, а не по переглянутих: інакше десяток уже наявних
@@ -172,6 +176,7 @@ async function insertDrafts(env: Env, drafts: Draft[], now: number, max = MAX_PE
     if (created >= max) break;
     let title = d.title ?? "";
     let body: string | null = d.body ?? null;
+    if (d.tkey) d.tparams = { ...(d.tparams ?? {}), cur };
     if (d.tkey) {
       const r = renderNotif(locale, d.tkey, d.tparams ?? {});
       title = r.title;
@@ -310,7 +315,7 @@ async function draftReports(env: Env, now: number): Promise<Draft[]> {
 
 /** Списання планів/підписок у горизонті 3 днів. §CUR-PLAN: сума зводиться plannedUAH. */
 async function draftDeadlines(env: Env, now: number): Promise<Draft[]> {
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const rows = await env.DB.prepare(
     `SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date
      FROM planned_payments WHERE is_active = 1`,
@@ -394,7 +399,7 @@ interface MonthPace {
   rows: { id: number; name: string; spent: number; n: number; usual: number }[];
 }
 async function monthPace(env: Env, now: number): Promise<MonthPace> {
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const monthStart = localMonthStart(now);
   const nextMonthStart = localMonthStart(now, 1);
@@ -513,7 +518,7 @@ async function draftLiquidity(env: Env, now: number): Promise<Draft[]> {
   const planningRepo = await import("../../repo/planning.ts");
   const [funds, rates, plans, incomePlans] = await Promise.all([
     fundsBreakdown(env),
-    getRates(env.DB),
+    getRates(env),
     // §INCOME-PLAN: through the repo, NOT an inline copy of the same SELECT. The inline version
     // read every active plan, so the day income plans existed this drafter would have counted a
     // salary as an outgoing payment and announced a liquidity gap that was the opposite of true.
@@ -673,11 +678,15 @@ async function draftGoalRisk(env: Env, now: number): Promise<Draft[]> {
 
   const out: Draft[] = [];
   const today = isoDay(now);
+  // §BASE-CUR: goal amounts are stored in hryvnia, and `insertDrafts` stamps the row with the
+  // base its numbers are in — so they have to BE in that base before they are written.
+  const rates = await getRates(env);
   for (const g of rows.results ?? []) {
-    const current = g.account_balance ?? g.current_amount;   // банка-джерело має пріоритет
+    const current = uahToBaseMinor(g.account_balance ?? g.current_amount, rates);   // банка-джерело має пріоритет
+    const target = uahToBaseMinor(g.target_amount, rates);
     // §GOAL-PACE: the same computation the goal card itself displays. Until now this drafter had
     // its own arithmetic, so the feed could name a monthly rate written nowhere on the goal.
-    const p = goalPace({ ...g, current }, now);
+    const p = goalPace({ ...g, target_amount: target, current }, now);
     if (!goalNeedsAttention(p)) continue;
     // A sprint (<1 month) has no monthly rate — the only meaningful figure there is the whole
     // remaining amount. That is exactly what the drafter used to show via `max(1, days / 30)`.
@@ -687,7 +696,7 @@ async function draftGoalRisk(env: Env, now: number): Promise<Draft[]> {
       tkey: "goal_risk",
       tparams: {
         name: g.name, passed: p.status === "overdue",
-        current, target: g.target_amount, progressPct: Math.round(p.progress_frac * 100),
+        current, target, progressPct: Math.round(p.progress_frac * 100),
         elapsedPct: Math.round((p.elapsed_frac ?? 0) * 100), perMonth, daysLeft: p.days_left ?? 0,
       },
       severity: p.status === "overdue" || p.status === "at_risk" ? "warn" : "info",
@@ -707,7 +716,7 @@ async function draftDeadSubs(env: Env, now: number): Promise<Draft[]> {
       "SELECT id, title, period_amount, currency_code, start_date FROM planned_payments WHERE is_active = 1",
     ).all<{ id: number; title: string; period_amount: number | null; currency_code: number | null; start_date: number }>(),
   ]);
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const countById = new Map(actuals.map((a) => [a.id, a.count]));
 
   const out: Draft[] = [];

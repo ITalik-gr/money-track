@@ -78,7 +78,7 @@ export function Stats() {
     const p = new URLSearchParams(prev); p.set(key, val); return p;
   }, { replace: true });
 
-  const [currency, setCurrency] = useState<Cur>(null); // null = ₴ зведено
+  const [currency, setCurrency] = useState<Cur>(null); // null = rolled up into the display base
   const { data: currencies } = useGetCurrenciesQuery();
   const { data: pm } = useGetPeriodModeQuery();
   const [setPeriodMode] = useSetPeriodModeMutation();

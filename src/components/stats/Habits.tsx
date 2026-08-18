@@ -7,6 +7,7 @@ import { useT } from "../../i18n/index.ts";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
 import type { HabitChange } from "../../store/api.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // §HABITS: що ТИХО зʼявилось у регулярних витратах і що ТИХО зникло.
 //
@@ -58,7 +59,7 @@ function Row({ h, kind }: { h: HabitChange; kind: "started" | "stopped" }) {
           ? t("hb.since", { month: monthLabel(h.since) })
           : t("hb.lastSeen", { month: monthLabel(h.last) })}
       </span>
-      <span className="hb-amt num-mono">{formatMinor(h.monthly, { decimals: false })} ₴</span>
+      <span className="hb-amt num-mono">{formatMinor(h.monthly, { decimals: false })} {baseSign()}</span>
       <span className="hb-acts">
         {kind === "started" && (
           <button className="btn sm" disabled={busy}
@@ -96,7 +97,7 @@ export function Habits() {
             <div className="hb-head">
               <span className="hb-kind started">{t("hb.startedTitle")}</span>
               <span className="num-mono hb-total">
-                +{formatMinor(data.started_monthly_total, { decimals: false })} ₴{t("hb.perMonth")}
+                +{formatMinor(data.started_monthly_total, { decimals: false })} {baseSign()}{t("hb.perMonth")}
               </span>
             </div>
             {data.started.map((h) => <Row key={h.merchant} h={h} kind="started" />)}

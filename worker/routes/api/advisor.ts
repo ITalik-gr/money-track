@@ -159,7 +159,16 @@ advisor.post("/advisor/chat/stream", async (c) => {
 // Гейт: лише confirmed факт із коригуванням рухає числа (categoryMonthlyLevels).
 advisor.get("/facts", async (c) => {
   const { listFacts } = await import("../../lib/ai/facts.ts");
-  return c.json(await listFacts(c.env) satisfies Fact[]);
+  const { getRates, uahToBaseMinor } = await import("../../lib/finance/money.ts");
+  const rates = await getRates(c.env);
+  // §BASE-CUR: only `delta_minor` is money — a multiplier is a ratio, and converting it would be
+  // the same error in the other direction.
+  const facts = (await listFacts(c.env)).map((f) => (
+    f.adjust_kind === "delta_minor" && f.adjust_value != null
+      ? { ...f, adjust_value: uahToBaseMinor(f.adjust_value, rates) }
+      : f
+  ));
+  return c.json(facts satisfies Fact[]);
 });
 
 advisor.post("/facts", async (c) => {
@@ -170,8 +179,12 @@ advisor.post("/facts", async (c) => {
     adjust_value?: number | null; confirm?: boolean;
   }>();
   if (!b.text?.trim()) return c.json({ error: "text required" }, 400);
+  const { getRates, baseToUah } = await import("../../lib/finance/money.ts");
+  const adjust_value = b.adjust_kind === "delta_minor" && b.adjust_value != null
+    ? baseToUah(b.adjust_value, await getRates(c.env))
+    : b.adjust_value;
   try {
-    return c.json(await addFact(c.env, { ...b, text: b.text, source: "user" }));
+    return c.json(await addFact(c.env, { ...b, adjust_value, text: b.text, source: "user" }));
   } catch (e) {
     return c.json({ error: String(e instanceof Error ? e.message : e) }, 400);
   }

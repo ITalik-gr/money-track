@@ -99,10 +99,11 @@ accounts.patch("/accounts/manual/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-// Cached rates map (currency code → UAH per unit) + last-updated, for client-side
-// ≈₴ conversion of FX cards/jars. Same source computeSummary uses.
+// Cached rates map (currency code → DISPLAY-base per unit, §BASE-CUR) + the base itself +
+// last-updated, for client-side conversion of FX cards/jars. Same source computeSummary uses,
+// so a jar's "≈" line and the header total cannot disagree about the rate or about the unit.
 accounts.get("/rates", async (c) => {
-  return c.json(await stateRepo.rates(c.env.DB));
+  return c.json(await stateRepo.rates(c.env));
 });
 
 // Перейменувати рахунок (напр. банку — mono дає generic «БАНКА»). Title — лише

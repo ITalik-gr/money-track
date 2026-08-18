@@ -5,6 +5,7 @@ import { useGetCashflowCalendarQuery } from "../../store/api.ts";
 import { formatMinor, currencySign } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { baseSign } from "../../lib/currency.ts";
 
 // Cashflow-календар: місячна сітка очікуваних списань (підписки/розстрочки) по днях +
 // проєкція ліквідної подушки «наперед» → видно провали ліквідності. Дані — /analytics/cashflow-calendar.
@@ -84,7 +85,7 @@ export function CashflowCalendar() {
       </div>
 
       {low && low.min < 0 && (
-        <div className="cf-warn">{t("cfcal.warnNegative", { date: dayFmt.format(new Date(`${low.minDate}T00:00:00`)), amount: `${formatMinor(low.min, { decimals: false })} ₴` })}</div>
+        <div className="cf-warn">{t("cfcal.warnNegative", { date: dayFmt.format(new Date(`${low.minDate}T00:00:00`)), amount: `${formatMinor(low.min, { decimals: false })} ${baseSign()}` })}</div>
       )}
 
       <div className="cf-wd">{WD.map((d) => <span key={d}>{d}</span>)}</div>
@@ -118,7 +119,7 @@ export function CashflowCalendar() {
               type="button"
               className={`cf-day has ${isToday ? "today" : ""} ${bal != null && bal < 0 ? "danger" : ""} ${open === dateStr ? "open" : ""}`}
               style={{ background: `color-mix(in srgb, var(--neg) ${Math.round(intensity * 100)}%, var(--surface))` }}
-              aria-label={t("cfcal.dayAria", { date: dayFmt.format(new Date(`${dateStr}T00:00:00`)), count: cell.items.length, amount: `${formatMinor(cell.total, { decimals: false })} ₴` })}
+              aria-label={t("cfcal.dayAria", { date: dayFmt.format(new Date(`${dateStr}T00:00:00`)), count: cell.items.length, amount: `${formatMinor(cell.total, { decimals: false })} ${baseSign()}` })}
               onMouseEnter={() => setOpen(dateStr)}
               onMouseLeave={() => setOpen((o) => (o === dateStr ? null : o))}
               onFocus={() => setOpen(dateStr)}
@@ -157,7 +158,7 @@ export function CashflowCalendar() {
                       <span className="cf-pop-name">{it.title}</span>
                       {/* Валютний план: показуємо суму у валюті + ₴-еквівалент (сітка рахує в ₴). */}
                       <span className={`cf-pop-amt ${it.amount < 0 ? "in" : ""}`}>
-                        {it.amount < 0 ? "+" : "−"}{formatMinor(Math.abs(it.amount), { decimals: false })} ₴
+                        {it.amount < 0 ? "+" : "−"}{formatMinor(Math.abs(it.amount), { decimals: false })} {baseSign()}
                         {it.currency !== 980 && <span className="cf-pop-orig"> ({formatMinor(Math.abs(it.amountOrig), { decimals: false })} {currencySign(it.currency)})</span>}
                       </span>
                     </span>
@@ -165,12 +166,12 @@ export function CashflowCalendar() {
                   <span className="cf-pop-foot">
                     <span>{t("cfcal.dayTotal")}</span>
                     <b className={cell.total < 0 ? "in" : ""}>
-                      {cell.total < 0 ? "+" : "−"}{formatMinor(Math.abs(cell.total), { decimals: false })} ₴
+                      {cell.total < 0 ? "+" : "−"}{formatMinor(Math.abs(cell.total), { decimals: false })} {baseSign()}
                     </b>
                   </span>
                   {bal != null && (
                     <span className={`cf-pop-bal ${bal < 0 ? "neg" : ""}`}>
-                      {t("cfcal.cushionAfter", { amount: `${formatMinor(bal, { decimals: false })} ₴` })}
+                      {t("cfcal.cushionAfter", { amount: `${formatMinor(bal, { decimals: false })} ${baseSign()}` })}
                     </span>
                   )}
                 </span>
@@ -181,8 +182,8 @@ export function CashflowCalendar() {
       </div>
 
       <div className="cf-foot">
-        <span>{t("cfcal.monthTotal")} <b>{formatMinor(monthTotal, { decimals: false })} ₴</b></span>
-        <span className="muted">{t("cfcal.cushionStart", { amount: `${formatMinor(data.cushion, { decimals: false })} ₴` })}</span>
+        <span>{t("cfcal.monthTotal")} <b>{formatMinor(monthTotal, { decimals: false })} {baseSign()}</b></span>
+        <span className="muted">{t("cfcal.cushionStart", { amount: `${formatMinor(data.cushion, { decimals: false })} ${baseSign()}` })}</span>
       </div>
     </div>
   );

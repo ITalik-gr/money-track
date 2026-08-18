@@ -213,7 +213,7 @@ export function TxDetail() {
               {neutralTx && <Icon name="swap" size={19} className="hero-swap" />}
               {!neutralTx && heroAmount > 0 ? "+" : ""}
               {numFmt({ minimumFractionDigits: 2, maximumFractionDigits: 2 }).format((neutralTx ? Math.abs(heroAmount) : heroAmount) / 100)}
-              <span className="cur">{tx.currency_code === 840 ? "$" : tx.currency_code === 978 ? "€" : "₴"}</span>
+              <span className="cur">{currencySign(tx.currency_code)}</span>
             </div>
             {reimbursedMinor > 0 && (
               <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>

@@ -12,7 +12,7 @@
  */
 import type { Env } from "../../env.ts";
 import type { AppDb } from "../platform/db-shim.ts";
-import { getRates } from "./finance.ts";
+import { getRates } from "./money.ts";
 import { STATS_JOINS, INCOME_WHERE, incomeSum, valueMode, localMonthStart, localYm } from "./stats.ts";
 
 /** Тип цілі — від нього залежить, ЯК читати прогрес, а не лише як його підписати. */
@@ -135,7 +135,7 @@ interface AutofillGoal {
  * Канон (`INCOME_WHERE` + `incomeSum`), тож це та сама цифра, що показує Статистика.
  */
 async function prevMonthIncome(env: Env, now: number): Promise<number> {
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const from = localMonthStart(now, -1);
   const to = localMonthStart(now);

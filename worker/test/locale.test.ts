@@ -106,9 +106,11 @@ test("locale: the demo seed carries no language of its own", async () => {
       );
     }
   }
-  // Only the language is dropped. Removing more would empty the demo's pre-baked advice, which is
-  // the whole reason the sandbox looks like a real account at $0.
-  assert.deepEqual([...DEMO_EXCLUDED_STATE_KEYS], ["locale"]);
+  // Only the reader's own preferences are dropped — language and display currency (§BASE-CUR),
+  // which are the two keys the fixture carries about the OWNER rather than about the data.
+  // Removing more would empty the demo's pre-baked advice, which is the whole reason the sandbox
+  // looks like a real account at $0.
+  assert.deepEqual([...DEMO_EXCLUDED_STATE_KEYS], ["locale", "display_currency"]);
 });
 
 /**

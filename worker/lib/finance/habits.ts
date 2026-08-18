@@ -10,7 +10,7 @@
 // This looks at what the bank actually did, so it finds the ones never declared — which is the
 // entire point, since an undeclared recurring charge is the one nobody is tracking.
 import { localYm, localMonthStart, valueMode } from "./stats.ts";
-import { getRates } from "./finance.ts";
+import { getRates } from "./money.ts";
 import type { Env } from "../../env.ts";
 import type { HabitChange, Habits } from "../../../shared/api/analytics.ts";
 
@@ -27,7 +27,7 @@ import type { HabitChange, Habits } from "../../../shared/api/analytics.ts";
 export async function collectHabits(env: Env, now: number): Promise<Habits> {
   const analyticsRepo = await import("../../repo/analytics.ts");
   const planningRepo = await import("../../repo/planning.ts");
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);   // always UAH — the lists compare merchants with each other
   const from = localMonthStart(now, -9);
   const [rows, declared, dismissed] = await Promise.all([

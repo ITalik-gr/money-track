@@ -10,18 +10,22 @@
 // debt, so accounts cannot be summed before the reconstruction. cushion/debt/investment are then
 // composed by the SAME rule as `fundsBreakdown` (§R3), or "now" on the chart would disagree with
 // the adviser.
-import type { AppDb } from "../platform/db-shim.ts";
+import type { Env } from "../../env.ts";
 import type { Networth } from "../../../shared/api/analytics.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 import * as accountsRepo from "../../repo/accounts.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
-import { getRates, toUAHMinor, ratesForDays, type Rates } from "./finance.ts";
+import { toBaseMinor, ratesForDays, moneyScope, type Rates } from "./money.ts";
 import { localMonthStart } from "./stats.ts";
 import { ownFundsMinor } from "./own-funds.ts";
 import { st } from "../platform/i18n.ts";
 
-export async function buildNetworth(db: AppDb, months: number, locale: NotifLocale): Promise<Networth> {
-  const rates = await getRates(db);
+export async function buildNetworth(env: Env, months: number, locale: NotifLocale): Promise<Networth> {
+  // §BASE-CUR: the base is resolved ONCE here and threaded into `ratesForDays`, so every point on
+  // the line is converted with the rate of ITS OWN day. Scaling a ₴-series afterwards would fold
+  // the whole move of the dollar into the curve as if it were a money move.
+  const { base, rates } = await moneyScope(env);
+  const db = env.DB;
   const now = Math.floor(Date.now() / 1000);
   const from = localMonthStart(now, -months + 1);
 
@@ -69,7 +73,7 @@ export async function buildNetworth(db: AppDb, months: number, locale: NotifLoca
   // Рівно `months` точок: `months-1` кінців місяця + «зараз». Без обрізки в масив потрапляв
   // ще й кінець місяця ПЕРЕД вікном (13 точок на запит «12 міс»).
   pointDays.splice(months - 1);
-  const { byDay, covered } = await ratesForDays(db, [...pointDays.map((p) => iso(p.t)), iso(now)].sort());
+  const { byDay, covered } = await ratesForDays(db, [...pointDays.map((p) => iso(p.t)), iso(now)].sort(), base);
 
   // Зводимо стан рахунків у cushion/debt/investment — правило `fundsBreakdown`.
   const snapshot = (t: number, at: Rates) => {
@@ -78,7 +82,7 @@ export async function buildNetworth(db: AppDb, months: number, locale: NotifLoca
       // Ручний рахунок з історією — беремо зріз на t; інакше tx-реконструйований `own`.
       const hb = a.is_manual === 1 ? manualBalanceAt(a.id, t) : null;
       const ownMinor = hb != null ? ownFundsMinor(hb, a.credit_limit) : (own.get(a.id) ?? 0);
-      const uah = toUAHMinor(ownMinor, a.currency_code, at);
+      const uah = toBaseMinor(ownMinor, a.currency_code, at);
       if (roleOf(a) === "investment") { if (uah > 0) investment += uah; else debt += -uah; }
       else { if (uah >= 0) cushion += uah; else debt += -uah; }
     }

@@ -7,7 +7,8 @@ import { type AdviceResult, type AiFact, evaluateGroup, generateAdvice, proposeB
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
 import { getState, setState } from "../finance/repo.ts";
-import { getRates, toUAHMinor, type Rates } from "../finance/finance.ts";
+import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } from "../finance/money.ts";
+import { currencySign } from "../../../shared/currency.ts";
 import { nextChargeUnix, plannedUAH, monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
@@ -15,13 +16,13 @@ import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
 import { ownFundsMinor } from "../finance/own-funds.ts";
 import { buildWeekdayAnalytics } from "../finance/weekday.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
-import { st, num, resolveLocale } from "../platform/i18n.ts";
+import { st, stLit, num, resolveLocale } from "../platform/i18n.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
 function txLabel(t: TxLabelRow): { id: string; label: string } {
   const name = (t.merchant || t.comment || "operation").slice(0, 24);
-  const sign = t.currency_code === 840 ? "$" : t.currency_code === 978 ? "€" : "₴";
+  const sign = currencySign(t.currency_code);
   return { id: t.id, label: `${name} ${Math.round(t.amount / 100)}${sign}` };
 }
 
@@ -74,11 +75,11 @@ export async function fundsBreakdown(env: Env, ratesIn?: Rates): Promise<FundsBr
   const accounts = await env.DB.prepare(
     "SELECT title, type, role, ai_note, balance, credit_limit, currency_code FROM accounts WHERE is_active = 1",
   ).all<{ title: string | null; type: string | null; role: string | null; ai_note: string | null; balance: number; credit_limit: number; currency_code: number }>();
-  const rates = ratesIn ?? await getRates(env.DB);
+  const rates = ratesIn ?? await getRates(env);
   let cushion = 0, debt = 0, investment = 0;
   const list: AccountFunds[] = [];
   for (const a of accounts.results ?? []) {
-    const own = toUAHMinor(ownFundsMinor(a.balance, a.credit_limit), a.currency_code, rates);
+    const own = toBaseMinor(ownFundsMinor(a.balance, a.credit_limit), a.currency_code, rates);
     const role: "liquid" | "investment" = a.role === "investment" ? "investment" : "liquid";
     if (role === "investment") { if (own > 0) investment += own; else debt += -own; }
     else { if (own >= 0) cushion += own; else debt += -own; }
@@ -106,7 +107,7 @@ export async function financeHealth(env: Env): Promise<FinanceHealth> {
   const monthStart = localMonthStart(now);
   // One snapshot for the whole answer (§D5) — health mixes funds with spending levels, and the
   // two halves resting on different rates would be a disagreement nobody could see.
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const [funds, levels, incomeRows] = await Promise.all([
     fundsBreakdown(env, rates),
@@ -195,7 +196,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
   const from6mo = localMonthStart(now, -5);
   const prevMonthStart = localMonthStart(now, -1);
 
-  const rates = ratesIn ?? await getRates(env.DB); // §D5: приймаємо вже прочитаний знімок
+  const rates = ratesIn ?? await getRates(env); // §D5: приймаємо вже прочитаний знімок
   const { mult } = valueMode(rates, null); // канонічно, зведено в ₴
   const [funds, levels, cats, merchants, events, importance, trend, budgetRows, monthByCat, prevMonthByCat, subsAgg, split, upcomingRows, weekdayRows] = await Promise.all([
     fundsBreakdown(env, rates), // §D5: той самий знімок курсів, що й решта цього контексту
@@ -495,7 +496,9 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   const loc = await resolveLocale(env);
   const uah = (minor: number) => Math.round(minor / 100);
   const n = (v: number) => num(loc, v);
-  const fmt = (minor: number) => `${n(uah(minor))} ₴`;
+  // §BASE-CUR: one symbol, resolved once, threaded into every template below as `cur`.
+  const cur = currencySign(await resolveBaseCurrency(env));
+  const fmt = (minor: number) => (loc === "uk" ? `${n(uah(minor))} ${cur}` : `${cur}${n(uah(minor))}`);
 
   type Cat = { id: number; name: string; avg_month_uah: number };
   const cats = (context.top_categories as Cat[] | undefined) ?? [];
@@ -515,8 +518,8 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
     const cut = Math.round(top.avg_month_uah * 0.15);
     suggestions.push({
       title: st(loc, "advTopCatTitle", { name: top.name }),
-      detail: st(loc, "advTopCatDetail", { avg: n(top.avg_month_uah), cut: n(cut), year: n(cut * 12) }),
-      action: { type: "create_budget", label: st(loc, "advTopCatAction", { amount: n(top.avg_month_uah - cut), name: top.name }), category_id: top.id, category_name: top.name, amount_uah: top.avg_month_uah - cut },
+      detail: st(loc, "advTopCatDetail", { cur, avg: n(top.avg_month_uah), cut: n(cut), year: n(cut * 12) }),
+      action: { type: "create_budget", label: st(loc, "advTopCatAction", { cur, amount: n(top.avg_month_uah - cut), name: top.name }), category_id: top.id, category_name: top.name, amount_uah: top.avg_month_uah - cut },
     });
   }
 
@@ -525,7 +528,7 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   if (optional && optional.spent_90d_uah > 0) {
     suggestions.push({
       title: st(loc, "advOptionalTitle"),
-      detail: st(loc, "advOptionalDetail", { sum: n(optional.spent_90d_uah), perMonth: n(Math.round(optional.spent_90d_uah / 3)) }),
+      detail: st(loc, "advOptionalDetail", { cur, sum: n(optional.spent_90d_uah), perMonth: n(Math.round(optional.spent_90d_uah / 3)) }),
       action: null,
     });
   }
@@ -544,7 +547,7 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   if (subsMonthly > 0) {
     suggestions.push({
       title: st(loc, "advSubsTitle"),
-      detail: st(loc, "advSubsDetail", { month: n(subsMonthly), year: n(subsMonthly * 12) }),
+      detail: st(loc, "advSubsDetail", { cur, month: n(subsMonthly), year: n(subsMonthly * 12) }),
       action: null,
     });
   }
@@ -554,8 +557,8 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   if (soon.length) {
     const total = soon.reduce((s, u) => s + u.amount_uah, 0);
     suggestions.push({
-      title: st(loc, "advUpcomingTitle", { total: n(total) }),
-      detail: soon.slice(0, 4).map((u) => st(loc, "advUpcomingItem", { title: u.title, amount: n(u.amount_uah), days: u.in_days })).join(" · "),
+      title: st(loc, "advUpcomingTitle", { cur, total: n(total) }),
+      detail: soon.slice(0, 4).map((u) => st(loc, "advUpcomingItem", { cur, title: u.title, amount: n(u.amount_uah), days: u.in_days })).join(" · "),
       action: null,
     });
   }
@@ -632,7 +635,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
   const now = Math.floor(Date.now() / 1000);
   const from90 = now - 90 * 86400;
 
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const [ownFunds, spendRows, budgetRows] = await Promise.all([
     ownFundsUAH(env, rates),
@@ -696,7 +699,7 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
   const loc = await resolveLocale(env);
   const now = Math.floor(Date.now() / 1000);
   const from90 = now - 90 * 86400;
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const [ownFunds, spendRows, budgetRows] = await Promise.all([
     ownFundsUAH(env, rates),
@@ -800,21 +803,39 @@ async function groupPayload(env: Env, eventId: number) {
      FROM savings_goals g LEFT JOIN accounts a ON a.id = g.account_id
      WHERE g.id = ?`,
   ).bind(ev.goal_id).first<{ name: string; target_amount: number; current: number }>();
+  const loc = await resolveLocale(env);
+  const rates = await getRates(env);
+  /**
+   * ⚠️ **A trip's FOREIGN spending used to be dropped here** — `AND t.currency_code = 980`.
+   *
+   * The same hole was found and closed twice before, in `/events` and in `/events/:id`, with the
+   * note that a trip is the worst possible place for it: abroad is exactly where another currency
+   * appears, so the group whose total most needed the conversion was the one silently reporting
+   * only its hryvnia half. The AI close-out was the third copy, and the last one nobody had
+   * checked — it reads the same event and told the owner it came in under budget.
+   *
+   * Now every row is converted through the canon (`toBaseMinor`), like the list and the page.
+   */
   const txs = await env.DB.prepare(
     `SELECT t.id, t.merchant, t.comment, t.amount, t.currency_code,
-            COALESCE(c.name, 'uncategorised') AS cat
+            COALESCE(${catNameSql(loc, "c.name")}, ${stLit(loc, "uncategorized")}) AS cat
      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.event_id = ? AND t.currency_code = 980 ORDER BY t.amount ASC`,
+     WHERE t.event_id = ? ORDER BY t.amount ASC`,
   ).bind(eventId).all<TxLabelRow & { cat: string }>();
   const list = txs.results ?? [];
-  const spent = list.filter((t) => t.amount < 0).reduce((s, t) => s - t.amount, 0);
-  const income = list.filter((t) => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+  // §BASE-CUR: the group's own figures and `monthly_burn_uah` two blocks down have to be in ONE
+  // unit. Handing the model both un-reconciled is how a trip gets compared against a burn rate
+  // 41× its own size — and the sentence it writes about that reads perfectly.
+  const inBase = (minorUah: number) => Math.round(minorUah * uahToBase(rates));
+  const conv = (t: TxLabelRow) => toBaseMinor(t.amount, t.currency_code, rates);
+  const spent = list.filter((t) => t.amount < 0).reduce((s, t) => s - conv(t), 0);
+  const income = list.filter((t) => t.amount > 0).reduce((s, t) => s + conv(t), 0);
   const byCat = new Map<string, number>();
-  for (const t of list) if (t.amount < 0) byCat.set(t.cat, (byCat.get(t.cat) ?? 0) - t.amount);
+  for (const t of list) if (t.amount < 0) byCat.set(t.cat, (byCat.get(t.cat) ?? 0) - conv(t));
 
   // Місячний burn + runway для масштабу.
   const now = Math.floor(Date.now() / 1000);
-  const { mult: burnMult } = valueMode(await getRates(env.DB), null);
+  const { mult: burnMult } = valueMode(rates, null);
   const burnRow = await env.DB.prepare(
     `SELECT ${spendSum(burnMult)} AS spent FROM transactions t ${STATS_JOINS} WHERE t.time >= ?`,
   ).bind(now - 90 * 86400).first<{ spent: number }>();
@@ -831,17 +852,17 @@ async function groupPayload(env: Env, eventId: number) {
       total_income_uah: Math.round(income / 100),
       tx_count: list.length,
       // §EVENT-GOAL: only present when linked, so the model never has to reason about a null.
-      ...(ev.budget != null ? { budget_uah: Math.round(ev.budget / 100) } : {}),
+      ...(ev.budget != null ? { budget_uah: Math.round(inBase(ev.budget) / 100) } : {}),
       ...(goal
         ? {
           goal: {
             name: goal.name,
-            saved_uah: Math.round(goal.current / 100),
-            target_uah: Math.round(goal.target_amount / 100),
+            saved_uah: Math.round(inBase(goal.current) / 100),
+            target_uah: Math.round(inBase(goal.target_amount) / 100),
             // Stated rather than left to arithmetic: this is the whole question the link exists
             // to answer, and a model asked to subtract two numbers will sometimes not.
-            covered: spent <= goal.current,
-            over_saved_uah: Math.max(0, Math.round((spent - goal.current) / 100)),
+            covered: spent <= inBase(goal.current),
+            over_saved_uah: Math.max(0, Math.round((spent - inBase(goal.current)) / 100)),
           },
         }
         : {}),

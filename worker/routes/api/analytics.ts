@@ -2,15 +2,15 @@
 // (`lib/finance/stats.ts` on the JS side, `repo/analytics.ts` on the SQL side); a handler that
 // starts computing its own total is the §CUR-PLAN mechanism restarting.
 import {
-  getPeriodMode, valueMode, uahMult, periodBounds,
+  getPeriodMode, valueMode, baseMult, periodBounds,
   recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localParts,
   type Preset,
 } from "../../lib/finance/stats.ts";
-import { computeSummary, getRates } from "../../lib/finance/finance.ts";
+import { computeSummary } from "../../lib/finance/finance.ts";
+import { getRates } from "../../lib/finance/money.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import * as receiptsRepo from "../../repo/receipts.ts";
-import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
 import { buildWeekdayAnalytics } from "../../lib/finance/weekday.ts";
@@ -33,7 +33,7 @@ export const analytics = apiRoutes();
 // transfers excluded. One call to keep the page snappy.
 analytics.get("/analytics/overview", async (c) => {
   const url = new URL(c.req.url);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const mode = await getPeriodMode(c.env.DB);
   const presetParam = url.searchParams.get("preset") as Preset | null;
 
@@ -88,7 +88,7 @@ analytics.get("/analytics/monthly-history", async (c) => {
 // §4 Safe-to-spend: скільки вільно до кінця календарного місяця. Розрахунок — `lib/finance/
 // cashflow.ts` `safeToSpend` (винесено під C3): роут дає лише «зараз».
 analytics.get("/analytics/safe-to-spend", async (c) => {
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null);
   const { safeToSpend } = await import("../../lib/finance/cashflow.ts");
   const now = Math.floor(Date.now() / 1000);
@@ -102,8 +102,8 @@ analytics.get("/analytics/safe-to-spend", async (c) => {
 analytics.get("/analytics/capital-trend", async (c) => {
   const url = new URL(c.req.url);
   const months = Math.min(Math.max(Number(url.searchParams.get("months") ?? 6), 1), 24);
-  const rates = await getRates(c.env.DB);
-  const mult = uahMult(rates);
+  const rates = await getRates(c.env);
+  const mult = baseMult(rates);
   const summary = await computeSummary(c.env);
 
   const now = Math.floor(Date.now() / 1000);
@@ -146,7 +146,7 @@ analytics.get("/analytics/capital-trend", async (c) => {
 analytics.get("/analytics/networth", async (c) => {
   const url = new URL(c.req.url);
   const months = Math.min(Math.max(Number(url.searchParams.get("months") ?? 12), 2), 24);
-  return c.json(await buildNetworth(c.env.DB, months, c.get("locale")) satisfies Networth);
+  return c.json(await buildNetworth(c.env, months, c.get("locale")) satisfies Networth);
 });
 
 // §P3: сторінка мерчанта — агрегати по одному мерчанту (уся історія + тренд 6 міс + частка
@@ -154,7 +154,7 @@ analytics.get("/analytics/networth", async (c) => {
 analytics.get("/analytics/merchant", async (c) => {
   const name = new URL(c.req.url).searchParams.get("name");
   if (!name) return c.json({ error: "name required" }, 400);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null);
   const now = Math.floor(Date.now() / 1000);
   const from6 = localMonthStart(now, -5);
@@ -193,7 +193,7 @@ analytics.get("/analytics/merchant", async (c) => {
 // рівного за довжиною B. Тотали + розбивка по категоріях (рол-ап підкатегорій), per-currency.
 analytics.get("/analytics/compare", async (c) => {
   const url = new URL(c.req.url);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
   const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
   const span = to - from;
@@ -226,7 +226,7 @@ analytics.get("/analytics/forecast", async (c) => {
   const daysElapsed = dayOfMonth;
   const daysRemaining = daysInMonth - dayOfMonth;
 
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null); // forecast завжди зведено в ₴
   // Трейлінг: до 3 ПОВНИХ місяців перед поточним — для історичного якоря прогнозу.
   const trailStart = localMonthStart(now, -3);
@@ -263,7 +263,7 @@ analytics.get("/analytics/forecast", async (c) => {
   // §SUB-MONTH: розклад дає канонічний `chargesBetween` — тижневий план у залишку місяця
   // спишеться кілька разів, а власний однопрохідний цикл рахував рівно одне списання на план.
   const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
-  const fxRates = await getRates(c.env.DB);
+  const fxRates = await getRates(c.env);
   const planned = await planningRepo.activeWithTitles(c.env.DB);
 
   // §CUR-PLAN: суми зводимо в ₴ — вони йдуть в один ряд із витратами місяця (теж ₴).
@@ -305,7 +305,7 @@ analytics.get("/analytics/forecast", async (c) => {
 // Канонічно (INCOME_WHERE), зведено в ₴. Дзеркалить визначення Статистики.
 analytics.get("/analytics/income", async (c) => {
   const url = new URL(c.req.url);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const mode = await getPeriodMode(c.env.DB);
   const presetParam = (url.searchParams.get("preset") as Preset | null) ?? "month";
   const preset: Preset = ["week", "month", "quarter", "year"].includes(presetParam) ? presetParam : "month";
@@ -371,7 +371,7 @@ analytics.get("/analytics/cashflow-calendar", async (c) => {
 
   const { cashflowMoves } = await import("../../lib/finance/cashflow.ts");
   const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
-  const [funds, rates] = await Promise.all([fundsBreakdown(c.env), getRates(c.env.DB)]);
+  const [funds, rates] = await Promise.all([fundsBreakdown(c.env), getRates(c.env)]);
   const items = await cashflowMoves(c.env.DB, rates, from, to);
 
   return c.json({ from, to, now, cushion: funds.cushion, items } satisfies CashflowCalendar);
@@ -444,7 +444,7 @@ analytics.get("/analytics/price-drift", async (c) => {
 //  • anomalies: категорії, чий прогноз на кінець місяця значно вищий за звичний (трейлінг 6 міс);
 //  • pace: темп по топ-категоріях — факт (MTD) vs звичний місяць vs лінійний прогноз.
 analytics.get("/analytics/patterns", async (c) => {
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null);
   const now = Math.floor(Date.now() / 1000);
   const monthStart = localMonthStart(now);
@@ -465,11 +465,6 @@ analytics.get("/analytics/patterns", async (c) => {
     // (n — к-ть операцій, biggest — найбільша одна) для чесного прогнозу.
     analyticsRepo.currentMonthSplitByCategory(c.env.DB, mult, recurExpr, { from: monthStart, to: now }),
   ]);
-  // `recurringOneoffSplit` builds category names in stats.ts (no locale there); localize the
-  // displayed one-off items here instead of threading locale through the canon.
-  const loc = c.get("locale");
-  split.oneoff_items = split.oneoff_items.map((it) => ({ ...it, category: localizeCatName(loc, it.category) ?? it.category }));
-
   const curSplitMap = new Map<string, { recurring: number; oneoff: number; n: number; biggest: number }>();
   for (const r of curSplit) curSplitMap.set(String(r.id ?? "null"), { recurring: r.recurring, oneoff: r.oneoff, n: r.n, biggest: r.biggest });
 
@@ -527,7 +522,7 @@ analytics.get("/analytics/category", async (c) => {
   const category = Number(url.searchParams.get("category"));
   const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
   const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
   const { mult, curFilter } = valueMode(rates, cur);
 
@@ -549,7 +544,7 @@ analytics.get("/analytics/slice", async (c) => {
   const value = url.searchParams.get("value") ?? "";
   const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
   const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
   const { mult, curFilter } = valueMode(rates, cur);
   const limit = Math.min(Number(url.searchParams.get("limit") ?? 60), 300);
@@ -577,7 +572,7 @@ analytics.get("/analytics/by-category", async (c) => {
   const url = new URL(c.req.url);
   const from = Number(url.searchParams.get("from") ?? 0);
   const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null);
   // Той самий запит, що живить `byCategory` в /analytics/overview — без валютного фільтра.
   return c.json(await analyticsRepo.spendByCategory(
@@ -594,7 +589,7 @@ analytics.get("/analytics/by-category", async (c) => {
 // екран отримали б два різні числа про одне й те саме.
 analytics.get("/analytics/weekday", async (c) => {
   const url = new URL(c.req.url);
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const mode = await getPeriodMode(c.env.DB);
   const presetParam = url.searchParams.get("preset") as Preset | null;
   const now = Math.floor(Date.now() / 1000);
@@ -631,7 +626,7 @@ analytics.get("/analytics/spark", async (c) => {
   const buckets: string[] = [];
   for (let i = N - 1; i >= 0; i--) buckets.push(localYm(localMonthStart(now, -i)));
   const bIdx = new Map(buckets.map((b, i) => [b, i]));
-  const { mult } = valueMode(await getRates(c.env.DB), null);
+  const { mult } = valueMode(await getRates(c.env), null);
   const [cat, mer] = await Promise.all([
     analyticsRepo.categoryMonthSeries(c.env.DB, mult, now, from),
     analyticsRepo.merchantMonthSeries(c.env.DB, mult, now, from),

@@ -9,12 +9,12 @@ import type { GoalContribution } from "../../shared/api/planning.ts";
  * `current` is NOT here: it is computed by the route (jar balance when linked, manual amount
  * otherwise), which is why this is `SavingsGoal` minus that one field rather than a twin.
  */
-export type GoalRow = Omit<SavingsGoal, "current">;
+export type GoalRow = Omit<SavingsGoal, "current"> & { account_currency?: number | null };
 
 /** Active goals with their linked jar's balance joined in, newest first. */
 export async function listActive(db: AppDb): Promise<GoalRow[]> {
   const r = await db.prepare(
-    `SELECT g.*, a.balance AS account_balance, a.title AS account_title
+    `SELECT g.*, a.balance AS account_balance, a.currency_code AS account_currency, a.title AS account_title
      FROM savings_goals g
      LEFT JOIN accounts a ON a.id = g.account_id
      WHERE g.is_active = 1 ORDER BY g.created_at DESC`,

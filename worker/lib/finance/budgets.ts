@@ -18,6 +18,7 @@ import type { Env } from "../../env.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "./categories-i18n.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
+import { getRates, uahToBase, hryvniaMult } from "./money.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_AMOUNT, amountSum,
   categoryMonthlyLevels, projectSpend, localMonthStart, localYm,
@@ -119,8 +120,12 @@ async function spendBetween(env: Env, mult: string, from: number, to: number) {
  * історії наростає з цього моменту.
  */
 export async function closeBudgetMonths(
-  env: Env, mult: string, now = Math.floor(Date.now() / 1000),
+  env: Env, now = Math.floor(Date.now() / 1000),
 ): Promise<{ ym: string; closed: number }> {
+  // §BASE-CUR: a CLOSED month is a record, so it is written in hryvnia — the unit the limits it
+  // sits beside are stored in. Using the reader's display multiplier would make the archive say
+  // dollars in the months a dollar reader happened to trigger the cron, and hryvnia in the rest.
+  const mult = await hryvniaMult(env);
   const monthStart = localMonthStart(now);
   const prevStart = localMonthStart(now, -1);
   const ym = localYm(prevStart);
@@ -156,6 +161,12 @@ export async function budgetStatus(
   // donut two blocks above, which reads the same categories through `catNameSql`. One concept,
   // two resolutions, diverging exactly where the reader can see both at once.
   const locale = await resolveLocale(env);
+  // §BASE-CUR: the LIMIT is stored in hryvnia (`budgets.amount` has no currency column) while the
+  // SPEND beside it is rolled up into the reader's base. Comparing them un-converted is not a
+  // rounding error — it is a 41× wrong percentage on a dollar screen. One factor, applied to
+  // every stored figure that enters this function.
+  const uah = uahToBase(await getRates(env));
+  const inBase = (minorUah: number) => Math.round(minorUah * uah);
   const monthStart = localMonthStart(now);
   const nextMonthStart = localMonthStart(now, 1);
   const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
@@ -197,10 +208,11 @@ export async function budgetStatus(
     const sh = shapeByCat.get(b.id) ?? { n: 0, biggest: spent };
     const lv = levels.get(b.id);
     const rollover = !!b.rollover;
-    const carried = rollover ? carryFrom(prevMonth.get(b.id), b.amount) : 0;
+    const baseAmount = inBase(b.amount);
+    const carried = inBase(carryFrom(prevMonth.get(b.id), b.amount) * (rollover ? 1 : 0));
     // The effective limit. `carryFrom` clamps at −base, so this cannot go negative; it CAN be
     // exactly zero, which is the honest reading of "last month you spent this month's money too".
-    const amount = b.amount + carried;
+    const amount = baseAmount + carried;
     /**
      * §BUDGET-ZERO — a limit of 0 is a real limit, and it needs its own arithmetic.
      *
@@ -223,7 +235,7 @@ export async function budgetStatus(
     // history for `categoryMonthlyLevels`, and projecting against zero would call every such
     // envelope safe. The BASE limit, not the effective one — the level is a statement about how
     // much this category usually costs, and a carry-over says nothing about that.
-    const usual = lv?.level ?? b.amount;
+    const usual = lv?.level ?? baseAmount;
     const projected = projectSpend(spent, usual, elapsedFrac, lumpy);
     // A zero envelope has nothing to project INTO: "you are heading for 300 ₴ in a category you
     // said you would not spend in" is a forecast about a decision, not about a pace. The breach is
@@ -232,7 +244,7 @@ export async function budgetStatus(
     const ratio = zero ? (spent > 0 ? 1 : 0) : spent / denom;
     return {
       id: b.id, name: b.name,
-      amount, base_amount: b.amount, carried, rollover,
+      amount, base_amount: baseAmount, carried, rollover,
       spent, ratio,
       projected, projected_ratio: zero ? ratio : projected / denom, lumpy,
     };

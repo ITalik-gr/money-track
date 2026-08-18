@@ -8,6 +8,7 @@ import { Icon } from "../ui/Icon.tsx";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
 import { useT } from "../../i18n/index.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 function state(ratio: number): "ok" | "warn" | "over" {
   if (ratio >= 1) return "over";
@@ -52,7 +53,7 @@ export function EventBudget({ id, spent, budget }: { id: number; spent: number; 
             placeholder={t("eb.amountPlaceholder")} aria-label={t("eb.amountAriaLabel")}
             onKeyDown={(e) => { if (e.key === "Escape" && budget != null) { setEditing(false); setVal(String(Math.round(budget / 100))); } }}
           />
-          <span className="eb-cur">₴</span>
+          <span className="eb-cur">{baseSign()}</span>
           <button className="btn primary sm" disabled={isLoading}>{t("common.save")}</button>
           {budget != null && (
             <button type="button" className="btn ghost sm" onClick={() => { setEditing(false); setVal(String(Math.round(budget / 100))); }}>

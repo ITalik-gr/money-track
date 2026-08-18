@@ -90,6 +90,7 @@ runs all of them.
 | C7 | no literal route below a parameterised one that matches it; one prefix, one file | an endpoint silently unreachable — a real past outage | `scripts/check-route-order.mjs` |
 | C8 | `index.css` is imports only; every part imported; line ceiling per part | the 4 182-line stylesheet regrowing | `scripts/check-styles.mjs` |
 | C9 | every `className` has a rule, every rule has a `className` | a block shipping unstyled, and dead CSS reading as live | `scripts/check-styles-used.mjs` |
+| C10 | one conversion target: `getStoredRates` only in `money.ts`, no `₴` literal outside Telegram | a screen mixing the reader's currency with the hryvnia — arithmetic that renders perfectly and is wrong by the exchange rate | `scripts/check-currency.mjs` |
 
 Two things learned about the checks themselves:
 
@@ -122,6 +123,13 @@ Two things learned about the checks themselves:
   direction found 59 dead rules — `.advisor-ask*` is seven rules for a feature that no longer
   exists, `.drill-tx*` and `.chat-log` are a superseded naming generation — and removing them took
   `domains-a.css` under its C8 exception and let `settings.css` drop its exception entirely.
+- **C10 exists because §BASE-CUR works by NOT touching its call sites** (2026-08-18). The display
+  currency shipped by changing what `getRates` returns while leaving its name and its type alone,
+  so forty existing call sites started converting into the reader's currency without being edited.
+  That is what made the change tractable in one pass — and it is exactly what makes a regression
+  invisible: a caller that reaches for the raw table instead compiles, runs, and renders a
+  plausible number that is wrong by the exchange rate. `tsc` cannot tell two
+  `Record<string, number>` maps apart, so the check is the only thing that can.
   ⚠️ **The false positives are the whole design problem, and both kinds nearly caused damage.**
   Six `.recharts-*` rules are emitted by the library at runtime and looked exactly as dead as the
   rest; deleting them would have broken every chart. And `` `toast-${t.type}` `` produces class

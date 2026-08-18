@@ -280,7 +280,7 @@ export const REPORT_ID = 720;
  * `/events`, `/events/:id` and the `byEvent` breakdown in every `/analytics/overview` golden.
  *
  * The two attached transactions are deliberately in DIFFERENT currencies. Both event endpoints
- * roll their totals up in ₴ through `uahMult`, and both once filtered on `currency_code = 980`
+ * roll their totals up in ₴ through `baseMult`, and both once filtered on `currency_code = 980`
  * instead — which is the worst possible place for that hole, since a trip is exactly where
  * foreign currency shows up. A single-currency event would go green through the bug.
  */

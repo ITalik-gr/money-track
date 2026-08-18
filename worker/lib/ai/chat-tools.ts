@@ -15,7 +15,7 @@
  */
 import type { Env } from "../../env.ts";
 import type { ChatTool } from "./ai.ts";
-import { getRates } from "../finance/finance.ts";
+import { getRates } from "../finance/money.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { addFact } from "./facts.ts";
@@ -100,7 +100,7 @@ function parseToolDate(s: unknown, endOfDay = false): number | null {
 const isoDay = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
 
 export async function runFinanceTool(env: Env, name: string, input: Record<string, unknown>): Promise<unknown> {
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null); // завжди ₴
   /**
    * The tools speak the same language the model was shown — in BOTH directions.

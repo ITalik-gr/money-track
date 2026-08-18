@@ -375,7 +375,7 @@ function BudgetCard({
       </div>
 
       {/* A zero envelope gets no bar: there is no proportion to draw, and a full red bar next to
-          «витрачено 40 ₴» would suggest a limit of 40 ₴ was reached rather than a limit of 0
+          «витрачено 40 {baseSign()}» would suggest a limit of 40 {baseSign()} was reached rather than a limit of 0
           broken. The words above and the amount below say it exactly. */}
       {!zero && (
         <div className="bc-bar">

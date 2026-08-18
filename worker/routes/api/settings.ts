@@ -2,6 +2,8 @@
 // model, saved filters. `period_mode` decides the boundaries every other screen counts within.
 import { setState, getState } from "../../lib/finance/repo.ts";
 import { getPeriodMode } from "../../lib/finance/stats.ts";
+import { BASE_CURRENCY_KEY, resolveBaseCurrency, setBaseCurrency } from "../../lib/finance/money.ts";
+import { asBaseCurrency, BASE_CURRENCIES } from "../../../shared/currency.ts";
 
 import type { AppDb } from "../../lib/platform/db-shim.ts";
 import { st } from "../../lib/platform/i18n.ts";
@@ -38,6 +40,29 @@ settings.put("/settings/locale", async (c) => {
   if (!v) return c.json({ error: "invalid locale" }, 400);
   await setState(c.env.DB, "locale", v);
   return c.json({ ok: true, locale: v });
+});
+
+/**
+ * Display currency (§BASE-CUR) — which unit every rolled-up number is expressed in.
+ *
+ * GET returns the EFFECTIVE base (what the numbers on this screen are actually in) alongside the
+ * stored choice, which may be empty: an account that never picked one follows its language, and
+ * the two answers differ exactly then. The client needs both — one to print the sign, one to show
+ * the control as "not set" rather than as a choice nobody made.
+ */
+settings.get("/settings/base-currency", async (c) => {
+  const stored = asBaseCurrency(await getState(c.env.DB, BASE_CURRENCY_KEY)) ?? null;
+  return c.json({ currency: await resolveBaseCurrency(c.env), stored, options: [...BASE_CURRENCIES] });
+});
+
+settings.put("/settings/base-currency", async (c) => {
+  const { currency } = await c.req.json<{ currency: number | null }>();
+  // `null` clears the choice on purpose — going back to "follow my language" must be sayable,
+  // or the only way out of a choice is another choice (the §BUDGET-ZERO lesson, smaller).
+  const v = currency === null ? null : asBaseCurrency(currency);
+  if (currency !== null && !v) return c.json({ error: st(c.get("locale"), "errCurrencyUnsupported") }, 400);
+  await setBaseCurrency(c.env.DB, v ?? null);
+  return c.json({ ok: true, currency: await resolveBaseCurrency({ ...c.env, UI_CURRENCY: undefined }) });
 });
 
 // AI-моделі ОКРЕМО НА ЗАДАЧУ (report/advisor/insight/…): токен haiku|sonnet|opus на кожну.

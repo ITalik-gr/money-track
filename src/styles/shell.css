@@ -250,6 +250,14 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   }
 }
 .section-head:first-child { margin-top: 4px; }
+/* ⚠️ …unless the "first child" is only first because of a `<section>` wrapper.
+   The 4px above exists so the FIRST heading on a page does not push the content away from the
+   page header. But 67 blocks group themselves in `<section>` elements — the semantic thing to do
+   — and inside one every heading is a first child, so each of those silently lost the 26px gap
+   the design system says separates sections. That is why the app looked tighter the more
+   correctly a page was marked up. `:first-child` still wins where it was meant to: the page's own
+   first heading is a child of the page, not of a section. */
+section > .section-head:first-child { margin-top: 26px; }
 .section-head .label { margin-left: auto; }
 .section-head a.label:hover { color: var(--accent); }
 /* Дія в заголовку секції — праворуч і компактна (не переважає 15px h2) */

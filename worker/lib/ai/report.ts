@@ -3,7 +3,7 @@
 // періодом, тягне аномалії (подорожчання підписок, викиди) і описи операцій (user_note),
 // кличе Sonnet 5, зберігає структурований репорт у ai_reports. Ідемпотентно по періоду.
 import type { Env } from "../../env.ts";
-import { getRates } from "../finance/finance.ts";
+import { getRates } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { fundsBreakdown } from "./advisor.ts";
@@ -108,7 +108,7 @@ export async function buildReportContext(
   categories: CategoryDetail[];
 }> {
   const loc = await resolveLocale(env);
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const { from, to, prevFrom, prevTo } = resolveBounds(type, scope, range);
   const periodDays = Math.max(1, Math.round((to - from) / 86400));
@@ -216,7 +216,7 @@ export async function buildReportContext(
   const anomaliesHint: string[] = [];
   for (const a of actuals) {
     if (a.price_change_pct != null && a.price_change_pct >= 5) {
-      anomaliesHint.push(`subscription id=${a.id} rose by ${a.price_change_pct}% (latest ${a.last_amount != null ? money(a.last_amount) : "?"}₴)`);
+      anomaliesHint.push(`subscription id=${a.id} rose by ${a.price_change_pct}% (latest ${a.last_amount != null ? money(a.last_amount) : "?"})`);
     }
   }
 

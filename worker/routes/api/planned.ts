@@ -3,7 +3,7 @@
 // `period_amount` is in the PLAN's currency and its period is the PLAN's period: never sum it
 // raw. ₴ totals go through `plannedUAH`/`sumPlannedUAH` (§CUR-PLAN), a monthly burden through
 // `monthlyPlannedUAH` (§SUB-MONTH), and "what is charged before month end" through `chargesBetween`.
-import { getRates } from "../../lib/finance/finance.ts";
+import { getRates } from "../../lib/finance/money.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
@@ -207,7 +207,7 @@ planned.get("/planned/upcoming", async (c) => {
   const horizon = now + days * 86400;
 
   const { nextChargeUnix, plannedUAH } = await import("../../lib/finance/subscriptions.ts");
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const planned = await planningRepo.activeWithCategory(c.env.DB);
 
   // §CUR-PLAN: `amount` лишається у ВАЛЮТІ ПЛАНУ (щоб показати «$5», а не «≈208 ₴»),

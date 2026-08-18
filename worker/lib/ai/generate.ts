@@ -18,7 +18,7 @@
 import type { Env } from "../../env.ts";
 import type { AnthropicContentBlock } from "./ai.ts";
 import { callHaikuJson } from "./json.ts";
-import { replyLangDirective } from "./prompt.ts";
+import { replyLangDirective, moneyUnitDirective } from "./prompt.ts";
 import { getTaskModel } from "./models.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
@@ -48,7 +48,7 @@ export async function proposeBudgetLimits(
         "phrase, overall is 1-2 sentences about the logic of the plan. No markdown." +
         // Без цієї директиви план бюджетів приходив українською навіть на англійському екрані:
         // `reason`/`overall` — це текст, який читає користувач, а не ключі JSON.
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];
   return callHaikuJson<BudgetPlan>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 2200, await getTaskModel(env, "budget"));
@@ -130,7 +130,7 @@ export async function generateNotifyObservations(
         "answer's own language. " +
         "title ≤ 60 characters, body ≤ 200 characters, no markdown. " +
         'Answer with VALID JSON ONLY: {"observations":[{"title","body","severity":"info"|"warn"}]}' +
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];
   return callHaikuJson<{ observations?: NotifyObservation[] }>(
@@ -176,7 +176,7 @@ export async function generateAdvice(
         "and the effect in UAH). action is either null or {type:'create_budget', label, category_id (from " +
         "top_categories), category_name, amount_uah} when proposing an envelope limit for a category makes sense. " +
         "Amounts are in hryvnia." +
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];
   return callHaikuJson<AdviceResult>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 2200, await getTaskModel(env, "advisor"));
@@ -197,13 +197,13 @@ export async function evaluateGroup(
         "project) from the figures supplied (amounts in UAH): what it cost, how that compares with monthly burn and " +
         "the reserve (runway), whether it is expensive, where most of it went, whether there are anomalies. If the " +
         "payload carries transactions:[{id,label}] you may point at a notable operation inside facts.label or note " +
-        "as [tx:ID|short caption] (e.g. [tx:abc|MrGrill 150₴]). " +
+        "as [tx:ID|short caption] (e.g. [tx:abc|MrGrill 150]). " +
         "Answer with VALID JSON ONLY, no markdown: {headline (1 sentence — the main conclusion about the group), " +
         "facts:[{label, amount (UAH number or null), category (name or null), delta_pct (usually null), " +
         "tone ('pos'|'neg'|'neutral')}] (2-5), note (one short piece of advice, or a verdict on whether it was " +
         "expensive, or null)}." +
         // `headline`/`facts.label`/`note` читає людина — див. сусідні задачі.
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];
   return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 800, await getTaskModel(env, "group"));

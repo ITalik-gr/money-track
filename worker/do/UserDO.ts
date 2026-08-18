@@ -9,7 +9,7 @@ import { DoDatabase, type AppDb } from "../lib/platform/db-shim.ts";
 import { runMigrations } from "./migrate.ts";
 import { userApp } from "../user-app.ts";
 import { getSecret } from "../lib/platform/secrets.ts";
-import { OWNER_HEADER, USER_HEADER, localeFromHeader } from "../lib/platform/forward.ts";
+import { OWNER_HEADER, USER_HEADER, localeFromHeader, currencyFromHeader } from "../lib/platform/forward.ts";
 import type { ImportReport } from "./import-legacy.ts";
 import type { RestoreReport } from "./restore.ts";
 import type { Env } from "../env.ts";
@@ -58,7 +58,10 @@ export class UserDO extends DurableObject<Env> {
     if (isOwner) await this.rememberOwner();
     // The reader's language rides along per request (see `forward.ts`): the stored preference is
     // the fallback, not the answer, because it is unset for everyone who never opened Settings.
-    const env = await this.appEnv(request.headers.get(USER_HEADER) ?? undefined, isOwner, localeFromHeader(request));
+    const env = await this.appEnv(
+      request.headers.get(USER_HEADER) ?? undefined, isOwner,
+      localeFromHeader(request), currencyFromHeader(request),
+    );
     return userApp.fetch(request, env, execCtx);
   }
 
@@ -70,7 +73,9 @@ export class UserDO extends DurableObject<Env> {
    * API-key checks is what keeps the whole multi-user migration mechanical: not one handler
    * and not one SQL string had to be edited.
    */
-  private async appEnv(userId?: string, isOwner = false, uiLocale?: "uk" | "en"): Promise<Env> {
+  private async appEnv(
+    userId?: string, isOwner = false, uiLocale?: "uk" | "en", uiCurrency?: number,
+  ): Promise<Env> {
     const creds = await this.userCredentials(isOwner);
     // Demo sandbox: run AI on the dedicated demo key (P4.3), and null out the mono token so a
     // sandbox can never reach the real bank even if a guard were ever missed (it also never has a
@@ -103,6 +108,7 @@ export class UserDO extends DurableObject<Env> {
         ...(!isDemo && creds.PRIVAT ? { privat: creds.PRIVAT } : {}),
       },
       UI_LOCALE: uiLocale,
+      UI_CURRENCY: uiCurrency,
       onSecretsChanged: () => this.invalidateCredentials(),
       // Both of these used to be `setAlarm` calls at the call site. They now record WHEN the
       // work is owed and let `armAlarm` pick the earliest — the object has one alarm and more
@@ -165,7 +171,7 @@ export class UserDO extends DurableObject<Env> {
         await setState(this.db, "rates", ratesJson);
         // Snapshot the daily rate BEFORE anything reads it: the net-worth history recomputes
         // past points with the rate of their day, and one missed day is a permanent hole.
-        const { snapshotRates } = await import("../lib/finance/finance.ts");
+        const { snapshotRates } = await import("../lib/finance/money.ts");
         await snapshotRates(this.db);
       });
     }
@@ -186,10 +192,7 @@ export class UserDO extends DurableObject<Env> {
       // other 30 days of the month this costs one indexed lookup.
       await step("close_budget_month", async () => {
         const { closeBudgetMonths } = await import("../lib/finance/budgets.ts");
-        const { getRates } = await import("../lib/finance/finance.ts");
-        const { valueMode } = await import("../lib/finance/stats.ts");
-        const { mult } = valueMode(await getRates(env.DB), null);
-        await closeBudgetMonths(env, mult);
+        await closeBudgetMonths(env);
       });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");

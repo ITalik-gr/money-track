@@ -144,7 +144,10 @@
 .acct-sec { min-width: 0; container-type: inline-size; }
 /* :first-child не спрацює для другої колонки — у сітці «перша» лише одна секція, а верхній
    ряд має вирівнятись увесь. Тому відступ заголовка задаємо явно. */
-.acct-sec .section-head { margin-top: 18px; }
+/* ⚠️ `:first-child` in the selector is not decoration — it is what keeps this 18px winning over
+   the global `section > .section-head:first-child` (26px). `.acct-sec` IS a `<section>`, and the
+   whole point of the 18px is that these headings sit in a multi-column grid and must line up. */
+.acct-sec .section-head:first-child { margin-top: 18px; }
 /* Усередині вужчої колонки картки мають бути щільнішими, інакше в колонку влазить одна. */
 .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 6px; }
 /* Але коли секція займає всю сторінку (один банк — саме так у більшості), 185px давало 7-8

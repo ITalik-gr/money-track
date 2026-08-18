@@ -5,86 +5,7 @@ import type { Env } from "../../env.ts";
 import { ownFundsMinor, debtMinor } from "./own-funds.ts";
 import type { AppDb } from "../platform/db-shim.ts";
 import { getState } from "./repo.ts";
-
-// §R2-CUR2: єдине джерело правди для зведення сум у гривню. rates — мапа
-// «код валюти → скільки ₴ за 1 одиницю» (див. cron/rates). Суми в мінімальних
-// одиницях (копійки/центи); множення на курс дає ₴-копійки без ділення на 100.
-export type Rates = Record<string, number>;
-
-export async function getRates(db: AppDb): Promise<Rates> {
-  const raw = await db
-    .prepare("SELECT value FROM app_state WHERE key = 'rates'")
-    .first<{ value: string }>();
-  return raw ? (JSON.parse(raw.value) as Rates) : {};
-}
-
-/**
- * Зафіксувати поточні курси за добу (крон). Ідемпотентно: повторний прогін того самого дня
- * перезаписує запис, а не плодить дублі.
- *
- * Навіщо: без історії ретроспективні перерахунки (нетворт) беруть СЬОГОДНІШНІЙ курс на
- * минулі залишки, і коливання курсу читається як рух грошей.
- */
-export async function snapshotRates(db: AppDb, now = Math.floor(Date.now() / 1000)): Promise<number> {
-  const rates = await getRates(db);
-  const day = new Date(now * 1000).toISOString().slice(0, 10);
-  const entries = Object.entries(rates).filter(([code, rate]) => Number(code) > 0 && rate > 0);
-  if (!entries.length) return 0;
-  await db.batch(entries.map(([code, rate]) =>
-    db.prepare(
-      `INSERT INTO rate_history (day, code, rate, ts) VALUES (?, ?, ?, ?)
-       ON CONFLICT(day, code) DO UPDATE SET rate = excluded.rate, ts = excluded.ts`,
-    ).bind(day, Number(code), rate, now),
-  ));
-  return entries.length;
-}
-
-/**
- * Курси на КОЖНУ з переданих дат. Для дати без запису бере найсвіжіший ЛІВОРУЧ (курс тримається
- * до наступної фіксації), а якщо історії ще нема зовсім — фолбек на поточні курси.
- * Повертає {день: Rates} + `covered` — чи всі дати покриті історією (для чесного caveat).
- */
-export async function ratesForDays(
-  db: AppDb, days: string[],
-): Promise<{ byDay: Map<string, Rates>; covered: boolean }> {
-  const current = await getRates(db);
-  const byDay = new Map<string, Rates>();
-  if (!days.length) return { byDay, covered: true };
-
-  // Таблиці може ще не бути на remote (міграція 0024) — тоді просто працюємо на поточних
-  // курсах, як до фічі. Нова аналітика не має ламати вже робочий графік.
-  let rows: { results?: { day: string; code: number; rate: number }[] };
-  try {
-    rows = await db.prepare(
-      "SELECT day, code, rate FROM rate_history WHERE day <= ? ORDER BY day ASC",
-    ).bind(days[days.length - 1]).all<{ day: string; code: number; rate: number }>();
-  } catch {
-    for (const day of days) byDay.set(day, current);
-    return { byDay, covered: false };
-  }
-
-  // Один прохід: несемо «останній відомий курс» уперед по датах.
-  const running: Rates = {};
-  let i = 0;
-  const hist = rows.results ?? [];
-  let anyMissing = false;
-  for (const day of [...days].sort()) {
-    while (i < hist.length && hist[i].day <= day) {
-      running[String(hist[i].code)] = hist[i].rate;
-      i++;
-    }
-    if (!Object.keys(running).length) { byDay.set(day, current); anyMissing = true; }
-    else byDay.set(day, { ...running });
-  }
-  return { byDay, covered: !anyMissing };
-}
-
-/** Convert a minor-unit amount in `code` to UAH minor units. 0 rate → 0 (unknown). */
-export function toUAHMinor(amountMinor: number, code: number, rates: Rates): number {
-  if (code === 980) return amountMinor;
-  const rate = rates[String(code)] ?? 0;
-  return Math.round(amountMinor * rate);
-}
+import { getRates, toBaseMinor } from "./money.ts";
 
 // Find or create the dedicated cash account so cash entries never land on a card.
 //
@@ -150,20 +71,27 @@ export async function computeSummary(env: Env): Promise<Summary> {
 
   const byCurrency = new Map<number, number>();
   let credit: Summary["credit"] = null;
+  const rates = await getRates(env);
 
   for (const a of accounts.results ?? []) {
     const creditLimit = a.credit_limit ?? 0;
     const own = ownFundsMinor(a.balance, creditLimit);
     byCurrency.set(a.currency_code, (byCurrency.get(a.currency_code) ?? 0) + own);
     if (creditLimit > 0 && a.type === "black") {
-      credit = { accountId: a.id, limit: creditLimit, own, debt: debtMinor(a.balance, creditLimit) };
+      // §BASE-CUR: the card's three figures are ROLLED UP like the total, not left in the card's
+      // own currency — the banner prints them under one sign, so one un-converted number there
+      // would be a limit and a debt in different units sitting next to each other.
+      const conv = (v: number) => toBaseMinor(v, a.currency_code, rates);
+      credit = {
+        accountId: a.id, limit: conv(creditLimit), own: conv(own),
+        debt: conv(debtMinor(a.balance, creditLimit)),
+      };
     }
   }
 
-  const rates = await getRates(env.DB);
   let totalUAH = 0;
   for (const [code, own] of byCurrency) {
-    totalUAH += toUAHMinor(own, code, rates);
+    totalUAH += toBaseMinor(own, code, rates);
   }
 
   return {

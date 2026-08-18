@@ -12,13 +12,13 @@
  */
 import type { Env } from "../../env.ts";
 import type { Draft } from "./notify.ts";
-import { getRates } from "../finance/finance.ts";
+import { getRates } from "../finance/money.ts";
 import { budgetStatus } from "../finance/budgets.ts";
 import { valueMode, localYm, localParts } from "../finance/stats.ts";
 
 /** Бюджети-конверти: вичерпані (≥100%) або на межі (≥90%). Розрахунок — `budgetStatus` (канон). */
 export async function draftBudgets(env: Env, now: number): Promise<Draft[]> {
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const monthKey = localYm(now);   // §APP_TZ — `budgetStatus` рахує місяць від локальної півночі
 
@@ -63,7 +63,7 @@ export async function draftBudgetForecast(env: Env, now: number): Promise<Draft[
   const { d: dayOfMonth } = localParts(now);
   if (dayOfMonth < 10) return [];
 
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   const monthKey = localYm(now);
   const MIN_OVER = 20000; // 200 ₴ — той самий поріг, що в «Радарі аномалій»

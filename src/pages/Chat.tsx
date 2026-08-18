@@ -1,3 +1,4 @@
+import { currencySign } from "../lib/format.ts";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDispatch } from "react-redux";
 import {
@@ -13,7 +14,9 @@ import { getLocale } from "../i18n/locale.ts";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type Attached = { id: string; label: string };
-const sign = (c: number) => (c === 840 ? "$" : c === 978 ? "€" : "₴");
+// One symbol table for the whole app (`shared/currency.ts`) — a local copy is how two
+// screens end up disagreeing about a currency they both show.
+const sign = (c: number) => currencySign(c);
 
 const SUGGESTION_KEYS = ["chat.suggest1", "chat.suggest2", "chat.suggest3", "chat.suggest4"] as const;
 

@@ -57,7 +57,7 @@ export function Transactions() {
   const acc = params.get("acc") ?? "";      // рахунок (account_id)
   const dfrom = params.get("dfrom") ?? "";  // yyyy-mm-dd
   const dto = params.get("dto") ?? "";
-  const amin = params.get("amin") ?? "";    // сума ₴ (по модулю)
+  const amin = params.get("amin") ?? "";    // amount in the display base (absolute)
   const amax = params.get("amax") ?? "";
   const category = cat ? Number(cat) : undefined;
   const catparent = catp ? Number(catp) : undefined;

@@ -2,6 +2,7 @@ import { useGetPriceDriftQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { useT } from "../../i18n/index.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // §E4: дрейф цін / персональна інфляція — як змінилась юніт-ціна позицій із чеків у часі.
 // Ховається, якщо ще нема достатньо історії чеків. Індекс кошика — медіана змін.
@@ -35,7 +36,7 @@ export function PriceDrift() {
               <div key={i} className="drift-row">
                 <span className="drift-name" title={it.name}>{it.name}</span>
                 <span className="drift-units num-mono">
-                  {formatMinor(it.first_unit, { decimals: false })} → {formatMinor(it.last_unit, { decimals: false })} ₴
+                  {formatMinor(it.first_unit, { decimals: false })} → {formatMinor(it.last_unit, { decimals: false })} {baseSign()}
                 </span>
                 <span className={`cmp-delta ${it.change_pct > 0 ? "up" : "down"}`}>
                   {it.change_pct > 0 ? "+" : ""}{it.change_pct}%

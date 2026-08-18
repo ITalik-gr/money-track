@@ -6,10 +6,12 @@
 //   • ефективна категорія = рол-ап real_category_id (готівка/зняття за реальною суттю),
 //     інакше рол-ап звичайної category_id;
 //   • зведення валют у ₴ через курси (inline CASE), опційно — «чиста» валюта.
-import type { Rates } from "./finance.ts";
+import type { Rates } from "./money.ts";
 import type { Env } from "../../env.ts";
 import type { AppDb } from "../platform/db-shim.ts";
 import { getState } from "./repo.ts";
+import { catNameSql } from "./categories-i18n.ts";
+import { resolveLocale } from "../platform/i18n.ts";
 
 export const TRANSFER_CAT = 13; // «Перекази і зняття» (+ діти через рол-ап)
 
@@ -138,22 +140,32 @@ export const INCOME_WHERE = `
   AND t.transfer_pair_id IS NULL AND t.is_transfer = 0
   AND ${EFF_CAT_ID} IS NOT ${TRANSFER_CAT} AND NOT ${IS_REFUND}`;
 
-// Множник зведення в ₴ для поточного рядка (inline CASE з курсів). 980→1.0; кожен
-// відомий код → його курс (₴ за одиницю-мінор, як у toUAHMinor); невідомий → 0.
-export function uahMult(rates: Rates, col = "t.currency_code"): string {
-  const parts = ["WHEN 980 THEN 1.0"];
+// Roll-up multiplier for the current row, in the READER'S base (inline CASE over the rates): each
+// known code → how many base units one minor unit is worth (same as `toBaseMinor`); unknown → 0.
+//
+// §BASE-CUR: this used to hardcode `WHEN 980 THEN 1.0`, which made "roll up into one unit" and
+// "roll up into ₴" the same sentence. The 980 row now arrives in the map itself (`ratesInBase`),
+// so this function does not know which currency the base is — and that is exactly why none of its
+// forty consumers had to be audited for the one that forgot to convert.
+export function baseMult(rates: Rates, col = "t.currency_code"): string {
+  const parts: string[] = [];
   for (const [code, rate] of Object.entries(rates)) {
-    if (code === "980") continue;
-    if (Number.isFinite(rate) && rate > 0) parts.push(`WHEN ${Number(code)} THEN ${rate}`);
+    if (Number(code) > 0 && Number.isFinite(rate) && rate > 0) parts.push(`WHEN ${Number(code)} THEN ${rate}`);
   }
+  // The hryvnia arm is guaranteed. A map from `getRates(env)` always carries its own 980 entry;
+  // a RAW map (or an empty one, on an account whose rates step has never run) never does, and
+  // without this line every hryvnia row in such a query would multiply by the ELSE branch — 0.
+  // That is the whole ledger silently reading as zero, which looks like an empty account.
+  if (!("980" in rates)) parts.unshift("WHEN 980 THEN 1.0");
   return `(CASE ${col} ${parts.join(" ")} ELSE 0 END)`;
 }
 
-// Режим значення: зведення в ₴ (дефолт) або «чиста» валюта (currency=NNN → множник 1,
-// плюс фільтр по валюті). Повертає готовий множник і фрагмент WHERE (може бути порожній).
+// Value mode: roll up into the reader's base (default, §BASE-CUR), or a "pure" currency
+// (currency=NNN → multiplier 1 plus a currency filter). Returns the multiplier and a WHERE
+// fragment, which may be empty.
 export function valueMode(rates: Rates, currency?: number | null): { mult: string; curFilter: string } {
   if (currency && currency !== 0) return { mult: "1.0", curFilter: ` AND t.currency_code = ${Math.trunc(currency)}` };
-  return { mult: uahMult(rates), curFilter: "" };
+  return { mult: baseMult(rates), curFilter: "" };
 }
 
 // Готові SUM-вирази із ВБУДОВАНИМ канонічним фільтром (тому totals — один запит; запит
@@ -239,7 +251,11 @@ export async function recurringOneoffSplit(
        GROUP BY kind`,
     ).bind(from, to).all<{ kind: string; spent: number; n: number }>(),
     env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${EFF_CAT_NAME} AS category,
+      // §LANG-ARCH: the category name is resolved HERE, not by whoever renders it. Three of the
+      // four callers are AI context builders, which had no post-map at all — so the model was
+      // handed «Продукти» while the screen beside it said "Groceries", the exact split that made
+      // the tool filters miss and the prose come back in the wrong language.
+      `SELECT t.merchant AS merchant, ${catNameSql(await resolveLocale(env), EFF_CAT_NAME)} AS category,
               CAST(ROUND((-${EFF_AMOUNT}) * ${mult}) AS INTEGER) AS amount, t.time AS time
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND NOT ${recur}
@@ -324,6 +340,12 @@ export async function categoryMonthlyLevels(
 
 async function applyFactAdjustments(env: Env, out: Map<number, MonthLevel>, now: number): Promise<void> {
   try {
+    // §BASE-CUR: `level` is in the reader's base, `delta_minor` is stored in hryvnia (the facts
+    // table has no currency column). A raw addition would add 3 000 dollars to a dollar level.
+    // A multiplier is unitless and needs no conversion — which is exactly why it must not be
+    // converted either.
+    const { getRates, uahToBase } = await import("./money.ts");
+    const uah = uahToBase(await getRates(env));
     const rows = await env.DB.prepare(
       `SELECT category_id AS id, adjust_kind AS kind, adjust_value AS val
        FROM facts
@@ -336,8 +358,9 @@ async function applyFactAdjustments(env: Env, out: Map<number, MonthLevel>, now:
       if (f.kind === "multiplier") {
         if (cur) cur.level = Math.round(cur.level * f.val); // 0×val=0 → категорію без історії не чіпаємо
       } else if (f.kind === "delta_minor") {
-        if (cur) cur.level = Math.round(cur.level + f.val);
-        else if (f.val > 0) out.set(f.id, { level: Math.round(f.val), mean: 0, last: 0, active_months: 0, cv: 0, fixed: false });
+        const val = f.val * uah;
+        if (cur) cur.level = Math.round(cur.level + val);
+        else if (val > 0) out.set(f.id, { level: Math.round(val), mean: 0, last: 0, active_months: 0, cv: 0, fixed: false });
       }
     }
   } catch {

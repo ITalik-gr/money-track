@@ -17,7 +17,7 @@ import type { AppDb } from "../platform/db-shim.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { chargesBetween } from "./subscriptions.ts";
 import { localYmd, localMonthStart } from "./stats.ts";
-import type { Rates } from "./finance.ts";
+import type { Rates } from "./money.ts";
 import type { Env } from "../../env.ts";
 import { incomeOutlook } from "./income.ts";
 

@@ -97,10 +97,10 @@ categories.get("/categories/:id/overview", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const to = Number(url.searchParams.get("to") ?? now);
 
-  const { getRates } = await import("../../lib/finance/finance.ts");
+  const { getRates } = await import("../../lib/finance/money.ts");
   const stats = await import("../../lib/finance/stats.ts");
   const { budgetStatus } = await import("../../lib/finance/budgets.ts");
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = stats.valueMode(rates, null);
   const loc = c.get("locale");
 

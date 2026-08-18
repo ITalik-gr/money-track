@@ -2,6 +2,7 @@
 //
 // Lives in its own module rather than in `index.ts` because the Durable Object also needs it,
 // and `index.ts` already imports the DO — putting it there would close an import cycle.
+import { asBaseCurrency } from "../../../shared/currency.ts";
 
 /**
  * Header that tells a Durable Object which user it is serving.
@@ -52,4 +53,20 @@ export const LOCALE_HEADER = "x-mt-locale";
 export function localeFromHeader(req: Request): "uk" | "en" | undefined {
   const v = req.headers.get(LOCALE_HEADER);
   return v === "uk" || v === "en" ? v : undefined;
+}
+
+/**
+ * The currency the reader wants totals expressed in, right now (§BASE-CUR).
+ *
+ * Travels beside the locale for exactly the reason the locale had to: the stored preference is
+ * empty for everyone who never opened Settings and for every demo sandbox, and empty read as
+ * hryvnia — so the audience the English UI was built for saw ₴ on every screen no matter what
+ * they picked. Unauthenticated like the locale: it says how to phrase the answer, which is the
+ * sender's own business.
+ */
+export const CURRENCY_HEADER = "x-mt-currency";
+
+/** Narrow to a supported base; anything else is dropped so the stored preference decides. */
+export function currencyFromHeader(req: Request): number | undefined {
+  return asBaseCurrency(req.headers.get(CURRENCY_HEADER));
 }

@@ -11,6 +11,7 @@ import { InfoTip } from "../ui/InfoTip.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { monthShort } from "../../lib/format.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
 const minor = (v: number) => fmt0.format(Math.round(v / 100));
@@ -32,10 +33,10 @@ function NwTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{p.label}{p.partial ? t("nw.partialSuffix") : ""}</div>
-      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{t("nw.cushionLabel")}: {minor(p.cushion)} ₴</div>
-      {p.investment > 0 && <div className="r"><span className="d" style={{ background: "var(--pos)" }} />{t("nw.investmentLabel")}: {minor(p.investment)} ₴</div>}
-      {p.debt > 0 && <div className="r"><span className="d" style={{ background: "var(--neg)" }} />{t("nw.debtLabel")}: −{minor(p.debt)} ₴</div>}
-      <div className="r" style={{ fontWeight: 600 }}>{t("nw.networthLabel")}: {minor(p.net)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{t("nw.cushionLabel")}: {minor(p.cushion)} {baseSign()}</div>
+      {p.investment > 0 && <div className="r"><span className="d" style={{ background: "var(--pos)" }} />{t("nw.investmentLabel")}: {minor(p.investment)} {baseSign()}</div>}
+      {p.debt > 0 && <div className="r"><span className="d" style={{ background: "var(--neg)" }} />{t("nw.debtLabel")}: −{minor(p.debt)} {baseSign()}</div>}
+      <div className="r" style={{ fontWeight: 600 }}>{t("nw.networthLabel")}: {minor(p.net)} {baseSign()}</div>
     </div>
   );
 }
@@ -68,10 +69,10 @@ export function NetworthCard({ months = 12 }: { months?: number }) {
             {t("nw.monthsLabel", { months })}
             <InfoTip>{t("nw.tip")}</InfoTip>
           </span>
-          <div className="cf-total num-hero">{minor(last)}<span className="cur">₴</span></div>
+          <div className="cf-total num-hero">{minor(last)}<span className="cur">{baseSign()}</span></div>
         </div>
         <div className={`cap-delta ${delta >= 0 ? "pos" : "neg"}`}>
-          {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : "−"}{minor(Math.abs(delta))} ₴
+          {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : "−"}{minor(Math.abs(delta))} {baseSign()}
           <span className="cap-delta-sub">{t("nw.periodSub")}</span>
         </div>
       </div>

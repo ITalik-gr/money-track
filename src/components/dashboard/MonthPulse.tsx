@@ -4,6 +4,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { EmptyCard } from "../ui/EmptyCard.tsx";
 import { useT } from "../../i18n/index.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // §4 Пульс місяця для Головної: норма заощаджень + топ-категорії міні (календарний місяць,
 // зведено в ₴). Одна вибірка overview → обидва блоки. Клік по категорії → дриль у Статистиці.
@@ -61,9 +62,9 @@ export function MonthPulse() {
             </div>
           </div>
           <div className="pulse-save-detail">
-            <span>{t("mp.income")} <b className="pos">{formatMinor(income, { decimals: false })} ₴</b></span>
-            <span>{t("common.expenses")} <b className="neg">{formatMinor(spend, { decimals: false })} ₴</b></span>
-            <span>{t("mp.saved")} <b className={net >= 0 ? "pos" : "neg"}>{net >= 0 ? "+" : "−"}{formatMinor(Math.abs(net), { decimals: false })} ₴</b></span>
+            <span>{t("mp.income")} <b className="pos">{formatMinor(income, { decimals: false })} {baseSign()}</b></span>
+            <span>{t("common.expenses")} <b className="neg">{formatMinor(spend, { decimals: false })} {baseSign()}</b></span>
+            <span>{t("mp.saved")} <b className={net >= 0 ? "pos" : "neg"}>{net >= 0 ? "+" : "−"}{formatMinor(Math.abs(net), { decimals: false })} {baseSign()}</b></span>
           </div>
         </div>
 
@@ -74,7 +75,7 @@ export function MonthPulse() {
               <Link key={c.category_id ?? i} to={`/stats?tab=categories`} className="pulse-cat">
                 <span className="pc-name"><span className="d" style={{ background: c.color ?? FALLBACK[i % FALLBACK.length] }} />{c.category_name ?? t("common.uncategorized")}</span>
                 <span className="pc-track"><span style={{ width: `${(c.spent / topMax) * 100}%`, background: c.color ?? FALLBACK[i % FALLBACK.length] }} /></span>
-                <span className="pc-val">{formatMinor(c.spent, { decimals: false })} ₴</span>
+                <span className="pc-val">{formatMinor(c.spent, { decimals: false })} {baseSign()}</span>
               </Link>
             ))}
           </div>

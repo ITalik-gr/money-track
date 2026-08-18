@@ -9,6 +9,7 @@
 // reconnection or last-event-id, and `EventSource` cannot POST a body at all. See the endpoint in
 // `worker/routes/api/advisor.ts` for the other half.
 
+import { getBaseCurrency } from "./currency.ts";
 import { getLocale } from "../i18n/locale.ts";
 
 /** One line of the stream. `done` carries the authoritative full text; `error` ends it. */
@@ -44,7 +45,7 @@ export async function streamChat(
     method: "POST",
     // `x-mt-locale` by hand, because this is the one API call that does not go through RTK
     // Query's `prepareHeaders` — and it is the most language-visible call in the app.
-    headers: { "content-type": "application/json", "x-mt-locale": getLocale() },
+    headers: { "content-type": "application/json", "x-mt-locale": getLocale(), "x-mt-currency": String(getBaseCurrency()) },
     body: JSON.stringify(body),
     signal,
   });

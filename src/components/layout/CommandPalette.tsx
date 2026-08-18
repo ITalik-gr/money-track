@@ -9,6 +9,7 @@ import { useLazySearchQuery } from "../../store/api.ts";
 import type { SearchResults } from "../../store/api.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { formatMinor } from "../../lib/format.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 interface Item {
   key: string;
@@ -72,7 +73,7 @@ function resultsToItems(r: SearchResults | undefined, t: (key: TranslationKey, p
     ...r.transactions.map((tx) => ({
       key: `t-${tx.id}`, group: t("cmdk.groupTransactions"), icon: "tx",
       label: tx.merchant ?? t("cmdk.txNoName"),
-      hint: `${dtf.format(tx.time * 1000)} · ${formatMinor(Math.abs(tx.amount), { decimals: false })} ₴${tx.category_name ? ` · ${tx.category_name}` : ""}`,
+      hint: `${dtf.format(tx.time * 1000)} · ${formatMinor(Math.abs(tx.amount), { decimals: false })} ${baseSign()}${tx.category_name ? ` · ${tx.category_name}` : ""}`,
       to: `/tx/${tx.id}`,
     })),
   ];

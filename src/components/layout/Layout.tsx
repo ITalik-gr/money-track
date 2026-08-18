@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, Link } from "react-router-dom";
 import { Icon } from "../ui/Icon.tsx";
 import { Toaster } from "../ui/Toaster.tsx";
 import { CommandPalette, openCommandPalette } from "./CommandPalette.tsx";
 import { AiJobChip } from "./AiJobs.tsx";
-import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation, useGetPeriodModeQuery, useSetPeriodModeMutation } from "../../store/api.ts";
+import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation, useGetPeriodModeQuery, useSetPeriodModeMutation, useGetRatesQuery } from "../../store/api.ts";
 import { useLocale, useT } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
 import type { TranslationKey } from "../../i18n/index.ts";
+import { baseSign, getBaseCurrency, setBaseCurrency } from "../../lib/currency.ts";
+import { asBaseCurrency } from "../../../shared/currency.ts";
+import { api } from "../../store/api.ts";
+import { store } from "../../store/index.ts";
 
 // Пункти навігації. desktop=сайдбар (усі), mobile=нижній таб-бар (тільки core).
 // `label` is a translation key resolved at render (see PLATFORM.md §12) — not a literal.
@@ -28,6 +32,26 @@ const items: { to: string; label: TranslationKey; tab?: TranslationKey; icon: st
 ];
 
 const LOCALES: Locale[] = ["uk", "en"];
+
+/**
+ * §BASE-CUR — adopt the base the SERVER answered in.
+ *
+ * Subscribed from the shell rather than from each screen so the sign is right on every page,
+ * including the ones that never look at a rate. It adopts WITHOUT persisting: this is the
+ * server's answer, not the reader's decision, and a reader whose requested currency had no rate
+ * must not have the fallback silently recorded as their choice.
+ */
+function useAdoptServerBase(): void {
+  const { data } = useGetRatesQuery();
+  const effective = data?.base;
+  useEffect(() => {
+    const base = asBaseCurrency(effective);
+    if (base && base !== getBaseCurrency()) {
+      setBaseCurrency(base, false);
+      store.dispatch(api.util.invalidateTags(["Summary", "Tx", "Budget", "Planned", "Goal", "Category", "Advice", "Report", "Event"]));
+    }
+  }, [effective]);
+}
 
 // Segmented UA/EN switch. Two languages → a plain segmented control reads clearer than a
 // toggle whose label would have to name the OTHER language.
@@ -158,6 +182,7 @@ export function Layout() {
   const [moreOpen, setMoreOpen] = useState(false);
   const t = useT();
   const { data: me } = useGetMeQuery();
+  useAdoptServerBase();
   const isDemo = me?.demo === true;
   const accountName = (me?.user?.name ?? "").trim().split(/\s+/)[0] || t("layout.account");
 
@@ -167,7 +192,7 @@ export function Layout() {
       <CommandPalette />
       <aside className="sidebar">
         <div className="brand">
-          <span className="mark">₴</span>
+          <span className="mark">{baseSign()}</span>
           <span className="name">money<span className="dot">·</span>track</span>
         </div>
 
@@ -206,7 +231,7 @@ export function Layout() {
         {isDemo && <DemoBanner expiresAt={me?.demo_expires_at} />}
         <header className="topbar">
           <Link to="/" className="topbar-brand">
-            <span className="mark">₴</span>
+            <span className="mark">{baseSign()}</span>
             <span className="name">money<span className="dot" style={{ color: "var(--accent)" }}>·</span>track</span>
           </Link>
           <div className="topbar-right">

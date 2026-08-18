@@ -1,6 +1,6 @@
 // `/budgets/*` — envelope budgets, their AI proposal and the budget chat.
 // Limit-versus-spent is `budgetStatus()` in lib/finance/budgets.ts and nowhere else.
-import { getRates } from "../../lib/finance/finance.ts";
+import { getRates, moneyScope, uahToBase, baseToUah } from "../../lib/finance/money.ts";
 import {
   valueMode, categoryMonthlyLevels, localYm, localMonthStart,
 } from "../../lib/finance/stats.ts";
@@ -33,7 +33,7 @@ budgets.get("/budgets", async (c) => {
  * private definition of "how full is this envelope".
  */
 budgets.get("/budgets/status", async (c) => {
-  const rates = await getRates(c.env.DB);
+  const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null);
   return c.json(await budgetStatus(c.env, mult) satisfies BudgetStatusList);
 });
@@ -56,7 +56,10 @@ budgets.put("/budgets", async (c) => {
   if (!Number.isFinite(amount) || amount < 0) {
     return c.json({ error: st(c.get("locale"), "errBudgetNegative") }, 400);
   }
-  await budgetsRepo.set(c.env.DB, b.category_id, b.period, amount, !!b.rollover);
+  // §BASE-CUR: the reader typed this in THEIR currency; the column has no currency, so it is
+  // stored in hryvnia — the same direction `budgetStatus` converts back on the way out.
+  const stored = baseToUah(amount, await getRates(c.env));
+  await budgetsRepo.set(c.env.DB, b.category_id, b.period, stored, !!b.rollover);
   return c.json({ ok: true });
 });
 
@@ -93,9 +96,13 @@ budgets.delete("/budgets/:categoryId", async (c) => {
 budgets.get("/budgets/auto", async (c) => {
   const url = new URL(c.req.url);
   const trim = Math.min(Math.max(Number(url.searchParams.get("trim") ?? 10), 0), 50) / 100;
-  const rates = await getRates(c.env.DB);
+  const { base, rates } = await moneyScope(c.env);
   const { mult } = valueMode(rates, null);
   const now = Math.floor(Date.now() / 1000);
+  // §BASE-CUR: `levels` come from the canon (already in the base), while `current` and the track
+  // record come out of `budgets`/`budget_months`, which are stored in hryvnia. Mixing the two is
+  // how a proposal would compare a dollar level against a hryvnia limit and call it a cut.
+  const inBase = (minorUah: number) => Math.round(minorUah * uahToBase(rates));
 
   const [levels, cats, currentByCat, record] = await Promise.all([
     categoryMonthlyLevels(c.env, mult, { now }),
@@ -107,7 +114,11 @@ budgets.get("/budgets/auto", async (c) => {
     budgetsRepo.trackRecord(c.env.DB, localYm(localMonthStart(now, -6))),
   ]);
 
-  const MIN_LEVEL = 30000; // 300 ₴/міс — дрібним категоріям конверт не потрібен
+  const MIN_LEVEL = inBase(30000);   // 300 ₴/міс — дрібним категоріям конверт не потрібен
+  // Rounding step: 50 ₴ reads as a decision, 47 ₴ reads as arithmetic noise. In another base the
+  // hryvnia step converts to something that is not round at all ($1.21), so a foreign base rounds
+  // to a whole unit instead — same intent, expressed in the currency the reader is looking at.
+  const ROUND_TO = base === 980 ? 5000 : 100;
   const items = cats
     .map((cat) => {
       const level = levels.get(cat.id)?.level ?? 0;
@@ -133,15 +144,14 @@ budgets.get("/budgets/auto", async (c) => {
       const missed = !!rec && rec.closed >= 2 && rec.over / rec.closed >= 0.5;
       const basis: AutoBudgetItem["basis"] =
         essential ? "essential" : missed ? "missed" : rec ? "kept" : "level";
-      const raw = essential || missed ? Math.max(level, rec?.avg_spent ?? 0) : level * (1 - trim);
-      // Округлюємо до 50 ₴ — «2 350 ₴» читається як рішення, «2 347 ₴» як шум обчислення.
-      const suggested = Math.max(MIN_LEVEL, Math.round(raw / 5000) * 5000);
+      const raw = essential || missed ? Math.max(level, inBase(rec?.avg_spent ?? 0)) : level * (1 - trim);
+      const suggested = Math.max(MIN_LEVEL, Math.round(raw / ROUND_TO) * ROUND_TO);
       return {
         category_id: cat.id, name: cat.name, color: cat.color,
         importance: cat.importance ?? "discretionary",
         essential,
         level, suggested,
-        current: currentByCat.get(cat.id) ?? null,
+        current: currentByCat.has(cat.id) ? inBase(currentByCat.get(cat.id)!) : null,
         // The record travels WITH the number: a proposal that quietly stops trimming one row and
         // not another looks like a bug unless it says why (same rule as `carried` on the envelope).
         basis,
@@ -168,7 +178,8 @@ budgets.post("/budgets/auto", async (c) => {
     .filter((i) => Number.isFinite(i.category_id) && i.amount > 0);
   if (!items.length) return c.json({ error: st(c.get("locale"), "errNothingToApply") }, 400);
 
-  await budgetsRepo.setMonthlyBatch(c.env.DB, items);
+  const rates = await getRates(c.env);
+  await budgetsRepo.setMonthlyBatch(c.env.DB, items.map((i) => ({ ...i, amount: baseToUah(i.amount, rates) })));
   return c.json({ ok: true, applied: items.length });
 });
 

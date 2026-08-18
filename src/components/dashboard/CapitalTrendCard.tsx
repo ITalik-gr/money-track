@@ -6,6 +6,7 @@ import { InfoTip } from "../ui/InfoTip.tsx";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { useT, translate } from "../../i18n/index.ts";
 import { getLocale as loc } from "../../i18n/locale.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // §4 Тренд капіталу: динаміка власних коштів (₴) за 6 місяців (реконструкція від поточного тоталу).
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
@@ -19,7 +20,7 @@ function CapTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{dLabel.format(p.t * 1000)}</div>
-      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{translate(loc(), "ct.capital")}: {fmt0.format(p.capital_uah)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{translate(loc(), "ct.capital")}: {fmt0.format(p.capital_uah)} {baseSign()}</div>
     </div>
   );
 }
@@ -43,10 +44,10 @@ export function CapitalTrendCard() {
             {t("ct.title")}
             <InfoTip>{t("ct.info")}</InfoTip>
           </span>
-          <div className="cf-total num-hero">{fmt0.format(last)}<span className="cur">₴</span></div>
+          <div className="cf-total num-hero">{fmt0.format(last)}<span className="cur">{baseSign()}</span></div>
         </div>
         <div className={`cap-delta ${delta >= 0 ? "pos" : "neg"}`}>
-          {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : "−"}{fmt0.format(Math.abs(delta))} ₴
+          {delta >= 0 ? "▲" : "▼"} {delta >= 0 ? "+" : "−"}{fmt0.format(Math.abs(delta))} {baseSign()}
           <span className="cap-delta-sub">{t("common.overPeriod")}</span>
         </div>
       </div>

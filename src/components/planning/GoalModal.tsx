@@ -4,6 +4,7 @@ import { useT } from "../../i18n/index.ts";
 import type { TranslationKey } from "../../i18n/index.ts";
 import { Select } from "../ui/Select.tsx";
 import type { SavingsGoal, GoalKind, AutofillKind, GoalBody } from "../../store/api.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 const PALETTE = ["#2e6be6", "#127c86", "#1f6e4c", "#7a3e9d", "#c2417a", "#b23a2e", "#c9871a", "#0e7490"];
 
@@ -58,7 +59,7 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
   // Джерело прогресу — банки (накопичення).
   const jarOptions = accounts
     .filter((a) => a.type === "jar")
-    .map((a) => ({ value: a.id, label: a.title ?? t("goal.jarFallback"), color: "#127c86", hint: `${Math.round((a.balance ?? 0) / 100)} ₴` }));
+    .map((a) => ({ value: a.id, label: a.title ?? t("goal.jarFallback"), color: "#127c86", hint: `${Math.round((a.balance ?? 0) / 100)} ${baseSign()}` }));
 
   const busy = creating || updating;
 

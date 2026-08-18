@@ -1,7 +1,10 @@
 {
   "status": 200,
   "body": {
-    "rates": {},
+    "rates": {
+      "980": 1
+    },
+    "base": 980,
     "updated": null
   }
 }

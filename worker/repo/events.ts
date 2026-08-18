@@ -1,7 +1,7 @@
 // Event groups (a trip, a project, a special day) and their plan line items.
 // See `worker/repo/README.md`.
 //
-// Every total here is rolled up in ₴ through the caller's `mult` (`uahMult(rates)`). Both of the
+// Every total here is rolled up in ₴ through the caller's `mult` (`baseMult(rates)`). Both of the
 // aggregate queries below once filtered on `currency_code = 980` instead, so a trip's foreign
 // spending simply did not count — and a trip is precisely where foreign currency happens. The
 // page and the list then disagreed about the same event. One figure has to be one figure.

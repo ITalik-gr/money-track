@@ -1,6 +1,7 @@
 // `/goals/*` — savings goals and their contribution history. `current_amount` is derived from
 // the contributions (§P2.1), so every write goes through `recalcGoal`.
 import * as goalsRepo from "../../repo/goals.ts";
+import { getRates, toBaseMinor, uahToBaseMinor, baseToUah } from "../../lib/finance/money.ts";
 import { recalcGoal, isGoalKind, isAutofillKind, goalPace } from "../../lib/finance/goals.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
@@ -17,8 +18,15 @@ goals.get("/goals", async (c) => {
   // One `now` for the whole list: otherwise two cards from the same request could end up with a
   // different number of days to their deadline if the response were assembled across midnight.
   const now = Math.floor(Date.now() / 1000);
+  // §BASE-CUR: a goal's target and its manual progress are stored in hryvnia (no currency column
+  // on `savings_goals`), while a linked jar's balance is in the JAR's currency. Two different
+  // conversions for two different origins — collapsing them would price a dollar jar as hryvnia.
+  const rates = await getRates(c.env);
   const goals = (await goalsRepo.listActive(c.env.DB)).map((g) => {
-    const current = g.account_id != null && g.account_balance != null ? g.account_balance : g.current_amount;
+    const current = g.account_id != null && g.account_balance != null
+      ? toBaseMinor(g.account_balance, g.account_currency ?? 980, rates)
+      : uahToBaseMinor(g.current_amount, rates);
+    g = { ...g, target_amount: uahToBaseMinor(g.target_amount, rates), current_amount: uahToBaseMinor(g.current_amount, rates) };
     // §GOAL-PACE is computed HERE, not in the component: `draftGoalRisk` calls the same function,
     // so "behind" on the card and "behind" in the feed are literally one computation.
     return { ...g, current, pace: goalPace({ ...g, current }, now) };
@@ -51,10 +59,12 @@ goals.post("/goals", async (c) => {
   if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
   const auto = parseAutofill(b.autofill_kind ?? null, b.autofill_value, locale);
   if ("error" in auto) return c.json({ error: auto.error }, 400);
+  // §BASE-CUR: what the reader typed is in THEIR currency; the columns hold hryvnia.
+  const rates = await getRates(c.env);
   const id = await goalsRepo.create(c.env.DB, {
     name: b.name.trim(),
-    target_amount: b.target_amount,
-    current_amount: b.current_amount ?? 0,
+    target_amount: baseToUah(b.target_amount, rates),
+    current_amount: baseToUah(b.current_amount ?? 0, rates),
     account_id: b.account_id ?? null,
     deadline: b.deadline ?? null,
     color: b.color ?? "#2e6be6",
@@ -74,9 +84,11 @@ goals.patch("/goals/:id", async (c) => {
   if (b.name !== undefined && !b.name.trim()) return c.json({ error: "name required" }, 400);
   if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
 
+  const rates = await getRates(c.env);
   const patch: goalsRepo.GoalPatch = {
     name: b.name !== undefined ? b.name.trim() : undefined,
-    target_amount: b.target_amount, current_amount: b.current_amount,
+    target_amount: b.target_amount === undefined ? undefined : baseToUah(b.target_amount, rates),
+    current_amount: b.current_amount === undefined ? undefined : baseToUah(b.current_amount, rates),
     account_id: b.account_id, deadline: b.deadline,
     color: b.color, note: b.note, kind: b.kind,
   };
@@ -124,17 +136,28 @@ goals.get("/goals/:id/progress", async (c) => {
     isJar ? goalsRepo.balanceHistory(c.env.DB, goal.account_id!, start) : Promise.resolve([]),
   ]);
 
+  // §GOAL-CHART already resolves both storages into ONE series; §BASE-CUR converts that one
+  // series once, at the end — a jar's balance is in the jar's currency, contributions in hryvnia.
+  const rates = await getRates(c.env);
+  const points = goalProgressSeries(
+    { created_at: goal.created_at ?? null, deadline: goal.deadline },
+    contributions, balances, isJar,
+  ).map((p) => ({
+    ...p,
+    amount: isJar
+      ? toBaseMinor(p.amount, goal.account_currency ?? 980, rates)
+      : uahToBaseMinor(p.amount, rates),
+  }));
   return c.json({
-    points: goalProgressSeries(
-      { created_at: goal.created_at ?? null, deadline: goal.deadline },
-      contributions, balances, isJar,
-    ),
+    points,
     is_jar: isJar,
   } satisfies GoalProgressSeries);
 });
 
 goals.get("/goals/:id/contributions", async (c) => {
-  return c.json(await goalsRepo.listContributions(c.env.DB, Number(c.req.param("id"))) satisfies GoalContribution[]);
+  const rates = await getRates(c.env);
+  const rows = await goalsRepo.listContributions(c.env.DB, Number(c.req.param("id")));
+  return c.json(rows.map((r) => ({ ...r, amount: uahToBaseMinor(r.amount, rates) })) satisfies GoalContribution[]);
 });
 
 goals.post("/goals/:id/contributions", async (c) => {
@@ -151,9 +174,9 @@ goals.post("/goals/:id/contributions", async (c) => {
   if (!goal) return c.json({ error: st(locale, "goalNotFound") }, 404);
   if (goal.account_id) return c.json({ error: st(locale, "goalJarNoContrib") }, 400);
 
-  await goalsRepo.addContribution(c.env.DB, id, amount,
+  await goalsRepo.addContribution(c.env.DB, id, baseToUah(amount, await getRates(c.env)),
     Math.floor(b.at ?? Date.now() / 1000), b.note?.trim() || null);
-  return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
+  return c.json({ ok: true, current: uahToBaseMinor(await recalcGoal(c.env.DB, id), await getRates(c.env)) });
 });
 
 goals.delete("/goals/:id/contributions/:cid", async (c) => {

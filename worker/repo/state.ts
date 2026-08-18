@@ -1,21 +1,24 @@
 // `app_state` key/value reads, and the schema introspection the backup export needs.
 // See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import type { Env } from "../env.ts";
+import { moneyScope } from "../lib/finance/money.ts";
+import type { RatesSnapshot } from "../../shared/api/accounts.ts";
 
-export interface RatesSnapshot {
-  rates: Record<string, number>;
-  /** Unix seconds, or null when rates have never been fetched. */
-  updated: number | null;
-}
+export type { RatesSnapshot } from "../../shared/api/accounts.ts";
 
-/** Cached FX rates plus when they were last refreshed — the same source `computeSummary` uses. */
-export async function rates(db: AppDb): Promise<RatesSnapshot> {
-  const raw = await db.prepare("SELECT value FROM app_state WHERE key = 'rates'").first<{ value: string }>();
-  const upd = await db.prepare("SELECT value FROM app_state WHERE key = 'rates_updated'").first<{ value: string }>();
-  return {
-    rates: raw ? (JSON.parse(raw.value) as Record<string, number>) : {},
-    updated: upd ? Number(upd.value) : null,
-  };
+/**
+ * Cached FX rates plus when they were last refreshed — the same source `computeSummary` uses,
+ * re-expressed in the reader's base by the same helper the canon uses.
+ *
+ * ⚠️ The EFFECTIVE base is returned, not the requested one. A base whose rate we do not have
+ * falls back to hryvnia (`resolveBaseCurrency`), and a client printing "$" over hryvnia numbers
+ * is a worse failure than showing ₴ — so the server states which unit it actually answered in.
+ */
+export async function rates(env: Env): Promise<RatesSnapshot> {
+  const upd = await env.DB.prepare("SELECT value FROM app_state WHERE key = 'rates_updated'").first<{ value: string }>();
+  const { base, rates } = await moneyScope(env);
+  return { rates, base, updated: upd ? Number(upd.value) : null };
 }
 
 /**

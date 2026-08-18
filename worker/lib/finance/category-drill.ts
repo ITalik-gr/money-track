@@ -44,7 +44,7 @@ export async function categoryDrill(
   const [subs, merchants, transactions] = await Promise.all([
     analyticsRepo.categorySubs(db, loc, v, range, category, scope),
     analyticsRepo.categoryMerchants(db, v, range, category, scope),
-    analyticsRepo.categoryTransactions(db, v, range, category, scope),
+    analyticsRepo.categoryTransactions(db, loc, v, range, category, scope),
   ]);
   return { subs, merchants, transactions };
 }

@@ -16,7 +16,7 @@ import { callHaikuMessages, runToolConversation, webSearchTool, type AnthropicCo
 import { isDemoEnv } from "../platform/demo.ts";
 import { buildKnowledgeCorpus } from "./knowledge/index.ts";
 import { callHaikuMessagesJson } from "./json.ts";
-import { buildSystemPrefix, replyLangDirective } from "./prompt.ts";
+import { buildSystemPrefix, replyLangDirective, moneyUnitDirective } from "./prompt.ts";
 import { getTaskModel } from "./models.ts";
 import type { AnthropicUsage } from "./cost.ts";
 
@@ -86,7 +86,7 @@ export async function chatAdvice(
     "the nearest charges (in_days): use them for advice about payment timing. " +
     "Formatting is markdown: **bold** for emphasis, \"- \" lists, short subheadings. " +
     "If the context contains transactions:[{id,label}] and it is apt to point at a specific operation, cite it as " +
-    "[tx:ID|short caption] (e.g. [tx:abc|MrGrill 150₴]); the app turns that into a clickable chip. " +
+    "[tx:ID|short caption] (e.g. [tx:abc|MrGrill 150]); the app turns that into a clickable chip. " +
     "📊 VISUALISATIONS — use SPARINGLY, only where they genuinely aid understanding (comparing several numbers, a " +
     "schedule, a plan by month). Do NOT attach a chart or table to every answer, and never when a sentence is enough. " +
     "At most one visualisation per answer, built only from real numbers in the context.\\n" +
@@ -126,7 +126,7 @@ export async function chatAdvice(
     // sat behind several kilobytes of JSON context — the weakest position in the whole system
     // prompt, with Ukrainian prose on every side of it. Last block is the only place where
     // "answer in this language" reads as an instruction rather than as the end of a data string.
-    { type: "text", text: (await replyLangDirective(env, "conversation")).trim() },
+    { type: "text", text: ((await replyLangDirective(env, "conversation")) + (await moneyUnitDirective(env))).trim() },
   ];
   const model = await getTaskModel(env, "chat");
   // §AGENT: якщо передано інструменти — ведемо агентний діалог; інакше звичайний виклик.
@@ -183,7 +183,7 @@ export async function txChat(
     ...base,
     // This inline chat had NO language directive at all (found while fixing B6) — its prose
     // answer simply inherited the Ukrainian prompt regardless of who was reading.
-    { type: "text", text: "Operation context (amounts in its own currency): " + JSON.stringify(ctx) + (await replyLangDirective(env, "conversation")) },
+    { type: "text", text: "Operation context (amounts in its own currency): " + JSON.stringify(ctx) + (await replyLangDirective(env, "conversation")) + (await moneyUnitDirective(env)) },
   ];
   return callHaikuMessagesJson<TxChatResult>(env, system, messages, 700, await getTaskModel(env, "chat"));
 }
@@ -214,7 +214,7 @@ export async function budgetChat(
         "Answer with VALID JSON ONLY: {reply (2-5 sentences, **bold** allowed), " +
         "proposals:[{category_id (only from the list), limit_uah (whole UAH), reason (briefly why)}] " +
         "(an empty array if this is just an answer with no new limit proposals)}." +
-        (await replyLangDirective(env, "conversation")),
+        (await replyLangDirective(env, "conversation")) + (await moneyUnitDirective(env)),
     },
     { type: "text", text: "Context: " + JSON.stringify(ctx) },
   ];

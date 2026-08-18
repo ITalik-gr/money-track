@@ -4,6 +4,7 @@ import { getLocale, numFmt } from "../../i18n/locale.ts";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { translate } from "../../i18n/index.ts";
 import { useT } from "../../i18n/index.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // Спільний dual-line графік: витрати + надходження (DESIGN.md §7 F1).
 export interface CfRow { label: string; spend: number; income: number }
@@ -22,10 +23,10 @@ function CfTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{label}</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{translate(getLocale(), "mp.income")}: {fmt0.format(inc)} ₴</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{translate(getLocale(), "common.expenses")}: {fmt0.format(exp)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{translate(getLocale(), "mp.income")}: {fmt0.format(inc)} {baseSign()}</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{translate(getLocale(), "common.expenses")}: {fmt0.format(exp)} {baseSign()}</div>
       <div className="r tip-net" style={{ color: net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
-        <span className="d" style={{ background: "transparent" }} />{translate(getLocale(), "common.balance")}: {net >= 0 ? "+" : ""}{fmt0.format(net)} ₴
+        <span className="d" style={{ background: "transparent" }} />{translate(getLocale(), "common.balance")}: {net >= 0 ? "+" : ""}{fmt0.format(net)} {baseSign()}
       </div>
     </div>
   );

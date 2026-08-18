@@ -54,7 +54,7 @@ Rules:
 3. **Доробив задачу** → (а) видали пункт з `ROADMAP.md`; (б) якщо це змінює «як усе працює» (новий інваріант, нове канонічне визначення, новий ops-крок) — онови відповідний розділ `CLAUDE.md`.
 4. **Гроші/статистика** → будь-яка нова аналітика рахується ТІЛЬКИ через `worker/lib/finance/stats.ts` (єдине джерело). Не дублюй SQL-фільтри в ендпоінтах.
 5. **Green-бар перед «готово»:** `npm run check` (tsc app+worker **+ SQL-лінт + тести канону**) + `npm run build`. Канонічний SQL — валідуй на D1.
-   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/check-repo-layer.mjs` (C1: `.prepare()` лише в `repo/` — з 2026-08-08 ПОВНА заборона, бюджет порожній) + `scripts/check-route-size.mjs` (C3: ≤400 рядків на файл у `routes/`+`services/`) + `scripts/check-route-order.mjs` (C7: літерал не нижче параметризованого роута, що його перекриває; один префікс — один файл) + `scripts/check-api-contract.mjs` (C2/C4: форма відповіді оголошена ОДИН раз, у `shared/api/`) + `scripts/check-styles.mjs` (C8: `src/index.css` — лише `@import`, кожна частина імпортована, стеля рядків на частину) + `scripts/check-styles-used.mjs` (C9: кожен `className` має правило, кожне правило має `className`) + `scripts/gen-migrations.mjs --check` + `npm test`.
+   `npm run check` = `tsc -b` + `scripts/check-stats-sql.mjs` + `scripts/check-i18n.mjs` + `scripts/check-repo-layer.mjs` (C1: `.prepare()` лише в `repo/` — з 2026-08-08 ПОВНА заборона, бюджет порожній) + `scripts/check-route-size.mjs` (C3: ≤400 рядків на файл у `routes/`+`services/`) + `scripts/check-route-order.mjs` (C7: літерал не нижче параметризованого роута, що його перекриває; один префікс — один файл) + `scripts/check-api-contract.mjs` (C2/C4: форма відповіді оголошена ОДИН раз, у `shared/api/`) + `scripts/check-styles.mjs` (C8: `src/index.css` — лише `@import`, кожна частина імпортована, стеля рядків на частину) + `scripts/check-styles-used.mjs` (C9: кожен `className` має правило, кожне правило має `className`) + `scripts/check-currency.mjs` (C10: `getStoredRates` лише у `money.ts`; жодного літерала `₴` у воркері поза Telegram — §BASE-CUR) + `scripts/gen-migrations.mjs --check` + `npm test`.
    Остання (2026-07-24, платформа-фаза) падає, якщо `migrations/*.sql` змінились, а ембед для
    Durable Object (`worker/do/migrations.generated.ts`) не перегенеровано — інакше нова міграція
    мовчки не доїхала б у БД юзера. Перегенерувати: `node scripts/gen-migrations.mjs`.
@@ -143,7 +143,9 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   роут через `st(locale)`. Простий CRUD сюди не їде: сервіс на кожну таблицю — це церемонія.
 - `worker/repo/*` — ЄДИНИЙ шар, що пише SQL (лінт C1; `services/` теж під забороною, без бюджету).
 - `worker/lib/finance/` — **гроші й канон**: `stats.ts` (ЄДИНЕ джерело розрахунків), `finance`,
-  `subscriptions`, `transfers`, `categorize`, `categories-i18n`, `repo`, `merchants`.
+  **`money.ts`** (§BASE-CUR: rates, conversion, and WHICH currency the answer is in — the only
+  module allowed to read the raw rate table), `subscriptions`, `transfers`, `categorize`,
+  `categories-i18n`, `repo`, `merchants`.
 - `worker/lib/ai/` — усе модельне, ШАРАМИ (2026-08-07, було 1335 рядків в одному `ai.ts`):
   `ai.ts` — ЛИШЕ транспорт (єдиний файл, що POST-ить в Anthropic) · `models.ts` — яка модель на
   яку задачу · `cost.ts` — скільки коштував виклик і лічильник · **`json.ts` — ШОВ ПРОВАЙДЕРА**
@@ -192,12 +194,49 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   свої inline (26 із них як `Record<string, unknown>`, тобто без обіцянок узагалі), і `tsc` не міг
   зіставити дві правди: розходження вилазило в проді по одному полю. Тримається лінтом C2/C4.
   ⚠️ **Новий ендпоінт → його форма їде у `shared/api/`, а не в компонент і не в хендлер.**
+- **`shared/currency.ts`** — the ONE symbol/code table and the list of currencies the app can roll
+  up INTO (§BASE-CUR). The worker prints signs too (deterministic advice, notification feed), so a
+  second table would disagree with the client exactly where nobody looks.
 - `shared/types.ts` — форми ТАБЛИЦЬ (`Account`, `Transaction`, `Category`…), `notif-i18n`.
 
 ## 🔒 Інваріанти (тримати ЗАВЖДИ)
 - Гроші — **INTEGER-копійки** скрізь; ділимо на 100 лише в показі.
 - Агрегація по `COALESCE(parent_id, id)` (рол-ап підкатегорій у батька).
 - Кредитний ліміт НІКОЛИ не зливати з власними: власні = `balance − credit_limit`, борг окремо.
+- **§BASE-CUR (2026-08-18): WHICH CURRENCY THE APP ANSWERS IN is the reader's question, not a
+  constant.** The canon always rolled a multi-currency ledger up into ONE unit (`baseMult` in SQL,
+  `toBaseMinor` in JS) and that unit was nailed to the hryvnia (`WHEN 980 THEN 1.0`) — so "roll up
+  into one unit" and "roll up into ₴" had become the same sentence. They are not: the English UI
+  exists for readers who hold no hryvnia, and "146 000 ₴" tells them nothing about the size of
+  anything. It is a setting now.
+  Single source — `worker/lib/finance/money.ts`: `resolveBaseCurrency(env)` (header
+  `x-mt-currency` → `app_state.display_currency` → the LANGUAGE, the same order and the same
+  reasoning as `resolveLocale`), `ratesInBase`, `getRates(env)`.
+  ⚠️ **`getRates` kept its name and its type but returns rates IN THE READER'S BASE** (with its own
+  row for 980). That is why none of its forty consumers had to be audited for the one that forgot
+  to convert. The raw table is `getStoredRates`, reachable by two modules — held by lint **C10**.
+  ⚠️ **A base with no rate is REFUSED** (falls back to ₴, and `/rates` returns the EFFECTIVE base):
+  a client printing "$" over hryvnia figures is a worse failure than one printing "₴".
+  ⚠️ **Amounts the USER TYPED are stored in HRYVNIA** (`budgets.amount`, `savings_goals`,
+  `event_groups.budget`, `event_planned`, `facts.delta_minor` — none has a currency column). Reads
+  convert (`uahToBase`), writes convert back (`baseToUah`). Named cost: a limit typed as $200 reads
+  as $198 next month. That is the honest consequence of a hryvnia-denominated plan read in another
+  currency, and it is smaller than the alternative — a limit compared against spending measured in
+  a different unit, which is not a rounding error but a wrong answer.
+  ⚠️ **A CLOSED month (`budget_months`) is written in HRYVNIA** (`hryvniaMult`): an archive whose
+  unit depends on who happened to wake the cron that day is not a history.
+  ⚠️ **The unit travels WITH the event:** `insertDrafts` stamps `cur` into `notif_params`. The feed
+  renders numbers computed months ago; re-labelling them with today's currency puts the sign of one
+  currency in front of the amount of another — a lie that renders perfectly.
+  ⚠️ **API fields still end in `*_uah`** — the suffix is historical and means "minor units of the
+  display base". Renaming is not free: those keys sit inside EVERY stored report
+  (`reports.data_json`), so the repair would silently blank part of a user's own history. Instead
+  the model gets `moneyUnitDirective` (`lib/ai/prompt.ts`) — left alone it reads a key name as a
+  fact and writes "₴" over dollars (§LANG-ARCH, the money half).
+  ⚠️ **Client: `baseSign()` (`src/lib/currency.ts`), never a literal.** Dictionaries use `{cur}`,
+  which `translate()` fills into EVERY string by itself — 28 entries said "₴" beside an
+  already-converted number, and a parameter you have to remember would have been forgotten on the
+  29th. Held by `check-i18n` + **C10** + `worker/test/currency.test.ts` (11 scenarios).
 - Мультивалюта: `transactions.currency_code` = валюта РАХУНКУ (mono `amount` у ній); `original_amount`/`original_currency` = валюта операції. Зведення в ₴ — лише через `toUAHMinor`/курси (`app_state.rates`).
 - **Пара-переказ = ЄДИНО `transfer_pair_id`** (ставить лише крок 1 `detectTransfers`). `is_transfer=1` НЕ згортає пару в один рядок — його ставлять 5 шляхів (вставка `repo.ts` через `descriptionIsTransfer`, AI-enrich, alias, ручне, одностороннє), і жоден з них pair_id не дає. Список ховає «+» сторону тільки по `transfer_pair_id` (`api.ts` `/transactions`). **Holds парують** (2026-07-15): моно лишає внутрішній рух («Округлення балансу», «Поповнення «На квартиру»») холдом надовго, а вхідну сторону на банці постить одразу `hold=0` — старий фільтр `hold=0` у детекті різав мінусову сторону, тож пара не збиралась і обидва рядки висіли окремо. Зміна суми на сеттлменті розпарює ОБИДВІ сторони (`repo.upsertMonoTx`) → наступний detect збирає заново.
 - **Подія інжесту НЕ втрачається через невідомий рахунок (§STUB-ACC, 2026-08-07).** `upsertMonoTx`

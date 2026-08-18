@@ -8,6 +8,7 @@ import { HoverTip } from "../ui/HoverTip.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { monthShort } from "../../lib/format.ts";
 import { IMPORTANCE_META } from "../../lib/importance.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 const monLbl = (m: string) => monthShort(Number(m.split("-")[1]) - 1) ?? m;
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
@@ -29,10 +30,10 @@ function MhTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{r.label}{r.current ? t("mh.currentSuffix") : ""}</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{t("mh.incomeLabel")}: {fmt0.format(r.income)} ₴</div>
-      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{t("common.expenses")}: {fmt0.format(r.spend)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{t("mh.incomeLabel")}: {fmt0.format(r.income)} {baseSign()}</div>
+      <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{t("common.expenses")}: {fmt0.format(r.spend)} {baseSign()}</div>
       <div className="r tip-net" style={{ color: r.net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
-        <span className="d" style={{ background: "transparent" }} />{t("mh.netLabel")}: {r.net >= 0 ? "+" : ""}{fmt0.format(r.net)} ₴
+        <span className="d" style={{ background: "transparent" }} />{t("mh.netLabel")}: {r.net >= 0 ? "+" : ""}{fmt0.format(r.net)} {baseSign()}
       </div>
     </div>
   );

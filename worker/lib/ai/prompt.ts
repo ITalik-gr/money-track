@@ -218,6 +218,29 @@ export async function replyLangDirective(env: Env, mode: "content" | "conversati
 }
 
 /**
+ * WHICH CURRENCY THE MODEL IS LOOKING AT (§BASE-CUR) — the money half of `replyLangDirective`.
+ *
+ * Every figure in an AI payload is already rolled up into ONE unit, and that unit is now the
+ * reader's choice rather than the hryvnia. Nothing in the payload says so: the field names still
+ * end in `_uah` (they are inside every stored report, so they cannot be renamed), and the model
+ * reads a key name as a fact. Left alone it writes "₴" over dollar amounts — the same class of
+ * defect as §LANG-ARCH, and just as invisible, because the sentence reads perfectly.
+ *
+ * Deliberately ONE short paragraph placed with the language directive, in the DYNAMIC block: it
+ * must not split the 1h prompt cache that the knowledge corpus depends on.
+ */
+export async function moneyUnitDirective(env: Env): Promise<string> {
+  const { resolveBaseCurrency } = await import("../finance/money.ts");
+  const { currencyCode, currencySign } = await import("../../../shared/currency.ts");
+  const base = await resolveBaseCurrency(env);
+  return ` 💱 CURRENCY: every money figure in the data you were given is already converted into ` +
+    `${currencyCode(base)} minor units — including fields whose name ends in "_uah", which is a ` +
+    `historical suffix and does NOT mean hryvnia. Write amounts with "${currencySign(base)}" and ` +
+    `never name or convert into another currency, unless a single transaction states its own ` +
+    `currency alongside the amount.`;
+}
+
+/**
  * Language for a structured answer where exactly ONE field is prose.
  *
  * `replyLangDirective("content")` is too broad for the enrichment calls: their output is data —

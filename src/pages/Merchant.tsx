@@ -9,6 +9,7 @@ import { TxItem } from "../components/transactions/TxItem.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { formatMinor } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
+import { baseSign } from "../lib/currency.ts";
 
 // §P3: сторінка одного мерчанта — уся історія витрат, тренд 6 міс, середній чек, частка в
 // категорії, перша/остання покупка. Дані канонічні (stats.ts), зведені в ₴.
@@ -25,7 +26,7 @@ function MTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{p.label}</div>
-      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{fmt0.format(p.spent)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{fmt0.format(p.spent)} {baseSign()}</div>
     </div>
   );
 }
@@ -73,9 +74,9 @@ export function Merchant() {
       ) : (
         <div className="stack" style={{ gap: 18 }}>
           <div className="merchant-kpis">
-            <Stat label={t("mrc.totalSpentLabel")} v={<>{formatMinor(data.total, { decimals: false })} <span className="cur">₴</span></>} />
+            <Stat label={t("mrc.totalSpentLabel")} v={<>{formatMinor(data.total, { decimals: false })} <span className="cur">{baseSign()}</span></>} />
             <Stat label={t("stats.fact.txCount")} v={data.n} sub={data.first_at ? t("mrc.sinceDate", { date: dateFull.format(data.first_at * 1000) }) : undefined} />
-            <Stat label={t("stats.fact.avgCheck")} v={<>{formatMinor(data.avg, { decimals: false })} <span className="cur">₴</span></>} />
+            <Stat label={t("stats.fact.avgCheck")} v={<>{formatMinor(data.avg, { decimals: false })} <span className="cur">{baseSign()}</span></>} />
             {data.top_category && (
               <Stat label={t("mrc.categoryLabel")} v={data.top_category.name} color={data.top_category.color}
                 sub={data.category_share != null ? t("mrc.categoryShareSub", { pct: data.category_share }) : undefined} />

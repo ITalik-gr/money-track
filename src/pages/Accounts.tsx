@@ -19,12 +19,13 @@ import { Skeleton } from "../components/ui/Skeleton.tsx";
 import { Sparkline } from "../components/ui/Sparkline.tsx";
 import { NetworthCard } from "../components/stats/NetworthCard.tsx";
 import { AddAccountModal } from "../components/accounts/AddAccountModal.tsx";
-import { toUAHMinor, formatMinor } from "../lib/format.ts";
+import { toBaseMinor, formatMinor } from "../lib/format.ts";
 import { errText } from "../lib/errors.ts";
 import { toast } from "../lib/toast.ts";
 import { accountTypeLabel } from "../lib/merchant.ts";
 import { currencySign } from "../lib/format.ts";
 import type { Account } from "../../shared/types.ts";
+import { baseSign, getBaseCurrency } from "../lib/currency.ts";
 
 // ₴-величина рахунку для сортування/підсумків — дзеркалить `shown` у картці (кредитка = власні).
 // Від'ємне НЕ затискаємо: кредитка в боргу має власних коштів менше нуля, і саме це число
@@ -34,8 +35,10 @@ function uahValue(a: Account, rates: Record<string, number>): number {
   const limit = a.credit_limit ?? 0;
   const own = (a.balance ?? 0) - limit;
   const shown = limit > 0 ? own : (a.balance ?? 0);
-  const code = a.currency_code ?? 980;
-  return code !== 980 ? (toUAHMinor(shown, code, rates) ?? 0) : shown;
+  // §BASE-CUR: no `code !== 980` shortcut. The rates map is expressed in the READER's base and
+  // carries its own 980 row, so the hryvnia is a currency like any other here — skipping it left
+  // hryvnia accounts un-converted in a column of dollars, all of them under one sign.
+  return toBaseMinor(shown, a.currency_code ?? 980, rates) ?? 0;
 }
 
 export function Accounts() {
@@ -176,7 +179,7 @@ function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
     <div className="card cur-split">
       <div className="cur-split-bar">
         {rows.map(([code, v], i) => (
-          <span key={code} style={{ width: `${(v / total) * 100}%`, background: COLORS[i % COLORS.length] }} title={`${currencySign(code)}: ${formatMinor(v, { decimals: false })} ₴`} />
+          <span key={code} style={{ width: `${(v / total) * 100}%`, background: COLORS[i % COLORS.length] }} title={`${currencySign(code)}: ${formatMinor(v, { decimals: false })} ${baseSign()}`} />
         ))}
       </div>
       <div className="cur-split-legend">
@@ -184,7 +187,7 @@ function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
           <span key={code} className="cs-item">
             <span className="d" style={{ background: COLORS[i % COLORS.length] }} />
             <span className="cs-cur">{currencySign(code)}</span>
-            <span className="cs-val">{formatMinor(v, { decimals: false })} ₴</span>
+            <span className="cs-val">{formatMinor(v, { decimals: false })} {baseSign()}</span>
             <span className="cs-pct muted">{Math.round((v / total) * 100)}%</span>
           </span>
         ))}
@@ -230,7 +233,7 @@ function FundsOverview() {
       {hasBar && (
         <div className="funds-bar">
           {parts.map((p) => p.val > 0 && (
-            <span key={p.key} style={{ width: `${(p.val / barTotal) * 100}%`, background: p.color }} title={`${p.label}: ${formatMinor(p.val, { decimals: false })} ₴`} />
+            <span key={p.key} style={{ width: `${(p.val / barTotal) * 100}%`, background: p.color }} title={`${p.label}: ${formatMinor(p.val, { decimals: false })} ${baseSign()}`} />
           ))}
         </div>
       )}
@@ -249,7 +252,7 @@ function Section({ title, accounts, rates, history }: {
     <section className="acct-sec">
       <div className="section-head">
         <h2>{title}</h2>
-        <span className="acct-sec-sum">≈ {formatMinor(subtotal, { decimals: false })} ₴</span>
+        <span className="acct-sec-sum">≈ {formatMinor(subtotal, { decimals: false })} {baseSign()}</span>
       </div>
       <div className="acct-grid">
         {sorted.map((a) => <AccountCard key={a.id} a={a} rates={rates} spark={history[a.id]} />)}
@@ -292,8 +295,9 @@ function AccountCard({ a, rates, spark }: {
   const code = a.currency_code ?? 980;
   const color = TYPE_COLOR[kind] ?? "var(--muted)";
 
-  // ≈ у ₴ для валютних рахунків/банок (курс з app_state.rates).
-  const uah = code !== 980 ? toUAHMinor(shown, code, rates) : null;
+  // The "≈" line converts the card's own currency into the DISPLAY base — so it is shown whenever
+  // the two differ, which is no longer the same as "the account is not in hryvnia" (§BASE-CUR).
+  const uah = code !== getBaseCurrency() ? toBaseMinor(shown, code, rates) : null;
 
   const showManualTitle = a.type === "cash" || a.type === "manual_card" || a.type === "crypto";
   const title = a.type === "jar" || showManualTitle ? (a.title || accountTypeLabel(kind)) : (accountTypeLabel(kind) ?? kind);
@@ -321,7 +325,7 @@ function AccountCard({ a, rates, spark }: {
       </div>
       <div className="acct2-sublabel">{subLabel}</div>
       <div className="acct2-bal"><Money minor={shown} currency={code} /></div>
-      {uah != null && <div className="acct2-fx">≈ {formatMinor(uah, { decimals: false })} ₴</div>}
+      {uah != null && <div className="acct2-fx">≈ {formatMinor(uah, { decimals: false })} {baseSign()}</div>}
       {spark && spark.length >= 2 && !spark.every((v) => v === spark[0]) && (
         <div className="acct2-spark" title={t("acct.trend6mo")}><Sparkline values={spark} width={220} height={26} goodUp /></div>
       )}
@@ -336,7 +340,7 @@ function AccountCard({ a, rates, spark }: {
           {a.payment_day != null && (
             <div className="acct2-credit-terms">
               <Icon name="calendar" size={12} /> {t("acct.paymentDue", { day: a.payment_day })}
-              {a.min_payment ? <> {t("acct.minPaymentPrefix")} {formatMinor(a.min_payment, { decimals: false })} ₴</> : null}
+              {a.min_payment ? <> {t("acct.minPaymentPrefix")} {formatMinor(a.min_payment, { decimals: false })} {baseSign()}</> : null}
             </div>
           )}
         </div>
@@ -458,7 +462,7 @@ function ArchivedSection({ rates }: { rates: Record<string, number> }) {
               <div key={a.id} className="acct2 muted-acct archived-acct">
                 <div className="acct2-head"><span className="acct2-title">{a.title || accountTypeLabel(a.type ?? "manual")}</span></div>
                 <div className="acct2-bal"><Money minor={a.balance ?? 0} currency={code} /></div>
-                {uah != null && <div className="acct2-fx">≈ {formatMinor(uah, { decimals: false })} ₴</div>}
+                {uah != null && <div className="acct2-fx">≈ {formatMinor(uah, { decimals: false })} {baseSign()}</div>}
                 <button className="btn ghost sm" style={{ marginTop: 8 }} onClick={() => setActive({ id: a.id, active: true })}>{t("acct.restore")}</button>
               </div>
             );

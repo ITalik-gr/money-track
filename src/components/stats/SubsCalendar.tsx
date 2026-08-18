@@ -3,6 +3,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
+import { baseSign } from "../../lib/currency.ts";
 
 // §Беклог: календар майбутніх списань — сітка на ~5 тижнів наперед, дні з підписками
 // підсвічені сумою. Дає побачити «важкі» дні місяця й вплив на кешфлоу.
@@ -49,7 +50,7 @@ export function SubsCalendar() {
     <section>
       <div className="section-head">
         <h2>{t("sc.title")}</h2>
-        <span className="label">{t("sc.subtitle", { amount: `${formatMinor(data.total, { decimals: false })} ₴` })}</span>
+        <span className="label">{t("sc.subtitle", { amount: `${formatMinor(data.total, { decimals: false })} ${baseSign()}` })}</span>
       </div>
       <div className="card subs-cal">
         <div className="sc-grid sc-head">
@@ -68,13 +69,13 @@ export function SubsCalendar() {
                 {hit && (
                   <div className="sc-hit">
                     <span className="sc-title">{hit.titles[0]}{hit.titles.length > 1 ? ` +${hit.titles.length - 1}` : ""}</span>
-                    <span className="sc-amt">{formatMinor(hit.sum, { decimals: false })} ₴</span>
+                    <span className="sc-amt">{formatMinor(hit.sum, { decimals: false })} {baseSign()}</span>
                   </div>
                 )}
               </div>
             );
             return hit
-              ? <HoverTip key={i} content={<><div className="tip-lbl">{d.getDate()}.{d.getMonth() + 1} · {formatMinor(hit.sum, { decimals: false })} ₴</div>{hit.titles.map((t, j) => <div key={j} className="r">{t}</div>)}</>}>{cell}</HoverTip>
+              ? <HoverTip key={i} content={<><div className="tip-lbl">{d.getDate()}.{d.getMonth() + 1} · {formatMinor(hit.sum, { decimals: false })} {baseSign()}</div>{hit.titles.map((t, j) => <div key={j} className="r">{t}</div>)}</>}>{cell}</HoverTip>
               : <div key={i}>{cell}</div>;
           })}
         </div>

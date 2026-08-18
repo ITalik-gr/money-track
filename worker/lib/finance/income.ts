@@ -21,7 +21,7 @@
  */
 import type { Env } from "../../env.ts";
 import * as planningRepo from "../../repo/planning.ts";
-import { getRates } from "./finance.ts";
+import { getRates } from "./money.ts";
 import { chargesBetween } from "./subscriptions.ts";
 import { localMonthStart, valueMode, STATS_JOINS, INCOME_WHERE, incomeSum } from "./stats.ts";
 
@@ -52,7 +52,7 @@ export async function incomeOutlook(
   const monthEnd = localMonthStart(now, 1);
 
   const [rates, plans] = await Promise.all([
-    getRates(env.DB),
+    getRates(env),
     planningRepo.activeIncomePlans(env.DB),
   ]);
   const { mult } = valueMode(rates, null);

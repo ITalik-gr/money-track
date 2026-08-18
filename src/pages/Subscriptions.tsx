@@ -21,8 +21,9 @@ import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { Select } from "../components/ui/Select.tsx";
 import { SubGridSkeleton } from "../components/ui/Skeleton.tsx";
-import { toUAHMinor, formatMinor } from "../lib/format.ts";
+import { toBaseMinor, formatMinor } from "../lib/format.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
+import { baseSign, getBaseCurrency } from "../lib/currency.ts";
 
 const fmtDate = dateFmt({ day: "numeric", month: "short" });
 const CUR_OPTS = [
@@ -141,11 +142,11 @@ export function Subscriptions() {
     .slice().sort((a, b) => nextCharge(a) - nextCharge(b));
   const incomePlans = (planned ?? []).filter((p) => p.kind === "income");
   // Місячний тягар — зводимо кожну підписку в ₴ за її валютою (§F4).
-  const burden = Math.round(list.reduce((s, p) => s + (toUAHMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)), 0));
+  const burden = Math.round(list.reduce((s, p) => s + (toBaseMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)), 0));
   // Топ-найдорожчі за місячним ₴-еквівалентом (завершені не рахуємо).
   const topExpensive = list
     .filter((p) => !isFinished(p))
-    .map((p) => ({ p, uah: Math.round(toUAHMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)) }))
+    .map((p) => ({ p, uah: Math.round(toBaseMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)) }))
     .filter((x) => x.uah > 0)
     .sort((a, b) => b.uah - a.uah)
     .slice(0, 3);
@@ -227,9 +228,11 @@ export function Subscriptions() {
                     <Money minor={p.period_amount ?? 0} currency={p.currency_code ?? 980} decimals={false} />
                     <span className="sub-card-per">{cadenceLabel(p)}</span>
                   </div>
-                  {(p.currency_code ?? 980) !== 980 && (() => {
-                    const uah = toUAHMinor(p.period_amount ?? 0, p.currency_code ?? 980, rates);
-                    return uah != null ? <div className="sub-card-fx">≈ {formatMinor(uah, { decimals: false })} ₴ {cadenceLabel(p)}</div> : null;
+                  {/* §BASE-CUR: the equivalent line appears whenever the plan's currency differs
+                      from the one this screen totals in — which is no longer "not hryvnia". */}
+                  {(p.currency_code ?? 980) !== getBaseCurrency() && (() => {
+                    const uah = toBaseMinor(p.period_amount ?? 0, p.currency_code ?? 980, rates);
+                    return uah != null ? <div className="sub-card-fx">≈ {formatMinor(uah, { decimals: false })} {baseSign()} {cadenceLabel(p)}</div> : null;
                   })()}
                   {(() => {
                     // §Хвіст: факт vs план — скільки реально списувалось + ознака подорожчання.

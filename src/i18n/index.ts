@@ -5,6 +5,7 @@ import uk from "./uk.json";
 import { getLocale, hasStoredLocale, initialLocale, localeTag, setLocale } from "./locale.ts";
 import type { Locale } from "./locale.ts";
 import { store } from "../store/index.ts";
+import { baseSign, getBaseCurrency } from "../lib/currency.ts";
 import { api, useGetMeQuery } from "../store/api.ts";
 
 // Category display names are resolved SERVER-SIDE in the owner locale (P3.4). Switching language
@@ -31,10 +32,17 @@ export type TParams = Record<string, string | number>;
  *  string is visible (as the key) rather than blank. `{name}` placeholders are interpolated. */
 export function translate(locale: Locale, key: TranslationKey, params?: TParams): string {
   let s = dicts[locale][key] ?? dicts.en[key] ?? (key as string);
-  if (params) {
-    for (const [k, v] of Object.entries(params)) {
-      s = s.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
-    }
+  // §BASE-CUR: `{cur}` is filled in for EVERY string, without the call site asking.
+  //
+  // Twenty-eight dictionary entries spelled the hryvnia sign out — "limit ₴", "converted to ₴",
+  // "{amount} ₴/mo" — which is precisely what an English-reading visitor saw next to numbers the
+  // server had by then already converted into dollars. Threading a parameter through twenty-eight
+  // `t()` calls would have left the twenty-ninth to whoever writes the next string; a default
+  // cannot be forgotten. Explicit `params.cur` still wins, for the rare row that names a currency
+  // of its own.
+  const all: TParams = { cur: baseSign(), ...params };
+  for (const [k, v] of Object.entries(all)) {
+    s = s.replace(new RegExp(`\\{${k}\\}`, "g"), String(v));
   }
   return s;
 }
@@ -61,7 +69,7 @@ const LocaleContext = createContext<{
  * asking the server what language to use without telling it who was asking.
  */
 const localeHeaders = (extra?: Record<string, string>): Record<string, string> =>
-  ({ "x-mt-locale": getLocale(), ...extra });
+  ({ "x-mt-locale": getLocale(), "x-mt-currency": String(getBaseCurrency()), ...extra });
 
 function pushLocale(l: Locale): void {
   fetch("/api/settings/locale", {

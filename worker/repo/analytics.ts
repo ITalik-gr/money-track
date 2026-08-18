@@ -645,12 +645,16 @@ export async function categoryMerchants(
 }
 
 export async function categoryTransactions(
-  db: AppDb, v: ValueScope, r: Range, parent: number,
+  db: AppDb, locale: NotifLocale, v: ValueScope, r: Range, parent: number,
   scope?: { isParent: boolean; isIncome: boolean },
 ): Promise<DrillTx[]> {
   const res = await db.prepare(
+    // §LANG-ARCH: this SELECT was the one query on the drill that skipped `catNameSql`. Its two
+    // neighbours (subs, merchants) localize, so an English reader opening a block on Statistics
+    // got English headings above a list of Ukrainian category names — which reads as a broken
+    // translation, not a missing one. A category name reaching the client resolves here.
     `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant, t.comment,
-            COALESCE(rc.name, c.name) AS category_name, COALESCE(rc.color, c.color) AS category_color
+            ${catNameSql(locale, "COALESCE(rc.name, c.name)")} AS category_name, COALESCE(rc.color, c.color) AS category_color
      FROM transactions t ${STATS_JOINS}
      WHERE ${categoryDrillWhere(v, scope)} ORDER BY t.amount ASC LIMIT 60`,
   ).bind(r.from, r.to, parent).all<DrillTx>();

@@ -125,15 +125,9 @@
 
 .chart-card { padding: 14px 12px 6px; }
 
-/* ⚠️ The vertical rhythm between this page's blocks, and WHY it needs saying here.
-   `.section-head` carries `margin: 26px 2px 10px` — that is the app's gap between sections. But
-   `.section-head:first-child` zeroes it to 4px so the first heading does not push the page away
-   from its header, and inside a `<section>` wrapper EVERY heading is a first child. So the moment
-   a page groups its blocks in `<section>` elements — which is the semantic thing to do — it loses
-   the spacing the design system says it has. Restored here for the sections that follow the stat
-   row, and a little wider than 26px because this page stacks five unrelated blocks.
-   ⚠️ Scoped, not global: the same defect is on every page using `<section>`, but fixing it there
-   changes spacing on screens I cannot see (STYLES phase 0.5 — needs a live eye). Noted in ROADMAP. */
+/* The base gap is now global (`section > .section-head:first-child` in shell.css). This page keeps
+   a wider one of its own: it stacks five unrelated blocks, so the standard 26px reads as one long
+   list rather than as five things. */
 .cat-page-stats ~ section > .section-head:first-child { margin-top: 34px; }
 
 @media (max-width: 560px) {

@@ -19,6 +19,7 @@ import type { Overview } from "../../store/api.ts";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../../lib/importance.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { SliceDrillPanel, StatKpiInner, type Cur } from "./shared.tsx";
+import { baseSign } from "../../lib/currency.ts";
 
 // Клікабельні KPI: клік на «Витрати»/«Надходження» → повний список операцій, що рахуються.
 export function ClickableKpis({ data, sign, net, avgDay, from, to, currency }: {
@@ -141,8 +142,8 @@ export function SpendingPatterns() {
               {one > 0 && <span style={{ width: `${(one / tot) * 100}%`, background: "var(--c-teal)" }} title={t("stats.recurring.titleOne", { pct: Math.round((one / tot) * 100) })} />}
             </div>
             <div className="imp-legend">
-              <span className="lg"><span className="d" style={{ background: "var(--accent)" }} />{t("stats.recurring.regularLabel")} · <b>{formatMinor(reg, { decimals: false })} ₴</b> <span className="muted">({recurring.recurring.n} {t("stats.txCountShort")})</span></span>
-              <span className="lg"><span className="d" style={{ background: "var(--c-teal)" }} />{t("stats.recurring.oneoffLabel")} · <b>{formatMinor(one, { decimals: false })} ₴</b> <span className="muted">({recurring.oneoff.n} {t("stats.txCountShort")})</span></span>
+              <span className="lg"><span className="d" style={{ background: "var(--accent)" }} />{t("stats.recurring.regularLabel")} · <b>{formatMinor(reg, { decimals: false })} {baseSign()}</b> <span className="muted">({recurring.recurring.n} {t("stats.txCountShort")})</span></span>
+              <span className="lg"><span className="d" style={{ background: "var(--c-teal)" }} />{t("stats.recurring.oneoffLabel")} · <b>{formatMinor(one, { decimals: false })} {baseSign()}</b> <span className="muted">({recurring.oneoff.n} {t("stats.txCountShort")})</span></span>
             </div>
             {recurring.oneoff_items.length > 0 && (
               <div className="oneoff-list">
@@ -152,7 +153,7 @@ export function SpendingPatterns() {
                     <span className="oor-name">{it.merchant ?? it.category ?? t("stats.recurring.fallback")}</span>
                     <span className="oor-cat muted">{it.category ?? "—"}</span>
                     <span className="oor-date muted">{dfmt.format(it.time * 1000)}</span>
-                    <span className="oor-amt num-mono">{formatMinor(it.amount, { decimals: false })} ₴</span>
+                    <span className="oor-amt num-mono">{formatMinor(it.amount, { decimals: false })} {baseSign()}</span>
                   </div>
                 ))}
               </div>
@@ -202,7 +203,7 @@ export function SpendingPatterns() {
                   {(p.mostly_oneoff || p.lumpy) && <span className="pace-tag" title={t("stats.pace.lumpyTitle")}>{t("stats.pace.lumpyTag")}</span>}
                 </span>
                 <span className="pace-nums num-mono">
-                  {formatMinor(p.spent, { decimals: false })} → <b>≈{formatMinor(p.projected, { decimals: false })}</b> ₴
+                  {formatMinor(p.spent, { decimals: false })} → <b>≈{formatMinor(p.projected, { decimals: false })}</b> {baseSign()}
                   <span className="muted"> / {formatMinor(p.usual, { decimals: false })}</span>
                 </span>
                 {p.pct != null && (

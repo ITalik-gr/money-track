@@ -12,7 +12,7 @@
  */
 import type { Env } from "../../env.ts";
 import { callHaikuJson } from "./json.ts";
-import { replyLangDirective } from "./prompt.ts";
+import { replyLangDirective, moneyUnitDirective } from "./prompt.ts";
 import { getTaskModel } from "./models.ts";
 import type { AnthropicContentBlock } from "./ai.ts";
 import type { AdviceAction } from "./generate.ts";
@@ -97,7 +97,7 @@ export async function generateFinancialReport(
         "runway_months (number or null), note}, advice:[{title, detail, action}] (3-5 actionable items with the " +
         "effect in UAH; action is null or {type:'create_budget', label, category_id, category_name, amount_uah})}. " +
         "Amounts are whole hryvnia." +
-        (await replyLangDirective(env)),
+        (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];
   // 8000, а не 3000: повний звіт українською — це 2-4 секції, 8 категорій, аномалії та 3-5 порад,

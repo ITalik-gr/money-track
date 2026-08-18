@@ -1,4 +1,4 @@
-import { toUAHMinor, type Rates } from "./finance.ts";
+import { toBaseMinor, type Rates } from "./money.ts";
 import type { AppDb } from "../platform/db-shim.ts";
 
 // Детерміністичне співставлення операцій із оголошеними підписками (planned_payments).
@@ -35,7 +35,7 @@ async function activeSubs(db: AppDb): Promise<SubRow[]> {
 // підписка $5 рахувалась як 5 ₴ (у «Скоро спишеться», прогнозі, календарі та в
 // AI-контексті порадника). Будь-яке зведення планів у ₴ — лише через ці хелпери.
 export function plannedUAH(amountMinor: number | null, code: number | null, rates: Rates): number {
-  return toUAHMinor(amountMinor ?? 0, code ?? 980, rates);
+  return toBaseMinor(amountMinor ?? 0, code ?? 980, rates);
 }
 
 // Сума планів у ₴. Приймає будь-які рядки з сумою+валютою (не лише SubRow).

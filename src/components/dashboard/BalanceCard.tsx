@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { useGetSummaryQuery } from "../../store/api.ts";
 import { Money } from "../ui/Money.tsx";
 import { Icon } from "../ui/Icon.tsx";
-import { formatMinor, currencySign } from "../../lib/format.ts";
+import { formatMinor } from "../../lib/format.ts";
+import { baseSign } from "../../lib/currency.ts";
 import { useCountUp } from "../../lib/useCountUp.ts";
 import { useT } from "../../i18n/index.ts";
 
@@ -10,10 +11,14 @@ import { useT } from "../../i18n/index.ts";
 export function BalanceCard() {
   const t = useT();
   const { data, isLoading } = useGetSummaryQuery();
-  const uah = data?.byCurrency.find((x) => x.currency_code === 980)?.own ?? 0;
-  const others = data?.byCurrency.filter((x) => x.currency_code !== 980 && x.own !== 0) ?? [];
+  // §BASE-CUR: the hero is the TOTAL, converted into the reader's currency — not the hryvnia
+  // bucket. Picking one currency out of the breakdown made the headline figure answer a different
+  // question from the card's own label ("own funds"), and on a dollar screen it answered it in
+  // the wrong unit besides. The per-currency chips below still show each bucket AS IT IS.
+  const total = data?.totalUAH ?? 0;
+  const others = data?.byCurrency.filter((x) => x.own !== 0) ?? [];
   // §10.4: делікатний count-up герой-суми, коли дані приходять
-  const animUah = useCountUp(uah);
+  const animTotal = useCountUp(total);
 
   return (
     <div className="card balance hero">
@@ -22,16 +27,19 @@ export function BalanceCard() {
         <Link to="/accounts" className="label">{t("link.accounts")} →</Link>
       </div>
 
-      <div className={`bal-num num-hero ${uah < 0 ? "neg" : ""}`}>
+      <div className={`bal-num num-hero ${total < 0 ? "neg" : ""}`}>
         {isLoading ? "…" : (
           <>
-            {formatMinor(Math.round(animUah), { decimals: false })}
-            <span className="cur">{currencySign(980)}</span>
+            {formatMinor(Math.round(animTotal), { decimals: false })}
+            <span className="cur">{baseSign()}</span>
           </>
         )}
       </div>
 
-      {(others.length > 0 || (data && data.totalUAH !== uah)) && (
+      {/* The breakdown is shown only when it says something the hero does not: one bucket in the
+          display currency IS the hero. Each chip stays in its OWN currency — that is the fact the
+          hero deliberately dissolves, and repeating the total here would just say it twice. */}
+      {others.length > 1 && (
         <div className="bal-chips">
           {others.map((x) => (
             <div key={x.currency_code} className="bal-chip">
@@ -39,12 +47,6 @@ export function BalanceCard() {
               <Money minor={x.own} currency={x.currency_code} decimals={false} />
             </div>
           ))}
-          {data && data.totalUAH !== uah && (
-            <div className="bal-chip">
-              <span className="label">{t("bal.totalUah")}</span>
-              <Money minor={data.totalUAH} decimals={false} />
-            </div>
-          )}
         </div>
       )}
 

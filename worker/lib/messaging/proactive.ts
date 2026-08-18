@@ -7,7 +7,7 @@ import { getStoredInsight, buildAndStoreInsight, type StoredInsight } from "../a
 import { nextChargeUnix } from "../finance/subscriptions.ts";
 import { valueMode } from "../finance/stats.ts";
 import { budgetStatus } from "../finance/budgets.ts";
-import { getRates } from "../finance/finance.ts";
+import { getRates } from "../finance/money.ts";
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const uah = (minor: number) => Math.round(minor / 100).toLocaleString("uk-UA");
@@ -34,7 +34,7 @@ function insightText(ins: StoredInsight): string {
 // повною сумою, не віднімав компенсації, викидав усі валютні витрати замість зводити їх у ₴ і
 // не робив рол-ап зняття за реальною категорією.
 async function overBudget(env: Env): Promise<{ name: string; spent: number; budget: number; ratio: number }[]> {
-  const rates = await getRates(env.DB);
+  const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
   return (await budgetStatus(env, mult))
     .filter((b) => b.ratio >= 0.9)

@@ -10,6 +10,7 @@ import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { formatMinor, startOfMonthUnix } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
+import { baseSign } from "../lib/currency.ts";
 
 /**
  * §CATEGORY-PAGE — one category, linkable.
@@ -43,7 +44,7 @@ function CTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{p.label}</div>
-      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{fmt0.format(p.spent)} ₴</div>
+      <div className="r"><span className="d" style={{ background: "var(--accent)" }} />{fmt0.format(p.spent)} {baseSign()}</div>
     </div>
   );
 }
@@ -225,7 +226,7 @@ export function Category() {
                 <li key={m.merchant}>
                   <Link className="cat-merch-name" to={`/merchant/${encodeURIComponent(m.merchant)}`}>{m.merchant}</Link>
                   <span className="cat-merch-n label">{t("cat.merchantOps", { n: m.n })}</span>
-                  <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} ₴</span>
+                  <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} {baseSign()}</span>
                 </li>
               ))}
             </ul>
@@ -326,7 +327,7 @@ export function Category() {
                 <li key={m.merchant}>
                   <Link className="cat-merch-name" to={`/merchant/${encodeURIComponent(m.merchant)}`}>{m.merchant}</Link>
                   <span className="cat-merch-n label">{t("cat.merchantOps", { n: m.n })}</span>
-                  <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} ₴</span>
+                  <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} {baseSign()}</span>
                 </li>
               ))}
             </ul>
