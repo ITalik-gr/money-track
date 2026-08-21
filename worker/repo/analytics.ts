@@ -8,9 +8,9 @@
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import {
   STATS_JOINS, SPEND_WHERE, SPEND_COUNT, INCOME_WHERE, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_LEAF_ID, EFF_CAT_NAME, EFF_CAT_COLOR,
-  EFF_IMPORTANCE, spendSum, incomeSum, amountSum, localYmSql,
+  EFF_IMPORTANCE, INCOME_COUNT, SPEND_TX_COUNT, spendSum, incomeSum, amountSum, localYmSql, localFmtSql,
 } from "../lib/finance/stats.ts";
-import { localDowSql, type WeekdayRow } from "../lib/finance/weekday.ts";
+import { localDowSql, localDomSql, type WeekdayRow, type DomRow } from "../lib/finance/weekday.ts";
 import type { MerchantMonthRow } from "../lib/finance/habits.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import { stLit } from "../lib/platform/i18n.ts";
@@ -44,10 +44,10 @@ export interface Range { from: number; to: number }
  *    even over an empty table — `.first()` types itself as `T | null` in general, but cannot be
  *    null here. Proved on the wire by `__golden__/empty/analytics.overview.json`, which shows an
  *    object rather than a null.
- * 2. `n` IS nullable, and that is a defect the contract has to be honest about: `SUM()` over an
- *    empty set is NULL, and `SPEND_COUNT` — unlike `spendSum`/`incomeSum` — carries no
- *    `COALESCE`. So a brand-new account reads `n: null` where the UI expects a number. Card in
- *    ROADMAP.md; not fixed here, because this pass is behaviour-preserving.
+ * 2. `n` was once nullable — `SUM()` over an empty set is NULL and `SPEND_COUNT` carried no
+ *    `COALESCE`, so a brand-new account read `n: null` where the UI expects a number. It has one
+ *    now (`stats.ts`), and this note is kept because the TYPE still says `number | null`: the
+ *    contract is a floor, and narrowing it is a separate, checkable change.
  */
 export async function periodTotals(
   db: AppDb, v: ValueScope, r: Range,
@@ -65,14 +65,21 @@ export async function periodTotals(
  * `fmt` is an `strftime` pattern chosen by the caller (day / week / month) and is interpolated,
  * not bound — SQLite will not take a format string as a parameter. It never comes from user
  * input: the route maps a fixed bucket name onto one of three literals.
+ *
+ * ⚠️ **The bucket is APP_TZ** (`localFmtSql`), fixed 2026-08-21. It was a raw `strftime`, i.e.
+ * UTC, while `periodBounds` has computed the WINDOW in Kyiv time since §APP_TZ — so the bounds
+ * and the buckets inside them lived in different zones. Two visible consequences: every purchase
+ * after 21:00 Kyiv was drawn on the following day, and the first bucket of a "calendar month"
+ * period actually held the last three hours of the previous month. Neither looks like an error on
+ * a chart; the second one is why a month could open with a bar nobody spent.
  */
 export type SeriesPoint = { bucket: string; spend: number; income: number };
 
 export async function series(
-  db: AppDb, v: ValueScope, r: Range, fmt: string,
+  db: AppDb, v: ValueScope, r: Range, fmt: string, now: number,
 ): Promise<SeriesPoint[]> {
   const res = await db.prepare(
-    `SELECT strftime('${fmt}', t.time, 'unixepoch') AS bucket,
+    `SELECT ${localFmtSql(now, fmt)} AS bucket,
             ${spendSum(v.mult)} AS spend, ${incomeSum(v.mult)} AS income
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ?${v.curFilter}
@@ -145,43 +152,82 @@ export async function spendByEvent(
   return res.results ?? [];
 }
 
-// ---- totals without a count -------------------------------------------------
+// ---- period comparison ------------------------------------------------------
 //
-// ⚠️ The two functions below are near-duplicates of `periodTotals` and `spendByCategory`: they
-// differ only by NOT selecting the transaction count. They are kept separate on purpose during
-// this refactor, which is strictly behaviour-preserving — an extra column in a response is a
-// behaviour change. Merging them is a phase-4 candidate, and having them side by side here is
-// what makes that visible; inline in two handlers, nobody could see they were almost the same.
+// ⚠️ These two look like `periodTotals` and `spendByCategory` with a column missing, and until
+// 2026-08-21 that is exactly what they were — kept side by side so the duplication would be
+// visible enough to merge later. §CADENCE settled it the other way: they are NOT the same
+// question, and the counts prove it. Comparison needs to know how many CHARGES produced a sum
+// (`SPEND_TX_COUNT`, `INCOME_COUNT`), because that is what separates «ця категорія подорожчала»
+// from «списання випало по інший бік межі». The overview needs how many ROWS went into an
+// average check (`SPEND_COUNT`), where one split expense correctly weighs three. Merging them
+// would have made a subscription look like it bills daily on one screen or ruined the average
+// check on the other.
 
 /**
- * Canonical spend + income for a window.
+ * Canonical spend + income for a window, with the number of INCOME events behind it.
  *
- * Shared by period comparison and the month-end forecast: with an empty `curFilter` the two
- * handlers were already issuing a byte-identical query, they just could not see each other.
+ * `income_n` exists for the same reason as the category counts: one salary a month, seen through
+ * a weekly window, reads as «дохід зник» on the week it did not arrive.
  */
 export async function spendIncomeTotals(
   db: AppDb, v: ValueScope, r: Range,
-): Promise<{ spend: number; income: number } | null> {
+): Promise<{ spend: number; income: number; income_n: number } | null> {
   return await db.prepare(
-    `SELECT ${spendSum(v.mult)} AS spend, ${incomeSum(v.mult)} AS income
+    `SELECT ${spendSum(v.mult)} AS spend, ${incomeSum(v.mult)} AS income, ${INCOME_COUNT} AS income_n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ?${v.curFilter}`,
-  ).bind(r.from, r.to).first<{ spend: number; income: number }>();
+  ).bind(r.from, r.to).first<{ spend: number; income: number; income_n: number }>();
 }
 
-/** Same rows as `spendByCategory` minus the count — see the note above about why both exist. */
-export type CategorySpendNoCount = Omit<CategorySpend, "n">;
+/** A category's spend in one window, plus the charge count §CADENCE reads. */
+export type CategoryCompare = Omit<CategorySpend, "n"> & { n: number };
 
 export async function compareByCategory(
   db: AppDb, locale: NotifLocale, v: ValueScope, r: Range,
-): Promise<CategorySpendNoCount[]> {
+): Promise<CategoryCompare[]> {
   const res = await db.prepare(
     `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(locale, EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS color,
-            ${amountSum(v.mult)} AS spent
+            ${amountSum(v.mult)} AS spent, ${SPEND_TX_COUNT} AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
-  ).bind(r.from, r.to).all<CategorySpendNoCount>();
+  ).bind(r.from, r.to).all<CategoryCompare>();
+  return res.results ?? [];
+}
+
+// ---- foreign-currency conversions -------------------------------------------
+
+/**
+ * Every purchase whose OPERATION currency differed from the ACCOUNT currency.
+ *
+ * ⚠️ No `STATS_JOINS`, and that is deliberate rather than an omission. The canon exists to answer
+ * «скільки витрачено на цю категорію», and it splits a transaction into parts to do it. A
+ * conversion happens to the WHOLE transaction, once, at one rate — asking about halves of it is
+ * asking a question the bank never answered. So this reads `t.amount` directly, and a split row
+ * appears here exactly once.
+ *
+ * ⚠️ Outflows only (`t.amount < 0`). A refund abroad converts too, but at the rate of the day it
+ * was returned, so pairing it with the purchase would report a rate MOVE as a bank fee.
+ */
+export interface ForeignTx {
+  id: string; time: number; merchant: string | null;
+  amount: number; currency_code: number;
+  original_amount: number; original_currency: number;
+}
+
+export async function foreignConversions(db: AppDb, r: Range): Promise<ForeignTx[]> {
+  const res = await db.prepare(
+    `SELECT t.id, t.time, t.merchant, t.amount, t.currency_code, t.original_amount, t.original_currency
+     FROM transactions t
+     WHERE t.time >= ? AND t.time <= ?
+       AND t.amount < 0
+       AND t.original_amount IS NOT NULL AND t.original_amount != 0
+       AND t.original_currency IS NOT NULL
+       AND t.original_currency != t.currency_code
+       AND t.transfer_pair_id IS NULL
+     ORDER BY t.time ASC`,
+  ).bind(r.from, r.to).all<ForeignTx>();
   return res.results ?? [];
 }
 
@@ -324,7 +370,7 @@ export async function incomeBySource(
 ): Promise<IncomeSource[]> {
   const res = await db.prepare(
     `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(locale, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
-            ${incomeSum(v.mult)} AS amount, COUNT(*) AS n
+            ${incomeSum(v.mult)} AS amount, COUNT(DISTINCT t.id) AS n
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${INCOME_WHERE}${v.curFilter}
      GROUP BY ${EFF_CAT_ID} ORDER BY amount DESC`,
@@ -456,6 +502,20 @@ export async function spendByWeekday(
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
      GROUP BY dow ORDER BY dow`,
   ).bind(r.from, r.to).all<WeekdayRow>();
+  return res.results ?? [];
+}
+
+/** §WEEKDAY along the other axis — spend per day of the month, in APP_TZ. */
+export async function spendByDom(
+  db: AppDb, v: ValueScope, r: Range, now: number,
+): Promise<DomRow[]> {
+  const res = await db.prepare(
+    `SELECT ${localDomSql(now)} AS dom, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n,
+            CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${v.mult}), 0)) AS INTEGER) AS biggest
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
+     GROUP BY dom ORDER BY dom`,
+  ).bind(r.from, r.to).all<DomRow>();
   return res.results ?? [];
 }
 
@@ -670,6 +730,8 @@ export interface SliceQuery {
   /** The dimension's value; ignored when `dim` is "all". */
   value: string;
   limit: number;
+  /** Now, for the APP_TZ offset the calendar dimensions are resolved with. */
+  now: number;
 }
 
 /**
@@ -683,14 +745,20 @@ export interface SliceQuery {
  */
 function sliceParts(v: ValueScope, r: Range, q: SliceQuery): { base: string; binds: unknown[] } {
   const canon = q.type === "income" ? INCOME_WHERE : SPEND_WHERE;
-  // §E1: weekday — 0=Sun..6=Sat. day — one calendar date (the same UTC bucket `series` grouped
-  // by). dom — day of month, for the heat-map. all — the whole period, for drilling the
-  // "Spending / Income" KPI itself.
+  // §E1: weekday — 0=Sun..6=Sat. day — one calendar date. dom — day of month, for the heat-map.
+  // all — the whole period, for drilling the "Spending / Income" KPI itself.
+  //
+  // ⚠️ **Every calendar dimension is APP_TZ**, fixed 2026-08-21. All three were raw UTC
+  // `strftime` while the charts that OPEN them are local — `buildWeekdayAnalytics` and
+  // `buildDomAnalytics` by construction, and `series` since the fix above. So the bar said one
+  // number and the list behind it held a different set of rows: an evening purchase belonged to
+  // Friday on the chart and to Saturday in the drill. A drill that disagrees with the figure it
+  // was opened from is worse than no drill, because it looks like the app losing transactions.
   const dimCol = q.dim === "account" ? "t.account_id"
     : q.dim === "event" ? "t.event_id"
-    : q.dim === "weekday" ? "CAST(strftime('%w', t.time, 'unixepoch') AS INTEGER)"
-    : q.dim === "day" ? "strftime('%Y-%m-%d', t.time, 'unixepoch')"
-    : q.dim === "dom" ? "CAST(strftime('%d', t.time, 'unixepoch') AS INTEGER)"
+    : q.dim === "weekday" ? `CAST(${localFmtSql(q.now, "%w")} AS INTEGER)`
+    : q.dim === "day" ? localFmtSql(q.now, "%Y-%m-%d")
+    : q.dim === "dom" ? `CAST(${localFmtSql(q.now, "%d")} AS INTEGER)`
     : q.dim === "importance" ? EFF_IMPORTANCE
     : q.dim === "all" ? null
     : "t.merchant";

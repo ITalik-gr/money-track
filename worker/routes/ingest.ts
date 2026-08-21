@@ -3,7 +3,7 @@
 // to a structured record and return it for the client to confirm/save.
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
-import { parseText } from "../lib/ai/enrich.ts";
+import { parseText } from "../lib/ai/parse-text.ts";
 import { ingestReceipt } from "../lib/ai/receipt.ts";
 import { st, resolveLocale } from "../lib/platform/i18n.ts";
 import { countReceiptUpload, DAILY_RECEIPTS } from "../lib/platform/quota.ts";

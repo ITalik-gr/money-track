@@ -350,6 +350,23 @@ export async function lifetimeStats(
   };
 }
 
+/**
+ * Spend and CHARGE COUNT for one window — the pair every comparison on this page needs.
+ *
+ * `COUNT(DISTINCT t.id)`, not `COUNT(*)`: `STATS_JOINS` multiplies a split row into its parts, and
+ * an average check divided by the inflated count is quietly too small (§SPLIT).
+ */
+export async function windowStats(
+  db: AppDb, mult: string, scope: CatScope, from: number, to: number,
+): Promise<{ spent: number; n: number }> {
+  const r = await db.prepare(
+    `SELECT ${catSum(scope, mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE ${catWhere(scope)} AND t.time >= ? AND t.time <= ?`,
+  ).bind(scope.id, from, to).first<{ spent: number; n: number }>();
+  return { spent: r?.spent ?? 0, n: r?.n ?? 0 };
+}
+
 /** Top merchants for this category over the WHOLE history — who this category actually is. */
 export async function lifetimeMerchants(
   db: AppDb, mult: string, scope: CatScope, limit = 8,

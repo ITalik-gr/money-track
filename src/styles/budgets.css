@@ -91,6 +91,31 @@
   .bh-verdict { display: none; }
 }
 
+/* ---- §BUDGET-MEMORY as a record: the whole plan, not one envelope ---------- */
+/* The month rows reuse `.bh-*` deliberately — same question, same shape, one place to restyle. */
+.br-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.br-score { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.br-pct { font-size: 30px; line-height: 1; }
+.br-cats { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.br-cats > .label { margin-bottom: 10px; display: block; }
+.br-cat { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px;
+  padding: 5px 0; font-size: 12.5px; }
+.br-name { display: flex; align-items: center; gap: 8px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.br-name .d { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.br-dots { display: flex; gap: 3px; }
+/* Squares, not a bar: the question here is «в які саме місяці», and a proportion cannot answer
+   it. Order is chronological left to right, matching the month list above. */
+.br-dots > i { width: 9px; height: 9px; border-radius: 2px; background: var(--c-teal, #2f7d6b); }
+.br-dots > i.over { background: var(--neg); }
+.br-streak { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  /* Same call as `.bh-verdict`: the dots already say it, and the sentence would wrap the row. */
+  .br-cat { grid-template-columns: 1fr auto; }
+  .br-streak { display: none; }
+}
+
 /* ---- §CATEGORY-PAGE layout (was entirely unstyled) ------------------------- */
 /* Same grid as `.merchant-kpis`, whose `.merchant-stat` cards this page reuses. Repeated rather
    than shared: the two pages happen to want the same measurements today, and a single class named

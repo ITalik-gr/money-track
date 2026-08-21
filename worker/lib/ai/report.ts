@@ -3,7 +3,7 @@
 // періодом, тягне аномалії (подорожчання підписок, викиди) і описи операцій (user_note),
 // кличе Sonnet 5, зберігає структурований репорт у ai_reports. Ідемпотентно по періоду.
 import type { Env } from "../../env.ts";
-import { getRates } from "../finance/money.ts";
+import { getRates, resolveBaseCurrency } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { fundsBreakdown } from "./advisor.ts";
@@ -11,6 +11,8 @@ import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_COUNT, SPEND_TX_COUNT, valueMode, spendSum, incomeSum, amountSum,
   lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit, categoryMonthlyLevels, localMonthStart, localYmSql, localYm,
 } from "../finance/stats.ts";
+import { deltaMeaningful } from "../finance/cadence.ts";
+import { savingsRatePct } from "../finance/finance.ts";
 import { plannedActuals } from "../finance/subscriptions.ts";
 import { getState } from "../finance/repo.ts";
 // The prompt and the model call live in `report-prompt.ts` (split 2026-08-12 under C3): this file
@@ -175,11 +177,9 @@ export async function buildReportContext(
     return { name: c.name ?? st(loc, "uncategorized"), amount_uah: money(c.spent), prev_uah: money(p), delta_pct: delta };
   });
 
-  // §CADENCE — ритм списань. Період, коротший за місяць, не може чесно порівнювати категорію,
-  // яку списують раз на місяць: підписка 99 ₴ цього тижня проти 1300 ₴ минулого читалась моделлю
-  // як «підписки впали на 92%», хоча це той самий календар, а не зміна поведінки. Дельта осмислена
-  // лише коли з ОБОХ боків є ≥2 списання; інакше даємо канонічний місячний рівень як точку опори.
-  const shortPeriod = periodDays < 28;
+  // §CADENCE — ритм списань. Правило живе в `lib/finance/cadence.ts` (його читає ще й
+  // `/analytics/compare`, який годує два екрани); тут лишається тільки те, що специфічне для
+  // звіту: точка опори замість дельти — канонічний місячний рівень.
   const categoriesForAi = curCats.map((c, i) => {
     const lvl = c.id != null ? levels.get(c.id) : undefined;
     const prevN = prevNMap.get(c.id) ?? 0;
@@ -190,12 +190,14 @@ export async function buildReportContext(
       monthly_usual_uah: lvl ? money(lvl.level) : null,
       // `fixed` з canonical categoryMonthlyLevels: стабільна сума останніх місяців = підписка/оренда.
       billing: lvl?.fixed ? "monthly_fixed" : "variable",
-      delta_meaningful: !shortPeriod || (c.n >= 2 && prevN >= 2),
+      delta_meaningful: deltaMeaningful(periodDays, c.n, prevN),
     };
   });
 
   const net = cur.income - cur.spend;
-  const savingsRate = cur.income > 0 ? Math.round((net / cur.income) * 100) : null;
+  // One definition, shared with `/analytics/monthly-history` — the model and the screen must not
+  // be able to quote different savings rates for the same month.
+  const savingsRate = savingsRatePct(cur.income, cur.spend);
 
   // §B/§R3 чесна подушка через канонічний fundsBreakdown: ліквідна = позитивні власні
   // ЛІКВІДНИХ рахунків; борг окремо; інвест-резерв (крипта/брокер) — НЕ подушка.
@@ -240,7 +242,7 @@ export async function buildReportContext(
     previous: { spend_uah: money(prev.spend), income_uah: money(prev.income), income_charges_n: prev.income_n },
     // §CADENCE: у короткому періоді різниця доходу з ≤1 надходженням з будь-якого боку означає
     // «зарплата/інвойс прийшов іншого тижня», а не «дохід зник».
-    income_delta_meaningful: !shortPeriod || (cur.income_n >= 2 && prev.income_n >= 2),
+    income_delta_meaningful: deltaMeaningful(periodDays, cur.income_n, prev.income_n),
     categories: categoriesForAi,
     // §B разові (податки/стоматолог/велика покупка) vs регулярний ритм — не проєктуй разові в майбутнє.
     recurring_vs_oneoff: {
@@ -343,8 +345,17 @@ export async function generateAndStoreReport(
     chars: JSON.stringify(result).length,
     out_tokens: usage.output_tokens ?? 0,
   };
-  // Зберігаємо AI-результат + детерміновані дані (категорії, тренд, вагомість) для графіків на сторінці.
-  const stored = JSON.stringify({ ...result, trend, importance, categories: categoriesDetail, _diag: diag });
+  // The AI result + the deterministic data (categories, trend, importance) the page plots, AND the
+  // unit all of it is in.
+  //
+  // §BASE-CUR: a report is a RECORD of numbers computed at one moment. The reader may switch
+  // currency next week, and a stored figure re-labelled with today's sign is the sign of one
+  // currency over the amount of another — the same defect the notification feed carries `cur` to
+  // avoid. Reports written before this field default to hryvnia, which is what they are.
+  const stored = JSON.stringify({
+    ...result, trend, importance, categories: categoriesDetail,
+    cur: await resolveBaseCurrency(env), _diag: diag,
+  });
 
   if (existing) {
     await env.DB.prepare(

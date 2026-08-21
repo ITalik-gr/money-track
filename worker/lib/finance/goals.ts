@@ -12,8 +12,8 @@
  */
 import type { Env } from "../../env.ts";
 import type { AppDb } from "../platform/db-shim.ts";
-import { getRates } from "./money.ts";
-import { STATS_JOINS, INCOME_WHERE, incomeSum, valueMode, localMonthStart, localYm } from "./stats.ts";
+import { hryvniaMult } from "./money.ts";
+import { STATS_JOINS, INCOME_WHERE, incomeSum, localMonthStart, localYm } from "./stats.ts";
 
 /** Тип цілі — від нього залежить, ЯК читати прогрес, а не лише як його підписати. */
 export const GOAL_KINDS = ["save_up", "debt_payoff", "sinking_fund"] as const;
@@ -135,8 +135,14 @@ interface AutofillGoal {
  * Канон (`INCOME_WHERE` + `incomeSum`), тож це та сама цифра, що показує Статистика.
  */
 async function prevMonthIncome(env: Env, now: number): Promise<number> {
-  const rates = await getRates(env);
-  const { mult } = valueMode(rates, null);
+  // §BASE-CUR: **hryvnia, deliberately** — this feeds a `goal_contributions` row, and that column
+  // has no currency. `getRates` answers in the READER's base, so with `valueMode(rates, null)` the
+  // amount written to the database depended on the display currency of whoever happened to be
+  // resolved when the cron ran: an English owner's "10% of income" was computed in dollars and
+  // stored as hryvnia, a ~40× understatement that looks like a perfectly ordinary contribution.
+  // Same argument as `hryvniaMult` in §BUDGET-MEMORY: a stored record whose unit moves is not a
+  // record.
+  const mult = await hryvniaMult(env);
   const from = localMonthStart(now, -1);
   const to = localMonthStart(now);
   const r = await env.DB.prepare(
@@ -174,6 +180,7 @@ export async function runGoalAutofill(
   for (const g of goals) {
     let amount = 0;
     if (g.autofill_kind === "fixed") {
+      // Already hryvnia: the route converts on write (§BASE-CUR), like every typed amount.
       amount = Math.max(0, Math.round(g.autofill_value ?? 0));
     } else if (g.autofill_kind === "income_pct") {
       income ??= await prevMonthIncome(env, now);

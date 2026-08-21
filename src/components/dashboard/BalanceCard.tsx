@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useGetSummaryQuery } from "../../store/api.ts";
 import { Money } from "../ui/Money.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { formatMinor } from "../../lib/format.ts";
 import { baseSign } from "../../lib/currency.ts";
 import { useCountUp } from "../../lib/useCountUp.ts";
@@ -10,7 +11,7 @@ import { useT } from "../../i18n/index.ts";
 // Власні кошти великою sans-цифрою (гібрид, DESIGN.md §2) + швидкі дії (DeliFin R1).
 export function BalanceCard() {
   const t = useT();
-  const { data, isLoading } = useGetSummaryQuery();
+  const { data, isLoading, error, refetch } = useGetSummaryQuery();
   // §BASE-CUR: the hero is the TOTAL, converted into the reader's currency — not the hryvnia
   // bucket. Picking one currency out of the breakdown made the headline figure answer a different
   // question from the card's own label ("own funds"), and on a dollar screen it answered it in
@@ -27,14 +28,23 @@ export function BalanceCard() {
         <Link to="/accounts" className="label">{t("link.accounts")} →</Link>
       </div>
 
-      <div className={`bal-num num-hero ${total < 0 ? "neg" : ""}`}>
-        {isLoading ? "…" : (
+      {/*
+        A failed request must not print a NUMBER.
+        The rule in CLAUDE.md is «порожнеча й збій виглядають по-різному», and this card was the
+        strongest case for it: `data?.totalUAH ?? 0` rendered «0 ₴» as the reader's own funds — not
+        an empty card, a wrong one, in the largest type on the first screen. A dash says «no
+        answer»; a zero says «you have nothing».
+      */}
+      <div className={`bal-num num-hero ${error ? "" : total < 0 ? "neg" : ""}`}>
+        {isLoading ? "…" : error ? "—" : (
           <>
             {formatMinor(Math.round(animTotal), { decimals: false })}
             <span className="cur">{baseSign()}</span>
           </>
         )}
       </div>
+
+      <ErrorNote error={error} what={t("bal.ownFunds")} onRetry={refetch} />
 
       {/* The breakdown is shown only when it says something the hero does not: one bucket in the
           display currency IS the hero. Each chip stays in its OWN currency — that is the fact the

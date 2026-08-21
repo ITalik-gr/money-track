@@ -247,7 +247,52 @@ export async function bumpTokenVersion(db: D1Database, id: string): Promise<void
  * everything, deletion is for "erase me". Both existed only as the former until 2026-07-26.
  */
 export async function deleteUser(db: D1Database, id: string): Promise<void> {
+  // The Telegram index goes with the identity, not with the finances: a chat left pointing at a
+  // deleted user would route the next message into an object that no longer exists — and, once
+  // ids are ever reused, into somebody else's.
+  await unlinkAllTgChats(db, id).catch(() => { /* table may predate migration 0008 */ });
   await db.prepare("DELETE FROM users WHERE id = ?").bind(id).run();
+}
+
+// ---- Telegram chat index (directory 0008) ------------------------------------
+//
+// The Worker needs "whose object does this chat belong to" BEFORE it can address any object, so
+// the answer cannot live inside one. See the migration for the full argument.
+//
+// ⚠️ **Authority is split, deliberately, and this is the line:** `app_state.tg_chat_id` inside the
+// object answers «куди ЦЕЙ обʼєкт пушить» (§D1, `tgTarget`), and this table answers «чий це чат»
+// for inbound routing. Two questions, two directions, and neither can be derived from the other —
+// an object cannot look itself up by name (`idFromName` is one-way). They are written by ONE
+// function (`tg-target.ts linkTgChat`) so they cannot drift.
+
+export async function linkTgChatToUser(
+  db: D1Database, chatId: string, userId: string, now = Math.floor(Date.now() / 1000),
+): Promise<void> {
+  // REPLACE, not IGNORE: re-linking a chat to a different account is a legitimate act (a shared
+  // family phone, a re-created account), and the last `/start` to prove ownership wins.
+  await db.prepare("INSERT OR REPLACE INTO tg_links (chat_id, user_id, linked_at) VALUES (?, ?, ?)")
+    .bind(String(chatId), userId, now).run();
+}
+
+/** Whose object should an update from this chat wake? `null` = nobody's, so do not route it. */
+export async function userForTgChat(db: D1Database, chatId: string): Promise<string | null> {
+  try {
+    const r = await db.prepare("SELECT user_id FROM tg_links WHERE chat_id = ?")
+      .bind(String(chatId)).first<{ user_id: string }>();
+    return r?.user_id ?? null;
+  } catch {
+    // The table may not exist yet on a directory that has not run 0008. Unrouted is the safe
+    // answer: it degrades to "the bot does not answer", never to "the bot answers the wrong user".
+    return null;
+  }
+}
+
+export async function unlinkTgChatRow(db: D1Database, chatId: string): Promise<void> {
+  await db.prepare("DELETE FROM tg_links WHERE chat_id = ?").bind(String(chatId)).run();
+}
+
+export async function unlinkAllTgChats(db: D1Database, userId: string): Promise<void> {
+  await db.prepare("DELETE FROM tg_links WHERE user_id = ?").bind(userId).run();
 }
 
 // ---- demo sandbox registry (P4.2) -------------------------------------------

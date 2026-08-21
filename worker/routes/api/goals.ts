@@ -1,7 +1,7 @@
 // `/goals/*` — savings goals and their contribution history. `current_amount` is derived from
 // the contributions (§P2.1), so every write goes through `recalcGoal`.
 import * as goalsRepo from "../../repo/goals.ts";
-import { getRates, toBaseMinor, uahToBaseMinor, baseToUah } from "../../lib/finance/money.ts";
+import { getRates, toBaseMinor, uahToBaseMinor, baseToUah, type Rates } from "../../lib/finance/money.ts";
 import { recalcGoal, isGoalKind, isAutofillKind, goalPace } from "../../lib/finance/goals.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
@@ -26,7 +26,18 @@ goals.get("/goals", async (c) => {
     const current = g.account_id != null && g.account_balance != null
       ? toBaseMinor(g.account_balance, g.account_currency ?? 980, rates)
       : uahToBaseMinor(g.current_amount, rates);
-    g = { ...g, target_amount: uahToBaseMinor(g.target_amount, rates), current_amount: uahToBaseMinor(g.current_amount, rates) };
+    g = {
+      ...g,
+      target_amount: uahToBaseMinor(g.target_amount, rates),
+      current_amount: uahToBaseMinor(g.current_amount, rates),
+      // §BASE-CUR: `autofill_value` is a PERCENTAGE for `income_pct` and a MONEY AMOUNT for
+      // `fixed`. One column, two units — so the conversion has to read the kind. It converted
+      // neither until 2026-08-21, which meant a dollar reader who set «$200 щомісяця» was shown
+      // "200" beside a dollar sign while 200 ₴ was what actually moved.
+      autofill_value: g.autofill_kind === "fixed" && g.autofill_value != null
+        ? uahToBaseMinor(g.autofill_value, rates)
+        : g.autofill_value,
+    };
     // §GOAL-PACE is computed HERE, not in the component: `draftGoalRisk` calls the same function,
     // so "behind" on the card and "behind" in the feed are literally one computation.
     return { ...g, current, pace: goalPace({ ...g, current }, now) };
@@ -41,14 +52,21 @@ goals.get("/goals", async (c) => {
  * не нараховується», а це найгірший стан для фічі, суть якої «воно саме». `null` (вимкнути)
  * лишається легальним, тож `undefined` (не чіпати) і `null` тут різні речі.
  */
-function parseAutofill(kind: unknown, value: unknown, locale: NotifLocale): { kind: string | null; value: number | null } | { error: string } {
+function parseAutofill(
+  kind: unknown, value: unknown, locale: NotifLocale, rates: Rates,
+): { kind: string | null; value: number | null } | { error: string } {
   if (kind == null) return { kind: null, value: null };
   if (!isAutofillKind(kind)) return { error: st(locale, "goalAutofillKind") };
   const v = Math.round(Number(value));
   if (!Number.isFinite(v) || v <= 0) return { error: st(locale, "goalAutofillValue") };
   // Відсоток — саме відсоток: 150% доходу не «агресивна ціль», а помилка вводу.
   if (kind === "income_pct" && v > 100) return { error: st(locale, "goalAutofillPct") };
-  return { kind, value: v };
+  // §BASE-CUR: a FIXED rule is an amount the reader typed, and the column has no currency — so it
+  // is stored in hryvnia like every other typed amount. The percentage is a ratio and is stored
+  // as it came. Validation happens BEFORE the conversion on purpose: «100» must mean 100% of
+  // income regardless of the reader's currency, and a converted number would fail the ≤100 check
+  // for no reason the reader could see.
+  return { kind, value: kind === "fixed" ? baseToUah(v, rates) : v };
 }
 
 goals.post("/goals", async (c) => {
@@ -57,10 +75,10 @@ goals.post("/goals", async (c) => {
   if (!b.name?.trim()) return c.json({ error: "name required" }, 400);
   if (!(b.target_amount > 0)) return c.json({ error: "target required" }, 400);
   if (b.kind !== undefined && !isGoalKind(b.kind)) return c.json({ error: st(locale, "goalKind") }, 400);
-  const auto = parseAutofill(b.autofill_kind ?? null, b.autofill_value, locale);
-  if ("error" in auto) return c.json({ error: auto.error }, 400);
   // §BASE-CUR: what the reader typed is in THEIR currency; the columns hold hryvnia.
   const rates = await getRates(c.env);
+  const auto = parseAutofill(b.autofill_kind ?? null, b.autofill_value, locale, rates);
+  if ("error" in auto) return c.json({ error: auto.error }, 400);
   const id = await goalsRepo.create(c.env.DB, {
     name: b.name.trim(),
     target_amount: baseToUah(b.target_amount, rates),
@@ -93,7 +111,7 @@ goals.patch("/goals/:id", async (c) => {
     color: b.color, note: b.note, kind: b.kind,
   };
   if (b.autofill_kind !== undefined) {
-    const auto = parseAutofill(b.autofill_kind, b.autofill_value, locale);
+    const auto = parseAutofill(b.autofill_kind, b.autofill_value, locale, rates);
     if ("error" in auto) return c.json({ error: auto.error }, 400);
     patch.autofill = auto;
   }
@@ -182,5 +200,9 @@ goals.post("/goals/:id/contributions", async (c) => {
 goals.delete("/goals/:id/contributions/:cid", async (c) => {
   const id = Number(c.req.param("id"));
   await goalsRepo.deleteContribution(c.env.DB, id, Number(c.req.param("cid")));
-  return c.json({ ok: true, current: await recalcGoal(c.env.DB, id) });
+  // §BASE-CUR: the SAME field as the add path two handlers up, so the same conversion. It was raw
+  // hryvnia here — adding a contribution returned a converted total and removing one returned an
+  // unconverted one, so on a dollar screen the goal jumped ~40× on delete. The currency sweep
+  // cannot see this class at all: it reads GETs, and this is a mutation's reply.
+  return c.json({ ok: true, current: uahToBaseMinor(await recalcGoal(c.env.DB, id), await getRates(c.env)) });
 });

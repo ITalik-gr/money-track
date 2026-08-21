@@ -11,10 +11,13 @@ import { tgTarget } from "./tg-target.ts";
 import { proposeTransferCategory } from "../ai/enrich.ts";
 import { logUsage } from "../ai/cost.ts";
 import { TRANSFER_CAT } from "../ai/enrich.ts";
-import { localMonthStart } from "../finance/stats.ts";
+import { valueMode } from "../finance/stats.ts";
+import { budgetStatus } from "../finance/budgets.ts";
+import { getRates, resolveBaseCurrency } from "../finance/money.ts";
+import { escapeHtml as esc, tgMoney } from "./tg-format.ts";
+import { st, resolveLocale, type ServerLocale } from "../platform/i18n.ts";
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const uah = (minor: number) => (minor / 100).toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 
 // Поріг «вагомості» для непояснених операцій: не нижче FLOOR, і не нижче ~3× середньої
 // витрати за 90 днів (щоб адаптуватись під масштаб трат конкретного користувача).
@@ -45,27 +48,47 @@ async function categoryName(env: Env, id: number | null): Promise<string | null>
   return r?.name ?? null;
 }
 
-// Місячна витрата по (рол-ап) категорії + її ліміт, щоб зловити момент перетину.
-async function budgetBreach(env: Env, rolledCat: number, outflow: number): Promise<{ name: string; spent: number; budget: number } | null> {
-  const bud = await env.DB.prepare(
-    "SELECT b.amount AS amount, c.name AS name FROM budgets b JOIN categories c ON c.id = b.category_id WHERE b.category_id = ? AND b.period = 'month' AND b.amount > 0",
-  ).bind(rolledCat).first<{ amount: number; name: string }>();
-  if (!bud) return null;
-  const monthStart = localMonthStart(Math.floor(Date.now() / 1000));
-  const sp = await env.DB.prepare(
-    `SELECT COALESCE(SUM(-t.amount), 0) AS spent FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.time >= ? AND t.amount < 0 AND t.hold = 0 AND t.is_transfer = 0 AND t.currency_code = 980
-       AND COALESCE(c.parent_id, t.category_id) = ?`,
-  ).bind(monthStart, rolledCat).first<{ spent: number }>();
-  const spentAfter = sp?.spent ?? 0;
+/**
+ * Місячна витрата по (рол-ап) категорії + її ліміт, щоб зловити момент перетину.
+ *
+ * ⚠️ **The THIRD copy of «скільки зʼїдено з конверта», removed 2026-08-21.** The first two were
+ * merged into `budgetStatus()` on 2026-07-31, after the owner found Telegram quoting a different
+ * figure than the app; this one was in the same directory and was missed. Its private SQL had
+ * every defect the canon exists to prevent, in the same words as the copy that was fixed:
+ * `t.currency_code = 980` (so every foreign purchase was invisible), no split handling (a divided
+ * expense counted at full value), no reimbursements, no refunds, and no §BUDGET-MEMORY carry — so
+ * the "limit" it compared against was not the limit the Plan page shows.
+ *
+ * `budgetStatus` gives `spent` AFTER this transaction, so the crossing test subtracts the
+ * outflow — the same before/after logic, now over a number that means what it says.
+ */
+async function budgetBreach(
+  env: Env, rolledCat: number, outflow: number,
+): Promise<{ name: string; spent: number; budget: number } | null> {
+  // Cheap gate FIRST. `budgetStatus` is the canon and it is not free — five queries, one of them
+  // `categoryMonthlyLevels` — and this runs on EVERY incoming webhook transaction over 50 ₴. Most
+  // categories carry no envelope at all, so one indexed existence check keeps the hot path the
+  // shape it was before the canon moved in here.
+  const hasEnvelope = await env.DB.prepare(
+    "SELECT 1 FROM budgets WHERE category_id = ? AND period = 'month' LIMIT 1",
+  ).bind(rolledCat).first();
+  if (!hasEnvelope) return null;
+
+  const { mult } = valueMode(await getRates(env), null);
+  const row = (await budgetStatus(env, mult)).find((b) => b.id === rolledCat);
+  // §BUDGET-ZERO: a zero envelope is a real limit, and crossing it is exactly what it is for.
+  if (!row || row.amount < 0) return null;
+  const spentAfter = row.spent;
   const spentBefore = spentAfter - outflow;
   // Алертимо лише момент перетину ліміту (раніше було під, тепер — за).
-  if (spentBefore < bud.amount && spentAfter >= bud.amount) return { name: bud.name, spent: spentAfter, budget: bud.amount };
+  if (spentBefore < row.amount && spentAfter >= row.amount) {
+    return { name: row.name, spent: spentAfter, budget: row.amount };
+  }
   return null;
 }
 
-function link(origin: string | undefined, id: string): string {
-  return origin ? `\n\n🔗 <a href="${origin}/tx/${id}">відкрити у застосунку</a>` : "";
+function link(origin: string | undefined, id: string, locale: ServerLocale): string {
+  return origin ? `\n\n🔗 <a href="${origin}/tx/${id}">${st(locale, "tgOpenInApp")}</a>` : "";
 }
 
 // Оцінити одну транзакцію й, за потреби, надіслати алерт. Ідемпотентно (alerted).
@@ -76,6 +99,10 @@ export async function maybeAlertTransaction(env: Env, txId: string, origin?: str
   const target = await tgTarget(env);
   if (!target) return false;
   const { token, chatId } = target;
+  // §D1 + §LANG-ARCH: a push has no request behind it, so both the language and the display
+  // currency come from the stored preference — the fallback branch `resolveLocale` is built for.
+  const locale = await resolveLocale(env);
+  const base = await resolveBaseCurrency(env);
 
   const tx = await env.DB.prepare(
     `SELECT t.*, c.parent_id AS parent_id, c.name AS category_name
@@ -107,34 +134,36 @@ export async function maybeAlertTransaction(env: Env, txId: string, origin?: str
     }
     const guessName = await categoryName(env, guessId);
     text =
-      "🔎 <b>Вагома непояснена операція</b>\n\n" +
-      `<b>${esc(tx.merchant ?? tx.comment ?? "—")}</b> — <b>${uah(outflow)} ₴</b>\n` +
-      "Це переказ/зняття. На що ці кошти пішли насправді?" +
-      (note ? `\n💡 ${esc(note)}` : "") + link(origin, tx.id);
+      st(locale, "tgUnexplained") + "\n\n" +
+      `<b>${esc(tx.merchant ?? tx.comment ?? "—")}</b> — <b>${tgMoney(outflow, base, locale)}</b>\n` +
+      st(locale, "tgUnexplainedBody") +
+      (note ? `\n💡 ${esc(note)}` : "") + link(origin, tx.id, locale);
     const rows: InlineKeyboard = [];
     if (guessId && guessName) rows.push([{ text: `✅ ${guessName}`, callback_data: `al_setreal:${tx.id}:${guessId}` }]);
-    rows.push([{ text: "🏷 Інша категорія", callback_data: `al_cat:${tx.id}:real` }]);
-    rows.push([{ text: "🔁 Переказ між своїми", callback_data: `al_transfer:${tx.id}` }, { text: "👌 Все ок", callback_data: `al_ok:${tx.id}` }]);
+    rows.push([{ text: st(locale, "tgBtnOtherCategory"), callback_data: `al_cat:${tx.id}:real` }]);
+    rows.push([{ text: st(locale, "tgBtnOwnTransfer"), callback_data: `al_transfer:${tx.id}` }, { text: st(locale, "tgBtnOk"), callback_data: `al_ok:${tx.id}` }]);
     keyboard = rows;
   } else if (tx.category_id == null && outflow >= threshold) {
     // Зовсім без категорії — попросимо розмітити.
     text =
-      "🔎 <b>Вагома витрата без категорії</b>\n\n" +
-      `<b>${esc(tx.merchant ?? tx.comment ?? "—")}</b> — <b>${uah(outflow)} ₴</b>\n` +
-      "Не зміг визначити категорію." + link(origin, tx.id);
+      st(locale, "tgNoCategory") + "\n\n" +
+      `<b>${esc(tx.merchant ?? tx.comment ?? "—")}</b> — <b>${tgMoney(outflow, base, locale)}</b>\n` +
+      st(locale, "tgNoCategoryBody") + link(origin, tx.id, locale);
     keyboard = [
-      [{ text: "🏷 Вказати категорію", callback_data: `al_cat:${tx.id}:cat` }],
-      [{ text: "👌 Все ок", callback_data: `al_ok:${tx.id}` }],
+      [{ text: st(locale, "tgBtnSetCategory"), callback_data: `al_cat:${tx.id}:cat` }],
+      [{ text: st(locale, "tgBtnOk"), callback_data: `al_ok:${tx.id}` }],
     ];
   } else if (rolled != null && outflow >= BUDGET_MIN_TX) {
     const breach = await budgetBreach(env, rolled, outflow);
     if (!breach) return false;
     const pct = Math.round((breach.spent / breach.budget) * 100);
     text =
-      "⚠️ <b>Бюджет перевищено</b>\n\n" +
-      `<b>${esc(breach.name)}</b> — ${uah(breach.spent)} / ${uah(breach.budget)} ₴ (${pct}%)\n` +
-      `Остання: ${esc(tx.merchant ?? tx.comment ?? "—")} — ${uah(outflow)} ₴.` + link(origin, tx.id);
-    keyboard = [[{ text: "👌 Зрозумів", callback_data: `al_ok:${tx.id}` }]];
+      st(locale, "tgBudgetOver") + "\n\n" +
+      `<b>${esc(breach.name)}</b> — ${tgMoney(breach.spent, base, locale)} / ${tgMoney(breach.budget, base, locale)} (${pct}%)\n` +
+      st(locale, "tgBudgetLast", {
+        merchant: esc(tx.merchant ?? tx.comment ?? "—"), amount: tgMoney(outflow, base, locale),
+      }) + link(origin, tx.id, locale);
+    keyboard = [[{ text: st(locale, "tgBtnGot"), callback_data: `al_ok:${tx.id}` }]];
   } else {
     return false;
   }

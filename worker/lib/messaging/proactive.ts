@@ -7,17 +7,18 @@ import { getStoredInsight, buildAndStoreInsight, type StoredInsight } from "../a
 import { nextChargeUnix } from "../finance/subscriptions.ts";
 import { valueMode } from "../finance/stats.ts";
 import { budgetStatus } from "../finance/budgets.ts";
-import { getRates } from "../finance/money.ts";
+import { getRates, resolveBaseCurrency } from "../finance/money.ts";
+import { escapeHtml as esc, tgMoney } from "./tg-format.ts";
+import { st, resolveLocale, type ServerLocale } from "../platform/i18n.ts";
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-const uah = (minor: number) => Math.round(minor / 100).toLocaleString("uk-UA");
 
-function insightText(ins: StoredInsight): string {
+function insightText(ins: StoredInsight, locale: ServerLocale, base: number): string {
   const s = ins.structured;
   if (!s) return esc(ins.text);
   const facts = (s.facts ?? []).map((f) => {
     const parts: string[] = [];
-    if (f.amount != null) parts.push(`<b>${f.amount.toLocaleString("uk-UA")} ₴</b>`);
+    // `f.amount` is already MAJOR units in the stored insight, so it is formatted, not divided.
+    if (f.amount != null) parts.push(`<b>${tgMoney(f.amount * 100, base, locale)}</b>`);
     if (f.category) parts.push(esc(f.category));
     if (f.delta_pct != null) parts.push(`${f.delta_pct > 0 ? "+" : ""}${f.delta_pct}%`);
     const dot = f.tone === "neg" ? "🔴" : f.tone === "pos" ? "🟢" : "•";
@@ -64,13 +65,19 @@ async function upcomingPlanned(env: Env, days = 7): Promise<{ title: string; amo
   return out.sort((a, b) => a.when - b.when);
 }
 
-const CUR_SIGN: Record<number, string> = { 980: "₴", 840: "$", 978: "€" };
-const dayMonth = (t: number) => new Date(t * 1000).toLocaleDateString("uk-UA", { day: "2-digit", month: "short" });
+// A second sign table used to live here. `shared/currency.ts` is documented as THE one, precisely
+// so the worker and the client cannot print different signs for the same code — and a private copy
+// in a file nobody re-reads is where that divergence would have appeared first.
+const dayMonth = (t: number, locale: ServerLocale) =>
+  new Date(t * 1000).toLocaleDateString(locale === "en" ? "en-US" : "uk-UA", { day: "2-digit", month: "short" });
 
 export async function runWeeklyProactive(env: Env): Promise<{ sent: boolean; reason?: string }> {
   // §D1 — this user's own linked chat; the global secret is an owner-only fallback (`tgTarget`).
   // See `notify.pushPendingToTelegram` for the cross-tenant leak the old owner-gate prevented.
   const { tgTarget } = await import("./tg-target.ts");
+  // §D1 + §LANG-ARCH: personal chat, so personal language — see the note in `alert.ts`.
+  const locale = await resolveLocale(env);
+  const base = await resolveBaseCurrency(env);
   const target = await tgTarget(env);
   if (!target) return { sent: false, reason: "no Telegram chat linked" };
   const { token, chatId } = target;
@@ -81,7 +88,7 @@ export async function runWeeklyProactive(env: Env): Promise<{ sent: boolean; rea
     try { ins = await buildAndStoreInsight(env); } catch { /* best-effort */ }
   }
   if (ins && !ins.empty) {
-    await sendMessage(token, chatId, "📊 Тижневий підсумок\n\n" + insightText(ins));
+    await sendMessage(token, chatId, st(locale, "tgWeekly") + "\n\n" + insightText(ins, locale, base));
   }
 
   // Попередження про бюджети.
@@ -90,19 +97,23 @@ export async function runWeeklyProactive(env: Env): Promise<{ sent: boolean; rea
     const lines = over.map((o) => {
       const icon = o.ratio >= 1 ? "🔴" : "🟠";
       const pct = Math.round(o.ratio * 100);
-      return `${icon} <b>${esc(o.name)}</b> — ${uah(o.spent)} / ${uah(o.budget)} ₴ (${pct}%)`;
+      return `${icon} <b>${esc(o.name)}</b> — ${tgMoney(o.spent, base, locale)} / ${tgMoney(o.budget, base, locale)} (${pct}%)`;
     }).join("\n");
-    await sendMessage(token, chatId, "⚠️ Бюджети під загрозою\n\n" + lines);
+    await sendMessage(token, chatId, st(locale, "tgBudgetsAtRisk") + "\n\n" + lines);
   }
 
   // Нагадування про підписки/планові платежі, що спишуться цього тижня.
   const upcoming = await upcomingPlanned(env, 7);
   if (upcoming.length) {
     const lines = upcoming.map((u) => {
-      const amt = u.amount != null ? ` — <b>${uah(u.amount)} ${CUR_SIGN[u.currency_code] ?? ""}</b>` : "";
-      return `• ${esc(u.title)}${amt} · ${dayMonth(u.when)}`;
+      // §CUR-PLAN: a planned charge is shown in the PLAN's own currency («$5»), which is the
+      // amount that will actually leave — not a roll-up. So the sign is the plan's, not the base's.
+      const amt = u.amount != null
+        ? ` — <b>${tgMoney(u.amount, u.currency_code ?? 980, locale)}</b>`
+        : "";
+      return `• ${esc(u.title)}${amt} · ${dayMonth(u.when, locale)}`;
     }).join("\n");
-    await sendMessage(token, chatId, "🔔 Скоро списання (7 днів)\n\n" + lines);
+    await sendMessage(token, chatId, st(locale, "tgUpcoming") + "\n\n" + lines);
   }
 
   return { sent: true };

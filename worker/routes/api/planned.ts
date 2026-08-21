@@ -4,11 +4,12 @@
 // raw. ₴ totals go through `plannedUAH`/`sumPlannedUAH` (§CUR-PLAN), a monthly burden through
 // `monthlyPlannedUAH` (§SUB-MONTH), and "what is charged before month end" through `chargesBetween`.
 import { getRates } from "../../lib/finance/money.ts";
+import { monthlyPlannedUAH } from "../../lib/finance/subscriptions.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
-import type { PlannedPayment, PlannedActual } from "../../../shared/types.ts";
-import type { UpcomingSubs, RecurringCandidate, PlanFromHabit } from "../../../shared/api/planning.ts";
+import type { PlannedActual } from "../../../shared/types.ts";
+import type { UpcomingSubs, RecurringCandidate, PlanFromHabit, PlannedRow } from "../../../shared/api/planning.ts";
 
 export const planned = apiRoutes();
 
@@ -19,7 +20,16 @@ planned.get("/planned/actuals", async (c) => {
 });
 
 planned.get("/planned", async (c) => {
-  return c.json(await planningRepo.listActive(c.env.DB) satisfies PlannedPayment[]);
+  const rows = await planningRepo.listActive(c.env.DB);
+  // §SUB-MONTH: the monthly burden travels WITH each plan, from the canon. The Subscriptions page
+  // used to average `period_amount` itself, and its "is this plan over" rule had drifted to cover
+  // installments only — so a cancelled subscription with an end date counted on that page and
+  // nowhere else. A component must not multiply `period_amount` by anything.
+  const rates = await getRates(c.env);
+  const now = Math.floor(Date.now() / 1000);
+  return c.json(rows.map((p) => ({
+    ...p, monthly_base: monthlyPlannedUAH(p, rates, now),
+  })) satisfies PlannedRow[]);
 });
 
 planned.post("/planned", async (c) => {

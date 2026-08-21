@@ -16,6 +16,7 @@ import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { BudgetCardsSkeleton } from "../components/ui/Skeleton.tsx";
 import { AutoBudget } from "../components/planning/AutoBudget.tsx";
+import { BudgetRecord } from "../components/planning/BudgetRecord.tsx";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
 import { toast } from "../lib/toast.ts";
@@ -34,6 +35,7 @@ export function Plan() {
       </div>
       <div className="stack" style={{ gap: 18 }}>
         <AutoBudget />
+        <BudgetRecord />
         <BudgetChat />
         <BudgetPlanner />
         <section>

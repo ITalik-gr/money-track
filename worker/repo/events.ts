@@ -1,26 +1,59 @@
 // Event groups (a trip, a project, a special day) and their plan line items.
 // See `worker/repo/README.md`.
 //
-// Every total here is rolled up in ₴ through the caller's `mult` (`baseMult(rates)`). Both of the
+// Every total here is rolled up through the caller's `mult` (`baseMult(rates)`). Both of the
 // aggregate queries below once filtered on `currency_code = 980` instead, so a trip's foreign
 // spending simply did not count — and a trip is precisely where foreign currency happens. The
 // page and the list then disagreed about the same event. One figure has to be one figure.
+//
+// ⚠️ **That sentence was only half true until 2026-08-21.** «Скільки коштувала подія» is computed
+// in FIVE places — these two, `repo/analytics.spendByEvent`, and the event blocks in the advisor's
+// and the insight's context — and they split into two different answers. The other three use the
+// canon (`STATS_JOINS` + `amountSum` + `EFF_AMOUNT < 0 AND is_transfer = 0`); these two summed
+// `t.amount` raw. Two consequences, both silent:
+//
+//   · **Reimbursements were ignored.** §COMPENSATION exists so that a shared dinner counts only
+//     the part that was actually yours; on this page it counted in full. A trip where friends
+//     repaid their share reported the whole bill as what the trip cost you — and §EVENT-GOAL
+//     compares exactly that figure against what you saved for it.
+//   · **Transfers counted as spending AND as income.** Moving money to a travel card before a
+//     trip appeared as both, on the one screen where an internal transfer is most likely.
+//
+// The currency half of this defect was found and fixed THREE separate times (see CLAUDE.md). The
+// reason it kept coming back is above: five copies, no shared function. These two now compose the
+// same canon as the rest, so the answer is one answer.
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
+import { STATS_JOINS, EFF_AMOUNT } from "../lib/finance/stats.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 import type { EventWithAgg } from "../../shared/api/platform.ts";
 import type { TxRow } from "../../shared/api/transactions.ts";
 import type { EventGroup } from "../../shared/types.ts";
 
-/** Active events with their transaction count and ₴ totals. Holds are counted like anywhere else. */
+/**
+ * What an event COST and what came back into it, as the canon measures both.
+ *
+ * `EFF_AMOUNT` rather than `t.amount` — so a reimbursed share is not counted as yours and a split
+ * purchase counts once. `is_transfer = 0` rather than `SPEND_WHERE` — a trip legitimately contains
+ * withdrawals and bucket-13 movements, which is the exception `spendByEvent` already states; what
+ * it must NOT contain is money moved between your own accounts, which would land in both columns.
+ */
+const EVENT_SPENT = (mult: string) =>
+  `CAST(ROUND(COALESCE(SUM(CASE WHEN ${EFF_AMOUNT} < 0 AND t.is_transfer = 0 THEN (-${EFF_AMOUNT}) * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
+const EVENT_INCOME = (mult: string) =>
+  `CAST(ROUND(COALESCE(SUM(CASE WHEN ${EFF_AMOUNT} > 0 AND t.is_transfer = 0 THEN ${EFF_AMOUNT} * ${mult} ELSE 0 END), 0)) AS INTEGER)`;
+
+/** Active events with their transaction count and totals. Holds are counted like anywhere else. */
 export async function listWithTotals(db: AppDb, mult: string): Promise<EventWithAgg[]> {
   const r = await db.prepare(
+    // `COUNT(DISTINCT t.id)`: `STATS_JOINS` multiplies a split row into its parts, so a plain
+    // count would report one divided purchase as several (§SPLIT).
     `SELECT e.*,
-            COUNT(t.id) AS tx_count,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount < 0 THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS spent,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER) AS income
+            COUNT(DISTINCT t.id) AS tx_count,
+            ${EVENT_SPENT(mult)} AS spent,
+            ${EVENT_INCOME(mult)} AS income
      FROM event_groups e
-     LEFT JOIN transactions t ON t.event_id = e.id
+     LEFT JOIN transactions t ON t.event_id = e.id ${STATS_JOINS}
      WHERE e.is_active = 1
      GROUP BY e.id ORDER BY e.created_at DESC`,
   ).all<EventWithAgg>();
@@ -96,9 +129,8 @@ export async function totals(
   db: AppDb, mult: string, id: number,
 ): Promise<{ spent: number; income: number } | null> {
   return await db.prepare(
-    `SELECT CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount < 0 THEN (-t.amount) * ${mult} ELSE 0 END), 0)) AS INTEGER) AS spent,
-            CAST(ROUND(COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * ${mult} ELSE 0 END), 0)) AS INTEGER) AS income
-     FROM transactions t WHERE t.event_id = ?`,
+    `SELECT ${EVENT_SPENT(mult)} AS spent, ${EVENT_INCOME(mult)} AS income
+     FROM transactions t ${STATS_JOINS} WHERE t.event_id = ?`,
   ).bind(id).first<{ spent: number; income: number }>();
 }
 

@@ -11,6 +11,7 @@ import type { AnthropicContentBlock } from "./ai.ts";
 import type { AiFact } from "./generate.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
+import { groundFacts } from "./grounding.ts";
 
 // Структурований інсайт для стилізованого рендеру (headline + факти + порада).
 export interface StructuredInsight {
@@ -47,7 +48,7 @@ export async function generateInsight(
   return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "insight"));
 }
 import { getState, setState } from "../finance/repo.ts";
-import { getRates } from "../finance/money.ts";
+import { getRates, resolveBaseCurrency } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, amountSum, recurringOneoffSplit } from "../finance/stats.ts";
@@ -63,6 +64,12 @@ export interface StoredInsight {
   period_from: number;
   period_to: number;
   period_days: number;
+  /**
+   * §BASE-CUR — the currency the figures in `structured.facts` are in, stamped at generation.
+   * A stored insight is re-read for days; the card must sign it with this, not with the currency
+   * selected today. Absent = written before the setting existed, i.e. hryvnia.
+   */
+  cur?: number;
   empty?: boolean;
 }
 
@@ -166,12 +173,18 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
       const { result, usage } = await generateInsight(env, payload);
       const text = [result.headline, result.note].filter(Boolean).join(" ");
       logUsage("insight", usage);
-      stored = { ...base, text, structured: result, usage: briefUsage(usage) };
+      // 🔒 The same deterministic guard the feed has had since the model quoted two different
+      // figures for one thing in a single notification. These facts render as numbers on the
+      // Advisor card and in the weekly Telegram digest, where nothing distinguishes an invented
+      // one from a computed one — which is exactly the condition the rule was written for.
+      const grounded = { ...result, facts: groundFacts(result.facts ?? [], payload) };
+      stored = { ...base, text, structured: grounded, usage: briefUsage(usage) };
     } catch (e) {
       stored = { ...base, text: st(loc, "insightFailed", { error: String(e) }), empty: true };
     }
   }
 
+  stored = { ...stored, cur: await resolveBaseCurrency(env) };
   await setState(env.DB, "insight", JSON.stringify(stored));
   return stored;
 }

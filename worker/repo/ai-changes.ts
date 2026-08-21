@@ -75,13 +75,40 @@ export async function byId(db: AppDb, id: number): Promise<AiChange | null> {
  * ⚠️ The log row is MARKED, not deleted. "The AI did this and I undid it" is a more useful fact
  * than an empty log, and keeping it is what lets the screen stop offering the same undo twice.
  */
-export async function revert(db: AppDb, change: AiChange, at: number): Promise<void> {
+export async function revert(
+  db: AppDb, change: AiChange, at: number,
+): Promise<{ ok: true } | { ok: false; reason: "superseded" }> {
+  const column = change.field === "category_id" ? "category_id"
+    : change.field === "is_transfer" ? "is_transfer" : "ai_note";
+
+  /**
+   * ⚠️ **Refuse when the field has MOVED ON since the model touched it.**
+   *
+   * The reasoning already existed one branch away: the route refuses a SECOND revert because «the
+   * log records what WAS, not what is», and writing `old_value` again would put a stale value over
+   * whatever the user has since chosen. That is true of any later change, not only of a second
+   * revert — and the ordinary case is the dangerous one. The model files a transaction as
+   * «Розваги», the person corrects it to «Відрядження», then opens the journal, sees «AI: →
+   * Розваги» and presses Повернути expecting the AI's work undone. It undid THEIRS, back to a
+   * category from before either of them, and nothing said so.
+   *
+   * The app has stated the opposite rule twice — §RULES-UI apply touches only uncategorised rows,
+   * §SIMILAR only offers rows that would change — both times as «застосунок не сперечається
+   * мовчки з уже зробленою роботою». This was the one door left open.
+   */
+  const row = await db.prepare(`SELECT ${column} AS v FROM transactions WHERE id = ?`)
+    .bind(change.tx_id).first<{ v: string | number | null }>();
+  if (!row) return { ok: false, reason: "superseded" };
+  const current = row.v == null ? null : String(row.v);
+  if (current !== (change.new_value == null ? null : String(change.new_value))) {
+    return { ok: false, reason: "superseded" };
+  }
+
   const value = change.old_value == null ? null
     : change.field === "ai_note" ? change.old_value
       : Number(change.old_value);
-  const column = change.field === "category_id" ? "category_id"
-    : change.field === "is_transfer" ? "is_transfer" : "ai_note";
   await db.prepare(`UPDATE transactions SET ${column} = ? WHERE id = ?`)
     .bind(value, change.tx_id).run();
   await db.prepare("UPDATE ai_changes SET reverted_at = ? WHERE id = ?").bind(at, change.id).run();
+  return { ok: true };
 }

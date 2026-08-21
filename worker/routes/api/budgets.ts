@@ -7,10 +7,10 @@ import {
 import * as categoriesRepo from "../../repo/categories.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, normChatMessages } from "./_shared.ts";
+import { apiRoutes, normChatMessages, numParam } from "./_shared.ts";
 import type { Budget } from "../../../shared/types.ts";
-import { budgetStatus } from "../../lib/finance/budgets.ts";
-import type { AutoBudget, AutoBudgetItem, BudgetStatusList } from "../../../shared/api/planning.ts";
+import { budgetStatus, budgetHistory } from "../../lib/finance/budgets.ts";
+import type { AutoBudget, AutoBudgetItem, BudgetHistory, BudgetStatusList } from "../../../shared/api/planning.ts";
 
 export const budgets = apiRoutes();
 
@@ -36,6 +36,22 @@ budgets.get("/budgets/status", async (c) => {
   const rates = await getRates(c.env);
   const { mult } = valueMode(rates, null);
   return c.json(await budgetStatus(c.env, mult) satisfies BudgetStatusList);
+});
+
+/**
+ * §BUDGET-MEMORY read as a RECORD — «чи я взагалі тримаю план».
+ *
+ * ⚠️ Declared above `/budgets/:categoryId` (lint C7), like every other literal here.
+ *
+ * The envelope grid answers «скільки зʼїдено зараз», which is the only question the app could
+ * answer about a budget until migration 0043 gave it a time dimension — and even then the table
+ * had no reader that looked at more than one envelope. A plan you cannot see yourself keeping is
+ * a plan that gets ignored: the useful fact is not «70% від ліміту», it is «четвертий місяць
+ * поспіль у межах».
+ */
+budgets.get("/budgets/history", async (c) => {
+  const months = numParam(new URL(c.req.url), "months", 12, { min: 1, max: 24 });
+  return c.json(await budgetHistory(c.env, months) satisfies BudgetHistory);
 });
 
 /**

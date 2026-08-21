@@ -21,7 +21,8 @@ export type BaseCurrency = (typeof BASE_CURRENCIES)[number];
 
 export const DEFAULT_BASE: BaseCurrency = 980;
 
-interface CurrencyMeta { sign: string; code: string }
+/** `sign` is optional: most currencies have no symbol worth printing, and the CODE is one. */
+interface CurrencyMeta { sign?: string; code: string }
 
 // Signs for everything we may have to PRINT, which is wider than what we can convert INTO:
 // an account or a transaction can be in any currency the bank reports, and its own row shows
@@ -34,7 +35,37 @@ export const CURRENCY_META: Record<number, CurrencyMeta> = {
   985: { sign: "zł", code: "PLN" },
   756: { sign: "₣", code: "CHF" },
   392: { sign: "¥", code: "JPY" },
+  // ⚠️ Everything below carries no `sign`, and that is the honest state rather than an omission:
+  // `currencySign` falls back to the CODE, so a Czech purchase prints «1 234 CZK» — which reads,
+  // where the numeric 203 does not. Signs are added only when they are unambiguous; «¥» already
+  // belongs to JPY, so CNY keeps its letters.
+  //
+  // These arrived here on 2026-08-21, from `lib/bank/normalize.ts`, which had been the only table
+  // that knew them. See the note below on why one table.
+  203: { code: "CZK" }, 348: { code: "HUF" }, 946: { code: "RON" }, 975: { code: "BGN" },
+  498: { code: "MDL" }, 981: { code: "GEL" }, 949: { code: "TRY" }, 124: { code: "CAD" },
+  36: { code: "AUD" }, 156: { code: "CNY" }, 752: { code: "SEK" }, 578: { code: "NOK" },
+  208: { code: "DKK" }, 376: { code: "ILS" }, 784: { code: "AED" }, 398: { code: "KZT" },
+  764: { code: "THB" }, 818: { code: "EGP" }, 941: { code: "RSD" }, 807: { code: "MKD" },
+  8: { code: "ALL" }, 352: { code: "ISK" }, 356: { code: "INR" }, 702: { code: "SGD" },
+  344: { code: "HKD" }, 484: { code: "MXN" }, 986: { code: "BRL" }, 710: { code: "ZAR" },
+  554: { code: "NZD" }, 410: { code: "KRW" }, 704: { code: "VND" },
 };
+
+/**
+ * Letters → the numeric code we store. The REVERSE of `CURRENCY_META`, derived from it.
+ *
+ * ⚠️ There were THREE tables for this one fact, and they disagreed (found 2026-08-21). This file
+ * declared itself «the ONE symbol/code table» and knew seven currencies; `lib/bank/normalize.ts`
+ * knew thirty-nine; `routes/api/export.ts` had a private six. The consequence was a round trip
+ * that lost data: a Czech purchase exported as the bare number «203», and re-importing it fell
+ * foul of §BANK-PARSE's own rule that an unknown currency resolves to `null` rather than to
+ * hryvnia — so the row could not come back in. Derivation, not a second literal, is what makes
+ * that impossible to reintroduce.
+ */
+export const CURRENCY_BY_CODE: Record<string, number> = Object.fromEntries(
+  Object.entries(CURRENCY_META).map(([num, meta]) => [meta.code, Number(num)]),
+);
 
 /** Symbol for a numeric ISO-4217 code; unknown codes print the number, never a wrong sign. */
 export function currencySign(code: number): string {

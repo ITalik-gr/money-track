@@ -37,6 +37,12 @@ export interface Advice {
   runway_months: number | null;
   usage?: AiUsageBrief;
   generated_at: number;
+  /**
+   * §BASE-CUR — the currency every figure here is in, stamped at generation. Advice is stored and
+   * re-read for a month, so it must be signed with its OWN unit; absent = written before the
+   * setting existed, which means hryvnia.
+   */
+  cur?: number;
   /** Порада зібрана детерміновано з чисел, без AI (ключ/ліміт/збій моделі). */
   fallback?: boolean;
   fallback_reason?: string;
@@ -44,6 +50,8 @@ export interface Advice {
 export interface AdviceHistoryItem {
   generated_at: number; summary: string; runway_months: number | null; monthly_burn: number; own_funds: number;
   cushion?: number;
+  /** §BASE-CUR — see `Advice.cur`. A delta against a snapshot in a DIFFERENT currency is not a delta. */
+  cur?: number;
 }
 
 export interface StructuredInsight {
@@ -59,6 +67,8 @@ export interface Insight {
   period_from: number;
   period_to: number;
   period_days: number;
+  /** §BASE-CUR — the currency `structured.facts` are in, stamped at generation. See `Advice.cur`. */
+  cur?: number;
   empty?: boolean;
 }
 
@@ -75,6 +85,12 @@ export interface FinancialReport {
   importance?: { level: string; amount_uah: number; pct: number }[]; // §6: детермінована розбивка вагомості
   // §R6: детерміновані категорії (надійні суми + дельта + prev) з приклеєною AI-нотаткою.
   categories?: { name: string; amount_uah: number; prev_uah: number; delta_pct: number | null; note?: string | null }[];
+  /**
+   * §BASE-CUR — the currency EVERY figure above is in, stamped when the report was generated.
+   * Absent on reports written before the display currency existed; those are hryvnia.
+   * The page must sign its numbers with this, not with the currency selected today.
+   */
+  cur?: number;
 }
 export type ReportPeriodType = "week" | "month" | "custom";
 export interface ReportListItem {

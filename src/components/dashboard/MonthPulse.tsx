@@ -3,6 +3,7 @@ import { useGetOverviewQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { EmptyCard } from "../ui/EmptyCard.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 import { baseSign } from "../../lib/currency.ts";
 
@@ -12,13 +13,31 @@ const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e"];
 
 export function MonthPulse() {
   const t = useT();
-  const { data } = useGetOverviewQuery({ preset: "month", currency: 980 });
+  // ⚠️ `currency: 980` here did NOT mean "show hryvnia" — in `valueMode` a currency PINS the query
+  // to rows in that currency and stops converting. So this card silently left out every foreign
+  // purchase of the month, and once the display currency existed it also printed a dollar sign
+  // over hryvnia figures. Rolled up is the ABSENCE of a currency (§BASE-CUR).
+  const { data, error, refetch } = useGetOverviewQuery({ preset: "month", currency: null });
+  // The other half of the same `.dash-pair` as `SafeToSpend`, and the same rule: a failure must
+  // not read as an absence. `EmptyCard` below already keeps the slot for «no movement this
+  // month»; this keeps it for «could not ask».
+  if (error) {
+    return (
+      <section>
+        <div className="section-head"><h2>{t("mp.title")}</h2></div>
+        <ErrorNote error={error} what={t("mp.title")} onRetry={refetch} />
+      </section>
+    );
+  }
   if (!data) return null;
 
   const income = data.summary.income;
   const spend = data.summary.spend;
   const net = income - spend;
-  const rate = income > 0 ? Math.round((net / income) * 100) : null;
+  // §savingsRatePct — the server's number. This was the FOURTH copy of the same three-token
+  // formula (report, Trends strip, here); they agreed today and nothing would have noticed the
+  // day one of them stopped agreeing.
+  const rate = data.summary.savings_rate_pct;
   const top = (data.byCategory ?? []).slice(0, 4);
   const topMax = Math.max(...top.map((c) => c.spent), 1);
   // Заголовок ЗОВНІ картки, як у сусіда по `.dash-pair` (safe-to-spend, прогноз, підписки).

@@ -19,6 +19,7 @@ import { callHaikuMessagesJson } from "./json.ts";
 import { buildSystemPrefix, replyLangDirective, moneyUnitDirective } from "./prompt.ts";
 import { getTaskModel } from "./models.ts";
 import type { AnthropicUsage } from "./cost.ts";
+import { localYmd } from "../finance/time.ts";
 
 /**
  * Output ceiling for a chat answer.
@@ -38,7 +39,10 @@ export async function chatAdvice(
   messages: ChatMsg[],
   opts?: { tools?: ChatTool[]; executor?: ToolExecutor; onText?: OnText },
 ): Promise<{ text: string; usage: AnthropicUsage }> {
-  const today = new Date().toISOString().slice(0, 10);
+  // §APP_TZ: the date the READER is living in, not the runtime's. Between midnight and 03:00
+  // Kyiv, UTC is still yesterday — so the model was told the wrong day, and on the 1st of a month
+  // it reasoned about the wrong month while every figure it was given came from the right one.
+  const today = localYmd(Math.floor(Date.now() / 1000));
   // Demo: no server-side web_search (billed per search on top of tokens) and a shorter tool loop.
   // The prompt must match what is actually sent — describing a tool the request does not carry
   // makes the model try to call it and waste a turn. `demoClamp` still strips it as a backstop.

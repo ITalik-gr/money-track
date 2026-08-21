@@ -9,7 +9,12 @@ import { baseSign } from "../../lib/currency.ts";
 // дельти виділені) + порада. Спільний для інсайту й порад (DESIGN.md §7 F6).
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
 
-export function RichFacts({ headline, facts, note }: { headline?: string; facts?: AiFact[]; note?: string | null }) {
+/**
+ * `sign` is a PROP, not `baseSign()`: these facts come out of a STORED payload (the advice, an
+ * insight), so their figures are in the currency that was in force when it was generated. The
+ * caller knows which; this component must not assume today's (§BASE-CUR).
+ */
+export function RichFacts({ headline, facts, note, sign }: { headline?: string; facts?: AiFact[]; note?: string | null; sign?: string }) {
   // Колір категорії тягнемо з реальних категорій за назвою (AI дає лише назву).
   const { data: cats } = useGetCategoriesQuery();
   const colorByName = useMemo(() => {
@@ -36,7 +41,7 @@ export function RichFacts({ headline, facts, note }: { headline?: string; facts?
                       {f.category}
                     </span>
                   )}
-                  {f.amount != null && <span className={`fact-amt ${f.tone ?? "neutral"}`}>{fmt0.format(f.amount)} {baseSign()}</span>}
+                  {f.amount != null && <span className={`fact-amt ${f.tone ?? "neutral"}`}>{fmt0.format(f.amount)} {sign ?? baseSign()}</span>}
                   {f.delta_pct != null && (
                     <span className="fact-delta">{f.delta_pct >= 0 ? "+" : ""}{f.delta_pct}%</span>
                   )}

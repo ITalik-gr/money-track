@@ -26,6 +26,7 @@ import { accountTypeLabel } from "../lib/merchant.ts";
 import { currencySign } from "../lib/format.ts";
 import type { Account } from "../../shared/types.ts";
 import { baseSign, getBaseCurrency } from "../lib/currency.ts";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 
 // ₴-величина рахунку для сортування/підсумків — дзеркалить `shown` у картці (кредитка = власні).
 // Від'ємне НЕ затискаємо: кредитка в боргу має власних коштів менше нуля, і саме це число
@@ -43,7 +44,7 @@ function uahValue(a: Account, rates: Record<string, number>): number {
 
 export function Accounts() {
   const t = useT();
-  const { data: accounts, isLoading } = useGetAccountsQuery();
+  const { data: accounts, isLoading, error: accountsError, refetch: refetchAccounts } = useGetAccountsQuery();
   const { data: ratesData } = useGetRatesQuery();
   const { data: histData } = useGetAccountsHistoryQuery();
   const rates = ratesData?.rates ?? {};
@@ -84,11 +85,15 @@ export function Accounts() {
 
       <FundsOverview />
 
-      {!accounts?.length && (
-        <div className="card empty" style={{ marginBottom: 16 }}>
-          {t("acct.empty")}
-        </div>
-      )}
+      {/* «Рахунків із Monobank ще немає. Підтягни їх…» is an instruction, and on a failed request
+          it is an instruction to someone who already has them. The error replaces it. */}
+      {accountsError
+        ? <ErrorNote error={accountsError} what={t("nav.accounts")} onRetry={refetchAccounts} />
+        : !accounts?.length && (
+          <div className="card empty" style={{ marginBottom: 16 }}>
+            {t("acct.empty")}
+          </div>
+        )}
 
       {/* Секції йдуть у кілька колонок (`.acct-sections`), а не стовпчиком: секція з двома
           картками раніше займала лише лівий край сітки, і сторінка тягнулась удвічі довше.
@@ -457,7 +462,7 @@ function ArchivedSection({ rates }: { rates: Record<string, number> }) {
         <div className="acct-grid">
           {data.map((a) => {
             const code = a.currency_code ?? 980;
-            const uah = code !== 980 ? uahValue(a, rates) : null;
+            const uah = code !== getBaseCurrency() ? uahValue(a, rates) : null;
             return (
               <div key={a.id} className="acct2 muted-acct archived-acct">
                 <div className="acct2-head"><span className="acct2-title">{a.title || accountTypeLabel(a.type ?? "manual")}</span></div>

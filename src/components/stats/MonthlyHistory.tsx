@@ -50,7 +50,10 @@ export function MonthlyHistory() {
     return {
       label: monLbl(m.month), spend, income, net: income - spend,
       essential: m.essential / 100, discretionary: m.discretionary / 100, optional: m.optional / 100,
-      rate: m.income > 0 ? Math.round(((m.income - m.spend) / m.income) * 100) : null,
+      // §savingsRatePct — the server's number, not a third spelling of it. The AI report has
+      // quoted `savings_rate_pct` since 2026-07 and this strip computed its own; identical today,
+      // and nothing would have said so on the day one of them changed.
+      rate: m.savings_rate_pct,
       current: i === data.months.length - 1,
     };
   });

@@ -6,76 +6,145 @@
       "to": 1778749200,
       "spend": 2382000,
       "income": 4770000,
-      "byCategory": [
-        {
-          "category_id": 8,
-          "category_name": "Дім і побут",
-          "color": "#1F6E4C",
-          "spent": 1260000
-        },
-        {
-          "category_id": 1,
-          "category_name": "Продукти",
-          "color": "#1F6E4C",
-          "spent": 419200
-        },
-        {
-          "category_id": 12,
-          "category_name": "Підписки",
-          "color": "#D99414",
-          "spent": 200000
-        },
-        {
-          "category_id": 11,
-          "category_name": "Подорожі",
-          "color": "#127C86",
-          "spent": 200000
-        },
-        {
-          "category_id": 2,
-          "category_name": "Кафе і ресторани",
-          "color": "#D99414",
-          "spent": 185000
-        },
-        {
-          "category_id": 6,
-          "category_name": "Розваги",
-          "color": "#127C86",
-          "spent": 135000
-        },
-        {
-          "category_id": 3,
-          "category_name": "Транспорт",
-          "color": "#2450C8",
-          "spent": -17200
-        }
-      ]
+      "income_n": 3
     },
     "b": {
       "from": 1773565200,
       "to": 1776157200,
       "spend": 1534900,
       "income": 4500000,
-      "byCategory": [
+      "income_n": 1
+    },
+    "rows": [
+      {
+        "category_id": 8,
+        "category_name": "Дім і побут",
+        "color": "#1F6E4C",
+        "a": 1260000,
+        "b": 1200000,
+        "n": 2,
+        "prev_n": 1,
+        "delta": 60000,
+        "delta_meaningful": true
+      },
+      {
+        "category_id": 1,
+        "category_name": "Продукти",
+        "color": "#1F6E4C",
+        "a": 419200,
+        "b": 311000,
+        "n": 6,
+        "prev_n": 5,
+        "delta": 108200,
+        "delta_meaningful": true
+      },
+      {
+        "category_id": 12,
+        "category_name": "Підписки",
+        "color": "#D99414",
+        "a": 200000,
+        "b": 0,
+        "n": 1,
+        "prev_n": 0,
+        "delta": 200000,
+        "delta_meaningful": true
+      },
+      {
+        "category_id": 11,
+        "category_name": "Подорожі",
+        "color": "#127C86",
+        "a": 200000,
+        "b": 0,
+        "n": 1,
+        "prev_n": 0,
+        "delta": 200000,
+        "delta_meaningful": true
+      },
+      {
+        "category_id": 2,
+        "category_name": "Кафе і ресторани",
+        "color": "#D99414",
+        "a": 185000,
+        "b": 0,
+        "n": 3,
+        "prev_n": 0,
+        "delta": 185000,
+        "delta_meaningful": true
+      },
+      {
+        "category_id": 6,
+        "category_name": "Розваги",
+        "color": "#127C86",
+        "a": 135000,
+        "b": 0,
+        "n": 1,
+        "prev_n": 0,
+        "delta": 135000,
+        "delta_meaningful": true
+      },
+      {
+        "category_id": 3,
+        "category_name": "Транспорт",
+        "color": "#2450C8",
+        "a": -17200,
+        "b": 23900,
+        "n": 1,
+        "prev_n": 1,
+        "delta": -41100,
+        "delta_meaningful": true
+      }
+    ],
+    "movers": {
+      "up": [
         {
-          "category_id": 8,
-          "category_name": "Дім і побут",
-          "color": "#1F6E4C",
-          "spent": 1200000
+          "category_id": 12,
+          "category_name": "Підписки",
+          "color": "#D99414",
+          "a": 200000,
+          "b": 0,
+          "n": 1,
+          "prev_n": 0,
+          "delta": 200000,
+          "delta_meaningful": true
         },
         {
-          "category_id": 1,
-          "category_name": "Продукти",
-          "color": "#1F6E4C",
-          "spent": 311000
+          "category_id": 11,
+          "category_name": "Подорожі",
+          "color": "#127C86",
+          "a": 200000,
+          "b": 0,
+          "n": 1,
+          "prev_n": 0,
+          "delta": 200000,
+          "delta_meaningful": true
         },
+        {
+          "category_id": 2,
+          "category_name": "Кафе і ресторани",
+          "color": "#D99414",
+          "a": 185000,
+          "b": 0,
+          "n": 3,
+          "prev_n": 0,
+          "delta": 185000,
+          "delta_meaningful": true
+        }
+      ],
+      "down": [
         {
           "category_id": 3,
           "category_name": "Транспорт",
           "color": "#2450C8",
-          "spent": 23900
+          "a": -17200,
+          "b": 23900,
+          "n": 1,
+          "prev_n": 1,
+          "delta": -41100,
+          "delta_meaningful": true
         }
       ]
-    }
+    },
+    "short_period": false,
+    "income_delta_meaningful": true
   }
 }

@@ -13,9 +13,11 @@
 -- cookie and is not counted again — which makes this "people who started a demo", the number
 -- worth knowing, rather than a hit counter.
 CREATE TABLE IF NOT EXISTS demo_daily (
-  -- 'YYYY-MM-DD' in Europe/Kyiv. Deliberately NOT the UTC day the quota keys use: this one is
-  -- read by a human who lives in that timezone, and a chart whose day rolls over at 03:00 local
-  -- reads as wrong data rather than as a different definition of "day".
+  -- 'YYYY-MM-DD' in Europe/Kyiv, because a human who lives in that timezone reads it: a chart
+  -- whose day rolls over at 03:00 local reads as wrong data, not as a different definition of
+  -- "day". ⚠️ This note used to say "deliberately NOT the UTC day the quota keys use" — on
+  -- 2026-08-21 those keys became Kyiv too, precisely because the disagreement was the defect
+  -- rather than a design.
   day        TEXT PRIMARY KEY,
   sandboxes  INTEGER NOT NULL DEFAULT 0
 );

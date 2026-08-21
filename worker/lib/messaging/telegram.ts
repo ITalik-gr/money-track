@@ -86,7 +86,14 @@ export interface TgUpdate {
 export interface TgMessage {
   message_id: number;
   from?: { id: number };
-  chat: { id: number };
+  /**
+   * `type` is "private" | "group" | "supergroup" | "channel".
+   *
+   * Read since 2026-08-21 because linking is only ever legitimate in a PRIVATE chat — see the
+   * refusal in `routes/telegram.ts`. It was absent from this shape, which is why the question
+   * could not be asked.
+   */
+  chat: { id: number; type?: string };
   text?: string;
   photo?: { file_id: string; file_size?: number }[];
 }

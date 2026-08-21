@@ -308,3 +308,56 @@ export function seedPlanning(db: MemDb): void {
   // A dismissed candidate, so the detect endpoint has an exclusion to honour.
   exec(db, "INSERT INTO planned_dismissed (merchant, created_at) VALUES ('таксі', ?)", [NOW - 20 * DAY]);
 }
+
+/**
+ * Rows for the tables the shared fixture never touches.
+ *
+ * This is the second half of the same lesson as `budget_months`: **the sweep is blind wherever the
+ * fixture is empty**, because an absent field cannot leak. Fourteen tables had no rows at all, and
+ * five of them carry money. Every endpoint reading them was passing this test vacuously.
+ */
+export function seedRareTables(db: MemDb, at = Math.floor(Date.parse(FROZEN_NOW_ISO) / 1000)): void {
+  const run = (sql: string, ...args: unknown[]) => db.raw.prepare(sql).run(...(args as never[]));
+  // A manual goal with a FIXED monthly autofill — that value is a hryvnia amount, and whether it
+  // converts is the question. Plus one contribution, so the progress series is not empty either.
+  run(`INSERT INTO savings_goals (id, name, target_amount, current_amount, is_active, created_at, kind, autofill_kind, autofill_value)
+       VALUES (1, 'Japan', 20000000, 500000, 1, ?, 'save_up', 'fixed', 300000)`, at - 200 * 86400);
+  run(`INSERT INTO goal_contributions (goal_id, amount, at, note, source) VALUES (1, 500000, ?, NULL, 'manual')`,
+      at - 30 * 86400);
+  // §A1 — a confirmed fact whose adjustment is money, not a ratio.
+  run(`INSERT INTO facts (text, effective_from, category_id, adjust_kind, adjust_value, confirmed_at, created_at, source)
+       VALUES ('rent went up', ?, 8, 'delta_minor', 150000, ?, ?, 'user')`,
+      at - 60 * 86400, at, at);
+  run(`INSERT INTO account_balance_history (account_id, balance, recorded_at, created_at)
+       VALUES ('acc-uah', 4200000, ?, ?)`, at - 13 * 86400, at - 13 * 86400);
+
+  // §PRICE-DRIFT reads unit prices off receipt lines. Three sightings of one item over a span
+  // wider than three weeks, which is exactly the minimum the analysis requires — below it the
+  // endpoint returns an empty list and every assertion about it holds vacuously.
+  for (const [i, day] of [120, 60, 10].entries()) {
+    run(`INSERT INTO receipts (id, transaction_id, store, purchased_at, total, currency_code, created_at)
+         VALUES (?, NULL, 'Сільпо', ?, ?, 980, ?)`, i + 1, at - day * 86400, 24000 + i * 2000, at - day * 86400);
+    run(`INSERT INTO receipt_items (receipt_id, name, qty, price, category_id)
+         VALUES (?, 'Молоко 1л', 2, ?, 1)`, i + 1, 4000 + i * 400);
+  }
+
+  // An event with both halves: spending attached to it (via the transaction below) and a planned
+  // line, which is stored in hryvnia and converted on read like every other typed amount.
+  run(`INSERT INTO event_groups (id, name, kind, color, is_active, created_at)
+       VALUES (1, 'Карпати', 'trip', '#127C86', 1, ?)`, at - 40 * 86400);
+  run(`INSERT INTO event_planned (event_id, label, amount, category_id, created_at)
+       VALUES (1, 'Житло', 800000, 8, ?)`, at - 40 * 86400);
+  run("UPDATE transactions SET event_id = 1 WHERE id = (SELECT id FROM transactions WHERE amount < 0 LIMIT 1)");
+
+  // A feed row whose params carry an AMOUNT and the currency it was computed in (§BASE-CUR: the
+  // unit travels WITH the event). Without one, `/notifications` proves nothing about either.
+  run(`INSERT INTO notifications (kind, title, body, severity, entity_type, entity_id, dedup_key, created_at, notif_params)
+       VALUES ('budget', 'Бюджет', NULL, 'warn', 'category', '1', 'budget:1:2026-05', ?, ?)`,
+      at - 2 * 86400, JSON.stringify({ name: "Продукти", spent: 1240000, amount: 1500000, pct: 83, cur: 980 }));
+
+  run(`INSERT INTO health_history (day, score, ts) VALUES ('2026-05-01', 72, ?)`, at - 13 * 86400);
+
+  // §BUDGET-MEMORY — one closed month, written in hryvnia as the archive always is.
+  run(`INSERT INTO budget_months (ym, category_id, limit_minor, carry_in_minor, spent_minor, closed_at)
+       VALUES ('2026-04', 1, 1500000, 0, 1200000, ?)`, at - 13 * 86400);
+}

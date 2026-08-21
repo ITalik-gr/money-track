@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useDeleteEventMutation, useGetEventsQuery } from "../store/api.ts";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { GroupGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
@@ -19,7 +20,7 @@ const kindLabel = (k: string | null) => {
 export function Events() {
   const t = useT();
   // Скелет, а не порожній стан, поки запит летить (див. Goals — та сама пастка `= []`).
-  const { data: groups = [], isLoading } = useGetEventsQuery();
+  const { data: groups = [], isLoading, error, refetch } = useGetEventsQuery();
   const [deleteEvent] = useDeleteEventMutation();
   const [showModal, setShowModal] = useState(false);
 
@@ -61,7 +62,11 @@ export function Events() {
           ))}
         </div>
       ) : (
-        <div className="card empty" style={{ padding: 28 }}>{t("events.emptyHint")}</div>
+        error ? (
+          // §Обробка помилок: «Ще нема груп» is a CLAIM, and it invites the reader to create what
+          // they may already have. On a failed request the claim is false, so it is replaced.
+          <ErrorNote error={error} what={t("nav.events")} onRetry={refetch} />
+        ) : <div className="card empty" style={{ padding: 28 }}>{t("events.emptyHint")}</div>
       )}
 
       {showModal && <GroupModal onClose={() => setShowModal(false)} />}

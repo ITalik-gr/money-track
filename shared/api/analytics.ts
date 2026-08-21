@@ -31,8 +31,17 @@ export interface CategorySpend {
  */
 export interface PeriodTotals { spend: number; income: number; n: number }
 
+/**
+ * `Overview.summary` plus the one derived figure the screens kept re-deriving.
+ *
+ * `savings_rate_pct` was computed in four places — the AI report, the Trends strip, the dashboard
+ * pulse, and nowhere on the server. Identical arithmetic in all of them, and nothing that would
+ * have said so on the day one of them changed (§CUR-PLAN, three times over).
+ */
+export interface PeriodSummary extends PeriodTotals { savings_rate_pct: number | null }
+
 export interface Overview {
-  summary: PeriodTotals;
+  summary: PeriodSummary;
   prev: PeriodTotals;
   range: { from: number; to: number; prevFrom: number; prevTo: number; bucket: string; mode: PeriodMode; preset: string | null };
   series: { bucket: string; spend: number; income: number }[];
@@ -51,7 +60,17 @@ export interface Overview {
  * two arrays would let a caller pair them up wrongly. The three add up to `spend` by construction
  * (`EFF_IMPORTANCE` defaults to `discretionary`, so no spending falls outside).
  */
-export interface MonthlyHistory { months: { month: string; spend: number; income: number; essential: number; discretionary: number; optional: number }[] }
+export interface MonthlyHistory {
+  months: {
+    month: string; spend: number; income: number;
+    /**
+     * Share of that month's income that survived it, 0–100 (negative when it did not).
+     * `null` when there was no income — a month with nothing coming in cannot be graded.
+     */
+     savings_rate_pct: number | null;
+    essential: number; discretionary: number; optional: number;
+  }[];
+}
 
 export interface SafeToSpend {
   /** §INCOME-PLAN — still scheduled to arrive before month end. NOT part of `safe`. */
@@ -75,11 +94,83 @@ export interface CapitalTrend {
 export interface NetworthPoint { t: number; ym: string; cushion: number; debt: number; investment: number; assets: number; net: number }
 export interface Networth { months: number; points: NetworthPoint[]; now: NetworthPoint | null; caveats: string[] }
 
+/**
+ * `GET /analytics/fx-cost` — what currency conversion actually cost, over a window.
+ *
+ * Not a fee the bank ever prints: it is the gap between the rate applied to a purchase
+ * (`amount ÷ original_amount`, both already stored) and the published rate of that day
+ * (`rate_history`). Amounts are in the reader's base.
+ */
+export interface FxCostItem {
+  id: string; at: number; merchant: string | null;
+  original_amount: number; original_currency: number;
+  charged: number; market: number; cost: number; cost_pct: number;
+}
+
+export interface FxCost {
+  window: { from: number; to: number };
+  n: number;
+  /** Charged by the bank, and what the same purchases were worth at the published rate. */
+  charged: number;
+  market: number;
+  cost: number;
+  cost_pct: number | null;
+  /** Rows with no published rate for their day — excluded rather than guessed. */
+  unpriced: number;
+  by_currency: { code: number; n: number; charged: number; market: number; cost: number; cost_pct: number }[];
+  items: FxCostItem[];
+}
+
 export interface CompareBucket {
   from: number; to: number; spend: number; income: number;
-  byCategory: { category_id: number | null; category_name: string | null; color: string | null; spent: number }[];
+  /** How many income events produced `income` — §CADENCE reads it, see `income_delta_meaningful`. */
+  income_n: number;
 }
-export interface Compare { a: CompareBucket; b: CompareBucket }
+
+/**
+ * One category, in both windows at once.
+ *
+ * The merge used to happen in the CLIENT, in two components with a copy each. That was already
+ * a second and third definition of «what changed», and neither could carry §CADENCE because the
+ * charge counts never left the server. Merged rows come down whole now; sorting and slicing stay
+ * with the screen, because those are presentation and the two tabs legitimately differ.
+ */
+export interface CompareRow {
+  category_id: number | null;
+  category_name: string | null;
+  color: string | null;
+  /** Spend in window A (the later one) and in window B (the baseline). Minor units, reader's base. */
+  a: number;
+  b: number;
+  delta: number;
+  /** Charges behind `a` and `b` — the rhythm count (`SPEND_TX_COUNT`), not the row count. */
+  n: number;
+  prev_n: number;
+  /**
+   * §CADENCE: `false` means this delta is about the calendar, not about behaviour — a monthly
+   * biller landed inside one window and outside the other. The row is still SHOWN (hiding it
+   * would hide real money), but the percentage next to it is not a finding.
+   */
+  delta_meaningful: boolean;
+}
+
+export interface Compare {
+  a: CompareBucket;
+  b: CompareBucket;
+  /** Every category present in either window, biggest side first. */
+  rows: CompareRow[];
+  /**
+   * The biggest movers, decided HERE rather than on screen: the noise floor is a money amount and
+   * therefore depends on the reader's base currency (§BASE-CUR), and the §CADENCE filter needs the
+   * charge counts. Both were client-side constants until 2026-08-21, and the floor was a literal
+   * `5000` minor units — 50 ₴ as intended, but $50 for anyone reading in dollars.
+   */
+  movers: { up: CompareRow[]; down: CompareRow[] };
+  /** The window is shorter than a monthly billing cycle, so some deltas are muted. */
+  short_period: boolean;
+  /** §CADENCE for the income line: one salary a month cannot be compared week to week. */
+  income_delta_meaningful: boolean;
+}
 
 export interface Forecast {
   /** §INCOME-PLAN — received so far PLUS what is still scheduled this month. */
@@ -189,6 +280,26 @@ export interface WeekdayAnalytics {
 }
 
 /**
+ * §WEEKDAY along the other axis — `GET /analytics/day-of-month`.
+ *
+ * `days` always has 31 entries. `typical` divides by how many times that date OCCURRED in the
+ * window, which is the whole point: in any window that is not a whole number of months the 31st
+ * shows up fewer times than the 15th, and raw sums report that as thrift.
+ */
+export interface DomSpend {
+  dom: number; spent: number; n: number; days: number; typical: number;
+  /** Carried by one payment — rent on the 1st is a due date, not a spending habit. */
+  lumpy: boolean;
+}
+export interface DomAnalytics {
+  from: number; to: number;
+  days: DomSpend[];
+  busiest: number | null;
+  /** How much of the window's spending left in days 1–5, where standing charges cluster. */
+  first_five_share_pct: number | null;
+}
+
+/**
  * §HABITS — a merchant that joined your regular spending, or that went quiet.
  *
  * `monthly` is the average over the months it was ACTUALLY charged, not over the window: a
@@ -269,8 +380,11 @@ export interface CategoryOverview {
      *  reported with a monthly figure it has never once spent. */
     per_active_month: number;
   };
-  /** Who this category actually is, over the whole history rather than the window. */
-  top_merchants: { merchant: string; spent: number; n: number }[];
+  /**
+   * Who this category actually is, over the whole history rather than the window.
+   * `share_pct` is against `lifetime.total`, so the rows are comparable to each other and to 100.
+   */
+  top_merchants: { merchant: string; spent: number; n: number; share_pct: number }[];
   /**
    * §categoryMonthlyLevels — the canonical "how much a month". NULL for a sub-category or an
    * income bucket: that canon is spend-only and rolls up, so there it would be a number about a
@@ -294,4 +408,27 @@ export interface CategoryOverview {
   /** §E1 — spending that repeats versus spending that happened once, this period. */
   recurring: number;
   oneoff: number;
+  /**
+   * The SAME window one year earlier — seasonality.
+   *
+   * The 24-month trend above already contains these numbers, and that is precisely why this is
+   * here: nobody can read «цей серпень проти торішнього» off a line with 24 points. A category
+   * whose whole story is a yearly rhythm — insurance, tuition, holidays — looks like a random
+   * spike in the trend and like a comparison in one figure.
+   *
+   * `null` when the window a year back predates the first transaction: comparing against a period
+   * in which the account did not yet exist reports «+100%» about nothing.
+   */
+  year_ago: { spent: number; n: number } | null;
+  /**
+   * The average charge in this window, and in the window immediately before it.
+   *
+   * A separate question from the total, and the reason the page needed it: a category that grew
+   * can have grown two ways, and they call for opposite reactions. More visits at the same price
+   * is a habit; the same visits at a higher price is a price. The totals cannot tell them apart —
+   * these two numbers can, and `n` is carried alongside so the reader can see which moved.
+   *
+   * `prev` is `null` when the previous window holds no charges — an average of nothing is not 0.
+   */
+  avg_check: { now: number; prev: number | null; n: number; prev_n: number } | null;
 }

@@ -1048,6 +1048,27 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["ai_changes"],
   },
   {
+    /**
+     * The door the «reverting twice» rule left open, closed 2026-08-21.
+     *
+     * The model files it as 6, the person then corrects it to 11 BY HAND, and only afterwards
+     * presses Повернути in the journal. Restoring `old_value` would put back 2 — a category from
+     * before either of them — and silently discard the correction. The reasoning was already
+     * written down one branch away, for a second revert; it is the same fact about any later
+     * change, and the ordinary case is the one that costs someone their own work.
+     */
+    name: "ai-audit: revert REFUSES when the field has changed hands since",
+    method: "POST",
+    path: () => "/ai-changes/9004/revert",
+    setup: (db) => {
+      db.raw.prepare(`INSERT INTO ai_changes (id, tx_id, field, old_value, new_value, source, created_at)
+                      VALUES (9004, 'tx0001', 'category_id', '2', '6', 'enrich', 1778600000)`).run();
+      // The human's later choice — not 6, and not 2 either.
+      db.raw.prepare("UPDATE transactions SET category_id = 11 WHERE id = 'tx0001'").run();
+    },
+    extraProbes: ["ai_changes"],
+  },
+  {
     name: "ai-audit: reverting an unknown entry is 404, not a silent success",
     method: "POST",
     path: () => "/ai-changes/9999/revert",

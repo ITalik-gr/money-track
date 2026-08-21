@@ -7,7 +7,7 @@ import { EmptyCard } from "../ui/EmptyCard.tsx";
 import { formatMinor } from "../../lib/format.ts";
 import { useT } from "../../i18n/index.ts";
 import type { TranslationKey } from "../../i18n/index.ts";
-import { baseSign } from "../../lib/currency.ts";
+import { baseSign, getBaseCurrency } from "../../lib/currency.ts";
 
 // §4 «Скоро спишеться»: планові платежі/підписки у горизонті 30 днів — лого бренду,
 // дата, «через N дн». Перетинає межу місяця (на відміну від прогнозу місяця).
@@ -65,7 +65,7 @@ export function UpcomingSubs() {
                     саме через це CLOUDFLARE $5 виглядав як 5 ₴. ₴-еквівалент — підписом. */}
                 <span className="us-amt">
                   <Money minor={s.amount} currency={s.currency_code} decimals={false} />
-                  {s.currency_code !== 980 && (
+                  {s.currency_code !== getBaseCurrency() && (
                     <span className="us-amt-uah">≈ {formatMinor(s.amount_uah, { decimals: false })} {baseSign()}</span>
                   )}
                 </span>

@@ -14,6 +14,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { GoalModal } from "../components/planning/GoalModal.tsx";
 import { GoalProgress } from "../components/planning/GoalProgress.tsx";
 import type { SavingsGoal } from "../store/api.ts";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 
 const fmtDate = dateFmt({ day: "numeric", month: "short", year: "numeric" });
 
@@ -30,7 +31,7 @@ export function Goals() {
   const t = useT();
   // `isLoading` окремо від даних: із дефолтом `= []` порожній акаунт і незавершений запит
   // малювали ОДИН екран («Цілей ще немає»), тож перше відкриття читалось як «нічого нема».
-  const { data: goals = [], isLoading: loadingGoals } = useGetGoalsQuery();
+  const { data: goals = [], isLoading: loadingGoals, error: goalsError, refetch: refetchGoals } = useGetGoalsQuery();
   const { data: accounts = [], isLoading: loadingAccounts } = useGetAccountsQuery();
   const loading = loadingGoals || loadingAccounts;
   const [deleteGoal] = useDeleteGoalMutation();
@@ -76,7 +77,11 @@ export function Goals() {
           ))}
         </div>
       ) : (
-        <div className="card empty" style={{ padding: 28 }}>{t("goal.emptyHint")}</div>
+        goalsError ? (
+          // «Ще нема цілей» invites the reader to create one. On a failure that is a false claim
+          // about their account, so the error takes the slot instead of sitting under it.
+          <ErrorNote error={goalsError} what={t("nav.goals")} onRetry={refetchGoals} />
+        ) : <div className="card empty" style={{ padding: 28 }}>{t("goal.emptyHint")}</div>
       )}
 
       {modal.open && (

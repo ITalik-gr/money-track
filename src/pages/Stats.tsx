@@ -5,6 +5,7 @@ import {
   useGetCurrenciesQuery, useGetOverviewQuery, useGetPeriodModeQuery, useSetPeriodModeMutation,
 } from "../store/api.ts";
 import { currencySign, formatMinor } from "../lib/format.ts";
+import { signFor } from "../lib/currency.ts";
 import { CashflowChart } from "../components/stats/CashflowChart.tsx";
 import { CumulativeChart } from "../components/stats/CumulativeChart.tsx";
 import { IncomeBreakdown } from "../components/stats/IncomeBreakdown.tsx";
@@ -23,6 +24,7 @@ import { WeekdaySpend } from "../components/stats/WeekdaySpend.tsx";
 import { Habits } from "../components/stats/Habits.tsx";
 import { FactLabel, RANGES, labelFor, type Cur, type RangeKey } from "../components/stats/shared.tsx";
 import { ClickableKpis, ImportanceBreakdown, SpendingPatterns } from "../components/stats/StatsOverview.tsx";
+import { FxCostCard } from "../components/stats/FxCostCard.tsx";
 import { AvgCheckByCategory, CategoryBreakdown, PeriodCompare } from "../components/stats/StatsCategories.tsx";
 import { DeeperAnalytics, TopSpendDays, toCumulative } from "../components/stats/StatsTrends.tsx";
 import { AccountsBlock, EventsBlock, MerchantsBlock } from "../components/stats/StatsMerchants.tsx";
@@ -85,7 +87,10 @@ export function Stats() {
   const mode = pm?.mode ?? "calendar";
 
   const { data, isFetching, error, refetch } = useGetOverviewQuery({ preset: range, currency });
-  const sign = currencySign(currency ?? 980);
+  // §BASE-CUR: `currency` is null in the DEFAULT mode ("rolled up"), and rolled up is the reader's
+  // base — not the hryvnia. This single expression is threaded into every block on the page, so
+  // `?? 980` here signed all five tabs with ₴ while the numbers under it were dollars.
+  const sign = signFor(currency);
 
   // Межі періоду беремо з відповіді (сервер рахує за period_mode) — узгоджено з Головною.
   const from = data?.range.from ?? Math.floor(Date.now() / 1000) - RANGES[range].days * 86400;
@@ -190,6 +195,7 @@ export function Stats() {
                 </div>
                 <ImportanceBreakdown data={data} sign={sign} from={from} to={to} currency={currency} />
                 <SpendingPatterns />
+                <FxCostCard sign={sign} />
                 <section>
                   <div className="section-head"><h2>{t("stats.cashflow.title")}</h2><span className="label">{t("stats.cashflow.sub")}</span></div>
                   <div className="card cashflow">

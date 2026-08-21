@@ -1,6 +1,7 @@
 // Planned payments / subscriptions. See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
+import { localFmtSql } from "../lib/finance/time.ts";
 
 /**
  * The fields `chargesBetween()` and `monthlyPlannedUAH()` need to build a schedule.
@@ -167,18 +168,23 @@ export interface DetectedCandidate {
  * sent to a person become "subscriptions". §G3: the sub-select proposes the most common category
  * among the matches, so accepting a candidate does not land it uncategorised.
  */
-export async function detectCandidates(db: AppDb, since: number): Promise<DetectedCandidate[]> {
+export async function detectCandidates(
+  db: AppDb, since: number, now = Math.floor(Date.now() / 1000),
+): Promise<DetectedCandidate[]> {
+  // ⚠️ APP_TZ (2026-08-21): `months >= 2` is the gate that turns a repeated charge into a
+  // proposed subscription, and a UTC month boundary moved a charge made just after midnight into
+  // the previous month — occasionally supplying the second month all by itself.
   const r = await db.prepare(
     `SELECT t.merchant, -t.amount AS amount, COUNT(*) AS n,
             MIN(t.time) AS first_time, MAX(t.time) AS last_time,
-            COUNT(DISTINCT strftime('%Y-%m', t.time, 'unixepoch')) AS months,
+            COUNT(DISTINCT ${localFmtSql(now, "%Y-%m")}) AS months,
             t.currency_code AS currency_code,
             (SELECT x.category_id FROM transactions x
              WHERE x.merchant = t.merchant AND x.amount = t.amount AND x.category_id IS NOT NULL
              GROUP BY x.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.amount < 0 AND t.hold = 0 AND t.is_transfer = 0
+     WHERE t.amount < 0 AND t.is_transfer = 0
        AND t.merchant IS NOT NULL AND t.merchant <> '' AND t.time >= ?
        AND COALESCE(c.parent_id, t.category_id) IS NOT 13
      GROUP BY t.merchant, t.amount
@@ -198,7 +204,17 @@ export interface MerchantMatch {
   category_id: number | null;
 }
 
-/** Spending grouped by merchant+currency for a free-text search — the §F4 "describe it" flow. */
+/**
+ * Spending grouped by merchant+currency for a free-text search — the §F4 "describe it" flow.
+ *
+ * ⚠️ **Holds are COUNTED**, like everywhere else (canon, `stats.ts`): monobank only sends executed
+ * operations, and when a hold settles the SAME id is overwritten, so there is no double count.
+ * Two of the three planning queries carried `t.hold = 0` and nothing said why — the visible cost
+ * was that the average charge shown in this SEARCH differed from the one `merchantProfile` uses
+ * for the plan created by clicking that very row. The rule already records that `hold = 0` once
+ * cut the freshest week out of a report; this was the same cut, in the flow whose whole purpose
+ * is "turn a recent repeating charge into a plan".
+ */
 export async function merchantMatches(
   db: AppDb, query: string, since: number,
 ): Promise<MerchantMatch[]> {
@@ -209,7 +225,7 @@ export async function merchantMatches(
              WHERE x.merchant = t.merchant AND x.category_id IS NOT NULL
              GROUP BY x.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id
      FROM transactions t
-     WHERE t.amount < 0 AND t.is_transfer = 0 AND t.hold = 0 AND t.merchant LIKE ? AND t.time >= ?
+     WHERE t.amount < 0 AND t.is_transfer = 0 AND t.merchant LIKE ? AND t.time >= ?
      GROUP BY t.merchant, t.currency_code
      HAVING n >= 1 ORDER BY n DESC, last_time DESC LIMIT 8`,
   ).bind(`%${query}%`, since).all<MerchantMatch>();

@@ -124,3 +124,22 @@ export async function recentTransactions(db: AppDb, limit = 10): Promise<RecentT
   ).bind(limit).all<RecentTx>();
   return rows.results ?? [];
 }
+
+/**
+ * Скільки доходу лишилось — ЄДИНЕ визначення.
+ *
+ * It lives here rather than in `stats.ts` for the reason `stats.ts` is at its C3 ceiling: that
+ * file is the SQL canon, and a pure two-argument ratio is not SQL. This module already exists to
+ * hold finance computations with more than one caller.
+ *
+ * The report has quoted `savings_rate_pct` to the model since 2026-07 and no screen ever showed
+ * it, so the app could tell an AI that a month kept 4% and had no way to say so to the person
+ * whose month it was — while the Trends strip computed its own copy in the client. Three places,
+ * one ratio: the shape §CUR-PLAN and §REFUND both grew out of.
+ *
+ * ⚠️ `null` when there was no income, not 0. «0% заощаджено» is a verdict about a month, and a
+ * month with no income supports no verdict — it is a month to look at, not to grade.
+ */
+export function savingsRatePct(income: number, spend: number): number | null {
+  return income > 0 ? Math.round(((income - spend) / income) * 100) : null;
+}

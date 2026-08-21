@@ -16,7 +16,7 @@ import { useT, translate } from "../../i18n/index.ts";
 import { getLocale, dateFmt } from "../../i18n/locale.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
 import { useGetSliceDrillQuery } from "../../store/api.ts";
-import type { DrillTx } from "../../store/api.ts";
+import type { CompareRow, DrillTx } from "../../store/api.ts";
 import { TxItem } from "../transactions/TxItem.tsx";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
@@ -38,8 +38,11 @@ export type RangeKey = keyof typeof RANGES;
 
 // currency=null → зведено в ₴. Знак завжди по обраній валюті (₴ для зведення).
 export type Cur = number | null;
-export type MoverRow = { name: string; color: string | null; a: number; b: number; delta: number };
-export type Movers = { up: MoverRow[]; down: MoverRow[] };
+// The merged comparison row and the movers come from the server whole (§CADENCE): the two tabs
+// used to build them here, twice, and neither copy could see the charge counts that decide
+// whether a delta means anything. Re-exported under the old names so the tabs read the same.
+export type MoverRow = CompareRow;
+export type Movers = { up: CompareRow[]; down: CompareRow[] };
 
 export const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e", "#127c86", "#6b7a74"];
 
@@ -121,7 +124,14 @@ export function deltaPct(a: number, b: number): number {
 
 // `goodUp` — для рядків, де зростання ДОБРЕ (надходження). Міняє лише КОЛІР, не число:
 // підмінити місцями a/b було б простіше, але тоді «+20% доходу» показалось би як «−20%».
-export function DeltaChip({ a, b, goodUp }: { a: number; b: number; goodUp?: boolean }) {
+//
+// `meaningful={false}` — §CADENCE. The percentage is still shown, because it is the true
+// arithmetic and hiding it would leave a hole where money moved; what goes away is the COLOUR.
+// Red and green are the part that makes a claim, and «підписки −92%» in green is the app
+// congratulating someone for the 1st of the month landing in the other window. Neutral chip
+// plus a `title` that says why is the honest version — same decision as `newLabel`/`goneLabel`,
+// which also refuse to dress a calendar fact as a trend.
+export function DeltaChip({ a, b, goodUp, meaningful = true }: { a: number; b: number; goodUp?: boolean; meaningful?: boolean }) {
   const t = useT();
   if (a === b) return <span className="cmp-delta flat">0%</span>;
   // §R2-ST2(а): 0→X — не «+100%» (вводить в оману), а «новий»; X→0 — «зникло».
@@ -129,6 +139,9 @@ export function DeltaChip({ a, b, goodUp }: { a: number; b: number; goodUp?: boo
   if (b === 0 && a > 0) return <span className={`cmp-delta ${goodUp ? "down" : "up"}`}>{t("stats.compare.newLabel")}</span>;
   if (a === 0 && b > 0) return <span className={`cmp-delta ${goodUp ? "up" : "down"}`}>{t("stats.compare.goneLabel")}</span>;
   const p = deltaPct(a, b);
+  if (!meaningful) {
+    return <span className="cmp-delta timing" title={t("stats.compare.cadenceHint")}>{p > 0 ? "+" : ""}{p}%</span>;
+  }
   // Для витрат зростання — «погано» (червоне), спад — «добре» (зелене). Для доходу — навпаки.
   const cls = grew === !goodUp ? "up" : "down";
   return <span className={`cmp-delta ${cls}`}>{p > 0 ? "+" : ""}{p}%</span>;

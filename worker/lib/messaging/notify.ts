@@ -13,6 +13,8 @@ import type { Env } from "../../env.ts";
 import { debtMinor } from "../finance/own-funds.ts";
 import { getRates, resolveBaseCurrency, uahToBaseMinor } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
+import { catNameSql } from "../finance/categories-i18n.ts";
+import { collectNumbers, numbersAreGrounded } from "../ai/grounding.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
 import { goalPace, goalNeedsAttention } from "../finance/goals.ts";
 import {
@@ -572,6 +574,11 @@ const TX_SPEND = "t.amount < 0 AND t.transfer_pair_id IS NULL AND t.is_transfer 
  * за визначенням і користувач про нього знає; новина — лише НЕсподіваний великий чек.
  */
 async function draftBigTx(env: Env, now: number): Promise<Draft[]> {
+  // §LANG-ARCH: the category name is rendered in the feed, so it resolves like every other name
+  // that reaches a screen. `catNameSql` was applied to `repo/*` and then to `lib/ai/*`, and
+  // `lib/messaging/*` — which writes the feed the reader actually sees — used it NOWHERE: an
+  // English reader got «Продукти» in a notification and "Groceries" in the category list.
+  const locale = await resolveLocale(env);
   const MIN_ABS = 50000;                      // 500 ₴ — нижче не сигнал, хоч би який множник
   const notRecurring = `NOT ${isRecurringExpr(defaultRefFrom(now), now)}`;
   const rows = await env.DB.prepare(
@@ -582,7 +589,7 @@ async function draftBigTx(env: Env, now: number): Promise<Draft[]> {
        GROUP BY t.category_id
      )
      SELECT t.id AS id, t.merchant AS merchant, -t.amount AS amount, t.time AS time,
-            c.name AS category, a.avg_amt AS avg_amt
+            ${catNameSql(locale, "c.name")} AS category, a.avg_amt AS avg_amt
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
      JOIN avg_check a ON a.cat IS t.category_id
@@ -765,44 +772,6 @@ async function draftTodo(env: Env, now: number): Promise<Draft[]> {
  * різниця з «тупими алертами» й водночас запобіжник: вигадану цифру тут ніде взяти,
  * бо в промті прямо заборонено рахувати нові числа.
  */
-/**
- * 🔒 Детермінований запобіжник проти вигаданих сум.
- *
- * Промт уже забороняє рахувати нові числа — і цього НЕ ВИСТАЧИЛО: на реальних даних модель
- * в ОДНОМУ сповіщенні назвала суму підписок у заголовку, а в тілі — іншу, більшу, «зі стелі»
- * (дві різні цифри про одне й те саме), плюс приписала сумі період, якого в payload не було.
- * Жодне з цих чисел у payload не існувало. Інструкція — не гарантія; гарантія — перевірка.
- *
- * Правило: КОЖНЕ число ≥ 100 у тексті мусить знайтися в payload. Дрібні (< 100) пропускаємо
- * свідомо — це кількості, дні, місяці, відсотки («8 підписок», «на 1-2 місяці»), і вимагати
- * для них джерела означало б глушити нормальні формулювання. Гроші — те, що бреше дорого.
- * Допуск 1% — модель округлює копійки до цілих гривень.
- *
- * Спостереження з непідтвердженим числом ВІДКИДАЄМО цілком, а не чистимо текст: фраза без
- * своєї цифри втрачає сенс, а стрічка з правилом «мовчання краще за шум» це витримує.
- */
-function collectNumbers(v: unknown, out: Set<number>, depth = 0): void {
-  if (depth > 6 || out.size > 5000) return;
-  if (typeof v === "number") { if (Number.isFinite(v)) out.add(Math.abs(v)); return; }
-  if (typeof v === "string") { const n = Number(v.replace(",", ".")); if (v.trim() && Number.isFinite(n)) out.add(Math.abs(n)); return; }
-  if (Array.isArray(v)) { for (const x of v) collectNumbers(x, out, depth + 1); return; }
-  if (v && typeof v === "object") { for (const x of Object.values(v)) collectNumbers(x, out, depth + 1); }
-}
-
-export function numbersAreGrounded(text: string, known: Set<number>): boolean {
-  // Пробіли/нерозривні пробіли всередині числа — це розрядні роздільники («3 354»).
-  const found = text.match(/\d[\d\s  ]*(?:[.,]\d+)?/g) ?? [];
-  for (const raw of found) {
-    const n = Math.abs(Number(raw.replace(/[\s  ]/g, "").replace(",", ".")));
-    if (!Number.isFinite(n) || n < 100) continue;
-    let ok = false;
-    for (const k of known) {
-      if (Math.abs(n - k) <= Math.max(1, k * 0.01)) { ok = true; break; }
-    }
-    if (!ok) return false;
-  }
-  return true;
-}
 
 /** Скільки днів одна тема AI-спостереження вважається «вже сказаною». */
 const AI_TOPIC_COOLDOWN_DAYS = 14;

@@ -211,3 +211,65 @@ test("§CAT-PAGE: the multiplier converts, so a foreign-currency row is not coun
     restore();
   }
 });
+
+/**
+ * §CAT-PAGE, second pass (2026-08-21): the two questions the page could not answer.
+ *
+ * Both are comparisons, and in both the NULL case matters more than the number:
+ *  · a window a year back that predates the account is not a −100% drop, it is no comparison;
+ *  · an average over zero charges is not 0, it is nothing.
+ * Either mistake prints a confident figure about a period that never existed — the same class of
+ * claim as `budget_history` reporting a month closed under a limit nobody had set.
+ */
+test("§CAT-PAGE: window comparisons", async (t) => {
+  const restore = freezeTime(FROZEN_NOW_ISO);   // 2026-05-14
+  const scope = { id: 1, isParent: true, isIncome: false };
+  try {
+    await t.test("windowStats counts CHARGES, not joined rows", async () => {
+      const db = db_();
+      const win = [NOW - 2 * 86400, NOW] as const;
+      // Measured as a DELTA, because the fixture already spends in this window — the claim is
+      // about how much one purchase adds, not about the absolute count.
+      const before = await categoriesRepo.windowStats(db as unknown as never, MULT, scope, ...win);
+
+      // One expense divided into three parts: `STATS_JOINS` multiplies it into three rows, and an
+      // average charge divided by that count is quietly a third of the truth (§SPLIT).
+      db.raw.prepare(
+        `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, category_id, created_at)
+         VALUES ('split-tx', 'acc-uah', 'manual', ?, -90000, 980, 1, 0)`,
+      ).run(NOW - 86400);
+      for (const part of [30000, 30000, 30000]) {
+        db.raw.prepare(
+          "INSERT INTO tx_splits (tx_id, category_id, amount, created_at) VALUES ('split-tx', 1, ?, 0)",
+        ).run(-part);
+      }
+
+      const after = await categoriesRepo.windowStats(db as unknown as never, MULT, scope, ...win);
+      assert.equal(after.n - before.n, 1, "one purchase, however many parts it was divided into");
+      assert.equal(after.spent - before.spent, 90000, "and its full amount, counted once");
+    });
+
+    await t.test("an empty window is zero rows, not a missing answer", async () => {
+      const db = db_();
+      // A year back the fixture has nothing at all — the route turns exactly this into `null`
+      // rather than into a −100% comparison against a period the account did not exist in.
+      const old = await categoriesRepo.windowStats(
+        db as unknown as never, MULT, scope, NOW - 400 * 86400, NOW - 380 * 86400,
+      );
+      assert.deepEqual(old, { spent: 0, n: 0 });
+    });
+
+    await t.test("the average charge is the window's spend over its charge count", async () => {
+      const db = db_();
+      const w = await categoriesRepo.windowStats(
+        db as unknown as never, MULT, scope, NOW - 30 * 86400, NOW,
+      );
+      assert.ok(w.n > 0, "the fixture spends in category 1 within the month");
+      const avg = Math.round(w.spent / w.n);
+      // Sanity in the direction that matters: an average charge cannot exceed the window total,
+      // and with more than one charge it must be strictly smaller.
+      assert.ok(avg > 0 && avg <= w.spent);
+      if (w.n > 1) assert.ok(avg < w.spent);
+    });
+  } finally { restore(); }
+});

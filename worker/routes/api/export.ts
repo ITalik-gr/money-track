@@ -8,6 +8,11 @@ import {
 import * as txRepo from "../../repo/transactions.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { buildDump } from "../../lib/platform/backup.ts";
+import { localYmd } from "../../lib/finance/time.ts";
+// The ONE code table (`shared/currency.ts`). A private six-entry copy used to live here, so a
+// Czech purchase exported as the bare number «203» — which §BANK-PARSE then refuses on re-import,
+// because an unknown currency resolves to null rather than to hryvnia. The round trip lost the row.
+import { currencyCode } from "../../../shared/currency.ts";
 import { apiRoutes } from "./_shared.ts";
 import type { SearchResults } from "../../../shared/api/platform.ts";
 
@@ -37,7 +42,9 @@ dataExport.get("/export/all.json", async (c) => {
     // на кілька байт було б найгіршим результатом: людина вважала б, що бекап у неї є.
     return c.json({ error: "export_schema_unreadable" }, 500);
   }
-  const day = new Date().toISOString().slice(0, 10);
+  // The filename's day is the reader's day too — a file named for yesterday looks like a
+  // stale export rather than one made just now.
+  const day = localYmd(Math.floor(Date.now() / 1000));
   return new Response(body, {
     headers: {
       "content-type": "application/json; charset=utf-8",
@@ -49,7 +56,6 @@ dataExport.get("/export/all.json", async (c) => {
 
 // §J: CSV-експорт транзакцій (для бухгалтера/податкової). Опційні from/to (unix). BOM для
 // коректної кирилиці в Excel; сума — у валюті рахунку. Пара-переказ — один рядок (як у списку).
-const CUR_ALPHA: Record<number, string> = { 980: "UAH", 840: "USD", 978: "EUR", 985: "PLN", 826: "GBP", 756: "CHF" };
 dataExport.get("/export/transactions.csv", async (c) => {
   const url = new URL(c.req.url);
   const from = url.searchParams.get("from");
@@ -98,9 +104,18 @@ dataExport.get("/export/transactions.csv", async (c) => {
   const lines = [header.map(esc).join(sep)];
   for (const r of rows) {
     lines.push([
-      new Date(r.time * 1000).toISOString().slice(0, 10),
+      /**
+       * §APP_TZ — the KYIV date, fixed 2026-08-21.
+       *
+       * It was the UTC date, and the round trip is what makes that a bug rather than a preference:
+       * §BANK-PARSE has the CSV importer read a zone-less date as a Kyiv wall clock, on the
+       * grounds that a statement is written in local time. So exporting in UTC and re-importing
+       * moved every purchase made after 21:00 back by a day — and the totals still added up,
+       * which is exactly how the same mistake survived on the import side until August.
+       */
+      localYmd(r.time),
       r.merchant ?? "", r.comment ?? "", r.user_note ?? "",
-      num(r.amount / 100), CUR_ALPHA[r.currency_code] ?? String(r.currency_code),
+      num(r.amount / 100), currencyCode(r.currency_code),
       r.category_name ?? "", r.account_title ?? "", r.event_name ?? "",
       r.is_transfer ? st(loc, "csvYes") : "",
     ].map(esc).join(sep));

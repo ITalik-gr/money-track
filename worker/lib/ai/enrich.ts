@@ -10,26 +10,6 @@ import { buildSystemPrefix, langNoteDirective } from "./prompt.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import { logUsage } from "./cost.ts";
 
-// 6.2 Quick text entry -> structured record.
-export interface TextResult {
-  merchant: string;
-  amount: number;
-  currency: string;
-  category_guess: number | null;
-  note: string | null;
-}
-
-export async function parseText(
-  env: Env,
-  input: string,
-): Promise<{ result: TextResult; usage: AnthropicUsage }> {
-  const system = await buildSystemPrefix(
-    env,
-    "parse a quick free-text expense note into JSON {merchant, amount, currency, category_guess (id or null), note}",
-  );
-  return callHaikuJson<TextResult>(env, system, [{ type: "text", text: input }]);
-}
-
 // Enrich a single transaction from its raw bank fields — understand what it actually
 // is, pick a category, flag transfers/withdrawals, suggest secondary tags. Reuses the
 // cached taxonomy prefix, so a batch of enrichments is cheap.

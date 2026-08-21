@@ -119,6 +119,8 @@
     "budget": null,
     "budget_history": [],
     "recurring": 0,
-    "oneoff": 0
+    "oneoff": 0,
+    "year_ago": null,
+    "avg_check": null
   }
 }

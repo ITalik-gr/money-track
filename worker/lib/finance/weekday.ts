@@ -82,3 +82,79 @@ export function buildWeekdayAnalytics(rows: WeekdayRow[], from: number, to: numb
     weekend_share_pct: total > 0 ? Math.round((weekend / total) * 100) : null,
   };
 }
+
+
+// ---- day of MONTH -----------------------------------------------------------
+//
+// The same question asked along the other axis, and it lives here for the reason the header
+// gives: the calendar shape of spending is one concept, and splitting it across two modules would
+// let the two halves acquire different rules about time zones and lumps — which is exactly what
+// had already happened. The Trends tab was drawing a day-of-month heat map computed IN THE
+// CLIENT, off UTC daily buckets, with raw sums: every evening purchase filed one day late, and
+// the 31st looked cheap because a 90-day window contains three of them and three 15ths.
+
+/** `strftime('%d')` in APP_TZ — same trap, same fix, as `localDowSql`. */
+export function localDomSql(now: number, col = "t.time"): string {
+  return `CAST(strftime('%d', ${col} + ${tzOffsetSec(now)}, 'unixepoch') AS INTEGER)`;
+}
+
+/**
+ * How many times each day-of-month (1..31) occurred in the window, LOCALLY.
+ *
+ * The normalisation matters more here than for weekdays: a 90-day window holds three 5ths and
+ * either two or three 31sts, and February drops the 30th entirely. Raw sums therefore make the
+ * end of the month look cheap in every window that is not a whole number of months — which is
+ * every window the period switcher offers.
+ */
+export function domCounts(from: number, to: number): number[] {
+  const counts = new Array(31).fill(0) as number[];
+  for (let day = localDayStart(from); day <= to; day = localDayStart(day + 36 * 3600)) {
+    counts[localParts(day).d - 1]!++;
+  }
+  return counts;
+}
+
+/** One expense row per day-of-month, straight from `repo/analytics.ts`. */
+export interface DomRow { dom: number; spent: number; n: number; biggest: number }
+
+export interface DomSpend {
+  dom: number; spent: number; n: number; days: number; typical: number; lumpy: boolean;
+}
+
+export interface DomAnalytics {
+  from: number; to: number;
+  days: DomSpend[];
+  /** The steadiest-expensive date, lumps excluded. Rent on the 1st is not a habit. */
+  busiest: number | null;
+  /** Share of the window's spending that left in the first five days of a month. */
+  first_five_share_pct: number | null;
+}
+
+export function buildDomAnalytics(rows: DomRow[], from: number, to: number): DomAnalytics {
+  const counts = domCounts(from, to);
+  const byDom = new Map(rows.map((r) => [r.dom, r]));
+
+  const days: DomSpend[] = counts.map((dayCount, i) => {
+    const dom = i + 1;
+    const r = byDom.get(dom);
+    const spent = r?.spent ?? 0;
+    const n = r?.n ?? 0;
+    return {
+      dom, spent, n, days: dayCount,
+      typical: dayCount > 0 ? Math.round(spent / dayCount) : 0,
+      lumpy: n <= 1 || (spent > 0 && (r?.biggest ?? 0) >= spent * 0.55),
+    };
+  });
+
+  const total = days.reduce((sum, d) => sum + d.spent, 0);
+  // The first five days: rent, subscriptions and standing charges cluster there, and what is left
+  // afterwards is the part a person actually decides about. That is the number worth naming.
+  const firstFive = days.slice(0, 5).reduce((sum, d) => sum + d.spent, 0);
+  const steady = days.filter((d) => !d.lumpy && d.spent > 0);
+
+  return {
+    from, to, days,
+    busiest: steady.length ? steady.reduce((best, d) => (d.typical > best.typical ? d : best)).dom : null,
+    first_five_share_pct: total > 0 ? Math.round((firstFive / total) * 100) : null,
+  };
+}

@@ -26,3 +26,4 @@
    which rule wins for anything that already existed. */
 @import "./styles/transactions.css";
 @import "./styles/budgets.css";
+@import "./styles/analytics.css";

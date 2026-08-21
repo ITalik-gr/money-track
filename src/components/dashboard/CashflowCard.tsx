@@ -2,6 +2,7 @@ import { useGetOverviewQuery } from "../../store/api.ts";
 import { numFmt } from "../../i18n/locale.ts";
 import { CashflowChart } from "../stats/CashflowChart.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { monthShort } from "../../lib/format.ts";
 import { useT } from "../../i18n/index.ts";
 import { baseSign } from "../../lib/currency.ts";
@@ -14,7 +15,9 @@ export function CashflowCard() {
   const now = new Date();
   const to = Math.floor(Date.now() / 1000);
   const from = Math.floor(new Date(now.getFullYear(), now.getMonth() - 5, 1).getTime() / 1000);
-  const { data } = useGetOverviewQuery({ from, to, bucket: "month", currency: 980 });
+  // Rolled up, not pinned to hryvnia — see the note in `MonthPulse`: a currency here filters the
+  // rows instead of choosing a unit, so the six-month cashflow line was missing foreign months.
+  const { data, error, refetch } = useGetOverviewQuery({ from, to, bucket: "month", currency: null });
 
   const series = data?.series ?? [];
   const rows = series.map((s) => {
@@ -31,8 +34,10 @@ export function CashflowCard() {
             {t("cf.title")}
             <InfoTip>{t("cf.info")}</InfoTip>
           </span>
-          <div className={`cf-total num-hero ${net < 0 ? "neg" : "pos"}`}>
-            {net >= 0 ? "+" : "−"}{fmt0.format(Math.abs(net) / 100)}<span className="cur">{baseSign()}</span>
+          {/* On failure the sum of an empty series is 0, and «+0 ₴» reads as a month that broke
+              exactly even — a statement, not an absence. */}
+          <div className={`cf-total num-hero ${error ? "" : net < 0 ? "neg" : "pos"}`}>
+            {error ? "—" : <>{net >= 0 ? "+" : "−"}{fmt0.format(Math.abs(net) / 100)}<span className="cur">{baseSign()}</span></>}
           </div>
         </div>
         <div className="legend">
@@ -40,6 +45,7 @@ export function CashflowCard() {
           <span><span className="d" style={{ background: "var(--chart-expense)" }} />{t("common.expenses")}</span>
         </div>
       </div>
+      <ErrorNote error={error} what={t("cf.title")} onRetry={refetch} />
       <CashflowChart rows={rows} />
     </div>
   );

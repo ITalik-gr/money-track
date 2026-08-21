@@ -34,7 +34,7 @@ import { formatMinor } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { toast } from "../lib/toast.ts";
 import { errText, errStatus } from "../lib/errors.ts";
-import { baseSign } from "../lib/currency.ts";
+import { baseSign, signFor } from "../lib/currency.ts";
 
 // AI-порадник: числа (runway) + структуровані поради + інтерактивне «запитай/опиши».
 // Профіль «про мене» редагується лише в Налаштуваннях — AI його й так знає в усіх викликах.
@@ -217,7 +217,7 @@ export function Advisor() {
           <aside className="stack advisor-rail" style={{ gap: 18 }}>
             {advice?.facts && advice.facts.length > 0 && (
               <div className="card" style={{ padding: 16 }}>
-                <RichFacts facts={advice.facts} />
+                <RichFacts facts={advice.facts} sign={signFor(advice.cur ?? 980)} />
               </div>
             )}
             <AiInsightCard days={30} />
@@ -231,7 +231,9 @@ export function Advisor() {
 }
 
 // Дельта-пілюля: зміна метрики vs минулого разу. `goodUp` — чи «більше = краще»
-// (runway/подушка так; burn навпаки — менше краще). Гроші показуємо у ₴.
+// (runway/подушка так; burn навпаки — менше краще).
+// ⚠️ §BASE-CUR: the two snapshots may have been generated in DIFFERENT currencies, and a delta
+// between them would be meaningless — `SinceLastTime` is what decides whether to show it at all.
 function DeltaPill({ cur, prev, goodUp, money, unit }: { cur: number | null; prev: number | null; goodUp: boolean; money?: boolean; unit?: string }) {
   const t = useT();
   if (cur == null || prev == null) return null;
@@ -248,6 +250,10 @@ function SinceLastTime({ advice }: { advice: Advice }) {
   const { data: hist } = useGetAdviceHistoryQuery();
   const prev = (hist ?? []).find((h) => h.generated_at < advice.generated_at);
   if (!prev) return null;
+  // §BASE-CUR: "since last time" subtracts two STORED snapshots. If they were generated in
+  // different currencies the difference is not a change in spending, it is a change of unit —
+  // and it would be shown as a win or a loss. Say nothing rather than something wrong.
+  if ((prev.cur ?? 980) !== (advice.cur ?? 980)) return null;
   const dfmt = dateFmt({ day: "2-digit", month: "short" });
   return (
     <div className="card since-last" style={{ padding: "10px 14px" }}>

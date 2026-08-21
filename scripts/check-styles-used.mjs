@@ -42,7 +42,9 @@ const SRC = "src";
 const STYLELESS_OK = new Set([
   // ── NAMESPACES: the container carries no rule of its own, its children do (`.whatif` is bare,
   //    `.whatif-row` is not). A real pattern; an empty rule to satisfy the check would be worse.
-  "whatif", "eb", "eb-edit", "evt-plan", "rich", "who", "tag-group", "tag-pick", "tg-more",
+  "whatif", "eb", "eb-edit", "evt-plan", "rich", "who", "tag-group", "tag-pick",
+  //    (`tg-more` left this list on 2026-08-18: it was never a namespace — it is the drawer at the
+  //     bottom of the Telegram card, and with no rule it sat glued to the button above it.)
 
   // ── MODIFIERS AND WRAPPERS THAT CURRENTLY DO NOTHING. Not namespaces — nothing anywhere reads
   //    them. Each is either a leftover or an intent never written, and telling those apart needs

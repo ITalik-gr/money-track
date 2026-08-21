@@ -97,11 +97,12 @@ categories.get("/categories/:id/overview", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const to = Number(url.searchParams.get("to") ?? now);
 
-  const { getRates } = await import("../../lib/finance/money.ts");
+  const { getRates, uahToBase } = await import("../../lib/finance/money.ts");
   const stats = await import("../../lib/finance/stats.ts");
   const { budgetStatus } = await import("../../lib/finance/budgets.ts");
   const rates = await getRates(c.env);
   const { mult } = stats.valueMode(rates, null);
+  const uahRate = uahToBase(rates);
   const loc = c.get("locale");
 
   /**
@@ -113,6 +114,10 @@ categories.get("/categories/:id/overview", async (c) => {
    * endpoint agree with itself for anyone who does not.
    */
   const from = Number(url.searchParams.get("from") ?? stats.localMonthStart(to));
+  // 365 days, not «the same month number»: the window the reader picked may be a quarter or a
+  // year, and «one year earlier» has to mean the same LENGTH of time shifted back, or the two
+  // halves of the comparison stop being comparable.
+  const YEAR = 365 * 86400;
 
   const row = await categoriesRepo.byId(c.env.DB, id);
   if (!row) return c.json({ error: "not_found" }, 404);
@@ -136,7 +141,7 @@ categories.get("/categories/:id/overview", async (c) => {
   // looks like a one-off.
   const TREND_MONTHS = 24;
 
-  const [levels, budgets, trend, split, children, closed, lifetime, merchants] = await Promise.all([
+  const [levels, budgets, trend, split, children, closed, lifetime, merchants, cur, yearAgo, prevWin] = await Promise.all([
     stats.categoryMonthlyLevels(c.env, mult, { now: to }),
     budgetStatus(c.env, mult, now),
     categoriesRepo.monthlyTrend(c.env.DB, mult, scope, stats.localMonthStart(to, -(TREND_MONTHS - 1)), to),
@@ -151,6 +156,12 @@ categories.get("/categories/:id/overview", async (c) => {
     // CATEGORY — the exact confusion the owner reported.
     categoriesRepo.lifetimeStats(c.env.DB, mult, scope),
     categoriesRepo.lifetimeMerchants(c.env.DB, mult, scope, 8),
+    // The window itself, the SAME window a year back, and the one immediately before it. Three
+    // identical queries rather than one clever one: the windows differ only in their bounds, and
+    // an expression that derived them from each other would have to encode which is which.
+    categoriesRepo.windowStats(c.env.DB, mult, scope, from, to),
+    categoriesRepo.windowStats(c.env.DB, mult, scope, from - YEAR, to - YEAR),
+    categoriesRepo.windowStats(c.env.DB, mult, scope, from - (to - from), from - 1),
   ]);
 
   // Zero-fill so the axis is continuous: a month with no spending is a real data point, and a gap
@@ -193,7 +204,23 @@ categories.get("/categories/:id/overview", async (c) => {
       // never once spent.
       per_active_month: lifetime.months > 0 ? Math.round(lifetime.total / lifetime.months) : 0,
     },
-    top_merchants: merchants,
+    /**
+     * Who this category IS — with each merchant's SHARE of it, not just its total.
+     *
+     * The list has been here since §CAT-PAGE and said only «Сільпо 42 000 ₴», which is a figure
+     * the reader cannot act on without first knowing what the category costs. The share is the
+     * part that makes it a finding: «70% Продуктів — це один магазин» names where a change would
+     * actually land, and «жоден мерчант не більше 12%» says just as clearly that there is nothing
+     * to consolidate here.
+     *
+     * ⚠️ Against the LIFETIME total, the same denominator the rows come from — mixing a window
+     * total with lifetime rows would produce shares that do not add up to anything, and could
+     * exceed 100%.
+     */
+    top_merchants: merchants.map((m) => ({
+      ...m,
+      share_pct: lifetime.total > 0 ? Math.round((Math.abs(m.spent) / lifetime.total) * 100) : 0,
+    })),
     level: lv ? { level: lv.level, mean: lv.mean, last: lv.last, active_months: lv.active_months, fixed: lv.fixed } : null,
     trend: months,
     budget: b
@@ -202,12 +229,36 @@ categories.get("/categories/:id/overview", async (c) => {
         spent: b.spent, projected: b.projected, lumpy: b.lumpy,
       }
       : null,
+    // §BASE-CUR: `budget_months` is an ARCHIVE and is deliberately written in hryvnia, so it has
+    // to be converted here like every other stored figure — this strip sits directly under the
+    // envelope above, which `budgetStatus` already converts. Un-converted, the two halves of one
+    // card were in different currencies. `currency-sweep.test.ts` cannot catch this one: the
+    // fixture has no closed months, so the field is absent and a missing field cannot leak.
     budget_history: closed.map((m) => ({
       month: m.ym,
-      limit: m.limit_minor + m.carry_in_minor,
-      spent: m.spent_minor,
+      limit: Math.round((m.limit_minor + m.carry_in_minor) * uahRate),
+      spent: Math.round(m.spent_minor * uahRate),
     })),
     recurring: split.recurring,
     oneoff: split.oneoff,
+    /**
+     * ⚠️ `null` rather than a zero row when the comparison window predates the account.
+     *
+     * `lifetime.first_at` is the earliest transaction there has ever been; a window that ends
+     * before it contained no data because there WAS none, and reporting «−100%» about a period
+     * that did not exist is the same class of lie as `budget_history` claiming a month closed
+     * under a limit that was never set.
+     */
+    year_ago: lifetime.first_at != null && to - YEAR >= lifetime.first_at
+      ? { spent: yearAgo.spent, n: yearAgo.n }
+      : null,
+    avg_check: cur.n > 0
+      ? {
+        now: Math.round(cur.spent / cur.n),
+        prev: prevWin.n > 0 ? Math.round(prevWin.spent / prevWin.n) : null,
+        n: cur.n,
+        prev_n: prevWin.n,
+      }
+      : null,
   } satisfies CategoryOverview);
 });

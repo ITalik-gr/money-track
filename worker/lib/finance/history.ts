@@ -13,6 +13,7 @@
 import type { Env } from "../../env.ts";
 import { getRates } from "./money.ts";
 import { valueMode, localMonthStart, localYm } from "./stats.ts";
+import { savingsRatePct } from "./finance.ts";
 import type { MonthlyHistory } from "../../../shared/api/analytics.ts";
 
 export async function collectMonthlyHistory(env: Env, months: number): Promise<MonthlyHistory> {
@@ -48,7 +49,11 @@ export async function collectMonthlyHistory(env: Env, months: number): Promise<M
     const key = localYm(localMonthStart(now, -i));
     const r = spendByMonth.get(key);
     const w = byMonth.get(key) ?? { essential: 0, discretionary: 0, optional: 0 };
-    out.push({ month: key, spend: r?.spend ?? 0, income: r?.income ?? 0, ...w });
+    const spend = r?.spend ?? 0, income = r?.income ?? 0;
+    // The one number that says whether things are getting BETTER. A rising total is ambiguous —
+    // a bigger rent and a bigger takeaway habit look identical in it — but the share of income
+    // that survives the month is not.
+    out.push({ month: key, spend, income, savings_rate_pct: savingsRatePct(income, spend), ...w });
   }
   return { months: out };
 }

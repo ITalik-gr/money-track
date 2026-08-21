@@ -10,10 +10,15 @@ export interface TopItem { name: string; total: number; qty: number; n: number }
 
 /** Top line items by spend in a window, grouped on the normalised (lower/trimmed) name. */
 export async function topItems(
-  db: AppDb, from: number, to: number, limit: number,
+  db: AppDb, mult: string, from: number, to: number, limit: number,
 ): Promise<TopItem[]> {
   const r = await db.prepare(
-    `SELECT LOWER(TRIM(ri.name)) AS name, CAST(COALESCE(SUM(ri.price), 0) AS INTEGER) AS total,
+    // §BASE-CUR: a receipt carries its OWN currency, so the sum is converted per row before it
+    // is added up — a euro receipt and a hryvnia one cannot be summed as numbers. `mult` is the
+    // same inline CASE the rest of the canon uses, keyed on the RECEIPT's code rather than the
+    // transaction's.
+    `SELECT LOWER(TRIM(ri.name)) AS name,
+            CAST(ROUND(COALESCE(SUM(ri.price * ${mult}), 0)) AS INTEGER) AS total,
             ROUND(COALESCE(SUM(COALESCE(ri.qty, 1)), 0), 2) AS qty, COUNT(*) AS n
      FROM receipt_items ri
      JOIN receipts r ON r.id = ri.receipt_id
@@ -47,11 +52,14 @@ export interface PricePoint { name: string; at: number; price: number; qty: numb
  * not retrieval, so it stays with the caller.
  */
 export async function pricePoints(
-  db: AppDb, from: number, to: number,
+  db: AppDb, mult: string, from: number, to: number,
 ): Promise<PricePoint[]> {
   const r = await db.prepare(
+    // Same conversion as `topItems`, and for the same reason: a unit price that changes because
+    // the reader switched currency is not a price change, and this endpoint exists to report
+    // price changes.
     `SELECT LOWER(TRIM(ri.name)) AS name, COALESCE(r.purchased_at, r.created_at) AS at,
-            ri.price AS price, COALESCE(ri.qty, 1) AS qty
+            CAST(ROUND(ri.price * ${mult}) AS INTEGER) AS price, COALESCE(ri.qty, 1) AS qty
      FROM receipt_items ri JOIN receipts r ON r.id = ri.receipt_id
      WHERE ri.name IS NOT NULL AND ri.name <> '' AND ri.price > 0 AND COALESCE(ri.qty, 1) > 0
        AND COALESCE(r.purchased_at, r.created_at) >= ? AND COALESCE(r.purchased_at, r.created_at) <= ?

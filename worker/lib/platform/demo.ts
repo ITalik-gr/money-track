@@ -12,6 +12,7 @@
 // point is an honest "the demo's shared AI budget is used up, the examples you see are real"
 // rather than a silent failure.
 import type { Env } from "../../env.ts";
+import { localYm, localYmd } from "../finance/time.ts";
 
 export const DEMO_SESSION_AI_CAP = 12;      // per sandbox
 export const DEMO_GLOBAL_DAILY_AI_CAP = 200; // across ALL sandboxes, per day
@@ -67,8 +68,12 @@ async function readShared(env: Env, key: string): Promise<number> {
   }
 }
 
-const dayKey = () => new Date().toISOString().slice(0, 10);
-const monthKey = () => new Date().toISOString().slice(0, 7);
+// §APP_TZ (2026-08-21). The sandbox counter was keyed on the UTC day while `demo_daily` — the
+// admin table recording the SAME event — is keyed on the Kyiv day (`feedback.ts`). So between
+// midnight and 03:00 the two disagreed about which day a visitor belonged to: the table opened a
+// new row while the cap was still spending yesterday's allowance. One event, two calendars.
+const dayKey = () => localYmd(Math.floor(Date.now() / 1000));
+const monthKey = () => localYm(Math.floor(Date.now() / 1000));
 
 /**
  * Book what a demo call actually cost, in USD, against the shared daily+monthly budget.

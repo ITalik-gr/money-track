@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "body": {
+    "months": [],
+    "categories": [],
+    "kept_pct": null,
+    "months_closed": 0
+  }
+}

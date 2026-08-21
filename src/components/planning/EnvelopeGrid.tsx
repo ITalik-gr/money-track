@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useGetBudgetStatusQuery, useGetCategoriesQuery } from "../../store/api.ts";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { Money } from "../ui/Money.tsx";
 import { useT } from "../../i18n/index.ts";
 
@@ -21,7 +22,7 @@ import { useT } from "../../i18n/index.ts";
  */
 export function EnvelopeGrid() {
   const t = useT();
-  const { data: rows } = useGetBudgetStatusQuery();
+  const { data: rows, error, refetch } = useGetBudgetStatusQuery();
   const { data: cats } = useGetCategoriesQuery();
 
   // Colour is the only thing still joined client-side: the canon answers about MONEY, and a
@@ -32,6 +33,16 @@ export function EnvelopeGrid() {
       .map((r) => ({ ...r, color: catById.get(r.id)?.color ?? "#6B7A74" }))
       .sort((a, b) => b.ratio - a.ratio); // tightest envelopes first
   }, [rows, cats]);
+
+  /**
+   * A failed request must not be reported as «конвертів ще немає».
+   *
+   * This was the strongest case in the whole error-branch sweep: the empty state is not blank, it
+   * INVITES you to create envelopes — so a network hiccup told a person with a dozen budgets that
+   * they had none and offered to set them up. «Порожнеча й збій виглядають по-різному» understates
+   * it; here the empty state is a false statement about the account.
+   */
+  if (error) return <ErrorNote error={error} what={t("eg.title")} onRetry={refetch} />;
 
   if (!envelopes.length) {
     return (

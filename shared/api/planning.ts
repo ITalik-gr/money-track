@@ -1,5 +1,6 @@
 // Response shapes of `/api/planned/*`, `/api/budgets/*` and `/api/goals/*`.
 // Money is INTEGER minor units. See `./analytics.ts` for why this file exists.
+import type { PlannedPayment } from "../types.ts";
 
 export interface UpcomingSubs {
   days: number; total: number;
@@ -83,6 +84,29 @@ export interface BudgetStatusRow {
 export type BudgetStatusList = BudgetStatusRow[];
 
 /**
+ * `GET /budgets/history` — §BUDGET-MEMORY, read as a record rather than as a carry.
+ *
+ * All amounts are in the reader's base (`budget_months` stores hryvnia, the canon converts).
+ */
+export interface ClosedBudgetMonth { month: string; limit: number; spent: number; kept: boolean }
+
+export interface BudgetHistoryCategoryRow {
+  category_id: number; name: string; color: string | null;
+  closed: number; over: number; avg_limit: number; avg_spent: number;
+  /** Kept months counting back from the latest close — 0 if the latest one was blown. */
+  streak: number;
+  months: ClosedBudgetMonth[];
+}
+
+export interface BudgetHistory {
+  months: (ClosedBudgetMonth & { envelopes: number; kept_envelopes: number })[];
+  categories: BudgetHistoryCategoryRow[];
+  /** Envelope-months kept, 0–100. `null` when nothing has closed — young, not failing. */
+  kept_pct: number | null;
+  months_closed: number;
+}
+
+/**
  * §GOAL-CHART — `GET /goals/:id/progress`. One shape for BOTH goal kinds: a manual goal's
  * cumulative contributions and a jar's account balance are resolved into the same series on the
  * server, so the client draws one thing and knows nothing about the difference.
@@ -92,6 +116,22 @@ export interface GoalProgressSeries {
   /** True when the series came from an account balance rather than from contributions. */
   is_jar: boolean;
 }
+
+/**
+ * `GET /planned` — the plans table, plus the ONE derived figure the page kept re-deriving.
+ *
+ * §SUB-MONTH says the monthly burden of a plan is `monthlyPlannedUAH` and nothing else, and the
+ * reason it says so is a complaint from the owner: the app quoted two different figures for his
+ * own subscriptions. That fix corrected the five SERVER sums and left the Subscriptions page
+ * computing its own — with a rule that had since drifted, because `isFinished` there only ends
+ * an `installment`, while the canon ends anything whose `end_date` has passed. A cancelled
+ * subscription with an end date was therefore worth its full amount on that page and zero
+ * everywhere else.
+ *
+ * ⚠️ `monthly_base` is in the READER's base, already averaged over the plan's period. Do not
+ * multiply `period_amount` by anything in a component.
+ */
+export type PlannedRow = PlannedPayment & { monthly_base: number };
 
 /** `POST /planned/from-habit` — §HABITS row turned into a declared plan. */
 export interface PlanFromHabit { ok: boolean; id: number }

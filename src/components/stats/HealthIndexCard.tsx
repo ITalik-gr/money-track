@@ -1,5 +1,6 @@
 import { Gauge } from "../ui/Gauge.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { Sparkline } from "../ui/Sparkline.tsx";
 import { useGetHealthQuery } from "../../store/api.ts";
@@ -11,7 +12,7 @@ const dot = (s: number) => (s >= 70 ? "pos" : s >= 45 ? "warn" : "neg");
 
 export function HealthIndexCard() {
   const t = useT();
-  const { data } = useGetHealthQuery();
+  const { data, error, refetch } = useGetHealthQuery();
   const score = data?.score ?? null;
   const gTone = score == null ? "accent" : score >= 70 ? "pos" : score >= 45 ? "warn" : "neg";
 
@@ -27,6 +28,11 @@ export function HealthIndexCard() {
           <div className="label">{t("hic.subtitle")}</div>
         </div>
       </div>
+
+      {/* The card already renders a dash for «score unknown», which is right — and made a FAILURE
+          indistinguishable from «not enough data yet». That is the exact confusion the rule names:
+          порожнеча й збій виглядають по-різному. */}
+      <ErrorNote error={error} what={t("hic.title")} onRetry={refetch} />
 
       {data ? (
         <div className="health-body">

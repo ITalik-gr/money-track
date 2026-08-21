@@ -1,0 +1,51 @@
+/* Analytics blocks added after the split (STYLES.md §6.1).
+ *
+ * `domains-a.css` is the part that would naturally have taken these, and it is at its C8 ceiling —
+ * an exception may never rise, so an overflow gets a SEAM. This file is the seam: statistics
+ * blocks written after 2026-08-21 live here rather than growing the biggest part further.
+ *
+ * Imported LAST, so nothing already on screen can change which rule wins.
+ */
+/* ---- §FX-COST: what conversion cost ---------------------------------------- */
+.fx-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.fx-total { font-size: 30px; line-height: 1; }
+.fx-total.neg { color: var(--neg); }
+.fx-total.pos { color: var(--pos); }
+.fx-total .cur { font-size: 0.6em; margin-left: 3px; color: var(--muted); }
+.fx-cur-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.fx-cur { display: flex; align-items: baseline; gap: 8px; padding: 6px 10px; border-radius: 10px;
+  background: var(--surface-2); font-size: 12.5px; }
+.fx-cur-code { color: var(--muted); }
+.fx-cur-pct { font-variant-numeric: tabular-nums; font-weight: 600; }
+.fx-cur-pct.neg { color: var(--neg); }
+.fx-cur-pct.pos { color: var(--pos); }
+.fx-cur-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.fx-items { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.fx-items > .label { display: block; margin-bottom: 8px; }
+.fx-item { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: baseline;
+  padding: 4px 0; font-size: 12.5px; }
+.fx-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fx-item-orig { color: var(--muted); font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  white-space: nowrap; }
+.fx-item-cost { font-family: var(--font-num); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fx-item-cost.neg { color: var(--neg); }
+.fx-item-cost.pos { color: var(--pos); }
+.fx-note { font-size: 12px; margin: 12px 0 0; }
+
+@media (max-width: 560px) {
+  /* The original amount is the first thing to go: the merchant and the cost are the row. */
+  .fx-item { grid-template-columns: 1fr auto; }
+  .fx-item-orig { display: none; }
+}
+
+/* §CAT-PAGE: the merchant's SHARE of its category, beside the count. Its own class rather than
+   another `.cat-merch-n`, because the grid needs a column for it and the two mean different
+   things — one is how often, the other is how much of the whole. */
+.cat-merch-list > li { grid-template-columns: 1fr auto auto auto; }
+.cat-merch-share { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+@media (max-width: 480px) {
+  /* The operation count goes first on a narrow row: the share and the amount are the answer. */
+  .cat-merch-list > li { grid-template-columns: 1fr auto auto; }
+  .cat-merch-n { display: none; }
+}

@@ -10,41 +10,43 @@ import type { Env } from "../env.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
 import * as catRepo from "../repo/categories.ts";
 import { computeSummary, createCashTx, recentTransactions, type Summary } from "../lib/finance/finance.ts";
-import { ingestReceipt } from "../lib/ai/receipt.ts";
-import { parseText } from "../lib/ai/enrich.ts";
-import type { ChatMsg } from "../lib/ai/ai.ts";
-import type { AiFact } from "../lib/ai/generate.ts";
-import { buildAndStoreInsight, getStoredInsight } from "../lib/ai/insight.ts";
-import { buildAdvice, chatReply, getStoredAdvice } from "../lib/ai/advisor.ts";
+import { parseText } from "../lib/ai/parse-text.ts";
 import {
-  answerCallbackQuery, editMessageText, getFileBytes, sendChatAction, sendMessage,
+  answerCallbackQuery, editMessageText, sendChatAction, sendMessage,
   type InlineKeyboard, type TgUpdate,
 } from "../lib/messaging/telegram.ts";
-import { applyAlertRealCategory, applyAlertCategory, applyAlertTransfer } from "../lib/messaging/alert.ts";
+import { handleAlertCallback } from "../lib/messaging/tg-alert-buttons.ts";
+import {
+  handleInsight, handleAdvice, handleAsk, handleStats, handleBudget, handleSubs, handleGoals,
+  handleNotify, handleMute, handleUnlink, handlePhoto,
+} from "../lib/messaging/tg-commands.ts";
+import { resolveBaseCurrency } from "../lib/finance/money.ts";
+import { st, resolveLocale, type ServerLocale } from "../lib/platform/i18n.ts";
+import { escapeHtml, tgMoney } from "../lib/messaging/tg-format.ts";
 
 export const telegram = new Hono<{ Bindings: Env }>();
 
-const HELP =
-  "<b>Money Track</b> — фінтрекер у Telegram.\n\n" +
-  "• <b>Напиши витрату текстом</b> — напр. «кава 45 аромакава» — я розберу й запропоную зберегти.\n" +
-  "• <b>Надішли фото чека</b> — розпізнаю магазин, суму й позиції.\n\n" +
-  "Команди:\n" +
-  "/balance — власні кошти\n" +
-  "/last — останні транзакції\n" +
-  "/insight — тижневий AI-інсайт\n" +
-  "/advice — фінансові поради\n" +
-  "/ask &lt;питання&gt; — спитати AI-порадника\n" +
-  "/help — ця довідка";
 
-const SIGN: Record<number, string> = { 980: "₴", 840: "$", 978: "€" };
-function money(minor: number, currency = 980): string {
-  const v = (minor / 100).toLocaleString("uk-UA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return `${v} ${SIGN[currency] ?? currency}`;
+/**
+ * Locale + display currency for one bot reply.
+ *
+ * Resolved per handler rather than threaded from the webhook: both reads hit the object's own
+ * SQLite, and a parameter that every function has to remember to pass is the thing that gets
+ * forgotten by the next handler somebody adds. §LANG-ARCH — `resolveLocale` is the ONE resolver;
+ * a bot has no request headers, so it lands on the stored preference, which is what that fallback
+ * branch exists for.
+ */
+async function tgCtx(env: Env): Promise<{ locale: ServerLocale; base: number }> {
+  const [locale, base] = await Promise.all([resolveLocale(env), resolveBaseCurrency(env)]);
+  return { locale, base };
 }
+
 
 interface Pending {
   merchant: string;
-  amount: number;       // major units, positive
+  amount: number;       // major units, positive — the SIGN comes from `kind`, on save
+  /** Which way the money went. Absent on a record stored before 2026-08-21 → expense, as it was. */
+  kind?: "expense" | "income";
   currency_code: number;
   category_id: number | null;
   note: string | null;
@@ -54,33 +56,38 @@ interface Pending {
 const pendingKey = (chatId: number) => `tg_pending_${chatId}`;
 const currencyCode = (c: string): number => (c === "USD" ? 840 : c === "EUR" ? 978 : 980);
 
-function balanceText(s: Summary): string {
-  const lines = [`<b>Власні кошти:</b> ≈ ${money(s.totalUAH)}`];
+function balanceText(s: Summary, locale: ServerLocale, base: number): string {
+  // `totalUAH` is the roll-up, so it wears the reader's BASE sign; the per-currency lines below
+  // are each in their own currency and wear theirs. Two different questions, two signs.
+  const lines = [st(locale, "tgOwnFunds", { amount: tgMoney(s.totalUAH, base, locale) })];
   if (s.byCurrency.length > 1) {
-    for (const b of s.byCurrency) lines.push(`  • ${money(b.own, b.currency_code)}`);
+    for (const b of s.byCurrency) lines.push(`  • ${tgMoney(b.own, b.currency_code, locale)}`);
   }
-  if (s.credit) lines.push(`\nКредитний ліміт: ${money(s.credit.limit)} — не рахую як свої.`);
+  if (s.credit) lines.push(st(locale, "tgCreditLimit", { amount: tgMoney(s.credit.limit, base, locale) }));
   return lines.join("\n");
 }
 
-function confirmText(p: Pending, categoryName: string | null): string {
+function confirmText(p: Pending, categoryName: string | null, locale: ServerLocale): string {
   return (
-    "Розпізнав витрату:\n\n" +
+    st(locale, p.kind === "income" ? "tgParsedIncome" : "tgParsed") + "\n\n" +
     `<b>${escapeHtml(p.merchant || "—")}</b>\n` +
-    `Сума: <b>${money(Math.round(p.amount * 100), p.currency_code)}</b>\n` +
-    `Категорія: ${categoryName ? escapeHtml(categoryName) : "— без категорії"}` +
-    (p.note ? `\nНотатка: ${escapeHtml(p.note)}` : "")
+    // The amount stays in the currency the user TYPED (`p.currency_code`), not the display base:
+    // this line is a confirmation of what will be stored, and converting it would ask them to
+    // approve a different number than the one they are about to save.
+    st(locale, "tgSumLine", { amount: tgMoney(Math.round(p.amount * 100), p.currency_code, locale) }) + "\n" +
+    st(locale, "tgCategoryLine", {
+      name: categoryName ? escapeHtml(categoryName) : st(locale, "tgUncategorized"),
+    }) +
+    (p.note ? "\n" + st(locale, "tgNoteLine", { note: escapeHtml(p.note) }) : "")
   );
 }
 
-const confirmKeyboard: InlineKeyboard = [
-  [{ text: "✅ Зберегти", callback_data: "tgsave" }, { text: "❌ Скасувати", callback_data: "tgcancel" }],
-  [{ text: "✏️ Категорія", callback_data: "tgcat" }],
+const confirmKeyboard = (locale: ServerLocale): InlineKeyboard => [
+  [{ text: st(locale, "tgBtnSave"), callback_data: "tgsave" },
+   { text: st(locale, "tgBtnCancel"), callback_data: "tgcancel" }],
+  [{ text: st(locale, "tgBtnCategory"), callback_data: "tgcat" }],
 ];
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 async function categoryName(env: Env, id: number | null): Promise<string | null> {
   if (id == null) return null;
@@ -88,106 +95,50 @@ async function categoryName(env: Env, id: number | null): Promise<string | null>
 }
 
 // Клавіатура вибору категорії: верхньорівневі витратні, по 2 в ряд + «без категорії».
-async function categoryKeyboard(env: Env): Promise<InlineKeyboard> {
+async function categoryKeyboard(env: Env, locale: ServerLocale): Promise<InlineKeyboard> {
   const kb: InlineKeyboard = [];
   const cats = await catRepo.topLevelExpense(env.DB);
   for (let i = 0; i < cats.length; i += 2) {
     kb.push(cats.slice(i, i + 2).map((c) => ({ text: c.name, callback_data: `tgsetcat:${c.id}` })));
   }
-  kb.push([{ text: "— без категорії", callback_data: "tgsetcat:0" }]);
+  kb.push([{ text: st(locale, "tgUncategorized"), callback_data: "tgsetcat:0" }]);
   return kb;
 }
 
-// ---- Phase 2: AI insight / advice / ask -------------------------------------
-
-// Факти AI (amount — у грн major) у рядок з тоном-емодзі.
-function renderFacts(facts: AiFact[]): string {
-  return facts.map((f) => {
-    const dot = f.tone === "pos" ? "🟢" : f.tone === "neg" ? "🔴" : "•";
-    const parts = [escapeHtml(f.label)];
-    if (f.amount != null) parts.push(`<b>${f.amount.toLocaleString("uk-UA")} ₴</b>`);
-    if (f.category) parts.push(escapeHtml(f.category));
-    if (f.delta_pct != null) parts.push(`${f.delta_pct > 0 ? "+" : ""}${f.delta_pct}%`);
-    return `${dot} ${parts.join(" · ")}`;
-  }).join("\n");
-}
-
-async function handleInsight(env: Env, chatId: number): Promise<void> {
-  const token = env.TG_BOT_TOKEN;
-  await sendChatAction(token, chatId, "typing");
-  let ins = await getStoredInsight(env);
-  if ((!ins || ins.empty) && env.ANTHROPIC_API_KEY) {
-    try { ins = await buildAndStoreInsight(env); } catch { /* fall through */ }
-  }
-  if (!ins || ins.empty) { await sendMessage(token, chatId, "Поки нема даних для інсайту."); return; }
-  const s = ins.structured;
-  const body = s
-    ? `<b>${escapeHtml(s.headline)}</b>\n\n${renderFacts(s.facts)}${s.note ? `\n\n💡 ${escapeHtml(s.note)}` : ""}`
-    : escapeHtml(ins.text);
-  await sendMessage(token, chatId, "📊 " + body);
-}
-
-async function handleAdvice(env: Env, chatId: number): Promise<void> {
-  const token = env.TG_BOT_TOKEN;
-  await sendChatAction(token, chatId, "typing");
-  let adv = await getStoredAdvice(env);
-  if (!adv && env.ANTHROPIC_API_KEY) {
-    try { adv = await buildAdvice(env); } catch { /* fall through */ }
-  }
-  if (!adv) { await sendMessage(token, chatId, "Порад ще нема. Додай фінансову ситуацію у вебі й спробуй ще раз."); return; }
-  const runway = adv.runway_months != null ? `⏳ Запасу на <b>${adv.runway_months} міс</b>\n` : "";
-  const steps = (adv.suggestions ?? []).map((x, i) => `${i + 1}. <b>${escapeHtml(x.title)}</b>\n   ${escapeHtml(x.detail)}`).join("\n");
-  await sendMessage(token, chatId, `${runway}${escapeHtml(adv.summary || adv.runway_comment)}\n\n${steps}`);
-}
-
-const chatHistKey = (chatId: number) => `tg_chat_${chatId}`;
-
-async function handleAsk(env: Env, chatId: number, question: string): Promise<void> {
-  const token = env.TG_BOT_TOKEN;
-  if (!env.ANTHROPIC_API_KEY) { await sendMessage(token, chatId, "AI-ключ не налаштовано на сервері."); return; }
-  if (!question.trim()) { await sendMessage(token, chatId, "Напиши питання після /ask, напр. «/ask на чому зекономити?»"); return; }
-
-  const raw = await getState(env.DB, chatHistKey(chatId));
-  const history: ChatMsg[] = raw ? JSON.parse(raw) : [];
-  const messages: ChatMsg[] = [...history, { role: "user" as const, content: question.trim() }].slice(-8);
-
-  await sendChatAction(token, chatId, "typing");
-  try {
-    const { reply } = await chatReply(env, messages);
-    await sendMessage(token, chatId, escapeHtml(reply));
-    // Зберігаємо останні ~8 ходів діалогу на цей chat_id.
-    await setState(env.DB, chatHistKey(chatId), JSON.stringify([...messages, { role: "assistant" as const, content: reply }].slice(-8)));
-  } catch {
-    await sendMessage(token, chatId, "Не вдалося відповісти. Спробуй ще раз.");
-  }
-}
-
-// ---- update handling --------------------------------------------------------
-
-async function handleText(env: Env, chatId: number, text: string): Promise<void> {
+async function handleText(env: Env, chatId: number, text: string, origin?: string): Promise<void> {
   const token = env.TG_BOT_TOKEN;
   const cmd = text.trim().toLowerCase();
 
+  const { locale, base } = await tgCtx(env);
+
   if (cmd === "/start" || cmd === "/help") {
-    await sendMessage(token, chatId, HELP);
+    await sendMessage(token, chatId, st(locale, "tgHelp"));
     return;
   }
   if (cmd === "/balance") {
-    await sendMessage(token, chatId, balanceText(await computeSummary(env)));
+    await sendMessage(token, chatId, balanceText(await computeSummary(env), locale, base));
     return;
   }
   if (cmd === "/last") {
     const rows = await recentTransactions(env.DB, 10);
-    if (!rows.length) { await sendMessage(token, chatId, "Транзакцій ще немає."); return; }
+    if (!rows.length) { await sendMessage(token, chatId, st(locale, "tgNoTx")); return; }
     const body = rows.map((r) => {
       const emoji = r.is_transfer ? "🔁" : r.amount < 0 ? "🔴" : "🟢";
       const name = r.merchant || r.comment || r.category_name || "—";
-      const date = new Date(r.time * 1000).toLocaleDateString("uk-UA", { day: "2-digit", month: "short" });
-      return `${emoji} <b>${money(r.amount, r.currency_code)}</b> — ${escapeHtml(name)} <i>${date}</i>`;
+      const date = new Date(r.time * 1000).toLocaleDateString(locale === "en" ? "en-US" : "uk-UA", { day: "2-digit", month: "short" });
+      return `${emoji} <b>${tgMoney(r.amount, r.currency_code, locale)}</b> — ${escapeHtml(name)} <i>${date}</i>`;
     }).join("\n");
-    await sendMessage(token, chatId, "<b>Останні:</b>\n" + body);
+    await sendMessage(token, chatId, st(locale, "tgLastHeader") + "\n" + body);
     return;
   }
+  if (cmd === "/stats" || cmd.startsWith("/stats ")) { await handleStats(env, chatId, cmd.slice(6), origin); return; }
+  if (cmd === "/budget") { await handleBudget(env, chatId, origin); return; }
+  if (cmd === "/subs") { await handleSubs(env, chatId, origin); return; }
+  if (cmd === "/goals") { await handleGoals(env, chatId, origin); return; }
+  if (cmd === "/notify") { await handleNotify(env, chatId, origin); return; }
+  if (cmd.startsWith("/mute")) { await handleMute(env, chatId, cmd.slice(5), false); return; }
+  if (cmd.startsWith("/unmute")) { await handleMute(env, chatId, cmd.slice(7), true); return; }
+  if (cmd === "/unlink") { await handleUnlink(env, chatId); return; }
   if (cmd === "/insight") { await handleInsight(env, chatId); return; }
   if (cmd === "/advice") { await handleAdvice(env, chatId); return; }
   if (cmd === "/ask" || cmd.startsWith("/ask ")) {
@@ -195,9 +146,28 @@ async function handleText(env: Env, chatId: number, text: string): Promise<void>
     return;
   }
 
+  /**
+   * A QUESTION goes to the adviser, not to the expense parser.
+   *
+   * Without this, «скільки я витратив на каву?» was parsed as a purchase from a merchant called
+   * «скільки я витратив на каву» — the app answering a question by offering to record it.
+   *
+   * ⚠️ The word boundary is `(?:\s|$)`, not `\b`: `\b` is defined on ASCII word characters, so
+   * after a Cyrillic word it does not match at all and «що з бюджетом» sailed straight into the
+   * expense parser. Caught by the test below, which is why the pattern is pinned there too.
+   * ⚠️ The test is a heuristic and it is allowed to be: guessing wrong costs an ANSWER instead of
+   * a draft, and the draft was never saved without confirmation anyway. A model call to classify
+   * every message would double the cost of quick entry to fix a mistake the reader can see and
+   * correct in one more message.
+   */
+  if (/[?？]/.test(text) || /^(скільки|чому|коли|який|яка|шо|що|how|why|when|what|which|where)(?:\s|$)/i.test(text.trim())) {
+    await handleAsk(env, chatId, text.trim());
+    return;
+  }
+
   // Вільний текст → швидкий ввід витрати через AI.
   if (!env.ANTHROPIC_API_KEY) {
-    await sendMessage(token, chatId, "AI-ключ не налаштовано на сервері — швидкий ввід недоступний.");
+    await sendMessage(token, chatId, st(locale, "tgNoAiKeyQuick"));
     return;
   }
   await sendChatAction(token, chatId, "typing");
@@ -205,121 +175,49 @@ async function handleText(env: Env, chatId: number, text: string): Promise<void>
   try {
     parsed = (await parseText(env, text)).result;
   } catch {
-    await sendMessage(token, chatId, "Не вдалося розібрати. Спробуй напр. «таксі 120».");
+    await sendMessage(token, chatId, st(locale, "tgParseFailed"));
     return;
   }
   const p: Pending = {
     merchant: parsed.merchant || text.trim(),
     amount: Math.abs(parsed.amount) || 0,
+    kind: parsed.kind === "income" ? "income" : "expense",
     currency_code: currencyCode(parsed.currency),
     category_id: parsed.category_guess,
     note: parsed.note,
     message_id: 0,
   };
-  const sent = await sendMessage(token, chatId, confirmText(p, await categoryName(env, p.category_id)), confirmKeyboard);
+  const sent = await sendMessage(token, chatId, confirmText(p, await categoryName(env, p.category_id), locale), confirmKeyboard(locale));
   p.message_id = sent.message_id;
   await setState(env.DB, pendingKey(chatId), JSON.stringify(p));
 }
 
-async function handlePhoto(env: Env, chatId: number, fileId: string): Promise<void> {
-  const token = env.TG_BOT_TOKEN;
-  if (!env.ANTHROPIC_API_KEY) {
-    await sendMessage(token, chatId, "AI-ключ не налаштовано — розбір чека недоступний.");
-    return;
-  }
-  await sendChatAction(token, chatId, "typing");
-  try {
-    const { bytes, mediaType } = await getFileBytes(token, fileId);
-    const out = await ingestReceipt(env, bytes, mediaType);
-    const items = out.result.items.length
-      ? "\n" + out.result.items.slice(0, 15).map((it) => `• ${escapeHtml(it.name)} — ${money(Math.round(it.price * 100), out.result.currency === "USD" ? 840 : out.result.currency === "EUR" ? 978 : 980)}`).join("\n")
-      : "";
-    const status = out.matched ? "✅ Причеплено до транзакції Monobank" : "💾 Створено готівкову витрату";
-    await sendMessage(
-      token, chatId,
-      `<b>${escapeHtml(out.result.store || "Чек")}</b> — ${money(Math.round(out.result.total * 100))}\n${status}${items}`,
-    );
-  } catch {
-    await sendMessage(token, chatId, "Не вдалося розпізнати чек. Спробуй чіткіше фото.");
-  }
-}
 
 // Клавіатура вибору категорії для алерту: верхньорівневі витратні + «— пропустити».
 // mode='real' → задаємо реальну категорію переказу; mode='cat' → основну категорію.
-async function alertCategoryKeyboard(env: Env, txId: string, mode: "real" | "cat"): Promise<InlineKeyboard> {
-  // 13 = «Перекази і зняття»: the question this keyboard asks is what the transfer really WAS,
-  // and «a transfer» is the one answer that carries no information.
-  const cats = await catRepo.topLevelExpense(env.DB, 13);
-  const set = mode === "real" ? "al_setreal" : "al_setcat";
-  const kb: InlineKeyboard = [];
-  for (let i = 0; i < cats.length; i += 2) {
-    kb.push(cats.slice(i, i + 2).map((c) => ({ text: c.name, callback_data: `${set}:${txId}:${c.id}` })));
-  }
-  kb.push([{ text: mode === "real" ? "— не визначено" : "— без категорії", callback_data: `${set}:${txId}:0` }]);
-  return kb;
-}
-
-// Дії з кнопок пер-транзакційного алерту (§F2 крок 2). Немає pending-запису — свій потік.
-async function handleAlertCallback(env: Env, chatId: number, messageId: number, cbId: string, data: string): Promise<boolean> {
-  const token = env.TG_BOT_TOKEN;
-  const parts = data.split(":");
-  const prefix = parts[0];
-  const txId = parts[1];
-  if (!prefix.startsWith("al_") || !txId) return false;
-
-  if (prefix === "al_ok") {
-    await editMessageText(token, chatId, messageId, "👌 Гаразд, лишаю як є.");
-    await answerCallbackQuery(token, cbId);
-    return true;
-  }
-  if (prefix === "al_transfer") {
-    await applyAlertTransfer(env, txId);
-    await editMessageText(token, chatId, messageId, "🔁 Позначив переказом між своїми — прибрав зі статистики.");
-    await answerCallbackQuery(token, cbId, "Готово");
-    return true;
-  }
-  if (prefix === "al_cat") {
-    const mode = parts[2] === "cat" ? "cat" : "real";
-    await editMessageText(token, chatId, messageId, "Оберіть категорію:", await alertCategoryKeyboard(env, txId, mode));
-    await answerCallbackQuery(token, cbId);
-    return true;
-  }
-  if (prefix === "al_setreal" || prefix === "al_setcat") {
-    const catId = Number(parts[2]) || 0;
-    const resolved = catId === 0 ? null : catId;
-    if (prefix === "al_setreal") await applyAlertRealCategory(env, txId, resolved);
-    else await applyAlertCategory(env, txId, resolved);
-    const name = await categoryName(env, resolved);
-    const label = prefix === "al_setreal" ? "Реальна категорія" : "Категорія";
-    await editMessageText(token, chatId, messageId, `✅ ${label}: <b>${escapeHtml(name ?? "— пропущено")}</b>`);
-    await answerCallbackQuery(token, cbId, "Збережено");
-    return true;
-  }
-  return false;
-}
-
 async function handleCallback(env: Env, chatId: number, messageId: number, cbId: string, data: string): Promise<void> {
   // Алерт-кнопки обробляємо першими — у них власний потік без pending-запису.
   if (data.startsWith("al_") && await handleAlertCallback(env, chatId, messageId, cbId, data)) return;
 
   const token = env.TG_BOT_TOKEN;
+  const { locale } = await tgCtx(env);
   const raw = await getState(env.DB, pendingKey(chatId));
   const p: Pending | null = raw ? JSON.parse(raw) : null;
 
   if (data === "tgcancel") {
     await setState(env.DB, pendingKey(chatId), "");
-    await editMessageText(token, chatId, messageId, "Скасовано.");
+    await editMessageText(token, chatId, messageId, st(locale, "tgCancelled"));
     await answerCallbackQuery(token, cbId);
     return;
   }
   if (!p) {
-    await answerCallbackQuery(token, cbId, "Немає активного запису.");
-    await editMessageText(token, chatId, messageId, "Запис застарів — надішли витрату ще раз.");
+    await answerCallbackQuery(token, cbId, st(locale, "tgNoActiveEntry"));
+    await editMessageText(token, chatId, messageId, st(locale, "tgEntryStale"));
     return;
   }
 
   if (data === "tgcat") {
-    await editMessageText(token, chatId, messageId, confirmText(p, await categoryName(env, p.category_id)), await categoryKeyboard(env));
+    await editMessageText(token, chatId, messageId, confirmText(p, await categoryName(env, p.category_id), locale), await categoryKeyboard(env, locale));
     await answerCallbackQuery(token, cbId);
     return;
   }
@@ -327,13 +225,16 @@ async function handleCallback(env: Env, chatId: number, messageId: number, cbId:
     const id = Number(data.slice("tgsetcat:".length)) || 0;
     p.category_id = id === 0 ? null : id;
     await setState(env.DB, pendingKey(chatId), JSON.stringify(p));
-    await editMessageText(token, chatId, messageId, confirmText(p, await categoryName(env, p.category_id)), confirmKeyboard);
+    await editMessageText(token, chatId, messageId, confirmText(p, await categoryName(env, p.category_id), locale), confirmKeyboard(locale));
     await answerCallbackQuery(token, cbId);
     return;
   }
   if (data === "tgsave") {
     await createCashTx(env.DB, {
-      amount: -Math.round(p.amount * 100),
+      // The sign lives HERE and nowhere else: `p.amount` is positive by contract, so a handler
+      // that forgets the direction produces an expense — the safe default, and the one the
+      // confirmation the user just read was labelled with.
+      amount: (p.kind === "income" ? 1 : -1) * Math.round(p.amount * 100),
       currency_code: p.currency_code,
       merchant: p.merchant,
       category_id: p.category_id,
@@ -341,8 +242,8 @@ async function handleCallback(env: Env, chatId: number, messageId: number, cbId:
       source: "cash",
     });
     await setState(env.DB, pendingKey(chatId), "");
-    await editMessageText(token, chatId, messageId, `✅ Збережено: <b>${escapeHtml(p.merchant)}</b> — ${money(Math.round(p.amount * 100), p.currency_code)}`);
-    await answerCallbackQuery(token, cbId, "Збережено");
+    await editMessageText(token, chatId, messageId, st(locale, p.kind === "income" ? "tgSavedIncomeAs" : "tgSavedAs", { merchant: escapeHtml(p.merchant), amount: tgMoney(Math.round(p.amount * 100), p.currency_code, locale) }));
+    await answerCallbackQuery(token, cbId, st(locale, "tgCbSaved"));
     return;
   }
   await answerCallbackQuery(token, cbId);
@@ -367,13 +268,40 @@ telegram.post("/:secret", async (c) => {
   // chat_id. Це ЄДИНИЙ шлях, що виконується для ще не привʼязаного чату.
   const startPayload = update.message?.text?.match(/^\/start\s+(\S+)/)?.[1];
   if (startPayload) {
+    /**
+     * ⚠️ **A GROUP is never a personal notification channel.**
+     *
+     * Pressing the link in a group used to succeed: the row went into `tg_links`, and
+     * `app_state.tg_chat_id` became the group — so every push from then on (a budget warning with
+     * amounts, a «вагома операція» alert with the merchant and the sum, the weekly digest) landed
+     * in a chat full of other people. Commands stayed silent, because the allowlist below happens
+     * to require `fromId === chatId`, which is only true in a private chat — so the one visible
+     * symptom was that the bot ignored you, while it quietly published your finances.
+     *
+     * That accidental gate is now the explicit rule, checked where the decision is actually made.
+     * A deep link is a bearer token: forwarding one into a group must not be enough.
+     */
+    const chatType = update.message?.chat.type;
+    if (chatType && chatType !== "private") {
+      const { locale: refuseLocale } = await tgCtx(c.env);
+      await sendMessage(c.env.TG_BOT_TOKEN, chatId, st(refuseLocale, "tgLinkPrivateOnly"));
+      return c.text("ok", 200);
+    }
     const { linkTgChat } = await import("../lib/messaging/tg-target.ts");
-    await linkTgChat(c.env, chatId);
-    await sendMessage(c.env.TG_BOT_TOKEN, chatId, "✅ Чат підключено. Сюди приходитимуть важливі сповіщення.");
+    // `USER_ID` is the header the Worker set when it routed this update here, so it is the id it
+    // just verified from the signed token — the same proof, carried one hop. Passing it is what
+    // writes the INBOUND index (directory 0008): without it the chat could receive pushes and
+    // still have its commands go nowhere.
+    await linkTgChat(c.env, chatId, c.env.USER_ID);
+    const { locale: linkLocale } = await tgCtx(c.env);
+    await sendMessage(c.env.TG_BOT_TOKEN, chatId, st(linkLocale, "tgChatLinked"));
     return c.text("ok", 200);
   }
 
   // Allowlist: лише ВЛАСНИЙ привʼязаний чат цього обʼєкта. Будь-хто інший — тихо ігноруємо
+  // ⚠️ `fromId === chatId` is TRUE only in a private chat (Telegram uses the user id as the chat
+  // id for a DM), so this doubles as "commands never answer in a group". That was incidental
+  // until 2026-08-21; linking now refuses a group outright, and this stays as the second lock.
   // (ack 200). Раніше звірка йшла з глобальним `TG_CHAT_ID`; тепер джерело те саме, що й для
   // вихідних пушів, тож «кому шлемо» і «кого слухаємо» не можуть розійтись.
   const { tgTarget } = await import("../lib/messaging/tg-target.ts");
@@ -392,10 +320,15 @@ telegram.post("/:secret", async (c) => {
         const largest = update.message.photo[update.message.photo.length - 1];
         await handlePhoto(c.env, chatId, largest.file_id);
       } else if (update.message?.text) {
-        await handleText(c.env, chatId, update.message.text);
+        // The app origin IS this request's origin: the bot and the app are one Worker, so a
+        // link built from it can never point at a different deployment than the reader's own.
+        await handleText(c.env, chatId, update.message.text, new URL(c.req.url).origin);
       }
     } catch (e) {
-      try { await sendMessage(c.env.TG_BOT_TOKEN, chatId, "Сталася помилка. Спробуй ще раз."); } catch { /* ignore */ }
+      try {
+        const { locale: errLocale } = await tgCtx(c.env);
+        await sendMessage(c.env.TG_BOT_TOKEN, chatId, st(errLocale, "tgGenericError"));
+      } catch { /* ignore */ }
       console.log(`[tg] error: ${String(e)}`);
     }
   })());

@@ -3,25 +3,30 @@
 // starts computing its own total is the §CUR-PLAN mechanism restarting.
 import {
   getPeriodMode, valueMode, baseMult, periodBounds,
-  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd, localParts,
+  recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd,
   type Preset,
 } from "../../lib/finance/stats.ts";
-import { computeSummary } from "../../lib/finance/finance.ts";
-import { getRates } from "../../lib/finance/money.ts";
+import { computeSummary, savingsRatePct } from "../../lib/finance/finance.ts";
+import { getRates, ratesForDays, rateDayKey, uahToBase, uahToBaseMinor } from "../../lib/finance/money.ts";
+import {
+  buildCompare, deltaMeaningful, isShortPeriod, periodDays, MOVERS_FLOOR_UAH_MINOR,
+} from "../../lib/finance/cadence.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
-import * as planningRepo from "../../repo/planning.ts";
 import * as receiptsRepo from "../../repo/receipts.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes } from "./_shared.ts";
-import { buildWeekdayAnalytics } from "../../lib/finance/weekday.ts";
+import { apiRoutes, numParam } from "./_shared.ts";
+import { buildWeekdayAnalytics, buildDomAnalytics } from "../../lib/finance/weekday.ts";
 import { buildNetworth } from "../../lib/finance/networth.ts";
 import { collectHabits } from "../../lib/finance/habits.ts";
+import { computePriceDrift } from "../../lib/finance/price-drift.ts";
+import { computeFxCost } from "../../lib/finance/fx.ts";
+import { buildForecast } from "../../lib/finance/forecast.ts";
 import { collectMonthlyHistory } from "../../lib/finance/history.ts";
 import type {
   Overview, MonthlyHistory, SafeToSpend, CapitalTrend, Networth, Compare, Forecast,
   IncomeAnalytics, CashflowCalendar, ReceiptItemsAnalytics, PriceDrift, SpendPatterns,
   CategoryDrill, SliceDrill, MerchantAnalytics, SparkData, FinanceHealth, CategorySpend,
-  CurrenciesList, WeekdayAnalytics, Habits,
+  CurrenciesList, WeekdayAnalytics, DomAnalytics, Habits, FxCost,
 } from "../../../shared/api/index.ts";
 
 export const analytics = apiRoutes();
@@ -44,8 +49,8 @@ analytics.get("/analytics/overview", async (c) => {
     const b = periodBounds(mode, presetParam);
     ({ from, to, prevFrom, prevTo, bucket } = b);
   } else {
-    to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
-    from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
+    to = numParam(url, "to", Math.floor(Date.now() / 1000));
+    from = numParam(url, "from", to - 30 * 86400);
     const span = to - from;
     prevFrom = from - span; prevTo = from;
     bucket = url.searchParams.get("bucket") ?? "day";
@@ -62,7 +67,7 @@ analytics.get("/analytics/overview", async (c) => {
   const [summary, prev, series, byCategory, byMerchant, byAccount, byEvent, byImportance] = await Promise.all([
     analyticsRepo.periodTotals(db, v, cur_),
     analyticsRepo.periodTotals(db, v, prev_),
-    analyticsRepo.series(db, v, cur_, fmt),
+    analyticsRepo.series(db, v, cur_, fmt, cur_.to),
     analyticsRepo.spendByCategory(db, loc, v, cur_),
     analyticsRepo.spendByMerchant(db, v, cur_),
     analyticsRepo.spendByAccount(db, v, cur_),
@@ -71,7 +76,10 @@ analytics.get("/analytics/overview", async (c) => {
   ]);
 
   return c.json({
-    summary, prev,
+    // The savings rate travels WITH the totals it is derived from, so the dashboard pulse cannot
+    // pair one period's income with another's spend — and so there is one definition of it.
+    summary: { ...summary, savings_rate_pct: savingsRatePct(summary.income, summary.spend) },
+    prev,
     range: { from, to, prevFrom, prevTo, bucket, mode, preset: presetParam ?? null },
     series, byCategory, byMerchant, byAccount, byEvent, byImportance,
   } satisfies Overview);
@@ -194,110 +202,46 @@ analytics.get("/analytics/merchant", async (c) => {
 analytics.get("/analytics/compare", async (c) => {
   const url = new URL(c.req.url);
   const rates = await getRates(c.env);
-  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
-  const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
+  const to = numParam(url, "to", Math.floor(Date.now() / 1000));
+  const from = numParam(url, "from", to - 30 * 86400);
   const span = to - from;
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
   const { mult, curFilter } = valueMode(rates, cur);
   // §D: фронт може передати явні межі попереднього періоду; інакше рівний відрізок перед.
-  const bpFrom = url.searchParams.get("bfrom");
-  const bpTo = url.searchParams.get("bto");
-  const bFrom = bpFrom != null ? Number(bpFrom) : from - span;
-  const bTo = bpTo != null ? Number(bpTo) : from;
+  // Через `numParam`, бо NaN тут не падає — він мовчки віддає порожнє порівняння з `from: null`,
+  // яке читається як «нічого не витрачено», а не як «поганий запит».
+  const bFrom = numParam(url, "bfrom", from - span);
+  const bTo = numParam(url, "bto", from);
 
   const db = c.env.DB, v = { mult, curFilter }, loc = c.get("locale");
   const totals = (f: number, t: number) => analyticsRepo.spendIncomeTotals(db, v, { from: f, to: t });
   const cats = (f: number, t: number) => analyticsRepo.compareByCategory(db, loc, v, { from: f, to: t });
 
   const [aTot, bTot, aCats, bCats] = await Promise.all([totals(from, to), totals(bFrom, bTo), cats(from, to), cats(bFrom, bTo)]);
+
+  // §CADENCE — the merge, the noise floor and «is this delta a finding» are decided HERE.
+  // Both were client-side until 2026-08-21, in two components with a copy each, and neither copy
+  // could see the charge counts. The window length is A's, not the union of both: A is the period
+  // the reader is asking about, and B is defined as a comparable stretch.
+  const days = periodDays(from, to);
+  const { rows, movers } = buildCompare(aCats, bCats, {
+    days,
+    floor: uahToBaseMinor(MOVERS_FLOOR_UAH_MINOR, rates),
+  });
+
   return c.json({
-    a: { from, to, spend: aTot?.spend ?? 0, income: aTot?.income ?? 0, byCategory: aCats },
-    b: { from: bFrom, to: bTo, spend: bTot?.spend ?? 0, income: bTot?.income ?? 0, byCategory: bCats },
+    a: { from, to, spend: aTot?.spend ?? 0, income: aTot?.income ?? 0, income_n: aTot?.income_n ?? 0 },
+    b: { from: bFrom, to: bTo, spend: bTot?.spend ?? 0, income: bTot?.income ?? 0, income_n: bTot?.income_n ?? 0 },
+    rows, movers,
+    short_period: isShortPeriod(days),
+    income_delta_meaningful: deltaMeaningful(days, aTot?.income_n ?? 0, bTot?.income_n ?? 0),
   } satisfies Compare);
 });
 
 // Month-end forecast (§7): project this month's spend from the current daily pace
 // plus known upcoming planned payments. UAH only, transfers excluded. No migration.
 analytics.get("/analytics/forecast", async (c) => {
-  const now = Math.floor(Date.now() / 1000);
-  const monthStart = localMonthStart(now);
-  const daysInMonth = Math.round((localMonthStart(now, 1) - monthStart) / 86400);
-  const dayOfMonth = localParts(now).d; // 1..daysInMonth, у локальній зоні
-  const daysElapsed = dayOfMonth;
-  const daysRemaining = daysInMonth - dayOfMonth;
-
-  const rates = await getRates(c.env);
-  const { mult } = valueMode(rates, null); // forecast завжди зведено в ₴
-  // Трейлінг: до 3 ПОВНИХ місяців перед поточним — для історичного якоря прогнозу.
-  const trailStart = localMonthStart(now, -3);
-  const [totals, trail] = await Promise.all([
-    analyticsRepo.spendIncomeTotals(c.env.DB, { mult, curFilter: "" }, { from: monthStart, to: now }),
-    analyticsRepo.monthlySpendBefore(c.env.DB, mult, now, trailStart, monthStart),
-  ]);
-
-  const spend = totals?.spend ?? 0;
-  const income = totals?.income ?? 0;
-  const pace = daysElapsed > 0 ? spend / daysElapsed : 0;
-  // Прогноз місяця = блендимо наївний темп (роздуває рано в місяці) з історичним якорем
-  // (факт + середньомісячна історія на дні, що лишились). Рано довіряємо історії, під кінець —
-  // фактичному темпу. Без історії — падаємо на чистий темп.
-  const trailMonths = trail.map((r) => r.spend);
-  const avgMonth = trailMonths.length ? trailMonths.reduce((s, v) => s + v, 0) / trailMonths.length : 0;
-  const elapsedFrac = Math.min(1, Math.max(0.05, daysElapsed / daysInMonth));
-  const paceProj = pace * daysInMonth;
-  const histProj = spend + avgMonth * (daysRemaining / daysInMonth);
-  const projectedSpend = avgMonth > 0
-    ? Math.round(paceProj * elapsedFrac + histProj * (1 - elapsedFrac))
-    : Math.round(paceProj);
-
-  // Діапазон довіри: розкид (σ) місячних витрат історії, звужений на решту місяця (вже витрачене
-  // — певне). Дає чесніший «12–15к» замість однієї цифри. Без історії — діапазон = точка.
-  const sd = trailMonths.length > 1
-    ? Math.sqrt(trailMonths.reduce((s, v) => s + (v - avgMonth) ** 2, 0) / trailMonths.length)
-    : avgMonth * 0.15;
-  const band = avgMonth > 0 ? Math.round(sd * (daysRemaining / daysInMonth) * 0.9) : 0;
-  const projectedLow = Math.max(spend, projectedSpend - band);
-  const projectedHigh = projectedSpend + band;
-
-  // Майбутні планові платежі, що спишуться до кінця місяця (інформативно).
-  // §SUB-MONTH: розклад дає канонічний `chargesBetween` — тижневий план у залишку місяця
-  // спишеться кілька разів, а власний однопрохідний цикл рахував рівно одне списання на план.
-  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
-  const fxRates = await getRates(c.env);
-  const planned = await planningRepo.activeWithTitles(c.env.DB);
-
-  // §CUR-PLAN: суми зводимо в ₴ — вони йдуть в один ряд із витратами місяця (теж ₴).
-  const monthEnd = localMonthStart(now, 1);
-  const upcomingItems = chargesBetween(planned, fxRates, now + 1, monthEnd - 1)
-    .map((ch) => ({ title: ch.plan.title, amount: ch.amount, at: ch.at }));
-  const upcomingPlanned = upcomingItems.reduce((s, p) => s + p.amount, 0);
-
-  /**
-   * §INCOME-PLAN — THIS is where the asymmetry gets fixed.
-   *
-   * `projectedNet` used to be `income(month-to-date) − projectedSpend(end of month)`: a fact minus
-   * a forecast, which is guaranteed to look catastrophic on the 3rd and to "improve" as the month
-   * passes without anything actually changing. Both halves now describe the same instant — the end
-   * of the month — so the number finally answers the question it is labelled with.
-   * ⚠️ `projectedIncome` is reported SEPARATELY as well, so the reader can see which half of the
-   * net is money in the bank and which half is a plan. A single net figure would hide exactly the
-   * uncertainty the owner flagged: income is not always the same, and not always on time.
-   */
-  const { incomeOutlook } = await import("../../lib/finance/income.ts");
-  const outlook = await incomeOutlook(c.env, now);
-  const projectedIncome = income + outlook.expected_remaining;
-
-  return c.json({
-    monthStart, now, daysInMonth, daysElapsed, daysRemaining,
-    spend, income, pace: Math.round(pace),
-    projectedSpend, projectedLow, projectedHigh,
-    projectedIncome,
-    incomeExpected: outlook.expected_remaining,
-    incomeOverdue: outlook.overdue,
-    incomeEstimated: outlook.estimated,
-    projectedNet: projectedIncome - projectedSpend,
-    upcomingPlanned, upcomingItems,
-  } satisfies Forecast);
+  return c.json(await buildForecast(c.env) satisfies Forecast);
 });
 
 // §1 Аналітика доходу: джерела (по ефективній категорії за період), стабільність
@@ -386,8 +330,12 @@ analytics.get("/analytics/receipt-items", async (c) => {
   const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 15), 1), 50);
 
   // Дата позиції = purchased_at чека (fallback created_at). Тільки чеки в періоді.
+  // §BASE-CUR: receipt prices are stored in the RECEIPT's currency, so the multiplier is keyed on
+  // `r.currency_code`, not on a transaction's. Both of these endpoints returned raw stored money
+  // until 2026-08-21 — the sweep could not see it, because the fixture had no receipts at all.
+  const mult = baseMult(await getRates(c.env), "r.currency_code");
   const [rows, meta] = await Promise.all([
-    receiptsRepo.topItems(c.env.DB, from, to, limit),
+    receiptsRepo.topItems(c.env.DB, mult, from, to, limit),
     receiptsRepo.windowMeta(c.env.DB, from, to),
   ]);
 
@@ -398,45 +346,44 @@ analytics.get("/analytics/receipt-items", async (c) => {
 // беремо ЮНІТ-ціну (price/qty) в кожній покупці; якщо позиція трапилась ≥3 разів із
 // достатнім розкидом у часі — порівнюємо середню юніт-ціну ранньої половини покупок із
 // пізньою → % зміни. Індекс кошика = медіана змін по позиціях. Детерміновано, без AI.
+/**
+ * §FX-COST — the fee that is never on the statement.
+ *
+ * The window defaults to 180 days, like price drift: a markup is a habit of a card, not an event,
+ * and a month of travel is not enough to tell a bad rate from an ordinary one.
+ */
+analytics.get("/analytics/fx-cost", async (c) => {
+  const url = new URL(c.req.url);
+  const to = numParam(url, "to", Math.floor(Date.now() / 1000));
+  const from = numParam(url, "from", to - 180 * 86400);
+
+  const rows = await analyticsRepo.foreignConversions(c.env.DB, { from, to });
+  // The key `rate_history` is stored under (`rateDayKey`), NOT the app's Kyiv day. This read used
+  // a Kyiv key when it was written and got away with it — `ratesForDays` resolves «latest at or
+  // before», so a key one day late still finds yesterday's rate. One table, one convention.
+  const dayKey = rateDayKey;
+  const days = [...new Set(rows.map((r) => dayKey(r.time)))].sort();
+  // Base 980: the comparison is done in hryvnia, where the published rates live, and converted
+  // once at the end. Asking for the reader's base here would convert each side separately and
+  // then compare two numbers that had already been rounded.
+  const [{ byDay }, rates] = await Promise.all([
+    ratesForDays(c.env.DB, days, 980),
+    getRates(c.env),
+  ]);
+
+  return c.json({
+    window: { from, to },
+    ...computeFxCost(rows, byDay, dayKey, uahToBase(rates)),
+  } satisfies FxCost);
+});
+
 analytics.get("/analytics/price-drift", async (c) => {
   const url = new URL(c.req.url);
   const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
   const from = Number(url.searchParams.get("from") ?? to - 180 * 86400);
-  const MIN_N = 3, MIN_SPAN = 21 * 86400, NOISE = 5;
-
-  const rows = await receiptsRepo.pricePoints(c.env.DB, from, to);
-
-  const byName = new Map<string, { at: number; unit: number }[]>();
-  for (const r of rows) {
-    const unit = r.price / r.qty;
-    (byName.get(r.name) ?? byName.set(r.name, []).get(r.name)!).push({ at: r.at, unit });
-  }
-
-  const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / a.length;
-  const items: { name: string; first_unit: number; last_unit: number; change_pct: number; n: number; first_at: number; last_at: number }[] = [];
-  for (const [name, occ] of byName) {
-    if (occ.length < MIN_N) continue;
-    const span = occ[occ.length - 1].at - occ[0].at;
-    if (span < MIN_SPAN) continue;
-    const half = Math.ceil(occ.length / 2);
-    const early = mean(occ.slice(0, half).map((o) => o.unit));
-    const late = mean(occ.slice(half).map((o) => o.unit));
-    if (early <= 0) continue;
-    const change = ((late - early) / early) * 100;
-    items.push({
-      name, first_unit: Math.round(early), last_unit: Math.round(occ[occ.length - 1].unit),
-      change_pct: Math.round(change * 10) / 10, n: occ.length, first_at: occ[0].at, last_at: occ[occ.length - 1].at,
-    });
-  }
-
-  // Індекс кошика — медіана змін (стійка до викидів).
-  const changes = items.map((i) => i.change_pct).sort((a, b) => a - b);
-  const basket = changes.length ? (changes.length % 2 ? changes[(changes.length - 1) / 2] : (changes[changes.length / 2 - 1] + changes[changes.length / 2]) / 2) : null;
-
-  // Топ рухів (лишаємо лише помітні), за модулем зміни.
-  const movers = items.filter((i) => Math.abs(i.change_pct) >= NOISE).sort((a, b) => Math.abs(b.change_pct) - Math.abs(a.change_pct)).slice(0, 12);
-
-  return c.json({ window: { from, to }, basket_change_pct: basket != null ? Math.round(basket * 10) / 10 : null, tracked: items.length, items: movers } satisfies PriceDrift);
+  const mult = baseMult(await getRates(c.env), "r.currency_code");
+  const rows = await receiptsRepo.pricePoints(c.env.DB, mult, from, to);
+  return c.json({ window: { from, to }, ...computePriceDrift(rows) } satisfies PriceDrift);
 });
 
 // §E1/E2/E3: патерни витрат ЦЬОГО МІСЯЦЯ — усе детерміновано, без AI.
@@ -542,16 +489,18 @@ analytics.get("/analytics/slice", async (c) => {
   const dim = url.searchParams.get("dim") ?? "merchant"; // merchant|account|event|weekday|day|all
   const type = url.searchParams.get("type") === "income" ? "income" : "expense";
   const value = url.searchParams.get("value") ?? "";
-  const to = Number(url.searchParams.get("to") ?? Math.floor(Date.now() / 1000));
-  const from = Number(url.searchParams.get("from") ?? to - 30 * 86400);
+  const to = numParam(url, "to", Math.floor(Date.now() / 1000));
+  const from = numParam(url, "from", to - 30 * 86400);
   const rates = await getRates(c.env);
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
   const { mult, curFilter } = valueMode(rates, cur);
-  const limit = Math.min(Number(url.searchParams.get("limit") ?? 60), 300);
+  const limit = numParam(url, "limit", 60, { min: 1, max: 300 });
 
   const v = { mult, curFilter };
   const range = { from, to };
-  const q = { dim, type, value, limit } as const;
+  // §APP_TZ: the calendar dimensions resolve their offset at `to`, the same instant the chart
+  // above them used — otherwise the drill could bucket by a different offset than the bar.
+  const q = { dim, type, value, limit, now: to } as const;
 
   const [summary, txs] = await Promise.all([
     analyticsRepo.sliceSummary(c.env.DB, v, range, q),
@@ -587,6 +536,27 @@ analytics.get("/analytics/by-category", async (c) => {
 // Ділимо на кількість таких днів у вікні (`weekdayCounts`) — інакше порівняння бреше: у місяці
 // пʼятниць 5, а субот 4. Саме тому `typical` рахує СЕРВЕР: якби ділив клієнт, AI-контекст і
 // екран отримали б два різні числа про одне й те саме.
+/**
+ * §WEEKDAY on the day-of-month axis.
+ *
+ * Its own endpoint rather than a field on `/analytics/weekday`: the two are read by different
+ * blocks with different windows, and a name that covers both would have to be vague enough to
+ * stop saying what it returns.
+ */
+analytics.get("/analytics/day-of-month", async (c) => {
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env);
+  const now = Math.floor(Date.now() / 1000);
+  // `numParam`, not `Number(… ?? d)`: the latter lets `NaN` through, and a NaN window walks into
+  // `domCounts` — a loop over local midnights that never advances.
+  const to = numParam(url, "to", now);
+  const from = numParam(url, "from", to - 90 * 86400);
+  const curParam = url.searchParams.get("currency");
+  const { mult, curFilter } = valueMode(rates, curParam ? Number(curParam) : null);
+  const rows = await analyticsRepo.spendByDom(c.env.DB, { mult, curFilter }, { from, to }, now);
+  return c.json(buildDomAnalytics(rows, from, to) satisfies DomAnalytics);
+});
+
 analytics.get("/analytics/weekday", async (c) => {
   const url = new URL(c.req.url);
   const rates = await getRates(c.env);

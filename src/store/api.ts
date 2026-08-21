@@ -1,5 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
-import type { Account, Budget, Category, EventGroup, PlannedPayment, AiUsageStats, PlannedActual } from "../../shared/types.ts";
+import type { Account, Budget, Category, EventGroup, AiUsageStats, PlannedActual } from "../../shared/types.ts";
 import { getLocale } from "../i18n/locale.ts";
 import { getBaseCurrency } from "../lib/currency.ts";
 
@@ -11,11 +11,11 @@ import { getBaseCurrency } from "../lib/currency.ts";
 export type * from "../../shared/api/index.ts";
 import type {
   Advice, AdviceHistoryItem, AiJob, AiModelToken, AiTask, AutoBudget, BudgetChatReply,
-  BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
-  CredentialStatus, CurrenciesList, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
-  BankConnections, CategoryWhy, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
+  BudgetHistory, BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
+  CredentialStatus, CurrenciesList, DomAnalytics, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
+  BankConnections, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, MerchantAnalytics, MonthlyHistory, Networth,
-  NotifPrefs, NotificationFeed, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
+  NotifPrefs, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
@@ -219,8 +219,14 @@ export const api = createApi({
     getBudgetStatus: b.query<BudgetStatusList, void>({
       query: () => "/budgets/status", providesTags: ["Budget", "Tx"],
     }),
+    // §BUDGET-MEMORY — closed months, not the live envelope. Tagged `Budget` too: editing a limit
+    // does not rewrite history, but the card reads the current envelopes' names alongside it.
+    getBudgetHistory: b.query<BudgetHistory, number | void>({
+      query: (months) => `/budgets/history${months ? `?months=${months}` : ""}`,
+      providesTags: ["Budget", "Tx"],
+    }),
     getBudgets: b.query<Budget[], void>({ query: () => "/budgets", providesTags: ["Budget"] }),
-    getPlanned: b.query<PlannedPayment[], void>({ query: () => "/planned", providesTags: ["Planned"] }),
+    getPlanned: b.query<PlannedRow[], void>({ query: () => "/planned", providesTags: ["Planned"] }),
     // §Хвіст C: глобальний лічильник витрат AI (сьогодні/місяць/за весь час).
     getAiUsage: b.query<AiUsageStats, void>({ query: () => "/ai-usage", providesTags: ["Tx"] }),
     // §PLATFORM P0.4 — свої ключі (mono / Anthropic). Значення НІКОЛИ не приходить назад,
@@ -347,6 +353,9 @@ export const api = createApi({
     }),
     getPatterns: b.query<SpendPatterns, void>({ query: () => "/analytics/patterns", providesTags: ["Tx"] }),
     getPriceDrift: b.query<PriceDrift, void>({ query: () => "/analytics/price-drift", providesTags: ["Tx"] }),
+    // §FX-COST — the conversion markup. Its own window (180 d) rather than the page period: a
+    // markup is a property of a card, and a month of it is too little to read.
+    getFxCost: b.query<FxCost, void>({ query: () => "/analytics/fx-cost", providesTags: ["Tx"] }),
     getCompare: b.query<Compare, { from: number; to: number; currency?: number | null; bfrom?: number; bto?: number }>({
       query: ({ from, to, currency, bfrom, bto }) =>
         `/analytics/compare?from=${from}&to=${to}${currency ? `&currency=${currency}` : ""}` +
@@ -720,8 +729,22 @@ export const api = createApi({
     // this tag a row would stay on screen after its own action.
     getHabits: b.query<Habits, void>({ query: () => "/analytics/habits", providesTags: ["Tx", "Planned"] }),
     // §WEEKDAY: витрати за днями тижня. Тег `Tx` — правка операції може змінити і день, і суму.
-    getWeekday: b.query<WeekdayAnalytics, { preset?: Preset; currency?: number | null } | void>({
-      query: (a) => `/analytics/weekday?preset=${a?.preset ?? "month"}${a?.currency ? `&currency=${a.currency}` : ""}`,
+    // Either a preset (the standalone card) or explicit bounds (the Trends tab, which shares the
+    // page window). Both reach the same canon — the point of §WEEKDAY is that there is one.
+    getWeekday: b.query<WeekdayAnalytics, { preset?: Preset; from?: number; to?: number; currency?: number | null } | void>({
+      query: (a) => {
+        const q = a?.from != null && a?.to != null
+          ? `from=${a.from}&to=${a.to}`
+          : `preset=${a?.preset ?? "month"}`;
+        return `/analytics/weekday?${q}${a?.currency ? `&currency=${a.currency}` : ""}`;
+      },
+      providesTags: ["Tx"],
+    }),
+    // §WEEKDAY on the day-of-month axis. Server-side for the same two reasons: the date has to be
+    // read in APP_TZ, and the sum has to be divided by how many times that date occurred.
+    getDayOfMonth: b.query<DomAnalytics, { from: number; to: number; currency?: number | null }>({
+      query: ({ from, to, currency }) =>
+        `/analytics/day-of-month?from=${from}&to=${to}${currency ? `&currency=${currency}` : ""}`,
       providesTags: ["Tx"],
     }),
     getMonthlyHistory: b.query<MonthlyHistory, { months?: number } | void>({
@@ -857,6 +880,11 @@ export const api = createApi({
     // Без інвалідації: тост уже показано, і зайвий рефетч лише повернув би той самий список.
     markJobSeen: b.mutation<{ ok: boolean }, number>({
       query: (id) => ({ url: `/jobs/${id}/seen`, method: "POST" }),
+      // `markSeen` WRITES, so the list that showed the job has to be refetched. Without this the
+      // dismissed job stayed in `/jobs` until the next poll — and §A6 turns polling OFF when no
+      // job is active (`pollingInterval: 0`), which is precisely the moment this fires. So the
+      // toast came back on the next mount and the button looked like it had done nothing.
+      invalidatesTags: ["Job"],
     }),
   }),
 });
@@ -904,6 +932,7 @@ export const {
   useDeleteEventMutation,
   useGetBudgetsQuery,
   useGetBudgetStatusQuery,
+  useGetBudgetHistoryQuery,
   useGetPlannedQuery,
   useGetAiUsageQuery,
   useGetConnectionsQuery,
@@ -936,6 +965,7 @@ export const {
   useGetReceiptItemsQuery,
   useGetPatternsQuery,
   useGetPriceDriftQuery,
+  useGetFxCostQuery,
   useGetCompareQuery,
   useGetCategoryDrillQuery,
   useGetSliceDrillQuery,
@@ -1030,6 +1060,7 @@ export const {
   useGetHealthQuery,
   useGetSparkQuery,
   useGetWeekdayQuery,
+  useGetDayOfMonthQuery,
   useGetHabitsQuery,
   useGetNetworthQuery,
   useLazySearchQuery,

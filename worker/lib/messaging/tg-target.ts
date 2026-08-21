@@ -33,14 +33,66 @@ export async function tgTarget(env: Env): Promise<{ token: string; chatId: strin
   return null;
 }
 
-export async function linkTgChat(env: Env, chatId: string | number): Promise<void> {
+/**
+ * Привʼязати чат — ЄДИНИЙ писар ОБОХ сховищ.
+ *
+ * Їх справді два, і це не дублювання: `app_state.tg_chat_id` каже, куди пушить ЦЕЙ обʼєкт
+ * (вихідний бік, §D1), а `tg_links` у спільній directory каже, ЧИЙ це чат — відповідь, потрібна
+ * воркеру ДО того, як він зможе звернутись до будь-якого обʼєкта. Обʼєкт не вміє знайти себе за
+ * імʼям (`idFromName` односторонній), тож із однієї таблиці другу не вивести.
+ *
+ * Раз їх два — писар мусить бути один, інакше це рівно та вада, яку цей проєкт ловив увесь
+ * 2026-08-21: два записи одного факту, що розходяться там, куди ніхто не дивиться.
+ *
+ * ⚠️ Запис у directory — best-effort: не змогти проіндексувати чат гірше, ніж не привʼязати
+ * його, але ще гірше — впасти в мідлварі вебхука й лишити людину без відповіді. Розбіжність
+ * самолікується наступним `/start`.
+ */
+export async function linkTgChat(env: Env, chatId: string | number, userId?: string): Promise<void> {
+  const previous = await getState(env.DB, TG_CHAT_KEY);
   await setState(env.DB, TG_CHAT_KEY, String(chatId));
+
+  /**
+   * A rebind is ANNOUNCED to the chat that just lost the account.
+   *
+   * The link token is a bearer token with a 15-minute life; a URL that leaks (a screenshot, a
+   * forwarded message) lets whoever presses it take over the channel — and since 2026-08-21 that
+   * channel can read balances and transactions, not just receive notifications. Forgery cannot be
+   * prevented by the token alone. What CAN be prevented is the takeover being silent, which is the
+   * same reasoning §REVOKE applies to sessions: you cannot stop a stolen key from working once,
+   * you can make sure the owner finds out.
+   *
+   * Best-effort: failing to warn must not fail the link the person is actually performing.
+   */
+  if (previous && previous !== String(chatId) && env.TG_BOT_TOKEN) {
+    try {
+      const { sendMessage } = await import("./telegram.ts");
+      const { st, resolveLocale } = await import("../platform/i18n.ts");
+      await sendMessage(env.TG_BOT_TOKEN, previous, st(await resolveLocale(env), "tgRelinked"));
+    } catch { /* the old chat may be gone, blocked, or unreachable */ }
+  }
+
+  if (userId && env.DIRECTORY) {
+    try {
+      const { linkTgChatToUser } = await import("../platform/directory.ts");
+      await linkTgChatToUser(env.DIRECTORY, String(chatId), userId);
+    } catch { /* directory may predate migration 0008 */ }
+  }
 }
 
 export async function unlinkTgChat(env: Env): Promise<void> {
   // Порожній рядок, а не DELETE: `getState` віддає null для обох, а `setState` — це upsert,
   // тож окремий шлях видалення тут нічого не додав би.
+  const previous = await getState(env.DB, TG_CHAT_KEY);
   await setState(env.DB, TG_CHAT_KEY, "");
+  // Знімаємо і маршрут: інакше «відвʼязав» означало б «більше не отримую пушів, але бот усе ще
+  // виконує мої команди з того чату» — половина відвʼязки, і саме та половина, що про доступ.
+  if (previous && env.DIRECTORY) {
+    try {
+      const { unlinkTgChatRow } = await import("../platform/directory.ts");
+      await unlinkTgChatRow(env.DIRECTORY, previous);
+    } catch { /* directory may predate migration 0008 */ }
+  }
 }
 
 /** Чи привʼязаний власний чат (для UI Налаштувань). */

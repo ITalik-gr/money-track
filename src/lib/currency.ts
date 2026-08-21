@@ -45,6 +45,19 @@ export function baseSign(): string {
 }
 
 /**
+ * The sign for a value that MAY be in a currency of its own.
+ *
+ * `null`/`undefined` means "rolled up", and the whole point of §BASE-CUR is that rolled-up has no
+ * fixed currency. Screens used to spell that as `currencySign(cur ?? 980)`, which reads as a
+ * harmless default and is in fact the entire bug: one such line on `Stats.tsx` put a ₴ next to
+ * every number on all five Statistics tabs, because the sign is threaded down into thirteen
+ * blocks from there. Lint C10 now refuses a literal currency code in a sign call.
+ */
+export function signFor(cur: number | null | undefined): string {
+  return cur == null ? baseSign() : currencySign(cur);
+}
+
+/**
  * Set the active base. `persist` marks it as an explicit choice; the server-effective base
  * arriving on `/rates` is adopted WITHOUT persisting, so it can never masquerade as a decision
  * the reader made — that distinction is what lets "follow my language" stay reachable.

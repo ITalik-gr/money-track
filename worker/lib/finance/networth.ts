@@ -15,7 +15,7 @@ import type { Networth } from "../../../shared/api/analytics.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 import * as accountsRepo from "../../repo/accounts.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
-import { toBaseMinor, ratesForDays, moneyScope, type Rates } from "./money.ts";
+import { toBaseMinor, ratesForDays, moneyScope, rateDayKey, type Rates } from "./money.ts";
 import { localMonthStart } from "./stats.ts";
 import { ownFundsMinor } from "./own-funds.ts";
 import { st } from "../platform/i18n.ts";
@@ -40,7 +40,8 @@ export async function buildNetworth(env: Env, months: number, locale: NotifLocal
   // Поточний власний залишок кожного рахунку (баланс − кредитний ліміт, §Інваріанти).
   const own = new Map<string, number>(accs.map((a) => [a.id, ownFundsMinor(a.balance, a.credit_limit)]));
   const roleOf = (a: typeof accs[number]): "liquid" | "investment" => (a.role === "investment" ? "investment" : "liquid");
-  const iso = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+  // The same key the snapshotter writes (`rateDayKey`) — see its note on why it is UTC.
+  const iso = (unix: number) => rateDayKey(unix);
 
   // Історія ручних балансів (§Історія ручних балансів): ручні/крипто-рахунки не мають tx-дельт,
   // тож без цього назад лишались би плоскими. Крокуємо по зафіксованих зрізах.

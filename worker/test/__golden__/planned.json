@@ -17,7 +17,8 @@
       "currency_code": 980,
       "period_count": 1,
       "note": null,
-      "amount_varies": 0
+      "amount_varies": 0,
+      "monthly_base": 19900
     },
     {
       "id": 2,
@@ -35,7 +36,8 @@
       "currency_code": 840,
       "period_count": 1,
       "note": null,
-      "amount_varies": 0
+      "amount_varies": 0,
+      "monthly_base": 40000
     },
     {
       "id": 3,
@@ -53,7 +55,8 @@
       "currency_code": 980,
       "period_count": 1,
       "note": null,
-      "amount_varies": 0
+      "amount_varies": 0,
+      "monthly_base": 360000
     },
     {
       "id": 4,
@@ -71,7 +74,8 @@
       "currency_code": 980,
       "period_count": 1,
       "note": null,
-      "amount_varies": 0
+      "amount_varies": 0,
+      "monthly_base": 50000
     }
   ]
 }

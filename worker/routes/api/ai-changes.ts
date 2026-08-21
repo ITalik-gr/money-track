@@ -12,6 +12,7 @@
  */
 import * as auditRepo from "../../repo/ai-changes.ts";
 import { apiRoutes } from "./_shared.ts";
+import { st } from "../../lib/platform/i18n.ts";
 import type { AiChange } from "../../../shared/api/ai.ts";
 
 export const aiChanges = apiRoutes();
@@ -28,6 +29,10 @@ aiChanges.post("/ai-changes/:id/revert", async (c) => {
   // Reverting twice would write a stale value over whatever the user has since chosen — the log
   // records what WAS, not what is.
   if (change.reverted_at != null) return c.json({ ok: true, already: true });
-  await auditRepo.revert(c.env.DB, change, Math.floor(Date.now() / 1000));
+  const out = await auditRepo.revert(c.env.DB, change, Math.floor(Date.now() / 1000));
+  // The field has changed hands since — most often because the person corrected it themselves.
+  // Saying so is the point: a silent no-op looks like a broken button, and a silent overwrite
+  // looks like nothing at all until they notice their own edit is gone.
+  if (!out.ok) return c.json({ error: st(c.get("locale"), "errRevertSuperseded") }, 409);
   return c.json({ ok: true });
 });

@@ -47,7 +47,7 @@ const EXCEPTIONS = {
   // 2026-08-14 (§CAT-PAGE): 687 → 655 — the category drill followed, into `category-drill.ts`.
   "worker/routes/api/analytics.ts": 670,
   // Predates the split: the Telegram bot's command surface, still holding 3 inline queries too.
-  "worker/routes/telegram.ts": 420,
+  "worker/routes/telegram.ts": 340,
   // The AI adviser: the finance snapshot, the chat, the chat's tools, and the deterministic
   // fallback advice. The snapshot alone is the single source every AI screen reads, so splitting
   // it is a design decision — recorded rather than done.
@@ -62,9 +62,9 @@ const EXCEPTIONS = {
   "worker/lib/messaging/notify.ts": 1000,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
   // "one number, one home", and cutting it up would give that number two homes again.
-  "worker/lib/finance/stats.ts": 615,
+  "worker/lib/finance/stats.ts": 500,
   // Categorisation, transfer review and text parsing — three model calls that share a taxonomy.
-  "worker/lib/ai/enrich.ts": 560,
+  "worker/lib/ai/enrich.ts": 530,
 };
 
 function tsFiles(dir, prefix = dir + "/") {

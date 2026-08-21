@@ -17,7 +17,7 @@ import { CashflowChart } from "../components/stats/CashflowChart.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
-import { baseSign } from "../lib/currency.ts";
+import { signFor } from "../lib/currency.ts";
 
 const rDate = dateFmt({ day: "numeric", month: "short" });
 const rDateTime = dateFmt({ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -195,6 +195,10 @@ export function ReportDetail() {
   );
 
   const r: FinancialReport = data.data;
+  // §BASE-CUR: a report is a RECORD. Its figures were computed in the currency stamped into the
+  // payload, so they are signed with THAT — not with whatever the reader has selected today.
+  // Reports written before the stamp existed are hryvnia, which is what they were.
+  const sign = signFor(r.cur ?? 980);
   // §R6: рендеримо детерміновані категорії (надійні суми/дельти), fallback — AI-версія (старі репорти).
   type CatRow = { name: string; amount_uah: number; delta_pct: number | null; note?: string | null; prev_uah?: number };
   const hasCatDetail = !!r.categories?.length;
@@ -219,7 +223,7 @@ export function ReportDetail() {
           </div>
         )}
 
-        <ForecastHero p={r.predictions} />
+        <ForecastHero p={r.predictions} sign={sign} />
 
         {r.sections?.length > 0 && (
           <section>
@@ -244,7 +248,7 @@ export function ReportDetail() {
             <div className="section-head"><h2>{t("report.categories")}</h2><InfoTip>{t("report.categoriesTip")}</InfoTip><span className="label">{t("report.vsPrevPeriod")}</span></div>
             <div className="card" style={{ padding: 16 }}>
               <div className="report-cat-grid">
-                <CategoryDonut cats={catList} />
+                <CategoryDonut cats={catList} sign={sign} />
                 <div className="catbars" style={{ padding: 0 }}>
                   {catList.map((c, i) => {
                     const isNew = hasCatDetail && (c.prev_uah ?? 0) === 0 && c.amount_uah !== 0;
@@ -252,7 +256,7 @@ export function ReportDetail() {
                       <div key={i} className="catbar">
                         <span className="cb-name" title={c.note ?? undefined}><span className="d" style={{ background: barColor(i), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} />{c.name}</span>
                         <span className="cb-track"><span className="cb-fill" style={{ width: `${(Math.abs(c.amount_uah) / catMax) * 100}%`, background: barColor(i) }} /></span>
-                        <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} {baseSign()}</span>
+                        <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} {sign}</span>
                         <span className="cb-pct">{isNew ? <span className="cmp-delta new">{t("stats.compare.newLabel")}</span> : <Delta pct={c.delta_pct} />}</span>
                       </div>
                     );
@@ -263,7 +267,7 @@ export function ReportDetail() {
           </section>
         )}
 
-        {r.importance && r.importance.length > 0 && <ImportanceSection data={r.importance} />}
+        {r.importance && r.importance.length > 0 && <ImportanceSection data={r.importance} sign={sign} />}
 
         {r.trend && r.trend.length > 1 && (
           <section>
@@ -316,7 +320,7 @@ export function ReportDetail() {
 }
 
 // §B: прогноз — hero-блок нагорі репорту (великі числа: очікувані витрати + запас-runway).
-function ForecastHero({ p }: { p: FinancialReport["predictions"] }) {
+function ForecastHero({ p, sign }: { p: FinancialReport["predictions"]; sign: string }) {
   const t = useT();
   if (!p || (p.next_period_spend_uah == null && p.runway_months == null && !p.note)) return null;
   return (
@@ -327,7 +331,7 @@ function ForecastHero({ p }: { p: FinancialReport["predictions"] }) {
           {p.next_period_spend_uah != null && (
             <div className="fh-item">
               <span className="fh-label">{t("report.expectedSpend")}</span>
-              <span className="fh-val">{formatMinor(p.next_period_spend_uah * 100, { decimals: false })} {baseSign()}</span>
+              <span className="fh-val">{formatMinor(p.next_period_spend_uah * 100, { decimals: false })} {sign}</span>
             </div>
           )}
           {p.runway_months != null && (
@@ -344,7 +348,7 @@ function ForecastHero({ p }: { p: FinancialReport["predictions"] }) {
 }
 
 // §6: смуга частки витрат за вагомістю (той самий візуал, що в Статистиці).
-function ImportanceSection({ data }: { data: NonNullable<FinancialReport["importance"]> }) {
+function ImportanceSection({ data, sign }: { data: NonNullable<FinancialReport["importance"]>; sign: string }) {
   const t = useT();
   const total = data.reduce((s, d) => s + Math.abs(d.amount_uah), 0);
   if (!total) return null;
@@ -367,7 +371,7 @@ function ImportanceSection({ data }: { data: NonNullable<FinancialReport["import
             return (
               <span key={lv} className="lg">
                 <span className="d" style={{ background: IMPORTANCE_META[lv].color }} />
-                {t(IMPORTANCE_META[lv].labelKey)} · <b>{row.pct}%</b> <span className="muted">({formatMinor(row.amount_uah * 100, { decimals: false })} {baseSign()})</span>
+                {t(IMPORTANCE_META[lv].labelKey)} · <b>{row.pct}%</b> <span className="muted">({formatMinor(row.amount_uah * 100, { decimals: false })} {sign})</span>
               </span>
             );
           })}
@@ -384,20 +388,20 @@ function monthLabel(m: string): string { const p = m.split("-"); return monthSho
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function DonutTooltip(props: any) {
-  const { active, payload } = props;
+  const { active, payload, sign } = props;
   if (!active || !payload?.length) return null;
   const d = payload[0];
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{d.name}</div>
-      <div className="r"><span className="d" style={{ background: d.payload.color }} />{formatMinor(d.value * 100, { decimals: false })} {baseSign()}</div>
+      <div className="r"><span className="d" style={{ background: d.payload.color }} />{formatMinor(d.value * 100, { decimals: false })} {sign}</div>
       <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{d.payload.pct}{translate(getLocale(), "report.ofTotal")}</div>
     </div>
   );
 }
 
 // §5: донат розподілу витрат по категоріях (топ-8 + «інші»).
-function CategoryDonut({ cats }: { cats: { name: string; amount_uah: number }[] }) {
+function CategoryDonut({ cats, sign }: { cats: { name: string; amount_uah: number }[]; sign: string }) {
   const t = useT();
   const top = cats.slice(0, 8).map((c, i) => ({ name: c.name, value: Math.abs(c.amount_uah), color: barColor(i) }));
   const restSum = cats.slice(8).reduce((s, c) => s + Math.abs(c.amount_uah), 0);
@@ -412,11 +416,11 @@ function CategoryDonut({ cats }: { cats: { name: string; amount_uah: number }[] 
           <Pie data={withPct} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={82} paddingAngle={1.5} strokeWidth={0} {...CHART_ANIM}>
             {withPct.map((d, i) => <Cell key={i} fill={d.color} />)}
           </Pie>
-          <Tooltip content={<DonutTooltip />} />
+          <Tooltip content={<DonutTooltip sign={sign} />} />
         </PieChart>
       </ResponsiveContainer>
       <div className="donut-center">
-        <span className="dc-val">{formatMinor(total * 100, { decimals: false })} {baseSign()}</span>
+        <span className="dc-val">{formatMinor(total * 100, { decimals: false })} {sign}</span>
         <span className="dc-lbl">{t("report.spendLabel")}</span>
       </div>
     </div>

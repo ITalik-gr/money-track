@@ -10,6 +10,7 @@ import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { formatMinor, startOfMonthUnix } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
+import { DeltaChip } from "../components/stats/shared.tsx";
 import { baseSign } from "../lib/currency.ts";
 
 /**
@@ -152,6 +153,41 @@ export function Category() {
             </div>
           )}
         </div>
+        {/* Два питання, які сторінка досі не ставила — і які просять протилежних дій. */}
+        {data.avg_check && (
+          <div className="card merchant-stat">
+            <div className="label">
+              {t("cat.avgCheck")}
+              <InfoTip>{t("cat.avgCheckHint")}</InfoTip>
+            </div>
+            <div className="merchant-stat-v num-hero"><Money minor={data.avg_check.now} decimals={false} /></div>
+            <div className="merchant-stat-sub">
+              {/* The COUNT is shown beside the delta on purpose: a category that grew did so
+                  either through more charges or through dearer ones, and only these two numbers
+                  together say which. */}
+              {data.avg_check.prev != null
+                ? <>
+                    <DeltaChip a={data.avg_check.now} b={data.avg_check.prev} />
+                    {" "}{t("cat.avgCheckOps", { n: data.avg_check.n, prev: data.avg_check.prev_n })}
+                  </>
+                : t("cat.avgCheckOpsOnly", { n: data.avg_check.n })}
+            </div>
+          </div>
+        )}
+        {data.year_ago && (
+          <div className="card merchant-stat">
+            <div className="label">
+              {t("cat.yearAgo")}
+              <InfoTip>{t("cat.yearAgoHint")}</InfoTip>
+            </div>
+            <div className="merchant-stat-v num-hero"><Money minor={data.year_ago.spent} decimals={false} /></div>
+            <div className="merchant-stat-sub">
+              {/* The trend chart above holds these very numbers; nobody can read one August
+                  against another off a line with 24 points, which is why this is a figure. */}
+              <DeltaChip a={total} b={data.year_ago.spent} goodUp={inc} />
+            </div>
+          </div>
+        )}
         {data.budget && (
           <div className="card merchant-stat">
             <div className="label">{t("cat.budgetLabel")}</div>
@@ -218,13 +254,23 @@ export function Category() {
         <section>
           <div className="section-head">
             <h2>{t("cat.topMerchantsTitle")}</h2>
-            <span className="label">{t("cat.topMerchantsHint")}</span>
+            <span className="label">
+              {data.top_merchants[0] && data.top_merchants[0].share_pct >= 40
+                // Concentration is only worth naming when there IS any: below this the honest
+                // reading is "spread out", and a leading share of 11% dressed as a headline
+                // would be the app manufacturing a finding.
+                ? t("cat.topMerchantsConcentrated", { name: data.top_merchants[0].merchant, pct: data.top_merchants[0].share_pct })
+                : t("cat.topMerchantsHint")}
+            </span>
           </div>
           <div className="card">
             <ul className="cat-merch-list">
               {data.top_merchants.map((m) => (
                 <li key={m.merchant}>
                   <Link className="cat-merch-name" to={`/merchant/${encodeURIComponent(m.merchant)}`}>{m.merchant}</Link>
+                  {/* The share is what turns a list into an answer: a total tells the reader
+                      nothing until they know what the category costs. */}
+                  <span className="cat-merch-share label">{m.share_pct}%</span>
                   <span className="cat-merch-n label">{t("cat.merchantOps", { n: m.n })}</span>
                   <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} {baseSign()}</span>
                 </li>

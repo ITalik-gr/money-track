@@ -52,7 +52,10 @@ export async function resolveLocale(env: Env): Promise<ServerLocale> {
  * uk/en pairs in one place, so a missing translation is impossible to commit: the `en` half is
  * part of the same object literal, and `tsc` derives the key union from it.
  */
+import { TG } from "./i18n-tg.ts";
+
 const S = {
+  ...TG,
   // ---- fallback labels for missing data ------------------------------------
   // These end up as chart legends and list rows, not as prose. Kept short for that reason.
   uncategorized: { uk: "без категорії", en: "uncategorized" },
@@ -321,6 +324,11 @@ const S = {
   },
   // §BASE-CUR: named list, not "invalid": the reader needs to know which units exist, and the
   // set is short enough to print.
+  // §AI-AUDIT — the field has changed hands since the model touched it.
+  errRevertSuperseded: {
+    uk: "Це поле змінилось після AI — найімовірніше, ви виправили його самі. Відкот поверне значення, що передувало обом, тож він не виконаний. Змініть категорію вручну, якщо треба інша.",
+    en: "This field changed after the AI touched it — most likely you corrected it yourself. Undoing would restore a value that predates you both, so it was not applied. Set the value by hand if you want a different one.",
+  },
   errCurrencyUnsupported: {
     uk: "Непідтримувана валюта. Доступні: ₴ UAH, $ USD, € EUR.",
     en: "Unsupported currency. Available: ₴ UAH, $ USD, € EUR.",

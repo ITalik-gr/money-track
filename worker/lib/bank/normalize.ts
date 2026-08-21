@@ -9,6 +9,7 @@
 // So they live here, once, above the providers. `csv.ts` was the first caller; PrivatBank will be
 // the second, and it must not get to decide these questions again.
 import { localWallTime } from "../finance/stats.ts";
+import { CURRENCY_BY_CODE } from "../../../shared/currency.ts";
 
 /**
  * "-1 234,56" / "1234.56" / "(1 234,56)" → minor units (integer kopecks).
@@ -106,13 +107,10 @@ export function parseStatementDate(raw: string): number | null {
  * A number passes through unchanged — feeds that already speak numeric (monobank) share this door
  * with feeds that do not (PrivatBank), so a caller never has to know which kind it is holding.
  */
-const CURRENCY_NUMERIC: Record<string, number> = {
-  UAH: 980, USD: 840, EUR: 978, GBP: 826, PLN: 985, CHF: 756, CZK: 203, HUF: 348,
-  RON: 946, BGN: 975, MDL: 498, GEL: 981, TRY: 949, CAD: 124, AUD: 36, JPY: 392,
-  CNY: 156, SEK: 752, NOK: 578, DKK: 208, ILS: 376, AED: 784, KZT: 398, THB: 764,
-  EGP: 818, RSD: 941, MKD: 807, ALL: 8, ISK: 352, INR: 356, SGD: 702, HKD: 344,
-  MXN: 484, BRL: 986, ZAR: 710, NZD: 554, KRW: 410, VND: 704,
-};
+// Derived from `shared/currency.ts`, which is THE code table (see its note: this list used to be
+// the third and largest of three, and the disagreement between them lost data on a CSV round
+// trip). Adding a currency is still a one-line change — it just happens in one file now.
+const CURRENCY_NUMERIC = CURRENCY_BY_CODE;
 
 export function currencyNumeric(code: string | number | null | undefined): number | null {
   if (code == null) return null;

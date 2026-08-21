@@ -53,6 +53,7 @@ const ENDPOINTS: string[] = [
   // because the client stopped deriving it: `EnvelopeGrid` renders these numbers verbatim, so a
   // silent change to the projection is a silent change on screen.
   "/budgets/status",
+  "/budgets/history",
   "/budgets/auto",
   "/budgets/auto?trim=25",
   "/planned",
@@ -76,11 +77,13 @@ const ENDPOINTS: string[] = [
   "/analytics/cashflow-calendar",
   "/analytics/receipt-items",
   "/analytics/price-drift",
+  "/analytics/fx-cost",
   "/analytics/patterns",
   "/analytics/currencies",
   "/analytics/by-category",
   "/analytics/habits",
   "/analytics/weekday",
+  "/analytics/day-of-month",
   "/analytics/weekday?preset=month",
   "/analytics/spark",
   "/analytics/health",

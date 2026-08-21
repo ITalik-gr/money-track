@@ -200,19 +200,34 @@ export async function signShortLived(env: Env, value: string, ttlSeconds = 600):
  * 32-char user id plus a full 64-char HMAC plus dot separators is nearly twice that. So:
  * `_` separators, base36 expiry, and the signature truncated to 16 hex chars.
  *
- * 64 bits of tag is deliberate and sufficient here: the token dies in 15 minutes, it is
- * single-purpose (bind a chat id), and an attacker who forged one would only manage to point
- * their OWN telegram chat at a stranger's notifications — noisy for them, no read access.
+ * ⚠️ **The old rationale here said «no read access», and that stopped being true on 2026-08-21.**
+ * It read: 64 bits is enough because a forged token would only point the attacker's own chat at a
+ * stranger's NOTIFICATIONS — noisy for them, nothing to read. Multi-user inbound commands landed
+ * that same night, and this token now also grants `/balance`, `/last`, `/stats`, `/budget`,
+ * `/subs`, `/goals` and `/ask` against the account's whole transaction database. The sentence was
+ * still there, still readable, and no longer describing the system — the third time in one day
+ * that a stated FACT expired under a rule that depended on it (C10's Telegram exemption,
+ * `budgets.rollover`, and now this).
+ *
+ * What holds it now, stated honestly:
+ *  · the tag is **88 bits** (22 hex chars), which is what the 64-character `?start=` budget allows
+ *    beside a 32-char user id and a base36 expiry — free, so taken;
+ *  · the token dies in 15 minutes and is only useful inside that window;
+ *  · a link that IS used by someone else is no longer silent: rebinding tells the chat that just
+ *    lost the account (`tg-target.ts linkTgChat`). Forgery cannot be prevented by a short tag
+ *    alone, but a takeover the owner hears about is a different kind of problem.
  * Same key and same timing-safe comparison as every other signed value in this file.
  */
 const TG_LINK_TTL_SEC = 900;
+/** 22 hex chars = 88 bits. Bounded by `?start=`: 32 (user id) + 1 + 7 (base36 exp) + 1 + 22 = 63. */
+const TG_LINK_TAG_LEN = 22;
 
 export async function telegramLinkToken(env: Env, userId: string): Promise<string> {
   const key = signingKey(env);
   if (!key) throw new Error("no signing key: set SESSION_SECRET (or APP_PASSWORD)");
   const exp = (Math.floor(Date.now() / 1000) + TG_LINK_TTL_SEC).toString(36);
   const payload = `${userId}_${exp}`;
-  return `${payload}_${(await hmacHex(key, `tglink:${payload}`)).slice(0, 16)}`;
+  return `${payload}_${(await hmacHex(key, `tglink:${payload}`)).slice(0, TG_LINK_TAG_LEN)}`;
 }
 
 /** Verifies a `telegramLinkToken` and returns the `userId` it belongs to, or `null`. */
@@ -225,7 +240,7 @@ export async function verifyTelegramLinkToken(env: Env, token: string | undefine
   // Same shape check as `verifyWebhookToken`: a user id is hex, and anything else is a probe.
   if (!/^[0-9a-f]+$/.test(userId) || !/^[0-9a-z]+$/.test(exp)) return null;
   if (parseInt(exp, 36) < Date.now() / 1000) return null;
-  const expected = (await hmacHex(key, `tglink:${userId}_${exp}`)).slice(0, 16);
+  const expected = (await hmacHex(key, `tglink:${userId}_${exp}`)).slice(0, TG_LINK_TAG_LEN);
   return timingSafeEqual(sig, expected) ? userId : null;
 }
 

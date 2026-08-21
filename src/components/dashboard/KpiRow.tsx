@@ -1,8 +1,10 @@
 import { useGetOverviewQuery, useGetPeriodModeQuery } from "../../store/api.ts";
 import { Icon } from "../ui/Icon.tsx";
-import { formatMinor, currencySign } from "../../lib/format.ts";
+import { formatMinor } from "../../lib/format.ts";
+import { baseSign } from "../../lib/currency.ts";
 import { useCountUp } from "../../lib/useCountUp.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 
 function pct(cur: number, prev: number): number | null {
@@ -11,7 +13,7 @@ function pct(cur: number, prev: number): number | null {
 }
 
 function KpiTile({
-  title, kind, valueMinor, prevMinor, deltaPct, prevLabel, info,
+  title, kind, valueMinor, prevMinor, deltaPct, prevLabel, info, unknown,
 }: {
   title: string;
   kind: "spend" | "income";
@@ -20,6 +22,8 @@ function KpiTile({
   deltaPct: number | null;
   prevLabel: string;
   info: string;
+  /** The request failed. A tile that prints 0 ₴ says «ти нічого не витратив», which is a claim. */
+  unknown?: boolean;
 }) {
   // spend: зростання — погано (черв.); income: зростання — добре (зел.)
   const goodWhenUp = kind === "income";
@@ -39,16 +43,20 @@ function KpiTile({
         <span className="kpi-info"><InfoTip>{info}</InfoTip></span>
       </div>
       <div className="kpi-num num-hero">
-        {formatMinor(Math.round(animVal), { decimals: false })}
-        <span className="cur">{currencySign(980)}</span>
+        {unknown ? "—" : (
+          <>
+            {formatMinor(Math.round(animVal), { decimals: false })}
+            <span className="cur">{baseSign()}</span>
+          </>
+        )}
       </div>
       <div className="kpi-foot">
-        {deltaPct !== null && (
+        {!unknown && deltaPct !== null && (
           <span className={`delta ${good ? "up" : "down"}`}>
             {up ? "↑" : "↓"} {Math.abs(deltaPct).toFixed(1)}%
           </span>
         )}
-        <span>{prevLabel}: {formatMinor(prevMinor, { decimals: false })} {currencySign(980)}</span>
+        <span>{unknown ? "" : `${prevLabel}: ${formatMinor(prevMinor, { decimals: false })} ${baseSign()}`}</span>
       </div>
     </div>
   );
@@ -57,9 +65,9 @@ function KpiTile({
 export function KpiRow() {
   const t = useT();
   // Preset «month» + режим period_mode → ті самі межі, що й Статистика (числа збігаються).
-  // Валюта не передається → зведено в ₴ (USD-витрати/доходи враховані).
+  // No currency is passed → rolled up into the reader's base, foreign spending included.
   const { data: pm } = useGetPeriodModeQuery();
-  const { data } = useGetOverviewQuery({ preset: "month" });
+  const { data, error, refetch } = useGetOverviewQuery({ preset: "month" });
   const rolling = pm?.mode === "rolling";
 
   const spend = data?.summary.spend ?? 0;
@@ -68,12 +76,20 @@ export function KpiRow() {
   const prevIncome = data?.prev.income ?? 0;
   const prevLabel = rolling ? t("kpi.prev30") : t("kpi.prevMonth");
 
+  // §Обробка помилок: `data?.x ?? 0` on a failed request renders «0 ₴ витрачено» — the same
+  // defect as `BalanceCard`, one row below it. The tiles keep their shape (the row must not
+  // collapse) and say they have no answer.
+  const failed = !!error;
+
   return (
-    <div className="kpi-row">
-      <KpiTile title={rolling ? t("kpi.spent30") : t("kpi.spentMonth")} kind="spend" valueMinor={spend} prevMinor={prevSpend} deltaPct={pct(spend, prevSpend)} prevLabel={prevLabel}
-        info={t("kpi.spendInfo")} />
-      <KpiTile title={rolling ? t("kpi.income30") : t("kpi.incomeMonth")} kind="income" valueMinor={income} prevMinor={prevIncome} deltaPct={pct(income, prevIncome)} prevLabel={prevLabel}
-        info={t("kpi.incomeInfo")} />
-    </div>
+    <>
+      <div className="kpi-row">
+        <KpiTile title={rolling ? t("kpi.spent30") : t("kpi.spentMonth")} kind="spend" valueMinor={spend} prevMinor={prevSpend} deltaPct={pct(spend, prevSpend)} prevLabel={prevLabel}
+          info={t("kpi.spendInfo")} unknown={failed} />
+        <KpiTile title={rolling ? t("kpi.income30") : t("kpi.incomeMonth")} kind="income" valueMinor={income} prevMinor={prevIncome} deltaPct={pct(income, prevIncome)} prevLabel={prevLabel}
+          info={t("kpi.incomeInfo")} unknown={failed} />
+      </div>
+      <ErrorNote error={error} what={t("kpi.spendInfo")} onRetry={refetch} />
+    </>
   );
 }

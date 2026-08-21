@@ -6,11 +6,12 @@ import { type BudgetChatResult, budgetChat, chatAdvice } from "./tasks.ts";
 import { type AdviceResult, type AiFact, evaluateGroup, generateAdvice, proposeBudgetLimits } from "./generate.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
+import type { AdviceHistoryItem } from "../../../shared/api/ai.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } from "../finance/money.ts";
 import { currencySign } from "../../../shared/currency.ts";
 import { nextChargeUnix, plannedUAH, monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
-import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm } from "../finance/stats.ts";
+import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
 import { ownFundsMinor } from "../finance/own-funds.ts";
@@ -46,6 +47,13 @@ export interface StoredAdvice extends AdviceResult {
   runway_months: number | null;  // ЧЕСНИЙ: подушка / burn
   usage?: AiUsageBrief;
   generated_at: number;
+  /**
+   * §BASE-CUR — the currency every figure in this advice is in, stamped when it was generated.
+   * Advice is STORED and re-read for a month; signing yesterday's numbers with today's currency
+   * would put one currency's sign in front of another's amount (the same reason the notification
+   * feed and a saved report carry theirs). Absent on advice written before the setting: hryvnia.
+   */
+  cur?: number;
   /** true — порада зібрана детерміновано з чисел, БЕЗ AI (див. `fallbackAdvice`). */
   fallback?: boolean;
   /** Чому впали у fallback — показуємо користувачу, а не глушимо (§Обробка помилок). */
@@ -425,7 +433,9 @@ async function activeFacts(env: Env, now: number): Promise<ActiveFact[]> {
        WHERE f.effective_from <= ? AND (f.expires_at IS NULL OR f.expires_at > ?)
        ORDER BY f.effective_from DESC LIMIT 20`,
     ).bind(now, now).all<{ text: string; ef: number; ex: number | null; cf: number | null; kind: string | null; cat: string | null }>();
-    const iso = (u: number) => new Date(u * 1000).toISOString().slice(0, 10);
+    // §APP_TZ: the dates handed to the model are the reader's, so «сьогодні» in the answer and
+    // «сьогодні» on the screen are the same day. UTC drifts one day back every night until 03:00.
+    const iso = (u: number) => localYmd(u);
     return (rows.results ?? []).map((r) => ({
       text: r.text,
       since: iso(r.ef),
@@ -456,6 +466,7 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     runway_months: runwayMonths,
     usage: briefUsage(usage),
     generated_at: now,
+    cur: await resolveBaseCurrency(env),
   };
   await setState(env.DB, "advisor", JSON.stringify(stored));
 
@@ -470,6 +481,7 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
       monthly_burn: monthlyBurn,
       own_funds: ownFunds,
       cushion: funds.cushion, // §+1: ліквідна подушка окремо (для тренду/дельт)
+      cur: stored.cur,        // §BASE-CUR: a delta against a snapshot in another unit is not a delta
     });
     await setState(env.DB, "advisor_history", JSON.stringify(hist.slice(0, 24)));
   } catch { /* історія не критична */ }
@@ -590,15 +602,13 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
     monthly_burn: monthlyBurn,
     runway_months: runwayMonths,
     generated_at: snap.now,
+    cur: await resolveBaseCurrency(env),
     fallback: true,
     fallback_reason: reason,
   };
 }
 
-export interface AdviceHistoryItem {
-  generated_at: number; summary: string; runway_months: number | null; monthly_burn: number; own_funds: number;
-  cushion?: number; // §+1: додано пізніше — старі записи можуть не мати
-}
+export type { AdviceHistoryItem };
 export async function getAdviceHistory(env: Env): Promise<AdviceHistoryItem[]> {
   const raw = await getState(env.DB, "advisor_history");
   return raw ? (JSON.parse(raw) as AdviceHistoryItem[]) : [];

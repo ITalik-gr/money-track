@@ -5,6 +5,8 @@
 // Telegram push once had its own SQL for exactly that and reported different numbers than the
 // notification feed for the same budgets.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import { catNameSql } from "../lib/finance/categories-i18n.ts";
+import type { NotifLocale } from "../../shared/notif-i18n.ts";
 import type { Budget } from "../../shared/types.ts";
 
 export async function listAll(db: AppDb): Promise<Budget[]> {
@@ -130,6 +132,35 @@ export async function monthsForCategory(
      FROM budget_months WHERE category_id = ? ORDER BY ym DESC LIMIT ?`,
   ).bind(categoryId, limit).all<BudgetMonth>();
   return (r.results ?? []).reverse();
+}
+
+/**
+ * Every closed month since `sinceYm`, with the category it belongs to — the whole-plan view.
+ *
+ * `monthsForCategory` answers «як цей конверт закривався»; this answers «чи я взагалі тримаю
+ * план», which is a different question and the one nothing could answer until now. The table has
+ * existed since migration 0043 and had exactly two readers: the auto-budget's `trackRecord` (which
+ * throws the months away and keeps a ratio) and the six-month strip on one category page.
+ *
+ * The name is resolved HERE rather than by the caller, through `catNameSql` like every other
+ * category name that reaches a screen (§LANG-ARCH: `repo/*` resolves, `lib/ai/*` used not to, and
+ * that was the bug).
+ */
+export interface BudgetMonthNamed extends BudgetMonth {
+  name: string;
+  color: string | null;
+}
+
+export async function monthsSince(
+  db: AppDb, locale: NotifLocale, sinceYm: string,
+): Promise<BudgetMonthNamed[]> {
+  const r = await db.prepare(
+    `SELECT m.ym, m.category_id, m.limit_minor, m.carry_in_minor, m.spent_minor,
+            ${catNameSql(locale, "c.name")} AS name, c.color AS color
+     FROM budget_months m JOIN categories c ON c.id = m.category_id
+     WHERE m.ym >= ? ORDER BY m.ym ASC`,
+  ).bind(sinceYm).all<BudgetMonthNamed>();
+  return r.results ?? [];
 }
 
 /** True once ANY envelope has a row for this month — the close is a no-op after that. */

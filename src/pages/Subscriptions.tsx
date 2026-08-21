@@ -24,6 +24,7 @@ import { SubGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { toBaseMinor, formatMinor } from "../lib/format.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
 import { baseSign, getBaseCurrency } from "../lib/currency.ts";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 
 const fmtDate = dateFmt({ day: "numeric", month: "short" });
 const CUR_OPTS = [
@@ -71,16 +72,10 @@ function cadenceLabel(p: PlannedPayment): string {
 }
 
 // Місячний еквівалент (ділимо на period_count; тижневі × середню кількість тижнів у місяці).
-// Завершені не тягнуть. Множник — той самий, що в канонічному `monthlyPlannedUAH` на сервері
-// (§SUB-MONTH): ця сторінка й Порадник мають називати ОДНЕ число, інакше «підписок на 3 100 ₴»
-// тут і «на 3 090 ₴» у пораді читається як помилка одного з двох.
-const WEEKS_PER_MONTH = 365.25 / 12 / 7;
-function monthly(p: PlannedPayment): number {
-  if (isFinished(p)) return 0;
-  const per = (p.period_amount ?? 0) / pcount(p);
-  return p.period === "week" ? per * WEEKS_PER_MONTH : per;
-}
-
+// The weekly→monthly multiplier that used to live here is GONE, and so is the comment promising
+// it matched the server's. A note asserting that two copies agree is the tell, not the safeguard
+// (§SIMILAR made the same observation about `coreToken`): the multiplier did match, and the
+// end-of-plan rule beside it did not.
 // §G1: з середнього інтервалу днів між списаннями виводимо period + «кожні N».
 // Раніше при додаванні хардкодився «month», тож каденція й наступна дата були неправильні.
 function cadenceFromDays(days: number): { period: "month" | "week"; period_count: number } {
@@ -109,7 +104,7 @@ function plannedFromCandidate(
 
 export function Subscriptions() {
   const t = useT();
-  const { data: planned, isLoading: loadingPlanned } = useGetPlannedQuery();
+  const { data: planned, isLoading: loadingPlanned, error: plannedError, refetch: refetchPlanned } = useGetPlannedQuery();
   const { data: actuals } = useGetPlannedActualsQuery();
   const { data: cats } = useGetCategoriesQuery();
   const { data: ratesData } = useGetRatesQuery();
@@ -141,12 +136,19 @@ export function Subscriptions() {
   const list = (planned ?? []).filter((p) => p.kind !== "income")
     .slice().sort((a, b) => nextCharge(a) - nextCharge(b));
   const incomePlans = (planned ?? []).filter((p) => p.kind === "income");
-  // Місячний тягар — зводимо кожну підписку в ₴ за її валютою (§F4).
-  const burden = Math.round(list.reduce((s, p) => s + (toBaseMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)), 0));
-  // Топ-найдорожчі за місячним ₴-еквівалентом (завершені не рахуємо).
+  /**
+   * §SUB-MONTH: the monthly burden comes from the SERVER (`monthly_base` on each plan).
+   *
+   * This page had its own `monthly()` — the very page whose disagreement with the rest of the app
+   * bought the rule in the first place. Its arithmetic still matched; its "is this plan over"
+   * test no longer did (`isFinished` covers `installment` only, the canon ends anything past its
+   * `end_date`), so a cancelled subscription with an end date was counted here and nowhere else.
+   * It also converted through `toBaseMinor(...) ?? monthly(p)`, where the fallback is unreachable
+   * and an unknown currency therefore silently weighed ZERO.
+   */
+  const burden = list.reduce((s, p) => s + p.monthly_base, 0);
   const topExpensive = list
-    .filter((p) => !isFinished(p))
-    .map((p) => ({ p, uah: Math.round(toBaseMinor(monthly(p), p.currency_code ?? 980, rates) ?? monthly(p)) }))
+    .map((p) => ({ p, uah: p.monthly_base }))
     .filter((x) => x.uah > 0)
     .sort((a, b) => b.uah - a.uah)
     .slice(0, 3);
@@ -296,7 +298,11 @@ export function Subscriptions() {
         )}
 
         {list.length === 0 && (
-          <div className="card empty" style={{ padding: 28 }}>
+          plannedError ? (
+            // The empty text offers to let the AI find subscriptions in your history — an offer
+            // that makes no sense to someone who already has a dozen and simply lost the request.
+            <ErrorNote error={plannedError} what={t("nav.subs")} onRetry={refetchPlanned} />
+          ) : <div className="card empty" style={{ padding: 28 }}>
             {t("sub.empty")}
           </div>
         )}

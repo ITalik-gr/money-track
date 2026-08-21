@@ -47,31 +47,17 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
     from: A.from, to: A.to, currency, bfrom: B.from, bto: B.to,
   });
 
-  const { rows, rest, movers } = useMemo(() => {
-    if (!data) return { rows: [] as MoverRow[], rest: null as null | { a: number; b: number }, movers: { up: [], down: [] } as Movers };
-    const map = new Map<number | null, { name: string; color: string | null; a: number; b: number }>();
-    for (const r of data.a.byCategory) map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: r.spent, b: 0 });
-    for (const r of data.b.byCategory) {
-      const cur = map.get(r.category_id);
-      if (cur) cur.b = r.spent;
-      else map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: 0, b: r.spent });
-    }
-    // Сортуємо за БІЛЬШОЮ з двох сум: категорія, що зникла, має лишитись видимою —
-    // саме її зникнення часто і є відповіддю на «що змінилось».
-    const all = [...map.values()].sort((x, y) => Math.max(y.a, y.b) - Math.max(x.a, x.b));
-    const tail = all.slice(12);
+  // The merge, the sort and the movers arrive ready (§CADENCE) — this tab only decides how many
+  // rows fit. Both of those jobs used to live here, in a copy shared with `PeriodCompare`.
+  const { rows, rest } = useMemo(() => {
+    if (!data) return { rows: [] as MoverRow[], rest: null as null | { a: number; b: number } };
+    const tail = data.rows.slice(12);
     return {
-      rows: all.slice(0, 12) as MoverRow[],
+      rows: data.rows.slice(0, 12),
       rest: tail.length ? tail.reduce((s, r) => ({ a: s.a + r.a, b: s.b + r.b }), { a: 0, b: 0 }) : null,
-      movers: (() => {
-        const deltas = [...map.values()].map((r) => ({ ...r, delta: r.a - r.b })).filter((r) => Math.abs(r.delta) >= 5000);
-        return {
-          up: deltas.filter((r) => r.delta > 0).sort((x, y) => y.delta - x.delta).slice(0, 3),
-          down: deltas.filter((r) => r.delta < 0).sort((x, y) => x.delta - y.delta).slice(0, 3),
-        } as Movers;
-      })(),
     };
-  }, [data, noCat]);
+  }, [data]);
+  const movers: Movers = data?.movers ?? { up: [], down: [] };
 
   const sameMonth = A.y === B.y && A.m === B.m;
   // ⚠️ Поточний місяць ще не завершився — порівнювати його з повним місяцем нечесно.
@@ -122,7 +108,7 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
                 <div className="mv-head up">{t("stats.compare.moversUp")}</div>
                 {movers.up.length ? movers.up.map((r, i) => (
                   <div key={i} className="mv-row">
-                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
                     <span className="mv-delta up">+{formatMinor(r.delta, { decimals: false })} {sign}</span>
                   </div>
                 )) : <div className="mv-empty">{t("stats.compare.moversEmpty")}</div>}
@@ -131,7 +117,7 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
                 <div className="mv-head down">{t("stats.compare.moversDown")}</div>
                 {movers.down.length ? movers.down.map((r, i) => (
                   <div key={i} className="mv-row">
-                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
                     <span className="mv-delta down">−{formatMinor(-r.delta, { decimals: false })} {sign}</span>
                   </div>
                 )) : <div className="mv-empty">{t("stats.compare.moversEmptyDown")}</div>}
@@ -155,14 +141,14 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
               <span className="cmp-name">{t("stats.compare.totalIncome")}</span>
               <span className="cmp-b">{formatMinor(data.b.income, { decimals: false })} {sign}</span>
               <span className="cmp-a">{formatMinor(data.a.income, { decimals: false })} {sign}</span>
-              <DeltaChip a={data.a.income} b={data.b.income} goodUp />
+              <DeltaChip a={data.a.income} b={data.b.income} goodUp meaningful={data.income_delta_meaningful} />
             </div>
             {rows.map((r, i) => (
               <div key={i} className="cmp-row">
-                <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
                 <span className="cmp-b">{formatMinor(r.b, { decimals: false })} {sign}</span>
                 <span className="cmp-a">{formatMinor(r.a, { decimals: false })} {sign}</span>
-                <DeltaChip a={r.a} b={r.b} />
+                <DeltaChip a={r.a} b={r.b} meaningful={r.delta_meaningful} />
               </div>
             ))}
             {rest && (rest.a > 0 || rest.b > 0) && (
@@ -172,6 +158,9 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
                 <span className="cmp-a">{formatMinor(rest.a, { decimals: false })} {sign}</span>
                 <DeltaChip a={rest.a} b={rest.b} />
               </div>
+            )}
+            {data.short_period && rows.some((r) => !r.delta_meaningful) && (
+              <p className="muted cmp-cadence-note">{t("stats.compare.cadenceNote")}</p>
             )}
             <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>
               {t("stats.compare.excludedNote")}

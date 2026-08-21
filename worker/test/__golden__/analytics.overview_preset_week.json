@@ -4,7 +4,8 @@
     "summary": {
       "spend": 1355600,
       "income": 0,
-      "n": 5
+      "n": 5,
+      "savings_rate_pct": null
     },
     "prev": {
       "spend": 804800,

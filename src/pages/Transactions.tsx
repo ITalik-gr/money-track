@@ -17,6 +17,7 @@ import {
   useGetTransactionsQuery,
 } from "../store/api.ts";
 import type { Category } from "../../shared/types.ts";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 
 // §11.4: згортувана секція фільтра. Заголовок-кнопка + шеврон; активний фільтр
 // у згорнутій секції позначається крапкою, щоб не загубився.
@@ -82,7 +83,7 @@ export function Transactions() {
   const limitKey = `tx-limit:${stateKey}`;
 
   const [limit, setLimit] = useState(() => Number(sessionStorage.getItem(limitKey)) || 100);
-  const { data: rows = [], isFetching } = useGetTransactionsQuery({
+  const { data: rows = [], isFetching, error: txError, refetch: refetchTx } = useGetTransactionsQuery({
     limit, q: q || undefined, category, catparent, type: type || undefined,
     account: acc || undefined, from: dateToUnix(dfrom), to: dateToUnix(dto, true),
     amin: amin ? Number(amin) : undefined, amax: amax ? Number(amax) : undefined,
@@ -269,8 +270,14 @@ export function Transactions() {
 
         <div className="tx-main">
           {isFetching && <div className="label" style={{ margin: "0 2px 8px" }}>{t("tx.list.loadingShort")}</div>}
-          <TransactionList rows={rows} selectable={selectMode} selected={selected} onToggle={toggle}
-            empty={anyFilter ? t("tx.list.emptyFiltered") : t("tx.list.emptyAll")} />
+          {/* The strongest case on the whole sweep: «Ще немає операцій.» told a person with years
+              of history that their ledger was empty. An empty list is a statement about the
+              account; a failed request is a statement about the request. */}
+          <ErrorNote error={txError} what={t("nav.tx")} onRetry={refetchTx} />
+          {!txError && (
+            <TransactionList rows={rows} selectable={selectMode} selected={selected} onToggle={toggle}
+              empty={anyFilter ? t("tx.list.emptyFiltered") : t("tx.list.emptyAll")} />
+          )}
           {hasMore && (
             <div className="tx-more">
               <button className="tx-more-btn" disabled={isFetching} onClick={() => setLimit((l) => l + 100)}>

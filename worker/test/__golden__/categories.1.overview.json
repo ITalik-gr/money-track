@@ -31,17 +31,20 @@
       {
         "merchant": "АТБ",
         "spent": 982700,
-        "n": 18
+        "n": 18,
+        "share_pct": 49
       },
       {
         "merchant": "Сільпо",
         "spent": 902400,
-        "n": 18
+        "n": 18,
+        "share_pct": 45
       },
       {
         "merchant": "Ашан",
         "spent": 140000,
-        "n": 1
+        "n": 1,
+        "share_pct": 7
       }
     ],
     "level": {
@@ -160,6 +163,13 @@
     },
     "budget_history": [],
     "recurring": 147600,
-    "oneoff": 140000
+    "oneoff": 140000,
+    "year_ago": null,
+    "avg_check": {
+      "now": 71900,
+      "prev": 71600,
+      "n": 4,
+      "prev_n": 1
+    }
   }
 }

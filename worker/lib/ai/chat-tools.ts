@@ -22,6 +22,7 @@ import { addFact } from "./facts.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, SPEND_WHERE, INCOME_WHERE, valueMode, amountSum,
 } from "../finance/stats.ts";
+import { localWallTime, localYmd, localYmSql } from "../finance/time.ts";
 
 /** Unix seconds for a YYYY-MM-DD string, or null. `endOfDay` pushes it to 23:59:59. */
 export function financeChatTools(): ChatTool[] {
@@ -94,14 +95,36 @@ function parseToolDate(s: unknown, endOfDay = false): number | null {
   if (typeof s !== "string") return null;
   const m = s.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return null;
-  const ms = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0);
-  return Number.isFinite(ms) ? Math.floor(ms / 1000) : null;
+  // §APP_TZ (2026-08-21): a bare date from the model is a KYIV wall clock, not UTC — the same
+  // rule §BANK-PARSE states for a statement. With `Date.UTC` the boundary sat at 03:00 Kyiv, so
+  // "spending in August" quietly dropped the first three hours of the 1st and swallowed the last
+  // three of July. The model then reported a total the screen disagreed with, confidently.
+  const at = localWallTime(
+    Number(m[1]), Number(m[2]), Number(m[3]),
+    endOfDay ? 23 : 0, endOfDay ? 59 : 0, endOfDay ? 59 : 0,
+  );
+  return Number.isFinite(at) ? at : null;
 }
-const isoDay = (unix: number) => new Date(unix * 1000).toISOString().slice(0, 10);
+const isoDay = (unix: number) => localYmd(unix);
 
 export async function runFinanceTool(env: Env, name: string, input: Record<string, unknown>): Promise<unknown> {
   const rates = await getRates(env);
-  const { mult } = valueMode(rates, null); // завжди ₴
+  // §BASE-CUR: `getRates` answers in the READER's base, so `valueMode(rates, null)` rolls up into
+  // that base — not into hryvnia. The comment here used to say «завжди ₴», which was true before
+  // the display currency existed and is the reason the `currency` field below was wrong.
+  const { mult } = valueMode(rates, null);
+  const { currencyCode } = await import("../../../shared/currency.ts");
+  const { resolveBaseCurrency } = await import("../finance/money.ts");
+  /**
+   * The unit the tool ANSWERS in, stated to the model as a fact.
+   *
+   * ⚠️ It was the literal `"UAH"`, and that is worse than the `_uah` suffix the money directive
+   * already explains away. The suffix is a key name the prompt can (and does) tell the model to
+   * disregard; this is a positive claim in the DATA, and a model handed a general instruction and
+   * a specific contradicting field will believe the field. So a dollar reader asking «скільки на
+   * продукти» got a correct number labelled with the wrong currency, by the tool, in writing.
+   */
+  const currency = currencyCode(await resolveBaseCurrency(env));
   /**
    * The tools speak the same language the model was shown — in BOTH directions.
    *
@@ -130,18 +153,20 @@ export async function runFinanceTool(env: Env, name: string, input: Record<strin
     const where = `t.time >= ? AND t.time <= ? AND ${whereFlow}${extra.length ? ` AND ${extra.join(" AND ")}` : ""}`;
     const group = input.group_by;
     if (group === "month" || group === "category" || group === "merchant") {
-      const sel = group === "month" ? "strftime('%Y-%m', t.time, 'unixepoch')" : group === "category" ? CAT_NAME : "COALESCE(t.merchant, 'other')";
+      // The month bucket is APP_TZ, like every other month key in the app. A raw `strftime` here
+      // meant the model grouped months differently from the screen it is answering about.
+      const sel = group === "month" ? localYmSql(to) : group === "category" ? CAT_NAME : "COALESCE(t.merchant, 'other')";
       const grp = group === "category" ? EFF_CAT_ID : sel;
       const order = group === "month" ? "label ASC" : "amt DESC";
       const rows = await env.DB.prepare(
         `SELECT ${sel} AS label, ${sumExpr} AS amt, COUNT(DISTINCT t.id) AS n FROM transactions t ${STATS_JOINS} WHERE ${where} GROUP BY ${grp} ORDER BY ${order} LIMIT 24`,
       ).bind(...binds).all<{ label: string; amt: number; n: number }>();
-      return { flow, from_date: input.from_date, to_date: input.to_date, currency: "UAH", groups: (rows.results ?? []).map((r) => ({ label: r.label, amount_uah: Math.round(r.amt / 100), count: r.n })) };
+      return { flow, from_date: input.from_date, to_date: input.to_date, currency, groups: (rows.results ?? []).map((r) => ({ label: r.label, amount_uah: Math.round(r.amt / 100), count: r.n })) };
     }
     const tot = await env.DB.prepare(
       `SELECT ${sumExpr} AS amt, COUNT(DISTINCT t.id) AS n FROM transactions t ${STATS_JOINS} WHERE ${where}`,
     ).bind(...binds).first<{ amt: number; n: number }>();
-    return { flow, from_date: input.from_date, to_date: input.to_date, currency: "UAH", total_uah: Math.round((tot?.amt ?? 0) / 100), count: tot?.n ?? 0 };
+    return { flow, from_date: input.from_date, to_date: input.to_date, currency, total_uah: Math.round((tot?.amt ?? 0) / 100), count: tot?.n ?? 0 };
   }
 
   if (name === "find_transactions") {

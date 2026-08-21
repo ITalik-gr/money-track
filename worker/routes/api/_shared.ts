@@ -30,3 +30,26 @@ export function normChatMessages(raw: unknown): ChatTurn[] {
     .slice(-CHAT_MAX_TURNS)
     .map((m) => ({ role: m.role, content: m.content.slice(0, CHAT_MAX_CHARS) }));
 }
+
+/**
+ * A numeric query parameter, or the fallback — never `NaN`.
+ *
+ * Written 2026-08-21 after a security-shaped pass over the night's new endpoints found two of them
+ * returning **500 on garbage input**: `?months=abc`. The idiom everywhere is
+ * `Number(url.searchParams.get(x) ?? d)`, and `??` does not catch `NaN` — `Number("abc")` is a
+ * value, so the fallback never fires and the NaN travels into date arithmetic, where it becomes an
+ * exception several layers down. The quieter variant is worse: a NaN window binds cleanly and the
+ * endpoint answers `{from: null, spend: 0}`, which reads as «нічого не витрачено».
+ *
+ * ⚠️ Clamping, not rejecting. These are window bounds and page sizes read off a URL — a client
+ * with a stale link should get the default view, not an error page. A parameter where a wrong
+ * value would be a WRITE is a different matter and belongs in the handler.
+ */
+export function numParam(
+  url: URL, name: string, fallback: number, range?: { min?: number; max?: number },
+): number {
+  const raw = url.searchParams.get(name);
+  const n = raw == null || raw.trim() === "" ? fallback : Number(raw);
+  const v = Number.isFinite(n) ? n : fallback;
+  return Math.min(range?.max ?? Number.MAX_SAFE_INTEGER, Math.max(range?.min ?? Number.MIN_SAFE_INTEGER, v));
+}

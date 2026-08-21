@@ -12,7 +12,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { budgetStatus, closeBudgetMonths } from "../lib/finance/budgets.ts";
+import { budgetStatus, budgetHistory, closeBudgetMonths } from "../lib/finance/budgets.ts";
 import * as budgetsRepo from "../repo/budgets.ts";
 import { migratedDb, testEnv, freezeTime, type MemDb } from "./harness.ts";
 import { seed, FROZEN_NOW_ISO } from "./fixture.ts";
@@ -290,6 +290,110 @@ test("§BUDGET-MEMORY: closing a month", async (t) => {
       // then, and writing today's limit into them would produce a verdict on a month nobody
       // measured — a chart that looks measured but is not.
       assert.equal(hist.length, 3);
+    });
+  } finally {
+    restore();
+  }
+});
+
+/**
+ * The record read across ALL envelopes — «чи я взагалі тримаю план».
+ *
+ * The table has had this answer since migration 0043 and no reader that asked for it. The two
+ * that existed each took a slice: the auto-budget reduces a category to a ratio, and the category
+ * page draws one envelope. So a person could see «зараз 70%» on every screen and nowhere find out
+ * whether that was better or worse than last month, which is the question a budget is kept for.
+ */
+test("§BUDGET-MEMORY: the whole-plan track record", async (t) => {
+  const restore = freezeTime(FROZEN_NOW_ISO);   // 2026-05-14
+  try {
+    await t.test("nothing closed yet is a YOUNG record, not a failure", async () => {
+      const db = migratedDb();
+      seed(db);
+      const h = await budgetHistory(env(db));
+      assert.equal(h.months_closed, 0);
+      // `null`, not 0: «0% утримано» is a verdict, and the data supports no verdict at all.
+      assert.equal(h.kept_pct, null);
+      assert.deepEqual(h.months, []);
+    });
+
+    await t.test("a month is judged on the PLAN as a whole, not envelope by envelope", async () => {
+      const db = migratedDb();
+      seed(db);
+      // One envelope 2 000 ₴ over, the other 5 000 ₴ under. The plan held; counting envelopes
+      // would call the month a failure, which is a different and less useful claim.
+      closed(db, "2026-04", 1, 15_000_00, 17_000_00);
+      closed(db, "2026-04", 2, 10_000_00, 5_000_00);
+      const h = await budgetHistory(env(db));
+
+      assert.equal(h.months.length, 1);
+      assert.equal(h.months[0].kept, true);
+      assert.equal(h.months[0].spent, 22_000_00);
+      assert.equal(h.months[0].limit, 25_000_00);
+      // The finer reading travels alongside rather than replacing it.
+      assert.equal(h.months[0].kept_envelopes, 1);
+      assert.equal(h.months[0].envelopes, 2);
+      // `kept_pct` counts ENVELOPE-months, which is the denominator the auto-budget also uses.
+      assert.equal(h.kept_pct, 50);
+    });
+
+    await t.test("the limit compared against is the one that was IN FORCE, carry included", async () => {
+      const db = migratedDb();
+      seed(db);
+      // Spent 16 000 against a 15 000 base — but 2 000 was carried in, so the month held.
+      // Comparing against today's limit is a verdict the data cannot support.
+      closed(db, "2026-04", 1, 15_000_00, 16_000_00, 2_000_00);
+      const h = await budgetHistory(env(db));
+      assert.equal(h.months[0].limit, 17_000_00);
+      assert.equal(h.months[0].kept, true);
+    });
+
+    await t.test("the streak counts back from the LATEST close, not the best run ever", async () => {
+      const db = migratedDb();
+      seed(db);
+      closed(db, "2026-01", 1, 10_000_00, 9_000_00);   // kept
+      closed(db, "2026-02", 1, 10_000_00, 9_000_00);   // kept
+      closed(db, "2026-03", 1, 10_000_00, 9_000_00);   // kept
+      closed(db, "2026-04", 1, 10_000_00, 12_000_00);  // blown — the streak is over
+      const cat = (await budgetHistory(env(db))).categories.find((x) => x.category_id === 1)!;
+
+      assert.equal(cat.closed, 4);
+      assert.equal(cat.over, 1);
+      // A three-month run that ended last month answers a question nobody asked.
+      assert.equal(cat.streak, 0);
+      // The strip keeps the ORDER, because «зривався спочатку» and «зривається зараз» need
+      // opposite reactions and a ratio cannot tell them apart.
+      assert.deepEqual(cat.months.map((m) => m.kept), [true, true, true, false]);
+    });
+
+    await t.test("a currently-held streak is counted, and only the unbroken tail", async () => {
+      const db = migratedDb();
+      seed(db);
+      closed(db, "2026-01", 1, 10_000_00, 12_000_00);  // blown
+      closed(db, "2026-02", 1, 10_000_00, 9_000_00);
+      closed(db, "2026-03", 1, 10_000_00, 9_000_00);
+      const cat = (await budgetHistory(env(db))).categories.find((x) => x.category_id === 1)!;
+      assert.equal(cat.streak, 2);
+    });
+
+    await t.test("§BASE-CUR: a closed month is stored in hryvnia and comes out in the reader's base", async () => {
+      const db = migratedDb();
+      seed(db);
+      db.raw.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES ('rates', ?)")
+        .run(JSON.stringify({ 840: 2 }));
+      closed(db, "2026-04", 1, 10_000_00, 8_000_00);
+
+      const uah = await budgetHistory(env(db));
+      const usd = await budgetHistory({ ...env(db), UI_CURRENCY: 840 } as unknown as Env);
+
+      assert.equal(uah.months[0].limit, 10_000_00);
+      // Exactly half. An archive is written in hryvnia on purpose (its unit must not depend on
+      // who woke the cron), so every read has to convert — and this one did not, which put the
+      // history strip and the envelope above it in different currencies on the same card.
+      assert.equal(usd.months[0].limit, 5_000_00);
+      assert.equal(usd.months[0].spent, 4_000_00);
+      // The verdict is a comparison, so it survives the conversion unchanged.
+      assert.equal(usd.months[0].kept, true);
     });
   } finally {
     restore();

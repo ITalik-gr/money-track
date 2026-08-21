@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
 import { formatMinor } from "../../lib/format.ts";
+import { useGetWeekdayQuery, useGetDayOfMonthQuery } from "../../store/api.ts";
 import type { Overview } from "../../store/api.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { FactLabel, SliceDrillPanel, labelFor, weekdayLong, weekdayShort, type Cur } from "./shared.tsx";
@@ -91,32 +92,45 @@ export function DeeperAnalytics({ series, sign, from, to, currency }: {
   const [openWd, setOpenWd] = useState<number | null>(null);
   const [openPriciest, setOpenPriciest] = useState(false);
   const [openDom, setOpenDom] = useState<number | null>(null);
+  const { data: wdData } = useGetWeekdayQuery({ from, to, currency });
+  const { data: domData } = useGetDayOfMonthQuery({ from, to, currency });
   const daily = series.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket));
   if (daily.length < 4) return null;
 
-  const byWeekday = new Array(7).fill(0) as number[];
-  let weekdaySum = 0, weekendSum = 0;
-  for (const s of daily) {
-    const d = new Date(s.bucket + "T00:00:00");
-    const wd = d.getDay();
-    byWeekday[wd] += s.spend;
-    if (wd === 0 || wd === 6) weekendSum += s.spend; else weekdaySum += s.spend;
-  }
-  const wdMax = Math.max(...byWeekday, 1);
-  const topWd = byWeekday.indexOf(Math.max(...byWeekday));
-  const total = weekdaySum + weekendSum || 1;
-  const weekendPct = Math.round((weekendSum / total) * 100);
+  /**
+   * §WEEKDAY and its day-of-month twin come from the SERVER.
+   *
+   * Both used to be derived right here, out of the daily buckets, and both were wrong in the two
+   * ways `lib/finance/weekday.ts` exists to prevent. The buckets are `strftime('%Y-%m-%d')` in
+   * UTC, so every purchase after 21:00 Kyiv time was filed on the FOLLOWING day — and Friday
+   * evening is the densest spending window there is, which made the error look like a finding
+   * ("Saturdays are expensive"). And the raw sums were never divided by how many such days the
+   * window held: a month has five Fridays and four Saturdays, three 15ths and two 31sts.
+   *
+   * The canonical answer already existed and was already on screen elsewhere (`WeekdaySpend`, and
+   * the advisor's own context reads the same function). This block was quietly disagreeing with
+   * both about the same money.
+   */
+  const wd = wdData?.days ?? [];
+  const wdTotal = wd.reduce((s, d) => s + d.spent, 0) || 1;
+  const wdMax = Math.max(...wd.map((d) => d.typical), 1);
+  const weekdaySum = wd.filter((d) => d.dow !== 0 && d.dow !== 6).reduce((s, d) => s + d.spent, 0);
+  const weekendSum = wd.filter((d) => d.dow === 0 || d.dow === 6).reduce((s, d) => s + d.spent, 0);
+  const weekendPct = wdData?.weekend_share_pct ?? 0;
+  // `busiest` already excludes days carried by a single payment; the fallback is the plain
+  // maximum, so the sentence still says something when every day is lumpy.
+  const topWd = wdData?.busiest ?? (wd.length ? wd.reduce((b, d) => (d.typical > b.typical ? d : b)).dow : 0);
 
   // §1b: найдорожчий день + скільки днів без витрат за період.
   const priciest = daily.reduce<Overview["series"][number] | null>((m, s) => (s.spend > (m?.spend ?? -1) ? s : m), null);
   const totalDays = Math.max(1, Math.round((to - from) / 86400));
   const noSpendDays = Math.max(0, totalDays - daily.filter((s) => s.spend > 0).length);
 
-  // §1: heat-map — сума витрат за числом місяця (1..31), щоб видно було «дорогі» дати (зарплата, оренда).
-  const byDom = new Array(31).fill(0) as number[];
-  for (const s of daily) { const dom = Number(s.bucket.split("-")[2]); if (dom >= 1 && dom <= 31) byDom[dom - 1] += s.spend; }
-  const domMax = Math.max(...byDom, 1);
-  const hasDom = byDom.some((v) => v > 0);
+  // §1: heat-map за числом місяця — «дорогі» дати (зарплата, оренда). Intensity is driven by
+  // `typical`, not by the raw sum, for the reason above.
+  const domDays = domData?.days ?? [];
+  const domMax = Math.max(...domDays.map((d) => d.typical), 1);
+  const hasDom = domDays.some((d) => d.spent > 0);
 
   return (
     <section>
@@ -143,23 +157,25 @@ export function DeeperAnalytics({ series, sign, from, to, currency }: {
         <div className="card deep-card">
           <div className="deep-title">{t("stats.patterns.byWd")} <span className="label" style={{ fontWeight: 400 }}>{t("stats.patterns.byWdSub")}</span></div>
           <div className="wd-bars">
-            {byWeekday.map((v, i) => (
-              <HoverTip key={i} content={
-                <><div className="tip-lbl">{weekdayLong(i)}</div>
-                <div className="r">{formatMinor(v, { decimals: false })} {sign}</div>
-                <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{Math.round((v / total) * 100)}{t("stats.patterns.pctOfPeriod")}</div></>
+            {wd.map((d) => (
+              <HoverTip key={d.dow} content={
+                <><div className="tip-lbl">{weekdayLong(d.dow)}</div>
+                {/* The bar is the TYPICAL day; the tooltip carries the total too, because the
+                    two answer different questions and the reader may want either. */}
+                <div className="r">{formatMinor(d.typical, { decimals: false })} {sign} · {t("stats.patterns.typicalDay")}</div>
+                <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{formatMinor(d.spent, { decimals: false })} {sign} · {Math.round((d.spent / wdTotal) * 100)}{t("stats.patterns.pctOfPeriod")}</div></>
               }>
-                <button type="button" className={`wd-col ${openWd === i ? "open" : ""}`}
-                  onClick={() => setOpenWd(openWd === i ? null : i)}>
+                <button type="button" className={`wd-col ${openWd === d.dow ? "open" : ""}`}
+                  onClick={() => setOpenWd(openWd === d.dow ? null : d.dow)}>
                   {/* scaleY замість height (layout-thrash). Мінімум 0.02 — щоб дуже малий
                       день лишався видимим: min-height трансформ не рятує. */}
-                  <div className="wd-bar-wrap"><div className="wd-bar" style={{ transform: `scaleY(${Math.max(0.02, v / wdMax)})`, background: i === topWd || i === openWd ? "var(--accent)" : "var(--line-strong)" }} /></div>
-                  <span className="wd-lbl">{weekdayShort(i)}</span>
+                  <div className="wd-bar-wrap"><div className="wd-bar" style={{ transform: `scaleY(${Math.max(0.02, d.typical / wdMax)})`, background: d.dow === topWd || d.dow === openWd ? "var(--accent)" : "var(--line-strong)" }} /></div>
+                  <span className="wd-lbl">{weekdayShort(d.dow)}</span>
                 </button>
               </HoverTip>
             ))}
           </div>
-          <p className="deep-desc">{t("stats.patterns.topWdDesc", { weekday: weekdayLong(topWd), amount: formatMinor(byWeekday[topWd], { decimals: false }), sign })}</p>
+          <p className="deep-desc">{t("stats.patterns.topWdDesc", { weekday: weekdayLong(topWd), amount: formatMinor(wd.find((d) => d.dow === topWd)?.typical ?? 0, { decimals: false }), sign })}</p>
           {openWd != null && (
             <div className="wd-drill">
               <div className="label" style={{ marginBottom: 2 }}>{t("stats.patterns.wdDrill", { weekday: weekdayLong(openWd) })}</div>
@@ -190,15 +206,20 @@ export function DeeperAnalytics({ series, sign, from, to, currency }: {
         <div className="card deep-card" style={{ marginTop: 14 }}>
           <div className="deep-title">{t("stats.patterns.byDom")} <span className="label" style={{ fontWeight: 400 }}>{t("stats.patterns.byDomSub")}</span></div>
           <div className="dom-heat">
-            {byDom.map((v, i) => {
-              const intensity = v > 0 ? 0.15 + 0.85 * (v / domMax) : 0;
-              const dom = i + 1;
+            {domDays.map((d) => {
+              const intensity = d.typical > 0 ? 0.15 + 0.85 * (d.typical / domMax) : 0;
               return (
-                <HoverTip key={i} content={<><div className="tip-lbl">{t("stats.patterns.domTip", { dom })}</div><div className="r">{formatMinor(v, { decimals: false })} {sign}</div></>}>
-                  <button type="button" className={`dom-cell ${openDom === dom ? "open" : ""}`} disabled={!(v > 0)}
-                    onClick={() => setOpenDom((o) => (o === dom ? null : dom))}
-                    style={{ background: v > 0 ? `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, transparent)` : "var(--surface-2)" }}>
-                    <span className="dom-num" style={{ color: intensity > 0.55 ? "#fff" : "var(--muted)" }}>{dom}</span>
+                <HoverTip key={d.dom} content={
+                  <><div className="tip-lbl">{t("stats.patterns.domTip", { dom: d.dom })}</div>
+                  <div className="r">{formatMinor(d.typical, { decimals: false })} {sign} · {t("stats.patterns.typicalDay")}</div>
+                  {/* How many times this date occurred is what makes the cell comparable to its
+                      neighbours, so it is shown rather than merely applied. */}
+                  <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{formatMinor(d.spent, { decimals: false })} {sign} · {t("stats.patterns.domTimes", { n: d.days })}</div></>
+                }>
+                  <button type="button" className={`dom-cell ${openDom === d.dom ? "open" : ""}`} disabled={!(d.spent > 0)}
+                    onClick={() => setOpenDom((o) => (o === d.dom ? null : d.dom))}
+                    style={{ background: d.typical > 0 ? `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, transparent)` : "var(--surface-2)" }}>
+                    <span className="dom-num" style={{ color: intensity > 0.55 ? "#fff" : "var(--muted)" }}>{d.dom}</span>
                   </button>
                 </HoverTip>
               );
@@ -210,7 +231,13 @@ export function DeeperAnalytics({ series, sign, from, to, currency }: {
               <SliceDrillPanel dim="dom" value={String(openDom)} from={from} to={to} currency={currency} sign={sign} embedded />
             </div>
           )}
-          <p className="deep-desc">{t("stats.patterns.domDesc")}</p>
+          <p className="deep-desc">
+            {domData?.first_five_share_pct != null
+              // The useful fact is not which date is dear but how much of the month is already
+              // committed before any of it is decided — rent and subscriptions cluster in days 1–5.
+              ? t("stats.patterns.domFirstFive", { pct: domData.first_five_share_pct })
+              : t("stats.patterns.domDesc")}
+          </p>
         </div>
       )}
     </section>

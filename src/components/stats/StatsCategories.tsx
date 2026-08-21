@@ -24,7 +24,7 @@ import { InfoTip } from "../ui/InfoTip.tsx";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import {
-  DeltaChip, DrillTxList, FALLBACK, RANGES, isSecondaryCat, type Cur, type Movers, type RangeKey,
+  DeltaChip, DrillTxList, FALLBACK, RANGES, isSecondaryCat, type Cur, type MoverRow, type Movers, type RangeKey,
 } from "./shared.tsx";
 
 export function CategoryBreakdown({ rows, from, to, currency, sign }: {
@@ -240,28 +240,20 @@ export function PeriodCompare({ range, mode, currency, sign }: {
   const { data, isFetching } = useGetCompareQuery({ from: curFrom, to: curTo, currency, bfrom: prevFrom, bto: prevTo });
   const dr = (a: number, b: number) => `${formatDate(a)}–${formatDate(b)}`;
   const noCat = t("common.uncategorized");
-  const { rows, rest, movers } = useMemo(() => {
-    if (!data) return { rows: [], rest: null as null | { a: number; b: number }, movers: { up: [], down: [] } as Movers };
-    const map = new Map<number | null, { name: string; color: string | null; a: number; b: number }>();
-    for (const r of data.a.byCategory) map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: r.spent, b: 0 });
-    for (const r of data.b.byCategory) {
-      const cur = map.get(r.category_id);
-      if (cur) cur.b = r.spent;
-      else map.set(r.category_id, { name: r.category_name ?? noCat, color: r.color, a: 0, b: r.spent });
-    }
-    const all = [...map.values()].sort((x, y) => y.a - x.a);
-    const top = all.slice(0, 10);
+  // §CADENCE: rows, ordering and the movers come from `/analytics/compare` already merged. The
+  // copy that used to be here differed from the one in `MonthCompare` in two ways nobody chose —
+  // it sorted by the current period alone (so a category that VANISHED sank to the bottom) and
+  // it applied a 50 ₴ noise floor as a bare `5000` (which is $50 in a dollar base).
+  const { rows, rest } = useMemo(() => {
+    if (!data) return { rows: [] as MoverRow[], rest: null as null | { a: number; b: number } };
     // §R2-ST2(г): решта категорій згорнута в один рядок, щоб сума рядків збігалася з тоталом.
-    const tail = all.slice(10);
-    const rest = tail.length
-      ? tail.reduce((s, r) => ({ a: s.a + r.a, b: s.b + r.b }), { a: 0, b: 0 })
-      : null;
-    // §1b: топ-рухи — найбільша зміна ₴ vs минулий (поріг 50₴, щоб відсіяти шум).
-    const deltas = [...map.values()].map((r) => ({ ...r, delta: r.a - r.b })).filter((r) => Math.abs(r.delta) >= 5000);
-    const up = deltas.filter((r) => r.delta > 0).sort((x, y) => y.delta - x.delta).slice(0, 3);
-    const down = deltas.filter((r) => r.delta < 0).sort((x, y) => x.delta - y.delta).slice(0, 3);
-    return { rows: top, rest, movers: { up, down } as Movers };
-  }, [data, noCat]);
+    const tail = data.rows.slice(10);
+    return {
+      rows: data.rows.slice(0, 10),
+      rest: tail.length ? tail.reduce((s, r) => ({ a: s.a + r.a, b: s.b + r.b }), { a: 0, b: 0 }) : null,
+    };
+  }, [data]);
+  const movers: Movers = data?.movers ?? { up: [], down: [] };
 
   if (isFetching || !data) return null;
   if (!data.a.spend && !data.b.spend) return null;
@@ -279,7 +271,7 @@ export function PeriodCompare({ range, mode, currency, sign }: {
             <div className="mv-head up">{t("stats.compare.moversUp")}</div>
             {movers.up.length ? movers.up.map((r, i) => (
               <div key={i} className="mv-row">
-                <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
                 <span className="mv-delta up">+{formatMinor(r.delta, { decimals: false })} {sign}</span>
               </div>
             )) : <div className="mv-empty">{t("stats.compare.moversEmpty")}</div>}
@@ -288,7 +280,7 @@ export function PeriodCompare({ range, mode, currency, sign }: {
             <div className="mv-head down">{t("stats.compare.moversDown")}</div>
             {movers.down.length ? movers.down.map((r, i) => (
               <div key={i} className="mv-row">
-                <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
                 <span className="mv-delta down">−{formatMinor(-r.delta, { decimals: false })} {sign}</span>
               </div>
             )) : <div className="mv-empty">{t("stats.compare.moversEmptyDown")}</div>}
@@ -310,15 +302,15 @@ export function PeriodCompare({ range, mode, currency, sign }: {
         </div>
         {rows.map((r, i) => (
           <HoverTip key={i} content={
-            <><div className="tip-lbl">{r.name}</div>
+            <><div className="tip-lbl">{r.category_name ?? noCat}</div>
             <div className="r">{t("stats.compare.drillPrev", { amount: formatMinor(r.b, { decimals: false }), sign })}</div>
             <div className="r">{t("stats.compare.drillCur", { amount: formatMinor(r.a, { decimals: false }), sign })}</div></>
           }>
             <div className="cmp-row">
-              <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+              <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
               <span className="cmp-b">{formatMinor(r.b, { decimals: false })} {sign}</span>
               <span className="cmp-a">{formatMinor(r.a, { decimals: false })} {sign}</span>
-              <DeltaChip a={r.a} b={r.b} />
+              <DeltaChip a={r.a} b={r.b} meaningful={r.delta_meaningful} />
             </div>
           </HoverTip>
         ))}
@@ -329,6 +321,9 @@ export function PeriodCompare({ range, mode, currency, sign }: {
             <span className="cmp-a">{formatMinor(rest.a, { decimals: false })} {sign}</span>
             <DeltaChip a={rest.a} b={rest.b} />
           </div>
+        )}
+        {data.short_period && rows.some((r) => !r.delta_meaningful) && (
+          <p className="muted cmp-cadence-note">{t("stats.compare.cadenceNote")}</p>
         )}
         <p className="muted" style={{ fontSize: 12, marginTop: 10, marginBottom: 0 }}>{t("stats.compare.excludedNote")}</p>
       </div>

@@ -82,9 +82,28 @@ export function ratesInBase(stored: Rates, base: number): Rates {
  * Навіщо: без історії ретроспективні перерахунки (нетворт) беруть СЬОГОДНІШНІЙ курс на
  * минулі залишки, і коливання курсу читається як рух грошей.
  */
+/**
+ * The day key `rate_history` is stored and looked up under.
+ *
+ * ⚠️ **UTC, and that is a decision rather than an oversight — but it has to be ONE decision.** The
+ * snapshotter wrote UTC while `buildNetworth` read UTC and `/analytics/fx-cost` (added
+ * 2026-08-21) read a KYIV key. Nothing broke, because `ratesForDays` resolves «the latest entry at
+ * or before this day» and a one-day-late key still finds yesterday's rate — which is precisely the
+ * shape of a divergence that survives: two conventions for one table, both working, until someone
+ * needs an exact match.
+ *
+ * UTC is kept over the app's Kyiv calendar for one reason: the value is a rate a bank PUBLISHED,
+ * not an event in the reader's day, and re-keying the existing rows would leave two spellings of
+ * the same date in one column. What matters is that every side asks the same question, so the
+ * question now has a name.
+ */
+export function rateDayKey(unixSec: number): string {
+  return new Date(unixSec * 1000).toISOString().slice(0, 10);
+}
+
 export async function snapshotRates(db: AppDb, now = Math.floor(Date.now() / 1000)): Promise<number> {
   const rates = await getStoredRates(db);
-  const day = new Date(now * 1000).toISOString().slice(0, 10);
+  const day = rateDayKey(now);
   const entries = Object.entries(rates).filter(([code, rate]) => Number(code) > 0 && rate > 0);
   if (!entries.length) return 0;
   await db.batch(entries.map(([code, rate]) =>

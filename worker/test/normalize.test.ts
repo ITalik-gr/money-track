@@ -10,6 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currencyNumeric, parseAmountMinor, parseStatementDate } from "../lib/bank/normalize.ts";
 import { localParts, localYmd } from "../lib/finance/stats.ts";
+import { currencyCode, currencySign, CURRENCY_META, CURRENCY_BY_CODE } from "../../shared/currency.ts";
 
 test("statement dates: a zone-less wall clock is KYIV time", async (t) => {
   await t.test("an evening operation stays on the day it happened", () => {
@@ -102,4 +103,37 @@ test("currency: letters become the numeric code we store", async (t) => {
     assert.equal(currencyNumeric(""), null);
     assert.equal(currencyNumeric(null), null);
   });
+});
+
+/**
+ * One code table, in both directions (2026-08-21).
+ *
+ * There were three, and they disagreed: `shared/currency.ts` (7 currencies, declaring itself the
+ * one), `lib/bank/normalize.ts` (39) and a private six-entry map in `routes/api/export.ts`. The
+ * disagreement was not theoretical — it lost data on a round trip, which is the strictest test a
+ * data format has.
+ */
+test("every currency the importer accepts, the exporter can name", () => {
+  // The failure this pins: a Czech purchase exported as the bare number «203», and §BANK-PARSE
+  // then refusing it on re-import, because an unknown currency resolves to `null` rather than to
+  // hryvnia. Silent on the way out, and a lost row on the way back.
+  for (const alpha of ["UAH", "USD", "EUR", "CZK", "HUF", "TRY", "KZT", "VND"]) {
+    const numeric = currencyNumeric(alpha);
+    assert.ok(numeric != null, `${alpha} is not importable`);
+    assert.equal(currencyCode(numeric), alpha, `${numeric} exports as something else`);
+  }
+});
+
+test("a currency with no symbol prints its CODE, never a bare number", () => {
+  // `currencySign` falls back to the code, so «1 234 CZK» reads where «1 234 203» does not.
+  assert.equal(currencySign(203), "CZK");
+  assert.equal(currencySign(980), "₴");
+  // And a code nobody has heard of still prints something rather than throwing.
+  assert.equal(currencySign(1), "1");
+});
+
+test("the two directions cannot drift, because one is derived", () => {
+  for (const [num, meta] of Object.entries(CURRENCY_META)) {
+    assert.equal(CURRENCY_BY_CODE[meta.code], Number(num), `${meta.code} disagrees with ${num}`);
+  }
 });

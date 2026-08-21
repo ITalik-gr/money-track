@@ -1,6 +1,7 @@
 import { useGetInsightQuery, useGenerateInsightMutation } from "../../store/api.ts";
 import { highlightAmounts } from "../../lib/highlight.tsx";
 import { RichFacts } from "./RichFacts.tsx";
+import { signFor } from "../../lib/currency.ts";
 import { UsageCost } from "../settings/UsageCost.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { useT } from "../../i18n/index.ts";
@@ -29,7 +30,7 @@ export function AiInsightCard({ days = 30 }: { days?: number }) {
         <div style={{ textAlign: "right", marginTop: -6, marginBottom: 8 }}><UsageCost usage={data.usage} /></div>
       )}
       {structured ? (
-        <RichFacts headline={structured.headline} facts={structured.facts} note={structured.note} />
+        <RichFacts headline={structured.headline} facts={structured.facts} note={structured.note} sign={signFor(data?.cur ?? 980)} />
       ) : text ? (
         <p className="ai-text">{highlightAmounts(text)}</p>
       ) : (

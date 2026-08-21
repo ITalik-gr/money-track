@@ -5,7 +5,7 @@ import { useGetCashflowCalendarQuery } from "../../store/api.ts";
 import { formatMinor, currencySign } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { Icon } from "../ui/Icon.tsx";
-import { baseSign } from "../../lib/currency.ts";
+import { baseSign, getBaseCurrency } from "../../lib/currency.ts";
 
 // Cashflow-календар: місячна сітка очікуваних списань (підписки/розстрочки) по днях +
 // проєкція ліквідної подушки «наперед» → видно провали ліквідності. Дані — /analytics/cashflow-calendar.
@@ -159,7 +159,7 @@ export function CashflowCalendar() {
                       {/* Валютний план: показуємо суму у валюті + ₴-еквівалент (сітка рахує в ₴). */}
                       <span className={`cf-pop-amt ${it.amount < 0 ? "in" : ""}`}>
                         {it.amount < 0 ? "+" : "−"}{formatMinor(Math.abs(it.amount), { decimals: false })} {baseSign()}
-                        {it.currency !== 980 && <span className="cf-pop-orig"> ({formatMinor(Math.abs(it.amountOrig), { decimals: false })} {currencySign(it.currency)})</span>}
+                        {it.currency !== getBaseCurrency() && <span className="cf-pop-orig"> ({formatMinor(Math.abs(it.amountOrig), { decimals: false })} {currencySign(it.currency)})</span>}
                       </span>
                     </span>
                   ))}

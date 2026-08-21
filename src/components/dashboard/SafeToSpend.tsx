@@ -1,13 +1,28 @@
 import { Link } from "react-router-dom";
 import { useGetSafeToSpendQuery } from "../../store/api.ts";
 import { Money } from "../ui/Money.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 
 // §4 Safe-to-spend: скільки вільно до кінця місяця = дохід − витрачено − прийдешні підписки.
 // Розбивка (обов'язкові/бажані) — з вагомості §6. Клік по підписках → /subs.
 export function SafeToSpend() {
   const t = useT();
-  const { data } = useGetSafeToSpendQuery();
+  const { data, error, refetch } = useGetSafeToSpendQuery();
+  /**
+   * A grid child does not vanish (CLAUDE.md): this is one half of a `.dash-pair`, and returning
+   * `null` on FAILURE left its neighbour alone in a row sized for two. `> :only-child` keeps the
+   * layout from breaking, but the block itself disappeared with no explanation — the empty half
+   * of the rule, where the documented fix only ever covered "no data yet".
+   */
+  if (error) {
+    return (
+      <section>
+        <div className="section-head"><h2>{t("sts.title")}</h2></div>
+        <ErrorNote error={error} what={t("sts.title")} onRetry={refetch} />
+      </section>
+    );
+  }
   if (!data) return null;
   const neg = data.safe < 0;
 

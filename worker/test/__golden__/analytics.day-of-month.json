@@ -1,0 +1,259 @@
+{
+  "status": 200,
+  "body": {
+    "from": 1770973200,
+    "to": 1778749200,
+    "days": [
+      {
+        "dom": 1,
+        "spent": 90000,
+        "n": 1,
+        "days": 3,
+        "typical": 30000,
+        "lumpy": true
+      },
+      {
+        "dom": 2,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 3,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 4,
+        "spent": 284300,
+        "n": 3,
+        "days": 3,
+        "typical": 94767,
+        "lumpy": true
+      },
+      {
+        "dom": 5,
+        "spent": 37400,
+        "n": 1,
+        "days": 3,
+        "typical": 12467,
+        "lumpy": true
+      },
+      {
+        "dom": 6,
+        "spent": 135000,
+        "n": 1,
+        "days": 3,
+        "typical": 45000,
+        "lumpy": true
+      },
+      {
+        "dom": 7,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 8,
+        "spent": -45000,
+        "n": 1,
+        "days": 3,
+        "typical": -15000,
+        "lumpy": true
+      },
+      {
+        "dom": 9,
+        "spent": 350900,
+        "n": 3,
+        "days": 3,
+        "typical": 116967,
+        "lumpy": true
+      },
+      {
+        "dom": 10,
+        "spent": 267900,
+        "n": 2,
+        "days": 3,
+        "typical": 89300,
+        "lumpy": false
+      },
+      {
+        "dom": 11,
+        "spent": 51700,
+        "n": 2,
+        "days": 3,
+        "typical": 17233,
+        "lumpy": false
+      },
+      {
+        "dom": 12,
+        "spent": 2473100,
+        "n": 4,
+        "days": 3,
+        "typical": 824367,
+        "lumpy": false
+      },
+      {
+        "dom": 13,
+        "spent": 1313800,
+        "n": 3,
+        "days": 4,
+        "typical": 328450,
+        "lumpy": true
+      },
+      {
+        "dom": 14,
+        "spent": 92800,
+        "n": 2,
+        "days": 4,
+        "typical": 23200,
+        "lumpy": true
+      },
+      {
+        "dom": 15,
+        "spent": 61400,
+        "n": 1,
+        "days": 3,
+        "typical": 20467,
+        "lumpy": true
+      },
+      {
+        "dom": 16,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 17,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 18,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 19,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 20,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 21,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 22,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 23,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 24,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 25,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 26,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 27,
+        "spent": 0,
+        "n": 0,
+        "days": 3,
+        "typical": 0,
+        "lumpy": true
+      },
+      {
+        "dom": 28,
+        "spent": 37700,
+        "n": 1,
+        "days": 3,
+        "typical": 12567,
+        "lumpy": true
+      },
+      {
+        "dom": 29,
+        "spent": 71600,
+        "n": 1,
+        "days": 2,
+        "typical": 35800,
+        "lumpy": true
+      },
+      {
+        "dom": 30,
+        "spent": 69200,
+        "n": 1,
+        "days": 2,
+        "typical": 34600,
+        "lumpy": true
+      },
+      {
+        "dom": 31,
+        "spent": 0,
+        "n": 0,
+        "days": 1,
+        "typical": 0,
+        "lumpy": true
+      }
+    ],
+    "busiest": 12,
+    "first_five_share_pct": 8
+  }
+}

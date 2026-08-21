@@ -57,6 +57,11 @@
 .set-card-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin: 5px 0 13px; }
 .set-card .stack { gap: 8px; }
 .set-card .stack .btn { justify-content: flex-start; text-align: left; }
+/* The secondary drawer at the BOTTOM of a settings card («tests & maintenance»). It was listed as
+   a bare namespace — a class whose children carry the styling — and it is not one: it is a
+   `<details>` sitting directly under a full-width primary button, so with no rule of its own the
+   disclosure ends up glued to the button and reads as part of it. Reported from the live demo. */
+.tg-more { margin-top: 12px; }
 
 /* ---- Backups ------------------------------------------------------------ */
 .bk-list { display: flex; flex-direction: column; gap: 2px; }
@@ -336,6 +341,11 @@
 .cmp-delta.down { color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, transparent); }
 .cmp-delta.flat { color: var(--muted); background: var(--line); }
 .cmp-delta.new { color: var(--accent); background: var(--accent-soft); }
+/* §CADENCE: the delta is arithmetically true but is about the calendar, not about behaviour.
+   Same neutral treatment as `flat`, kept as its own class because it means something different:
+   `flat` is «нічого не змінилось», this is «не питай про це цю цифру». */
+.cmp-delta.timing { color: var(--muted); background: var(--line); font-weight: 500; }
+.cmp-cadence-note { font-size: 12px; margin: 10px 0 0; }
 
 .btn.danger { background: var(--neg); color: #fff; border-color: var(--neg); }
 .btn.danger:hover { background: color-mix(in srgb, var(--neg) 88%, #000); border-color: color-mix(in srgb, var(--neg) 88%, #000); }

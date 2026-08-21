@@ -387,16 +387,33 @@ app.post("/webhook/:token", async (c) => {
  * WHICH object it goes to is decided here, because only the Worker can address one:
  *
  *   • `/start <token>` — the §D1 linking deep link. The token is a signed user id, so the
- *     update goes to THAT user's object, which records the chat as its own. This is the only
- *     branch that runs for a chat nobody has claimed yet, and its whole security rests on the
- *     signature: no signature, no routing, and the update falls through to the owner below.
- *   • everything else — the owner's object, as before. Inbound bot COMMANDS still assume one
- *     chat, because routing them needs a chat_id → user index in the directory, and that is a
- *     separate feature. Outbound pushes are already per-user (`tgTarget`).
+ *     update goes to THAT user's object, which records the chat as its own AND writes the
+ *     inbound index. This is the only branch that runs for a chat nobody has claimed yet, and
+ *     its whole security rests on the signature.
+ *   • a chat already in `tg_links` (directory 0008) — that user's object. This is what made the
+ *     bot multi-user on 2026-08-21: outbound pushes had been personal since §D1, while inbound
+ *     commands still assumed a single chat.
+ *   • the deployment `TG_CHAT_ID` — the owner's object. The same owner-only fallback `tgTarget`
+ *     applies on the outbound side, so «кому шлемо» and «кого слухаємо» stay one answer.
+ *   • anything else — **not routed at all**. It used to fall through to the OWNER's object, which
+ *     was safe only because the bot then refused to answer anyone but the owner; with real
+ *     routing that refusal has to move here, or an unknown chat would be handed a live object.
+ *     The Worker answers such a chat itself, once, with an invitation to link.
  *
  * The body is read here and re-sent: a Request body can only be consumed once, and the parsed
  * copy is the only way to see the token before choosing a destination.
  */
+/**
+ * What an unlinked chat is told.
+ *
+ * Bilingual on purpose and NOT through `st()`: at this point the Worker knows nothing about who
+ * is writing — that is the whole reason the message exists — so there is no locale to resolve.
+ * Two short lines beat guessing, and beat silence, which reads as a broken bot.
+ */
+const TG_LINK_PROMPT =
+  "Цей чат не привʼязаний до акаунта. Відкрий Налаштування у застосунку → «Telegram» і натисни кнопку привʼязки.\n\n" +
+  "This chat is not linked to an account. Open Settings → «Telegram» in the app and press the link button.";
+
 app.all("/tg/*", async (c) => {
   const ns = c.env.USER_DO;
   let raw = c.req.raw;
@@ -406,8 +423,19 @@ app.all("/tg/*", async (c) => {
     const body = await c.req.raw.clone().text();
     // Re-issue the request with the body we already consumed, so the object sees it untouched.
     raw = new Request(c.req.raw.url, { method: "POST", headers: c.req.raw.headers, body });
+    let chatId: string | null = null;
     try {
-      const update = JSON.parse(body) as { message?: { text?: string } };
+      type Upd = {
+        message?: { text?: string; chat?: { id?: number } };
+        callback_query?: { message?: { chat?: { id?: number } } };
+      };
+      const update = JSON.parse(body) as Upd;
+      // A button press carries the chat one level deeper, and the bot's whole inline keyboard
+      // arrives that way — routing only `message` would have made every button dead for
+      // everyone but the owner.
+      const rawChat = update.message?.chat?.id ?? update.callback_query?.message?.chat?.id;
+      chatId = rawChat != null ? String(rawChat) : null;
+
       const payload = update.message?.text?.match(/^\/start\s+(\S+)/)?.[1];
       if (payload) {
         const { verifyTelegramLinkToken } = await import("./lib/platform/auth.ts");
@@ -417,13 +445,39 @@ app.all("/tg/*", async (c) => {
           target = { id: userId, isOwner };
         }
       }
-    } catch { /* not JSON, or no token — fall through to the owner */ }
+    } catch { /* not JSON — nothing to route */ }
+
+    if (!target && chatId) {
+      const { userForTgChat } = await import("./lib/platform/directory.ts");
+      const linked = await userForTgChat(c.env.DIRECTORY, chatId);
+      if (linked) {
+        const access = await userAccess(c.env, linked);
+        // A disabled account loses the bot with everything else. `userAccess` is the one place
+        // that answers "may this id act", and skipping it here would leave a banned user a
+        // working channel into their own data — the §REVOKE hole, in another door.
+        if (access.ok) target = { id: linked, isOwner: access.isOwner };
+      }
+    }
+
+    // The owner's deployment chat, kept working without a row: the same owner-only fallback
+    // `tgTarget` grants on the outbound side.
+    if (!target && chatId && c.env.TG_CHAT_ID && chatId === String(c.env.TG_CHAT_ID)) {
+      const owner = await ensureOwner(c.env.DIRECTORY, c.env.OWNER_EMAIL || "owner@localhost");
+      target = { id: owner.id, isOwner: true };
+    }
+
+    if (!target) {
+      // Unknown chat. Answer once and stop — silence here reads as a broken bot, and routing
+      // would hand a stranger somebody's object.
+      if (chatId && c.env.TG_BOT_TOKEN) {
+        const { sendMessage } = await import("./lib/messaging/telegram.ts");
+        await sendMessage(c.env.TG_BOT_TOKEN, chatId, TG_LINK_PROMPT).catch(() => { /* best-effort */ });
+      }
+      return c.text("ok", 200);
+    }
   }
 
-  if (!target) {
-    const owner = await ensureOwner(c.env.DIRECTORY, c.env.OWNER_EMAIL || "owner@localhost");
-    target = { id: owner.id, isOwner: true };
-  }
+  if (!target) return c.text("ok", 200);   // non-POST (Telegram never sends one) — nothing to do
   return ns.get(ns.idFromName(target.id)).fetch(withUserHeader(raw, target.id, target.isOwner));
 });
 // Owner-only whitelist management; behind the guard above, so `c.var.userId` is set.

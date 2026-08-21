@@ -11,6 +11,7 @@ import type { Env } from "../../env.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { demoRecordSpend } from "../platform/demo.ts";
 import { MODEL_FAST, MODEL_SMART, MODEL_OPUS } from "./models.ts";
+import { localYm, localYmd } from "../finance/time.ts";
 
 
 export interface AnthropicUsage {
@@ -96,9 +97,15 @@ function addTo(b: UsageBucket, u: AnthropicUsage, cost: number): void {
   b.calls += 1;
 }
 
-// UTC-дати (день/місяць). Особистий апп, низька конкурентність — read-modify-write ок.
-function dayKey(now: number): string { return new Date(now * 1000).toISOString().slice(0, 10); }
-function monthKey(now: number): string { return new Date(now * 1000).toISOString().slice(0, 7); }
+// §APP_TZ day/month keys (2026-08-21). Особистий апп, низька конкурентність — read-modify-write ок.
+//
+// These were UTC while `quota.ts` (the receipt cap) already keyed on the Kyiv day, so the app held
+// two "today"s three hours apart: the «💸 Витрати на AI · сьогодні» card went on counting last
+// night's calls until 03:00, and on the 1st the monthly figure did the same. Both are shown to the
+// owner beside each other, and the rule CLAUDE.md states for the quota — «Ключ доби — київський,
+// інакше квота оновлювалась би о 03:00» — is the same rule.
+function dayKey(now: number): string { return localYmd(now); }
+function monthKey(now: number): string { return localYm(now); }
 
 export async function recordUsage(env: Env, model: string, u: AnthropicUsage): Promise<void> {
   try {

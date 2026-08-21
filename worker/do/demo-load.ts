@@ -15,6 +15,7 @@
 import demoDatasetJson from "../demo/dataset.json";
 // What a sandbox must not inherit from the owner's snapshot — see the constant's own note.
 import { DEMO_EXCLUDED_STATE_KEYS } from "../lib/platform/demo.ts";
+import { localYmd } from "../lib/finance/time.ts";
 
 type Row = Record<string, unknown>;
 interface DemoDataset {
@@ -118,9 +119,22 @@ export function buildDemoStatements(nowSec: number): DemoStatement[] {
       if (table === "app_state" && DEMO_EXCLUDED_STATE_KEYS.has(String(row.key))) continue;
       const shifted: Row = { ...row };
       for (const tc of timeCols) if (typeof shifted[tc] === "number") shifted[tc] = (shifted[tc] as number) + shift;
-      // `health_history.day` is the string form of its `ts`; after shifting ts it must be recomputed.
+      /**
+       * `health_history.day` is the string form of its `ts`, so shifting `ts` must recompute it.
+       *
+       * ⚠️ **In APP_TZ** (`localYmd`), fixed 2026-08-21. It was `toISOString().slice(0, 10)` —
+       * the UTC day — while `recordHealthScore` states in its own docstring that the key MUST be
+       * Kyiv-local, and `draftHealthDrop` compares these rows to spot a decline. A shifted row
+       * landing in the 21:00–24:00 UTC window therefore got a key one day behind the one the app
+       * would compute for the same instant, and `ON CONFLICT(day)` then let a later real write
+       * create a SECOND row for the same day with a different score.
+       *
+       * The rule was written down twice — in `recordHealthScore` and in CLAUDE.md §APP_TZ, which
+       * names this table by hand — and broken in the one file that recreates the key rather than
+       * receiving it.
+       */
       if (table === "health_history" && typeof shifted.ts === "number") {
-        shifted.day = new Date((shifted.ts as number) * 1000).toISOString().slice(0, 10);
+        shifted.day = localYmd(shifted.ts as number);
       }
       // `app_state` stores JSON blobs, so its timestamps are INSIDE a string and cannot be listed
       // in `meta.timeFields` (which shifts numeric columns). Left alone they stay absolute while

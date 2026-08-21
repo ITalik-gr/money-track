@@ -250,3 +250,126 @@ export async function budgetStatus(
     };
   });
 }
+
+// ---- §BUDGET-MEMORY: does the plan actually hold? ---------------------------
+
+/**
+ * `budget_months` has held the answer since migration 0043 and nobody could ask the question.
+ *
+ * Its two readers each took a slice and threw the rest away: `trackRecord` reduces a category to
+ * a ratio so the auto-budget knows whether to trim, and the category page draws six months of ONE
+ * envelope. Neither answers «чи я тримаю план» — the question a person actually has about a
+ * budget, and the only one that distinguishes «зараз 70%» from «стає краще».
+ *
+ * ⚠️ **Everything here is stored in HRYVNIA and converted on the way out** (§BASE-CUR). A closed
+ * month is an archive, so it is written in hryvnia deliberately; the reader may be looking at
+ * dollars. This was already leaking: `budget_history` on `/categories/:id/overview` returned
+ * `limit_minor`/`spent_minor` raw, so the strip under a converted envelope was in a different
+ * currency than the envelope above it. The sweep in `currency-sweep.test.ts` could not see it,
+ * because the fixture has no closed months for the field to appear in.
+ */
+export interface ClosedMonth {
+  month: string;
+  limit: number;
+  spent: number;
+  /** Closed inside the envelope. A zero limit is kept only by spending nothing. */
+  kept: boolean;
+}
+
+export interface BudgetHistoryCategory {
+  category_id: number;
+  name: string;
+  color: string | null;
+  closed: number;
+  over: number;
+  avg_limit: number;
+  avg_spent: number;
+  /**
+   * Consecutive kept months counting back from the MOST RECENT close, 0 if that one was blown.
+   *
+   * Counting back rather than the best run ever: the question is «чи я тримаю це зараз», and a
+   * five-month streak from last spring answers a question nobody asked.
+   */
+  streak: number;
+  months: ClosedMonth[];
+}
+
+export interface BudgetHistory {
+  /** Whole-plan totals per closed month, oldest first. */
+  months: (ClosedMonth & { envelopes: number; kept_envelopes: number })[];
+  categories: BudgetHistoryCategory[];
+  /** Envelope-months kept ÷ envelope-months closed, 0–100. `null` when nothing has closed yet. */
+  kept_pct: number | null;
+  /** How many distinct months are in the record — the honest denominator for everything above. */
+  months_closed: number;
+}
+
+/**
+ * Assemble the whole-plan track record over the last `monthsBack` closed months.
+ *
+ * ⚠️ The window is bounded by the MONTH KEY, like `trackRecord`, and for the same reason: a row
+ * limit would have to guess how many envelopes exist, and the guess would silently decide how far
+ * back the history reaches.
+ * ⚠️ A month with no closed rows produces no entry rather than a zero one. §BUDGET-MEMORY only
+ * starts accumulating when the feature is switched on, so a zero-filled axis would draw months of
+ * apparent perfect discipline before any envelope existed.
+ */
+export async function budgetHistory(
+  env: Env, monthsBack = 12, now = Math.floor(Date.now() / 1000),
+): Promise<BudgetHistory> {
+  const locale = await resolveLocale(env);
+  const uah = uahToBase(await getRates(env));
+  const inBase = (minorUah: number) => Math.round(minorUah * uah);
+  const rows = await budgetsRepo.monthsSince(
+    env.DB, locale, localYm(localMonthStart(now, -monthsBack)),
+  );
+
+  const byCat = new Map<number, BudgetHistoryCategory>();
+  const byMonth = new Map<string, ClosedMonth & { envelopes: number; kept_envelopes: number }>();
+  let kept = 0;
+
+  for (const r of rows) {
+    // The limit that was in force: the base plus whatever it carried in. Comparing spending
+    // against today's limit is a verdict the data cannot support — the limit may have changed.
+    const limit = inBase(r.limit_minor + r.carry_in_minor);
+    const spent = inBase(r.spent_minor);
+    const held = spent <= limit;
+    if (held) kept++;
+
+    const cat = byCat.get(r.category_id) ?? {
+      category_id: r.category_id, name: r.name, color: r.color,
+      closed: 0, over: 0, avg_limit: 0, avg_spent: 0, streak: 0, months: [],
+    };
+    cat.closed++;
+    if (!held) cat.over++;
+    cat.avg_limit += limit;
+    cat.avg_spent += spent;
+    cat.months.push({ month: r.ym, limit, spent, kept: held });
+    byCat.set(r.category_id, cat);
+
+    const m = byMonth.get(r.ym) ?? { month: r.ym, limit: 0, spent: 0, kept: true, envelopes: 0, kept_envelopes: 0 };
+    m.limit += limit;
+    m.spent += spent;
+    m.envelopes++;
+    if (held) m.kept_envelopes++;
+    byMonth.set(r.ym, m);
+  }
+
+  for (const cat of byCat.values()) {
+    cat.avg_limit = Math.round(cat.avg_limit / cat.closed);
+    cat.avg_spent = Math.round(cat.avg_spent / cat.closed);
+    for (let i = cat.months.length - 1; i >= 0 && cat.months[i].kept; i--) cat.streak++;
+  }
+  // The month verdict is about the PLAN as a whole, so it is the sum against the sum: an envelope
+  // blown by 200 ₴ while another came in 900 ₴ under is a month that held, and counting envelopes
+  // instead would call it a failure. `kept_envelopes` is carried alongside for the finer reading.
+  for (const m of byMonth.values()) m.kept = m.spent <= m.limit;
+
+  const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month));
+  return {
+    months,
+    categories: [...byCat.values()].sort((a, b) => b.avg_spent - a.avg_spent),
+    kept_pct: rows.length ? Math.round((kept / rows.length) * 100) : null,
+    months_closed: months.length,
+  };
+}

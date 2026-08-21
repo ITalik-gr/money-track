@@ -1,0 +1,17 @@
+{
+  "status": 200,
+  "body": {
+    "window": {
+      "from": 1763197200,
+      "to": 1778749200
+    },
+    "n": 0,
+    "charged": 0,
+    "market": 0,
+    "cost": 0,
+    "cost_pct": null,
+    "unpriced": 0,
+    "by_currency": [],
+    "items": []
+  }
+}
