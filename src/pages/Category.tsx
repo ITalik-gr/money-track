@@ -4,7 +4,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
 import { dateFmt, numFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
-import { useGetCategoryOverviewQuery, useGetCategoryDrillQuery } from "../store/api.ts";
+import { useGetCategoryOverviewQuery, useGetCategoryDrillQuery, useGetTransactionsQuery } from "../store/api.ts";
+import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
@@ -12,6 +13,7 @@ import { formatMinor, startOfMonthUnix } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { DeltaChip } from "../components/stats/shared.tsx";
 import { baseSign } from "../lib/currency.ts";
+import { importanceMeta } from "../lib/importance.ts";
 
 /**
  * §CATEGORY-PAGE — one category, linkable.
@@ -36,6 +38,21 @@ const monthLabel = (m: string) => {
   const [y, mm] = m.split("-");
   return monthShort.format(new Date(Number(y), Number(mm) - 1, 1));
 };
+
+/**
+ * The bounds of a `YYYY-MM` key, for the drill under the trend.
+ *
+ * Local midnight, matching `rangeFrom` above and `startOfMonthUnix`: the key itself was built in
+ * Kyiv by the server (§APP_TZ), and re-deriving it from a timestamp here is the mistake that puts
+ * the end of June into July.
+ */
+function monthBounds(ym: string): [number, number] {
+  const [y, m] = ym.split("-").map(Number);
+  return [
+    Math.floor(new Date(y, m - 1, 1).getTime() / 1000),
+    Math.floor(new Date(y, m, 1).getTime() / 1000) - 1,
+  ];
+}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CTooltip(props: any) {
@@ -76,12 +93,29 @@ export function Category() {
   const to = Math.floor(Date.now() / 1000);
   const from = rangeFrom(range, to);
 
+  // Which month of the trend is opened underneath it. A bar is the only place on this page where
+  // a number stands for a set of operations you can actually name, so it is the one that should
+  // open (asked for after the chart went live).
+  const [openMonth, setOpenMonth] = useState<string | null>(null);
+
   const { data, isError, error, refetch } = useGetCategoryOverviewQuery({ id, from, to });
   const { data: drill } = useGetCategoryDrillQuery({ category: id, from, to });
+  const monthWin = openMonth ? monthBounds(openMonth) : null;
+  const { data: monthRows, isFetching: monthLoading } = useGetTransactionsQuery(
+    // A parent must include its sub-categories (`catparent`), a leaf must not — the same
+    // distinction `CatScope` makes on the server. Getting it backwards would show a list that
+    // does not add up to the bar above it.
+    monthWin
+      ? { ...(data?.is_sub ? { category: id } : { catparent: id }), from: monthWin[0], to: monthWin[1], limit: 200 }
+      : { limit: 0 },
+    { skip: !monthWin },
+  );
 
   if (isError) return <ErrorNote error={error} what={t("nav.categories")} onRetry={refetch} />;
   if (!data) return null;
 
+  const impLabel = importanceMeta(data.importance)?.labelKey;
+  const rangeLabel = t(`cat.range.${range}` as "cat.range.month");
   const chart = data.trend.map((m) => ({ ...m, label: monthLabel(m.month), spent: Math.round(m.spent / 100) }));
   const total = data.recurring + data.oneoff;
   // §CAT-PAGE: an income bucket has no spending, no envelope and no canonical level — the page
@@ -100,7 +134,15 @@ export function Category() {
             <span className="d cat-page-dot" style={{ background: data.color ?? "var(--muted)" }} />
             {data.name}
           </div>
-          <div className="sub">{t(`imp.${data.importance}` as "imp.essential")}</div>
+          {/*
+            The label comes from `IMPORTANCE_META`, the canonical set of three — NOT from a key
+            assembled as `imp.${level}`. That concatenation printed the raw key «imp.optional» on
+            every optional category, because `imp.*` is a two-item pair belonging to SafeToSpend
+            (which only shows two levels) and nothing could see the gap: the i18n lint checks that
+            uk and en AGREE, and both were missing it. A key built at runtime is invisible to it by
+            construction — which is the general lesson, not just this line.
+          */}
+          <div className="sub">{impLabel ? t(impLabel) : ""}</div>
         </div>
         <div className="page-head-actions">
           <div className="seg">
@@ -124,9 +166,14 @@ export function Category() {
           <div className="label">
             {data.level ? t("cat.levelLabel") : t("cat.perActiveMonth")}
             <InfoTip>
+              {/* Both of these are MONTHLY by definition and deliberately ignore the range (the
+                  canon is month-defined, §CAT-PAGE). The tile beside them follows the range, so
+                  the difference has to be stated — two tiles side by side, one of which quietly
+                  answers about a different period, is the confusion this page already had once. */}
               {data.level
                 ? (data.level.fixed ? t("cat.levelFixed") : t("cat.levelVariable"))
                 : t("cat.perActiveMonthHint")}
+              {" "}{t("cat.levelLabelHint")}
             </InfoTip>
           </div>
           <div className="merchant-stat-v num-hero">
@@ -143,7 +190,14 @@ export function Category() {
           </div>
         </div>
         <div className="card merchant-stat">
-          <div className="label">{inc ? t("cat.periodEarned") : t("cat.periodSpent")}</div>
+          {/*
+            The label carries the RANGE (2026-08-21). It used to read «За цей місяць», hardcoded,
+            while the selector above it could be set to a year or to all time — so the tile stated
+            one period and counted another, and the owner reported exactly that: «міняю на весь
+            час, а воно все одно показує що за місяць». A label that can go out of step with its
+            own number should not be able to: it is now built from the same state as the query.
+          */}
+          <div className="label">{t(inc ? "cat.periodEarned" : "cat.periodSpent", { range: rangeLabel })}</div>
           <div className="merchant-stat-v num-hero"><Money minor={total} decimals={false} /></div>
           {/* §E1: the split is the useful half — a big month made of one purchase means something
               different from the same month made of forty. */}
@@ -342,25 +396,96 @@ export function Category() {
                   digit, and a clipped number is indistinguishable from a real one. */}
               <YAxis {...Y_AXIS} tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
               <Tooltip content={<CTooltip />} cursor={{ fill: "var(--surface-2)" }} />
-              <Bar dataKey="spent" fill={data.color ?? "var(--accent)"} radius={[4, 4, 0, 0]} {...CHART_ANIM} />
+              <Bar
+                dataKey="spent" fill={data.color ?? "var(--accent)"} radius={[4, 4, 0, 0]} {...CHART_ANIM}
+                cursor="pointer"
+                // Toggle: the second click on the same bar closes it. A drill that can only be
+                // opened leaves the page permanently taller than the reader asked for.
+                // Recharts types the handler around its own mouse event; the datum rides on
+                // `payload`, so it is read here rather than typed at the boundary.
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                onClick={(d: any) => {
+                  const m = (d?.payload?.month ?? d?.month) as string | undefined;
+                  setOpenMonth((cur) => (m && cur !== m ? m : null));
+                }}
+              />
             </BarChart>
           </ResponsiveContainer>
         </div>
+
+        {openMonth && (
+          <div className="card cat-month-drill">
+            <div className="cat-month-head">
+              <b>{monthLabel(openMonth)}</b>
+              <span className="label">
+                {monthLoading ? t("common.loading") : t("cat.monthOps", { n: monthRows?.length ?? 0 })}
+              </span>
+              <button className="cat-empty-cta" onClick={() => setOpenMonth(null)}>{t("cat.monthClose")}</button>
+            </div>
+            {/* Not gated on `monthLoading`: an empty list and a loading list must look different
+                (CLAUDE.md — «вантажиться» і «даних справді нема» — різні екрани), and the header
+                above already says which of the two this is. */}
+            {!monthLoading && <TransactionList rows={monthRows ?? []} empty={t("cat.monthEmpty")} />}
+          </div>
+        )}
       </section>
 
-      {data.children.length > 0 && (
+      {/*
+        «З чого складається» (2026-08-21). The chips that used to be here named the sub-categories
+        and said nothing about them — so a parent page could not answer the only question a parent
+        raises: «Транспорт виріс — це таксі чи пальне?». Every other figure on this page is the
+        roll-up, which hides that by design.
+
+        The parent's OWN rows are a part like any other, not a remainder: «74% цієї категорії лежить
+        напряму» is a fact about how the ledger is kept, and it disappears in a list of children.
+        Children with nothing in this window keep their chip below — navigation is why they were
+        here, and a sub-category you cannot reach because it was quiet this month is the §CAT-PAGE
+        bug in a smaller form.
+      */}
+      {/* A breakdown of ONE part is not a breakdown — it says «100% of this category is this
+          category» and fills a card to say it. Below two parts the chips alone are the honest
+          content of this section. */}
+      {(data.composition.length > 1 || data.children.length > 0) && (
         <section>
           <div className="section-head">
-            <h2>{t("cat.childrenTitle")}</h2>
-            <span className="label">{t("cat.childrenSub")}</span>
+            <h2>{data.composition.length > 1 ? t("cat.compositionTitle") : t("cat.childrenTitle")}</h2>
+            <span className="label">
+              {data.composition.length > 1 ? t("cat.compositionSub", { range: rangeLabel }) : t("cat.childrenSub")}
+            </span>
           </div>
-          <div className="cat-page-children">
-            {data.children.map((ch) => (
-              <Link key={ch.id} className="cat-chip" to={`/categories/${ch.id}`}>
-                <span className="d" style={{ background: ch.color ?? "var(--muted)" }} />{ch.name}
-              </Link>
-            ))}
-          </div>
+          {data.composition.length > 1 && (
+            <div className="card">
+              <ul className="cat-merch-list">
+                {data.composition.map((p) => (
+                  <li key={p.id}>
+                    {p.self
+                      ? <span className="cat-merch-name">{p.name}</span>
+                      : <Link className="cat-merch-name" to={`/categories/${p.id}`}>{p.name}</Link>}
+                    <span className="cat-merch-share label">{p.share_pct}%</span>
+                    <span className="cat-merch-n label">
+                      {p.self ? t("cat.compositionSelf") : t("cat.merchantOps", { n: p.n })}
+                    </span>
+                    <span className="num-mono">{formatMinor(p.spent, { decimals: false })} {baseSign()}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {(() => {
+            const shown = new Set(data.composition.length > 1 ? data.composition.map((p) => p.id) : []);
+            const quiet = data.children.filter((ch) => !shown.has(ch.id));
+            if (quiet.length === 0) return null;
+            return (
+              <div className="cat-page-children">
+                {data.composition.length > 1 && <span className="label">{t("cat.compositionRest")}</span>}
+                {quiet.map((ch) => (
+                  <Link key={ch.id} className="cat-chip" to={`/categories/${ch.id}`}>
+                    <span className="d" style={{ background: ch.color ?? "var(--muted)" }} />{ch.name}
+                  </Link>
+                ))}
+              </div>
+            );
+          })()}
         </section>
       )}
 

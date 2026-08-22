@@ -72,6 +72,13 @@ export function TelegramCard({ isOwner }: { isOwner: boolean }) {
               : state?.owner_fallback ? t("setup.tgOwnerFallback") : t("setup.tgNotLinked")}
           </p>
           {/*
+            What the bot LOOKS like, said here because it is invisible from this screen (2026-08-21).
+            The strip and the ⌘ menu attach themselves from the next update (`tg-surface.ts`), but a
+            chat linked before that shipped shows neither until something arrives — so the recovery
+            («send /help») belongs next to the state that needs it, not in a changelog.
+          */}
+          {linked && <p className="set-card-sub">{t("setup.tgButtonsNote")}</p>}
+          {/*
             The primary slot belongs to the action that matches the STATE (2026-08-14). While a
             chat was connected the loudest button on the card was "connect a different chat" — the
             one action you would take almost never — and it sat above four more buttons of equal

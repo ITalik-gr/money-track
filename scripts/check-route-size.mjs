@@ -47,7 +47,7 @@ const EXCEPTIONS = {
   // 2026-08-14 (§CAT-PAGE): 687 → 655 — the category drill followed, into `category-drill.ts`.
   "worker/routes/api/analytics.ts": 670,
   // Predates the split: the Telegram bot's command surface, still holding 3 inline queries too.
-  "worker/routes/telegram.ts": 340,
+  "worker/routes/telegram.ts": 320,
   // The AI adviser: the finance snapshot, the chat, the chat's tools, and the deterministic
   // fallback advice. The snapshot alone is the single source every AI screen reads, so splitting
   // it is a design decision — recorded rather than done.

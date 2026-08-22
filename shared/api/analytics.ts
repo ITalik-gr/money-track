@@ -365,6 +365,14 @@ export interface CategoryOverview {
   /** Sub-categories rolled INTO this one, so the page can say what it is aggregating. */
   children: { id: number; name: string; color: string | null }[];
   /**
+   * What the category is MADE of in the selected window — each sub-category's share, plus the
+   * parent's own directly-filed rows as a part of their own (`self`). Empty for a leaf.
+   *
+   * A parent's headline number is a roll-up, which is exactly what hides «Транспорт виріс — це
+   * таксі чи пальне?». Shares are against the sum of the parts, so they add up to 100.
+   */
+  composition: { id: number; name: string; color: string | null; self: boolean; spent: number; n: number; share_pct: number }[];
+  /**
    * §CAT-PAGE — the whole history, independent of the selected window.
    *
    * Exists because the owner opened categories that were empty for the current month and read that

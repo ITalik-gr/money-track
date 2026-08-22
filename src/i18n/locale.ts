@@ -52,7 +52,10 @@ export function hasStoredLocale(): boolean {
  *  choice (written to localStorage). Server sync is done by the React provider, not here,
  *  to keep this module free of network concerns. */
 export function setLocale(l: Locale, persist = true): void {
+  const changed = current !== l;
   current = l;
+  // After `current`, before the write: a listener asking `getLocale()` must see the new value.
+  if (changed) for (const fn of localeListeners) fn(l);
   if (persist) {
     try {
       localStorage.setItem(STORAGE_KEY, l);
@@ -65,6 +68,28 @@ export function setLocale(l: Locale, persist = true): void {
 // Prime the module value at import time so format helpers used before the provider mounts
 // still pick the right locale.
 current = initialLocale();
+
+/**
+ * Notify anything that DERIVES from the language when the language changes.
+ *
+ * 🐞 Why (2026-08-22, reported from a Telegram Mini App: Ukrainian interface, dollar amounts).
+ * A webview has its own storage, so `mt-locale` is empty there and this module primes to `en`.
+ * `lib/currency.ts` primes from `getLocale()` at IMPORT and gets 840. Then `LocaleProvider`
+ * fetches the account's locale, adopts `uk` and re-renders every string — but nothing told the
+ * currency, so it stayed on dollars. And because the client states `x-mt-currency` on every
+ * request, the server obligingly answered in dollars too, and `/rates` came back agreeing with
+ * the value that was wrong: a loop with no way out but Settings.
+ *
+ * It is the same defect CLAUDE.md §i18n names for `Intl` formatters — a value read from the
+ * locale at module level freezes — except the frozen value here is money. So the dependency
+ * SUBSCRIBES instead of sampling. Listeners live here and not in a shared bus because the import
+ * only runs one way (`currency` → `locale`); a back-import would be a cycle.
+ */
+const localeListeners = new Set<(l: Locale) => void>();
+
+export function onLocaleChange(fn: (l: Locale) => void): void {
+  localeListeners.add(fn);
+}
 
 // ---- lazy Intl formatters ----------------------------------------------------
 //

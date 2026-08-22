@@ -19,6 +19,26 @@
         "color": "#1F6E4C"
       }
     ],
+    "composition": [
+      {
+        "id": 1,
+        "name": "Продукти",
+        "color": "#1F6E4C",
+        "self": true,
+        "spent": 213800,
+        "n": 2,
+        "share_pct": 74
+      },
+      {
+        "id": 30,
+        "name": "Супермаркет",
+        "color": "#1F6E4C",
+        "self": false,
+        "spent": 73800,
+        "n": 2,
+        "share_pct": 26
+      }
+    ],
     "lifetime": {
       "total": 2025100,
       "n": 37,
@@ -55,66 +75,6 @@
       "fixed": true
     },
     "trend": [
-      {
-        "month": "2024-06",
-        "spent": 0
-      },
-      {
-        "month": "2024-07",
-        "spent": 0
-      },
-      {
-        "month": "2024-08",
-        "spent": 0
-      },
-      {
-        "month": "2024-09",
-        "spent": 0
-      },
-      {
-        "month": "2024-10",
-        "spent": 0
-      },
-      {
-        "month": "2024-11",
-        "spent": 0
-      },
-      {
-        "month": "2024-12",
-        "spent": 0
-      },
-      {
-        "month": "2025-01",
-        "spent": 0
-      },
-      {
-        "month": "2025-02",
-        "spent": 0
-      },
-      {
-        "month": "2025-03",
-        "spent": 0
-      },
-      {
-        "month": "2025-04",
-        "spent": 0
-      },
-      {
-        "month": "2025-05",
-        "spent": 0
-      },
-      {
-        "month": "2025-06",
-        "spent": 0
-      },
-      {
-        "month": "2025-07",
-        "spent": 0
-      },
-      {
-        "month": "2025-08",
-        "spent": 0
-      },
       {
         "month": "2025-09",
         "spent": 172800

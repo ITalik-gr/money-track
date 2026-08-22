@@ -72,9 +72,56 @@ for (const [name, dict] of [["en.json", en], ["uk.json", uk]]) {
   }
 }
 
+// 4. A translation key ASSEMBLED at runtime is invisible to the parity check above (2026-08-21).
+//
+// The bug that bought this: the category page rendered `t(`imp.${data.importance}`)`, and the app
+// printed the raw key «imp.optional» on every optional category. Parity did not care — `imp.*` was
+// a two-entry pair belonging to a component that only ever shows two levels, and BOTH dictionaries
+// were equally missing the third. tsc could not see it either: the key is a template literal cast
+// to a sample member of the union.
+//
+// So a dynamic key has to declare the VALUES it can take, and every one of them is then checked
+// like an ordinary key. The table is the exception list, and — per the rule that an exemption
+// cites a fact and a fact can expire — each entry carries a date and a reason.
+const DYNAMIC_KEYS = [
+  { prefix: "cat.range.", values: ["month", "quarter", "year", "all"], since: "2026-08-14", why: "the category page's window selector" },
+  // NOT every `GoalStatus`: `done` and `no_deadline` are the ABSENCE of a pace and are filtered
+  // out before the badge renders (`Goals.tsx`). Listing them would demand two strings nothing
+  // shows — the list must match what can reach `t()`, not what the type can hold.
+  { prefix: "goal.pace.", values: ["on_track", "behind", "at_risk", "overdue"], since: "2026-08-12", why: "§GOAL-PACE verdicts that get a badge" },
+  { prefix: "goal.kind.", values: ["save_up", "debt_payoff", "sinking_fund"], since: "2026-08-12", why: "`GOAL_KINDS` in lib/finance/goals.ts" },
+  { prefix: "audit.source.", values: ["chat", "enrich", "resweep"], since: "2026-08-12", why: "§AI-AUDIT — which path wrote the change" },
+  { prefix: "audit.field.", values: ["category_id", "is_transfer", "ai_note"], since: "2026-08-12", why: "§AI-AUDIT — the three fields a model may rewrite" },
+  { prefix: "feedback.kind", values: ["Bug", "Idea", "Other"], since: "2026-08-01", why: "feedback inbox badges" },
+  { prefix: "imp.", values: ["essential", "discretionary"], since: "2026-07-14", why: "SafeToSpend's two-level legend — NOT the three-level set, which is `IMPORTANCE_META`" },
+];
+for (const { prefix, values, since, why } of DYNAMIC_KEYS) {
+  for (const v of values) {
+    const key = prefix + v;
+    if (!enKeys.has(key)) problems.push(`en.json missing "${key}" — built at runtime (${prefix}\${...}, since ${since}: ${why})`);
+    if (!ukKeys.has(key)) problems.push(`uk.json missing "${key}" — built at runtime (${prefix}\${...}, since ${since}: ${why})`);
+  }
+}
+// And the other direction: a dynamic key nobody declared is one nobody can check.
+const DECLARED = new Set(DYNAMIC_KEYS.map((d) => d.prefix));
+for (const file of walk(SRC)) {
+  const lines = readFileSync(file, "utf8").split("\n");
+  lines.forEach((line, i) => {
+    for (const m of line.matchAll(/\bt\(`([A-Za-z0-9_.]*?)\$\{/g)) {
+      if (!DECLARED.has(m[1])) {
+        problems.push(
+          `${file}:${i + 1}  translation key built at runtime with an UNDECLARED prefix "${m[1]}".\n` +
+          `    Neither tsc nor the parity check can see whether every value it can take exists.\n` +
+          `    Add it to DYNAMIC_KEYS in this script (prefix, values, since, why), or resolve the\n` +
+          `    key through a map the way \`IMPORTANCE_META\` does.`);
+      }
+    }
+  });
+}
+
 if (problems.length) {
   console.error(`✗ i18n lint: ${problems.length} problem(s)\n`);
   for (const p of problems) console.error("  " + p);
   process.exit(1);
 }
-console.log("✓ i18n lint: no hardcoded locale tags; en/uk dictionaries in parity");
+console.log(`✓ i18n lint: no hardcoded locale tags; en/uk in parity; ${DYNAMIC_KEYS.length} runtime-built key prefixes resolved`);

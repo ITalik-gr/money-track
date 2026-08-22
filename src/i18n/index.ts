@@ -5,7 +5,7 @@ import uk from "./uk.json";
 import { getLocale, hasStoredLocale, initialLocale, localeTag, setLocale } from "./locale.ts";
 import type { Locale } from "./locale.ts";
 import { store } from "../store/index.ts";
-import { baseSign, getBaseCurrency } from "../lib/currency.ts";
+import { baseSign, currencyHeader } from "../lib/currency.ts";
 import { api, useGetMeQuery } from "../store/api.ts";
 
 // Category display names are resolved SERVER-SIDE in the owner locale (P3.4). Switching language
@@ -68,8 +68,11 @@ const LocaleContext = createContext<{
  * for the GET below: it is the call that DECIDES whether to adopt the server's language, and it was
  * asking the server what language to use without telling it who was asking.
  */
-const localeHeaders = (extra?: Record<string, string>): Record<string, string> =>
-  ({ "x-mt-locale": getLocale(), "x-mt-currency": String(getBaseCurrency()), ...extra });
+export const localeHeaders = (extra?: Record<string, string>): Record<string, string> => {
+  // The currency rides along ONLY as an explicit choice — see `currencyHeader()`.
+  const cur = currencyHeader();
+  return { "x-mt-locale": getLocale(), ...(cur ? { "x-mt-currency": cur } : {}), ...extra };
+};
 
 function pushLocale(l: Locale): void {
   fetch("/api/settings/locale", {
@@ -136,6 +139,14 @@ export function LocaleProvider({ children }: { children: ReactNode }) {
         if (server && server !== local) {
           setLocale(server, false); // adopt without marking as an explicit choice
           setLocaleState(server);
+          // Everything already fetched was answered in the OLD language — and, since the base
+          // currency follows the language for a reader who never chose one, in the old CURRENCY
+          // too (`/rates` carries the `Summary` tag, so the effective base is re-asked here as
+          // well). Without this drop the screen switches to Ukrainian while the category names
+          // baked into the cached responses stay English and the sums stay in dollars, which is
+          // the state that was reported. The same invalidation `pushLocale` does, for the same
+          // reason — it was simply missing on the branch that adopts rather than pushes.
+          store.dispatch(api.util.invalidateTags([...LOCALE_DEPENDENT_TAGS]));
         }
       })
       .catch(() => {

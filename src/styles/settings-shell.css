@@ -22,3 +22,20 @@
    (bank keys at the top, the danger zone at the bottom) sat flush against the columns while every
    other pair had a 14px gap. Not on the first child: there the margin would only pad the page. */
 .settings-grid > .set-full:not(:first-child) { margin-top: 14px; }
+
+/* ⚠️ **The narrow-screen collapse HAS to live in this file** (2026-08-22, reported from a phone:
+   the whole Settings page unreadable — two ~160px columns, every label wrapping after two words,
+   the UAH/USD/EUR segment spilling out of its card).
+   The rule existed the whole time — `@media (max-width: 760px) { .settings-grid { columns: 1 } }`
+   — but it stayed behind in `settings.css` when the layout moved here, and `settings-shell.css`
+   is imported AFTER it. A media query adds no specificity, so an unconditional `columns: 2` in a
+   later file beats a conditional `columns: 1` in an earlier one, always. It was dead the day the
+   split happened, and nothing said so.
+   **Rule: a media query belongs in the same file as the declaration it overrides** — splitting a
+   stylesheet moves the cascade position of everything in it. */
+@media (max-width: 760px) {
+  .settings-grid { columns: 1; }
+  /* With one column there is no span left to make: the rule would still apply, and
+     `column-span: all` inside a single-column box suppresses the margin trimming above. */
+  .settings-grid > .set-full { column-span: none; }
+}

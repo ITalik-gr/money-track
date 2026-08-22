@@ -13,7 +13,7 @@
  * printing "₴", so the sign follows the server's answer, never the request.
  */
 import { asBaseCurrency, currencySign, DEFAULT_BASE, type BaseCurrency } from "../../shared/currency.ts";
-import { getLocale } from "../i18n/locale.ts";
+import { getLocale, onLocaleChange } from "../i18n/locale.ts";
 import { baseCurrencyForLocale } from "../../shared/currency.ts";
 
 const STORAGE_KEY = "mt-base-cur";
@@ -84,8 +84,32 @@ export function clearBaseCurrency(): void {
   current = baseCurrencyForLocale(getLocale());
 }
 
+/**
+ * The value for `x-mt-currency`, or `null` when this reader has never chosen.
+ *
+ * ⚠️ **An inherited default must not be sent as a preference.** `resolveBaseCurrency` reads the
+ * header FIRST, ahead of the stored setting and ahead of the language — which is right for a
+ * choice and wrong for a guess. The client used to state its primed value unconditionally, so a
+ * device that had primed to dollars (empty storage → `en` → 840) told the server dollars, got
+ * dollars back on `/rates`, and confirmed itself. Sending nothing lets the server answer from
+ * what it knows — the saved currency, else the account's language — which is the whole point of
+ * the resolution order.
+ */
+export function currencyHeader(): string | null {
+  return explicit ? String(current) : null;
+}
+
 // Prime at import: an explicit choice, else whatever the language implies — so the first paint,
 // which happens before any request comes back, is already in the right unit for this reader.
 const saved = storedBaseCurrency();
 explicit = saved != null;
 current = saved ?? baseCurrencyForLocale(getLocale());
+
+// …and KEEP following the language, because at import time the language may not be known yet:
+// a fresh device (or a Telegram webview, which has storage of its own) primes to `en` and only
+// learns the account's real locale a request later. Without this the currency stayed frozen at
+// whatever that first guess implied — see `onLocaleChange` for the full report.
+// An explicit choice is never overruled: that is what makes it explicit.
+onLocaleChange((l) => {
+  if (!explicit) current = baseCurrencyForLocale(l);
+});

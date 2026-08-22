@@ -1,7 +1,7 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 import type { Account, Budget, Category, EventGroup, AiUsageStats, PlannedActual } from "../../shared/types.ts";
 import { getLocale } from "../i18n/locale.ts";
-import { getBaseCurrency } from "../lib/currency.ts";
+import { currencyHeader } from "../lib/currency.ts";
 
 // The API contract lives in `shared/api/` and is imported, not re-declared (phase 2, defect D2).
 // It is RE-EXPORTED from here because 66 files already import these names from `store/api.ts`;
@@ -39,7 +39,10 @@ export const api = createApi({
     // hryvnia — so the audience the English UI exists for saw ₴ on every screen.
     prepareHeaders: (headers) => {
       headers.set("x-mt-locale", getLocale());
-      headers.set("x-mt-currency", String(getBaseCurrency()));
+      // Only when the reader actually chose one — `currencyHeader()` explains why an inherited
+      // default must not be stated as a preference.
+      const cur = currencyHeader();
+      if (cur) headers.set("x-mt-currency", cur);
       return headers;
     },
   }),

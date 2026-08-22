@@ -8,12 +8,10 @@
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
-import * as catRepo from "../repo/categories.ts";
 import { computeSummary, createCashTx, recentTransactions, type Summary } from "../lib/finance/finance.ts";
 import { parseText } from "../lib/ai/parse-text.ts";
 import {
-  answerCallbackQuery, editMessageText, sendChatAction, sendMessage,
-  type InlineKeyboard, type TgUpdate,
+  answerCallbackQuery, editMessageText, sendChatAction, sendMessage, type TgUpdate,
 } from "../lib/messaging/telegram.ts";
 import { handleAlertCallback } from "../lib/messaging/tg-alert-buttons.ts";
 import {
@@ -22,7 +20,12 @@ import {
 } from "../lib/messaging/tg-commands.ts";
 import { resolveBaseCurrency } from "../lib/finance/money.ts";
 import { st, resolveLocale, type ServerLocale } from "../lib/platform/i18n.ts";
-import { escapeHtml, tgMoney } from "../lib/messaging/tg-format.ts";
+import { escapeHtml, tgMoney, replyKeyboard, buttonCommand } from "../lib/messaging/tg-format.ts";
+import {
+  type Pending, pendingKey, currencyCode, confirmText, confirmKeyboard, categoryKeyboard,
+  categoryName,
+} from "../lib/messaging/tg-entry.ts";
+import { ensureBotSurface, markKeyboardShown } from "../lib/messaging/tg-surface.ts";
 
 export const telegram = new Hono<{ Bindings: Env }>();
 
@@ -42,20 +45,6 @@ async function tgCtx(env: Env): Promise<{ locale: ServerLocale; base: number }> 
 }
 
 
-interface Pending {
-  merchant: string;
-  amount: number;       // major units, positive — the SIGN comes from `kind`, on save
-  /** Which way the money went. Absent on a record stored before 2026-08-21 → expense, as it was. */
-  kind?: "expense" | "income";
-  currency_code: number;
-  category_id: number | null;
-  note: string | null;
-  message_id: number;
-}
-
-const pendingKey = (chatId: number) => `tg_pending_${chatId}`;
-const currencyCode = (c: string): number => (c === "USD" ? 840 : c === "EUR" ? 978 : 980);
-
 function balanceText(s: Summary, locale: ServerLocale, base: number): string {
   // `totalUAH` is the roll-up, so it wears the reader's BASE sign; the per-currency lines below
   // are each in their own currency and wear theirs. Two different questions, two signs.
@@ -67,52 +56,27 @@ function balanceText(s: Summary, locale: ServerLocale, base: number): string {
   return lines.join("\n");
 }
 
-function confirmText(p: Pending, categoryName: string | null, locale: ServerLocale): string {
-  return (
-    st(locale, p.kind === "income" ? "tgParsedIncome" : "tgParsed") + "\n\n" +
-    `<b>${escapeHtml(p.merchant || "—")}</b>\n` +
-    // The amount stays in the currency the user TYPED (`p.currency_code`), not the display base:
-    // this line is a confirmation of what will be stored, and converting it would ask them to
-    // approve a different number than the one they are about to save.
-    st(locale, "tgSumLine", { amount: tgMoney(Math.round(p.amount * 100), p.currency_code, locale) }) + "\n" +
-    st(locale, "tgCategoryLine", {
-      name: categoryName ? escapeHtml(categoryName) : st(locale, "tgUncategorized"),
-    }) +
-    (p.note ? "\n" + st(locale, "tgNoteLine", { note: escapeHtml(p.note) }) : "")
-  );
-}
-
-const confirmKeyboard = (locale: ServerLocale): InlineKeyboard => [
-  [{ text: st(locale, "tgBtnSave"), callback_data: "tgsave" },
-   { text: st(locale, "tgBtnCancel"), callback_data: "tgcancel" }],
-  [{ text: st(locale, "tgBtnCategory"), callback_data: "tgcat" }],
-];
-
-
-async function categoryName(env: Env, id: number | null): Promise<string | null> {
-  if (id == null) return null;
-  return catRepo.nameById(env.DB, id);
-}
-
-// Клавіатура вибору категорії: верхньорівневі витратні, по 2 в ряд + «без категорії».
-async function categoryKeyboard(env: Env, locale: ServerLocale): Promise<InlineKeyboard> {
-  const kb: InlineKeyboard = [];
-  const cats = await catRepo.topLevelExpense(env.DB);
-  for (let i = 0; i < cats.length; i += 2) {
-    kb.push(cats.slice(i, i + 2).map((c) => ({ text: c.name, callback_data: `tgsetcat:${c.id}` })));
-  }
-  kb.push([{ text: st(locale, "tgUncategorized"), callback_data: "tgsetcat:0" }]);
-  return kb;
-}
-
 async function handleText(env: Env, chatId: number, text: string, origin?: string): Promise<void> {
   const token = env.TG_BOT_TOKEN;
-  const cmd = text.trim().toLowerCase();
-
   const { locale, base } = await tgCtx(env);
 
+  /**
+   * A button press arrives as ORDINARY TEXT — so it has to be translated back into a command
+   * BEFORE anything else looks at the message.
+   *
+   * Below this line sit the question heuristic and the expense parser, and both would happily
+   * accept «📊 Статистика»: the first as a question, the second as a purchase from a merchant of
+   * that name. The order is the whole safety of the feature.
+   */
+  const asButton = buttonCommand(text);
+  const cmd = asButton ?? text.trim().toLowerCase();
+
   if (cmd === "/start" || cmd === "/help") {
-    await sendMessage(token, chatId, st(locale, "tgHelp"));
+    // The strip is (re)attached here, which is the only moment it can be: Telegram keeps a reply
+    // keyboard until a message replaces it, so /start and /help are what restore it after the
+    // user has hidden it or reinstalled the app.
+    await sendMessage(token, chatId, st(locale, "tgHelp"), undefined, replyKeyboard(locale));
+    await markKeyboardShown(env, chatId);
     return;
   }
   if (cmd === "/balance") {
@@ -143,6 +107,18 @@ async function handleText(env: Env, chatId: number, text: string, origin?: strin
   if (cmd === "/advice") { await handleAdvice(env, chatId); return; }
   if (cmd === "/ask" || cmd.startsWith("/ask ")) {
     await handleAsk(env, chatId, text.trim().slice(4));
+    return;
+  }
+
+  /**
+   * A button whose command lost its branch shows help — it is NOT parsed as an expense.
+   *
+   * `BUTTONS` in `tg-format.ts` is a map that can drift from the dispatch above (rename a label,
+   * drop a command), and the cost of drift landing in the parser is a saved «purchase» from a
+   * merchant called «🎯 Цілі». A guard here makes the drift visible instead of expensive.
+   */
+  if (asButton) {
+    await sendMessage(token, chatId, st(locale, "tgHelp"), undefined, replyKeyboard(locale));
     return;
   }
 
@@ -294,7 +270,11 @@ telegram.post("/:secret", async (c) => {
     // still have its commands go nowhere.
     await linkTgChat(c.env, chatId, c.env.USER_ID);
     const { locale: linkLocale } = await tgCtx(c.env);
-    await sendMessage(c.env.TG_BOT_TOKEN, chatId, st(linkLocale, "tgChatLinked"));
+    // The strip rides the very first message the chat receives: this is the one moment every
+    // user passes through, since linking is the only way in.
+    await sendMessage(c.env.TG_BOT_TOKEN, chatId, st(linkLocale, "tgChatLinked"), undefined, replyKeyboard(linkLocale));
+    await markKeyboardShown(c.env, chatId);
+    await ensureBotSurface(c.env, chatId, linkLocale);
     return c.text("ok", 200);
   }
 
@@ -324,6 +304,8 @@ telegram.post("/:secret", async (c) => {
         // link built from it can never point at a different deployment than the reader's own.
         await handleText(c.env, chatId, update.message.text, new URL(c.req.url).origin);
       }
+      // Attach whatever this chat has not seen yet — see `tg-surface.ts` for why it is lazy.
+      await ensureBotSurface(c.env, chatId, (await tgCtx(c.env)).locale);
     } catch (e) {
       try {
         const { locale: errLocale } = await tgCtx(c.env);

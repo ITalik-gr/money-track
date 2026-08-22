@@ -173,3 +173,113 @@ test("tg: both halves of the door are required", async () => {
   assert.equal(wrongHeader.status, 403, "the path segment alone must not be enough");
   assert.deepEqual(sent, []);
 });
+
+/**
+ * The bot's own chrome (2026-08-21): the ⌘ command menu and the button strip.
+ *
+ * Both existed for a day without being visible in production, and the reason was not the code that
+ * builds them — it was WHEN it ran. So what these tests pin is the timing: attached from an
+ * ordinary update, exactly once, and again when the labels change. A test that only asserted
+ * «the strip is well-formed» would have passed on the broken version.
+ */
+const stripKeyboards = () =>
+  sent.filter((c) => (c.body.reply_markup as { keyboard?: unknown } | undefined)?.keyboard);
+
+test("tg: the button strip is attached once per chat, not on every message", async () => {
+  const db = migratedDb();
+  seed(db);
+  const e = env(db);
+
+  await send(e, textMessage("/balance"));
+  assert.equal(stripKeyboards().length, 1, "a chat that has never seen the strip must be given it");
+  const kb = (stripKeyboards()[0].body.reply_markup as { keyboard: { text: string }[][] }).keyboard;
+  assert.equal(kb.flat().length, 8);
+
+  sent = [];
+  await send(e, textMessage("/balance"));
+  // Re-sending it every time would be noise on a channel people read on a phone — and the marker
+  // is what makes the lazy attachment cheap enough to run after every update.
+  assert.deepEqual(stripKeyboards(), [], "the strip must not be re-attached to a chat that has it");
+});
+
+test("tg: changing the labels re-attaches the strip", async () => {
+  // The version is derived FROM the labels, so nobody has to remember to bump it. Simulated here
+  // by an older marker, which is exactly what a rename leaves behind for every existing chat.
+  const db = migratedDb();
+  seed(db);
+  db.raw.prepare("INSERT OR REPLACE INTO app_state (key, value) VALUES (?, ?)")
+    .run(`tg_kb_${CHAT}`, "an-older-set-of-buttons");
+
+  await send(env(db), textMessage("/balance"));
+  assert.equal(stripKeyboards().length, 1);
+});
+
+test("tg: the ⌘ menu is registered once, and never by a guest object", async () => {
+  const db = migratedDb();
+  seed(db);
+  const e = env(db);
+
+  await send(e, textMessage("/balance"));
+  // Two calls: the default list and the Ukrainian one. Telegram picks by interface language.
+  assert.equal(sent.filter((c) => c.method === "setMyCommands").length, 2);
+
+  sent = [];
+  await send(e, textMessage("/balance"));
+  assert.deepEqual(sent.filter((c) => c.method === "setMyCommands"), [],
+    "the command list is one resource for the whole bot — registering it per message is waste");
+
+  // A non-owner object must not write it at all: the list belongs to the deployment, and
+  // «harmless this time» is how both cross-tenant holes of 2026-07-26 were argued for.
+  const other = migratedDb();
+  seed(other);
+  sent = [];
+  await send({ ...env(other), IS_OWNER: false }, textMessage("/balance"));
+  assert.deepEqual(sent.filter((c) => c.method === "setMyCommands"), []);
+});
+
+/**
+ * §D1 — «відвʼязав» must mean it, for the owner too (2026-08-21).
+ *
+ * Reported from production: unlinking in the app and then going on using the bot. The cause was
+ * that `unlinkTgChat` writes an EMPTY row and both readers treated empty as «never linked», so
+ * the owner-only deployment fallback re-granted what the button had just revoked — outbound AND
+ * inbound, since `tgTarget` is also the command allowlist. These pin both directions, because a
+ * fix to one of them looks complete from either side alone.
+ */
+import { tgTarget, unlinkTgChat } from "../lib/messaging/tg-target.ts";
+
+test("tg: after unlinking, the deployment chat no longer commands the bot", async () => {
+  const db = migratedDb();
+  seed(db);
+  const e = { ...env(db), TG_CHAT_ID: CHAT };
+
+  await unlinkTgChat(e as never);
+  sent = [];
+
+  const res = await send(e, textMessage("/balance"));
+  assert.equal(res.status, 200);
+  assert.deepEqual(sent, [], "an unlinked chat must not be answered, even the owner's own");
+
+  // The outbound half of the same switch.
+  assert.equal(await tgTarget(e as never), null, "and nothing may be pushed there either");
+});
+
+test("tg: the chat is told it was unlinked, and an owner who never linked keeps the fallback", async () => {
+  const db = migratedDb();
+  seed(db);
+  const e = { ...env(db), TG_CHAT_ID: CHAT };
+
+  await unlinkTgChat(e as never);
+  const notice = sent.find((c) => c.method === "sendMessage");
+  // Silence after this looks exactly like a broken bot from inside Telegram — the one place the
+  // person now is. Same reasoning as the re-link warning: you cannot undo it, you can say it.
+  assert.ok(notice, "the chat that lost the bot must be told");
+  assert.match(String(notice.body.text), /відвʼязано|unlinked/i);
+
+  // A fresh object has NO row at all, which is a different fact: the fallback exists for exactly
+  // this case, and narrowing it would have taken the bot away from the owner entirely.
+  const fresh = migratedDb();
+  seed(fresh);
+  const target = await tgTarget({ ...env(fresh, false), TG_CHAT_ID: CHAT } as never);
+  assert.equal(target?.chatId, CHAT);
+});

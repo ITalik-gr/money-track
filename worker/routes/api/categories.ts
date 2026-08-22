@@ -141,12 +141,17 @@ categories.get("/categories/:id/overview", async (c) => {
   // looks like a one-off.
   const TREND_MONTHS = 24;
 
-  const [levels, budgets, trend, split, children, closed, lifetime, merchants, cur, yearAgo, prevWin] = await Promise.all([
+  const [levels, budgets, trend, split, children, parts, closed, lifetime, merchants, cur, yearAgo, prevWin] = await Promise.all([
     stats.categoryMonthlyLevels(c.env, mult, { now: to }),
     budgetStatus(c.env, mult, now),
     categoriesRepo.monthlyTrend(c.env.DB, mult, scope, stats.localMonthStart(to, -(TREND_MONTHS - 1)), to),
     categoriesRepo.recurringSplit(c.env.DB, mult, scope, from, to, stats.isRecurringExpr(stats.defaultRefFrom(to), to)),
     categoriesRepo.childrenOf(c.env.DB, loc, id),
+    // What the category is MADE of, in the chosen window. Only for a parent: a leaf has no parts,
+    // and asking would return one bucket equal to the total — a chart of itself.
+    row.parent_id == null
+      ? categoriesRepo.childrenBreakdown(c.env.DB, mult, { id, isParent: true, isIncome: !!row.is_income }, from, to)
+      : Promise.resolve([]),
     // §BUDGET-MEMORY. NOT derived from `trend` above: that is what was SPENT, and whether a month
     // was closed inside its envelope also depends on the limit that was in force at the time —
     // which exists nowhere except this row. Comparing today's limit against last spring's spending
@@ -166,10 +171,17 @@ categories.get("/categories/:id/overview", async (c) => {
 
   // Zero-fill so the axis is continuous: a month with no spending is a real data point, and a gap
   // would make the line jump between distant months as though they were adjacent.
+  //
+  // ⚠️ But only from the FIRST month this category ever had (2026-08-21). A zero before that is
+  // not «nothing was spent», it is «this account did not exist yet» — and 24 of them is what the
+  // owner saw: a chart that is mostly an empty floor, where every hover reads 0. Zero-filling
+  // pre-history states something about a period nobody lived through.
   const byMonth = new Map(trend.map((r) => [r.month, r.spent]));
+  const firstYm = lifetime.first_at ? stats.localYm(lifetime.first_at) : null;
   const months: { month: string; spent: number }[] = [];
   for (let i = TREND_MONTHS - 1; i >= 0; i--) {
     const key = stats.localYm(stats.localMonthStart(to, -i));
+    if (firstYm && key < firstYm) continue;   // `YYYY-MM` sorts as text — see `localYm`
     months.push({ month: key, spent: byMonth.get(key) ?? 0 });
   }
 
@@ -195,6 +207,36 @@ categories.get("/categories/:id/overview", async (c) => {
     is_income: scope.isIncome,
     is_sub: !scope.isParent,
     children,
+    /**
+     * §CAT-PAGE — «з чого складається ця категорія», in the selected window.
+     *
+     * The chips above name the sub-categories; this says how much each one IS. A parent's total is
+     * a roll-up by construction, so the number the page leads with is precisely the one that hides
+     * the answer to «що саме виросло».
+     *
+     * ⚠️ The parent's OWN rows are a part like any other (`self: true`), not a remainder folded
+     * away: «40% Транспорту не розкладено» is a finding about how the ledger is kept, and it is
+     * invisible in a list of children alone. Sorted by size, so the answer is the first line.
+     */
+    composition: (() => {
+      const named = new Map(children.map((ch) => [ch.id, ch]));
+      const total = parts.reduce((sum, p) => sum + Math.abs(p.spent), 0);
+      return parts
+        .filter((p) => p.spent !== 0)
+        .map((p) => {
+          const ch = named.get(p.leaf);
+          return {
+            id: p.leaf,
+            // A leaf that is the category itself is not a child and has no row in `children`.
+            name: ch ? ch.name : localizeCatName(loc, row.name),
+            color: ch ? ch.color : row.color,
+            self: !ch,
+            spent: Math.abs(p.spent),
+            n: p.n,
+            share_pct: total > 0 ? Math.round((Math.abs(p.spent) / total) * 100) : 0,
+          };
+        });
+    })(),
     lifetime: {
       total: lifetime.total, n: lifetime.n,
       first_at: lifetime.first_at, last_at: lifetime.last_at,

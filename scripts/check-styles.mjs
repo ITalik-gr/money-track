@@ -42,7 +42,10 @@ const MAX_LINES = 700;
  * than kept as headroom.** That is the point of the mechanism: an exception nobody needs is an
  * invitation to grow back into it.
  */
-const EXCEPTIONS = { "domains-a.css": 1105 };
+// 2026-08-22: 1105 → 1000. The chat page's phone layout pushed this part 26 lines over, and an
+// exception may never rise — so the chat block became `chat.css`, the fourteenth part, and the
+// cap follows the file DOWN. A cap left at its old height is headroom nobody decided to grant.
+const EXCEPTIONS = { "domains-a.css": 1000 };
 
 const problems = [];
 

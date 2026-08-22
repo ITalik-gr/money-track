@@ -8,6 +8,7 @@
     "is_income": false,
     "is_sub": false,
     "children": [],
+    "composition": [],
     "lifetime": {
       "total": 0,
       "n": 0,

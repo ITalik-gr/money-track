@@ -302,6 +302,33 @@ export async function childrenOf(
 }
 
 /**
+ * What a parent category is MADE OF, in the chosen window (2026-08-21).
+ *
+ * The page listed its sub-categories as bare chips — the names, and nothing about them. So the one
+ * question a parent raises («Транспорт виріс — це таксі чи пальне?») was the question it could not
+ * answer, while every number on the page was the rolled-up total that hides the answer by design.
+ *
+ * ⚠️ One query, grouped by the LEAF: the rows are selected by the rolled-up match (`EFF_CAT_ID`,
+ * so exactly the population every other figure on the page counts) and bucketed by the leaf they
+ * actually landed in. The parent's OWN direct rows fall out as their own bucket for free — and
+ * they matter: «40% цієї категорії не розкладено по підкатегоріях» is a real finding, and a
+ * version that only summed the children would have quietly dropped it.
+ *
+ * ⚠️ `COUNT(DISTINCT t.id)` — `STATS_JOINS` multiplies a split row into its parts (§SPLIT).
+ */
+export async function childrenBreakdown(
+  db: AppDb, mult: string, scope: CatScope, from: number, to: number,
+): Promise<{ leaf: number; spent: number; n: number }[]> {
+  const r = await db.prepare(
+    `SELECT ${EFF_CAT_LEAF_ID} AS leaf, ${catSum(scope, mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${catWhere({ ...scope, isParent: true })}
+     GROUP BY leaf ORDER BY spent DESC`,
+  ).bind(from, to, scope.id).all<{ leaf: number; spent: number; n: number }>();
+  return r.results ?? [];
+}
+
+/**
  * Monthly spending ON this category, rolled up — the same `EFF_CAT_ID` every other screen uses, so
  * the page cannot disagree with the donut it was opened from.
  *

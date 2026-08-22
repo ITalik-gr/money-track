@@ -1,0 +1,143 @@
+/* ---- the adviser CHAT ------------------------------------------------------
+ *
+ * The thirteenth part became the fourteenth on 2026-08-22, under the C8 ratchet: `domains-a.css`
+ * went 26 lines over its exception when the chat page got its phone layout, and an exception may
+ * never rise (`STYLES.md` §6.1). So the overflow becomes a SEAM, and the seam is chosen where a
+ * domain already existed — every rule below is `.chat-*`, they were contiguous, and nothing else
+ * in the sheet styles them.
+ *
+ * ⚠️ Imported straight AFTER `domains-a.css`, so these rules keep their position in the cascade
+ * relative to everything that came before them. What moved ahead of them is the rest of
+ * `domains-a.css` (the merchant page onwards), and it shares no selector with the chat.
+ */
+.chat-msg { max-width: 86%; padding: 9px 13px; border-radius: 15px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
+.chat-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.chat-msg.assistant { align-self: flex-start; background: var(--surface-2); color: var(--ink); border-bottom-left-radius: 5px; }
+.chat-typing { color: var(--muted); letter-spacing: 2px; }
+
+/* dedicated chat page — рейл розмов + основна колонка.
+   Фіксована висота = в'юпорт мінус topbar+паддинги контенту → сам БЛОК чату скролиться
+   всередині (лог + рейл), сторінка НЕ росте. */
+.chat-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 16px; align-items: stretch; height: calc(100dvh - 140px); }
+.chat-page { display: flex; flex-direction: column; min-height: 0; }
+.chat-head { align-items: flex-start; flex-shrink: 0; }
+.chat-rail-toggle { display: none; }
+
+/* Рейл розмов (desktop: власний скрол, лишається на місці; mobile: drawer) */
+.chat-rail { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.chat-new { width: 100%; justify-content: center; }
+.chat-rail-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; padding-right: 2px; }
+.chat-rail-item {
+  display: flex; align-items: center; gap: 6px; padding: 9px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; color: var(--ink-2); font-size: 13px; transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-rail-item:hover { background: var(--surface-2); }
+.chat-rail-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
+.cri-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cri-del {
+  flex-shrink: 0; width: 20px; height: 20px; border: none; background: none; color: var(--muted);
+  font-size: 17px; line-height: 1; border-radius: var(--radius-xs); cursor: pointer; opacity: 0;
+  transition: opacity var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+.chat-rail-item:hover .cri-del, .chat-rail-item.active .cri-del { opacity: 1; }
+.cri-del:hover { background: var(--surface); color: var(--neg); }
+.chat-rail-scrim { display: none; }
+
+.chat-shell {
+  flex: 1; display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  overflow: hidden;
+}
+.chat-log2 { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 18px 18px 22px; min-height: 0; scroll-padding-top: 12px; }
+.chat-msg-wrap { display: flex; flex-direction: column; gap: 4px; max-width: 82%; animation: chat-in 0.22s ease; }
+.chat-msg-wrap.user { align-self: flex-end; align-items: flex-end; }
+.chat-msg-wrap.assistant { align-self: flex-start; align-items: flex-start; }
+.chat-msg-wrap .chat-msg { max-width: 100%; }
+@keyframes chat-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.chat-msg-actions { display: flex; gap: 4px; padding-left: 4px; }
+.chat-msg-actions button {
+  display: inline-flex; align-items: center; gap: 4px; border: none; background: none; cursor: pointer;
+  color: var(--muted); font-size: 11.5px; padding: 3px 6px; border-radius: var(--radius-xs);
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-msg-actions button:hover { background: var(--surface-2); color: var(--ink-2); }
+.chat-log2 .chat-typing { display: inline-flex; gap: 4px; align-items: center; }
+.chat-log2 .chat-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); display: inline-block; animation: chat-dot 1s infinite ease-in-out; }
+.chat-log2 .chat-typing span:nth-child(2) { animation-delay: 0.15s; }
+.chat-log2 .chat-typing span:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-dot { 0%, 60%, 100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+
+/* Курсора в кінці відповіді, що пишеться, тут свідомо НЕМА (прибрано 2026-08-07 за скаргою).
+   Ідея була позначити третій стан («текст іде далі»), але сам текст, що прибуває, і є цією
+   ознакою — а миготлива смужка стрибала разом із перерозміткою markdown і тягнула око на себе
+   рівно там, де людина читає. Стан «ще нічого не сказано» лишається за крапками (.chat-typing). */
+.chat-retry { align-self: flex-start; margin-top: 2px; font-size: 12.5px; color: var(--accent); background: none; border: none; cursor: pointer; padding: 4px 2px; }
+.chat-retry:hover { text-decoration: underline; }
+.chat-empty { margin: auto; text-align: center; color: var(--muted); max-width: 460px; }
+.chat-empty p { margin-bottom: 14px; font-size: 14px; }
+.chat-suggest { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.chat-chip {
+  padding: 9px 14px; border-radius: var(--radius-pill); border: 1px solid var(--line-strong);
+  background: var(--surface); color: var(--ink-2); font-size: 13px; cursor: pointer; transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.chat-chip:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.chat-input { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--line); background: var(--surface); align-items: flex-end; }
+.chat-input textarea {
+  flex: 1; resize: none; font: inherit; line-height: 1.5; min-height: 42px; max-height: 160px; overflow-y: hidden;
+  padding: 10px 14px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-2); color: var(--ink); box-sizing: border-box;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+}
+.chat-input textarea::placeholder { color: var(--muted); }
+.chat-input textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+/* Тонкий скролбар у полі вводу (лише коли текст сягає максимуму) */
+.chat-input textarea { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.chat-input textarea::-webkit-scrollbar { width: 8px; }
+.chat-input textarea::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; border: 2px solid var(--surface); }
+.chat-input textarea::-webkit-scrollbar-track { background: transparent; }
+.chat-send { padding: 0; width: 42px; height: 42px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; border-radius: var(--radius); }
+
+/* Мобілка: рейл розмов — off-canvas шухляда */
+@media (max-width: 860px) {
+  .chat-layout { grid-template-columns: 1fr; height: calc(100dvh - 176px); }
+  .chat-rail-toggle {
+    display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+    width: 38px; height: 38px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+    background: var(--surface); color: var(--ink-2); cursor: pointer; margin-right: 2px;
+  }
+  .chat-head { align-items: center; }
+  .chat-rail {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 268px; z-index: 60;
+    background: var(--surface); border-right: 1px solid var(--line-strong); padding: 16px;
+    transform: translateX(-100%); transition: transform var(--dur-2) var(--ease-out);
+    box-shadow: var(--shadow-card);
+  }
+  .chat-layout.rail-open .chat-rail { transform: translateX(0); }
+  .chat-layout.rail-open .chat-rail-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(15, 22, 32, 0.4); }
+}
+
+/* Телефон: місце віддається САМІЙ розмові (2026-08-22, скарга — «чат малий»).
+   Заголовок над чатом займав ~230px з ~700 доступних: назва, підзаголовок-опис і дубль кнопки
+   «Нова», яка вже є в шухляді. Це рівно та сторінка, де все, крім логу, — це підпис до фічі, а не
+   фіча, тож ущільнюється все, що не є повідомленнями.
+   ⚠️ Підзаголовок ХОВАЄТЬСЯ, а не зменшується: «Особистий фінменеджер — бачить усі твої числа…»
+   читають один раз, а місце він забирає щоразу. Обрізати його на два рядки означало б лишити
+   і витрату, і незручність.
+   ⚠️ 176px у формулі висоти вище — це топбар + таб-бар + падінги ДЕСКТОПНОГО хеда; коли хед
+   ужався, лишок мусить піти чату, інакше сторінка просто отримує порожнечу під ним. */
+@media (max-width: 560px) {
+  .chat-layout { height: calc(100dvh - 148px); }
+  .chat-head { margin-bottom: 10px; }
+  .chat-head .sub { display: none; }
+  .chat-head .greet { font-size: 1.125rem; }
+  /* Падінги логу — 18px з обох боків це 10% ширини телефона, віддані полям. */
+  .chat-log2 { padding: 14px 12px 18px; gap: 10px; }
+  /* 82% лишає праворуч смугу, яка нічого не робить: на вузькому екрані бульбашку від краю
+     відрізняє вже сам колір, а не відступ. */
+  .chat-msg-wrap { max-width: 92%; }
+  .chat-input { padding: 10px; gap: 6px; }
+  /* Плейсхолдер тут — два рядки, а авто-ресайз рахує висоту лише на ВВІД: поле стояло 42px
+     заввишки й обрізало власну підказку на півслові. */
+  .chat-input textarea { min-height: 52px; }
+  .chat-empty p { font-size: 13.5px; margin-bottom: 10px; }
+}

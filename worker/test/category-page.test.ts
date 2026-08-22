@@ -273,3 +273,67 @@ test("§CAT-PAGE: window comparisons", async (t) => {
     });
   } finally { restore(); }
 });
+
+/**
+ * The trend chart's floor (2026-08-21, from the owner: «в графіку легенда показує 0 завжди»).
+ *
+ * The window is 24 months and gaps are zero-filled so the axis stays continuous. But a zero BEFORE
+ * the category's first transaction is not «nothing was spent that month» — it is «this account did
+ * not exist yet», and on a fixture whose history starts nine months ago that was fifteen empty
+ * columns: a chart that is mostly floor, where most of what you can hover reads 0.
+ */
+test("§CAT-PAGE: the trend starts at the first transaction, not 24 months ago", async (t) => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const { api } = await import("../routes/api/index.ts");
+    const { testEnv } = await import("./harness.ts");
+    const db = db_();
+    const res = await api.request("/categories/1/overview", {}, testEnv(db));
+    const body = await res.json() as { trend: { month: string; spent: number }[]; lifetime: { first_at: number } };
+
+    const firstYm = new Date(body.lifetime.first_at * 1000).toISOString().slice(0, 7);
+    assert.ok(body.trend.length > 0);
+    assert.ok(body.trend[0].month >= firstYm,
+      `the chart starts at ${body.trend[0].month}, before anything was ever spent (${firstYm})`);
+
+    // The zero-fill INSIDE the history stays: a quiet month between two busy ones is a real data
+    // point, and dropping it would make the axis jump between non-adjacent months.
+    const months = body.trend.map((m) => m.month);
+    assert.deepEqual(months, [...months].sort(), "oldest first, no gaps in the sequence");
+    await t.test("and it never runs past today", () => {
+      assert.ok(body.trend[body.trend.length - 1].month <= new Date(NOW * 1000).toISOString().slice(0, 7));
+    });
+  } finally { restore(); }
+});
+
+/**
+ * «З чого складається» — a parent's parts, including its own directly-filed rows.
+ *
+ * The property worth pinning is that the parts ADD UP to what the page leads with. A breakdown
+ * whose pieces do not sum to the total is worse than none: it looks like an answer and quietly
+ * loses money somewhere, which is the failure mode this codebase has been removing all month.
+ */
+test("§CAT-PAGE: the parts of a category sum to the category", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const db = db_();
+    const scope = { id: 1, isParent: true, isIncome: false };
+    const win: [number, number] = [localMonthStart(NOW), NOW];
+
+    const parts = await categoriesRepo.childrenBreakdown(db as unknown as never, MULT, scope, ...win);
+    const whole = await categoriesRepo.windowStats(db as unknown as never, MULT, scope, ...win);
+
+    assert.ok(parts.length > 0, "the fixture has spending in category 1 this month");
+    assert.equal(parts.reduce((s, p) => s + p.spent, 0), whole.spent,
+      "the parts must be the same money the headline is");
+
+    // The parent's own rows are a bucket, not a remainder folded away — its leaf id IS the parent.
+    assert.ok(parts.some((p) => p.leaf === 1), "rows filed directly on the parent must appear");
+    // And a sub-category's rows land under the SUB, never merged into the parent's bucket.
+    const sub = subWithSpend(db, 1, 700_00, NOW - 2 * 86400);
+    const after = await categoriesRepo.childrenBreakdown(db as unknown as never, MULT, scope, ...win);
+    assert.equal(after.find((p) => p.leaf === sub)?.spent, 700_00);
+    assert.equal(after.find((p) => p.leaf === 1)?.spent, parts.find((p) => p.leaf === 1)?.spent,
+      "adding a child must not move the parent's own total");
+  } finally { restore(); }
+});

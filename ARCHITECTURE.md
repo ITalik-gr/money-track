@@ -90,7 +90,7 @@ runs all of them.
 | C7 | no literal route below a parameterised one that matches it; one prefix, one file | an endpoint silently unreachable — a real past outage | `scripts/check-route-order.mjs` |
 | C8 | `index.css` is imports only; every part imported; line ceiling per part | the 4 182-line stylesheet regrowing | `scripts/check-styles.mjs` |
 | C9 | every `className` has a rule, every rule has a `className` | a block shipping unstyled, and dead CSS reading as live | `scripts/check-styles-used.mjs` |
-| C10 | one conversion target: `getStoredRates` only in `money.ts`, no `₴` literal outside Telegram | a screen mixing the reader's currency with the hryvnia — arithmetic that renders perfectly and is wrong by the exchange rate | `scripts/check-currency.mjs` |
+| C10 | one conversion target: `getStoredRates` only in `money.ts`, no `₴` literal in the worker (the Telegram exemption was dropped 2026-08-21) | a screen mixing the reader's currency with the hryvnia — arithmetic that renders perfectly and is wrong by the exchange rate | `scripts/check-currency.mjs` |
 
 Two things learned about the checks themselves:
 

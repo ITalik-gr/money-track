@@ -133,6 +133,27 @@ export const TG = {
   },
 
   // ---- statistics commands (2026-08-21) --------------------------------------
+  // ---- the persistent button strip (2026-08-21) ------------------------------
+  // ⚠️ Each label is ALSO the routing key: a reply keyboard sends its own text as an ordinary
+  // message, so `buttonCommand()` has to recognise it. Changing a label without changing that map
+  // gives a button that types a sentence at the expense parser.
+  tgBtnStats: { uk: "📊 Статистика", en: "📊 Stats" },
+  tgBtnBudget: { uk: "🧧 Конверти", en: "🧧 Envelopes" },
+  tgBtnSubs: { uk: "🔁 Підписки", en: "🔁 Subscriptions" },
+  tgBtnGoals: { uk: "🎯 Цілі", en: "🎯 Goals" },
+  tgBtnBalance: { uk: "💰 Баланс", en: "💰 Balance" },
+  tgBtnLast: { uk: "🧾 Останні", en: "🧾 Recent" },
+  tgBtnAdvice: { uk: "💡 Порада", en: "💡 Advice" },
+  tgBtnHelp: { uk: "❓ Довідка", en: "❓ Help" },
+
+  // Sent ONCE per chat, alongside the strip itself (`tg-surface.ts`). New buttons appearing with
+  // no word about them read as the app doing something on its own; one sentence is the whole
+  // difference between a feature and a surprise.
+  tgButtonsHint: {
+    uk: "⌨️ Кнопки під полем вводу — команди можна не памʼятати.\nПовний список — у меню ⌘ біля скріпки.",
+    en: "⌨️ Buttons are under the input field — no need to remember commands.\nThe full list is in the ⌘ menu next to the paperclip.",
+  },
+
   tgStatsHeader: { uk: "📊 <b>{period}</b>", en: "📊 <b>{period}</b>" },
   tgStatsWeek: { uk: "Цей тиждень", en: "This week" },
   tgStatsMonth: { uk: "Цей місяць", en: "This month" },

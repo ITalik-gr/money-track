@@ -139,7 +139,12 @@
 .cat-merch-list > li { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline;
   gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .cat-merch-list > li:last-child { border-bottom: none; }
+/* Both ends trimmed, not just the top (2026-08-22, reported: «внизу багато місця порівняно з
+   верхом»). The card already contributes its own 20px; the first row dropped its padding and the
+   last did not, so every list on this page sat 9px lower in its card than it did high — visible as
+   a lopsided box, and invisible as a cause. */
 .cat-merch-list > li:first-child { padding-top: 0; }
+.cat-merch-list > li:last-child { padding-bottom: 0; }
 /* `min-width: 0` + ellipsis: a long merchant name must not push the amount column out of the
    card — a wrapped number reads as a different number (DESIGN §правила). */
 .cat-merch-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -189,5 +194,22 @@
   padding: 12px 14px; font-size: 13px; color: var(--muted); }
 .cat-empty-cta { padding: 0; border: none; background: none; cursor: pointer; font-size: 13px;
   color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+/* Two blocks that follow something directly, with no section of their own to carry the gap: the
+   notice under the stat grid, and the chips under the composition card. Both read as stuck to the
+   thing above them (2026-08-22). The gap matches the grid gap they sit under rather than the
+   section rhythm — they belong to the block above, they are not a new subject. */
+.cat-page-stats + .cat-empty-note { margin-top: 14px; }
+.card + .cat-page-children { margin-top: 12px; align-items: center; }
+
+/* The month drill under the trend: a bar is the one number on this page that stands for a set of
+   operations you can name, so clicking it lists them. Flush, because `.ledger.rows` brings its own
+   row padding (DESIGN §2 — otherwise the padding doubles). */
+.cat-month-drill { padding: 0; margin-top: 12px; overflow: hidden; }
+.cat-month-head { display: flex; align-items: baseline; gap: 12px; padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--line); }
+/* The count sits next to the month and the collapse control goes to the far end: the header is
+   read left to right, and the way out belongs where the eye stops. */
+.cat-month-head .label { margin-right: auto; }
+
 /* Same measurements as `.cat-page-stats` — it is the same kind of row, one question lower. */
 .cat-life { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }

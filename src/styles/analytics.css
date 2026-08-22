@@ -49,3 +49,11 @@
   .cat-merch-list > li { grid-template-columns: 1fr auto auto; }
   .cat-merch-n { display: none; }
 }
+
+/* §FX-COST folded (2026-08-22). Collapsed, the card is one figure and one control — the block was
+   a screenful of evidence for a number people read once a month, parked mid-way down Огляд. */
+.fx-card .fx-head { margin-bottom: 10px; }
+/* The first thing inside a `<details>` is its own summary, so the currency row must not keep the
+   top margin it needed when it followed the headline directly. */
+.fx-more > .fx-cur-row { margin-top: 2px; }
+.fx-more > .fx-items { margin-top: 14px; }

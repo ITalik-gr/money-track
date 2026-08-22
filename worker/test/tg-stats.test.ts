@@ -112,3 +112,45 @@ test("a question is routed to the adviser, an entry is not", () => {
   assert.ok(!isQuestion("taxi 120"));
   assert.ok(!isQuestion("отримав 12000 зарплата"));
 });
+
+/**
+ * The button strip (2026-08-21). A reply keyboard sends its own LABEL as an ordinary message, so
+ * the labels are routing keys — and the failure mode if the map drifts is not a dead button, it
+ * is a saved «purchase» from a merchant called «🎯 Цілі».
+ */
+import { replyKeyboard, buttonCommand, botCommands } from "../lib/messaging/tg-format.ts";
+
+test("every button label routes to a command, in BOTH languages", () => {
+  for (const loc of ["uk", "en"] as const) {
+    const labels = replyKeyboard(loc).flat().map((b) => b.text);
+    assert.equal(labels.length, 8);
+    for (const label of labels) {
+      // Cross-language on purpose: a reader who switches the app to English still has the
+      // Ukrainian strip open in Telegram until they press something.
+      assert.ok(buttonCommand(label), `«${label}» is not routed`);
+      assert.match(buttonCommand(label)!, /^\/[a-z]+$/);
+    }
+  }
+});
+
+test("ordinary text is NOT mistaken for a button", () => {
+  // The other direction, and the one that costs money: an expense must reach the parser.
+  assert.equal(buttonCommand("кава 45 аромакава"), null);
+  assert.equal(buttonCommand("Статистика"), null, "a label without its emoji is a message");
+  assert.equal(buttonCommand(""), null);
+});
+
+test("the ⌘ menu offers only commands the dispatcher answers", () => {
+  // A menu entry that answers nothing is worse than no menu. This pins the list against the
+  // branches in `handleText` — the pairing that BotFather cannot check for us.
+  const answered = new Set([
+    "stats", "budget", "subs", "goals", "balance", "last",
+    "advice", "insight", "ask", "notify", "unlink", "help",
+  ]);
+  for (const loc of ["uk", "en"] as const) {
+    for (const c of botCommands(loc)) {
+      assert.ok(answered.has(c.command), `/${c.command} is in the menu but not in the dispatcher`);
+      assert.ok(c.description.length > 0 && c.description.length <= 60, `/${c.command} description`);
+    }
+  }
+});

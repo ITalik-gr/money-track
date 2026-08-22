@@ -22,10 +22,27 @@ export async function getBotUsername(token: string): Promise<string> {
   return me.username;
 }
 
+/**
+ * The persistent button strip under the input field.
+ *
+ * A different thing from `InlineKeyboard`, and the difference decides where each belongs: an
+ * inline keyboard hangs under ONE message and answers with `callback_data`, while this one
+ * replaces the user's keyboard and answers by sending its own label as plain TEXT. So every label
+ * here has to be something the text dispatcher already understands — see `REPLY_KEYBOARD`.
+ */
+export type ReplyKeyboard = { text: string }[][];
+
 export async function sendMessage(
-  token: string, chatId: number | string, text: string, keyboard?: InlineKeyboard,
+  token: string, chatId: number | string, text: string,
+  keyboard?: InlineKeyboard, replyKeyboard?: ReplyKeyboard,
 ): Promise<{ message_id: number }> {
-  const markup = keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {};
+  const markup = keyboard
+    ? { reply_markup: { inline_keyboard: keyboard } }
+    : replyKeyboard
+      // `is_persistent` keeps the strip open instead of collapsing into the ⌨️ icon after one
+      // use; `resize_keyboard` stops six buttons taking half the screen on a phone.
+      ? { reply_markup: { keyboard: replyKeyboard, resize_keyboard: true, is_persistent: true } }
+      : {};
   const base = { chat_id: chatId, text, disable_web_page_preview: true, ...markup };
   try {
     return await call(token, "sendMessage", { ...base, parse_mode: "HTML" });
@@ -77,6 +94,26 @@ export async function getFileBytes(token: string, fileId: string): Promise<{ byt
 }
 
 // ---- Telegram update shapes (лише поля, що використовуємо) -------------------
+
+/**
+ * Register the command list — what the ⌘ Menu button next to the input field shows.
+ *
+ * Done from the app rather than by hand in BotFather so the list ships with the code that
+ * implements it: a command added here and forgotten there is a menu entry that answers nothing,
+ * and a command removed from the code but left in the menu is worse.
+ *
+ * ⚠️ Per LANGUAGE. Telegram picks by the client's interface language, and a list registered
+ * without `language_code` is the fallback for everyone else — so the Ukrainian list goes in under
+ * `uk` and the English one as the default, not the other way round.
+ */
+export async function setMyCommands(
+  token: string, commands: { command: string; description: string }[], languageCode?: string,
+): Promise<void> {
+  await call(token, "setMyCommands", {
+    commands,
+    ...(languageCode ? { scope: { type: "default" }, language_code: languageCode } : {}),
+  });
+}
 
 export interface TgUpdate {
   update_id: number;

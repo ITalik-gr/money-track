@@ -13,6 +13,7 @@ import { MonthPulse } from "../components/dashboard/MonthPulse.tsx";
 import { UpcomingSubs } from "../components/dashboard/UpcomingSubs.tsx";
 import { QuickBar } from "../components/dashboard/QuickBar.tsx";
 import { SetupNudge } from "../components/dashboard/SetupNudge.tsx";
+import { PrefsHint } from "../components/dashboard/PrefsHint.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
@@ -43,6 +44,7 @@ export function Dashboard() {
       </div>
 
       <SetupNudge />
+      <PrefsHint />
 
       <QuickBar />
 

@@ -320,11 +320,14 @@ export async function handleMute(env: Env, chatId: number, arg: string, on: bool
  * messages nowhere. Detaching is the one action a channel must always be able to perform on
  * itself. The same single writer as everywhere else, so the routing index goes with it.
  */
-export async function handleUnlink(env: Env, chatId: number): Promise<void> {
-  const { locale } = await ctx(env);
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the dispatcher passes a chat to
+// every handler; keeping the shape uniform is worth more than one unused parameter.
+export async function handleUnlink(env: Env, _chatId: number): Promise<void> {
   const { unlinkTgChat } = await import("./tg-target.ts");
+  // The confirmation is sent by `unlinkTgChat` itself (2026-08-21) — it goes to the chat that was
+  // attached, which is this one here and is NOT this one when the button in Settings is pressed.
+  // Saying it twice from here would double it on the path people actually use.
   await unlinkTgChat(env);
-  await sendMessage(env.TG_BOT_TOKEN, chatId, st(locale, "tgUnlinkDone"));
 }
 
 /**

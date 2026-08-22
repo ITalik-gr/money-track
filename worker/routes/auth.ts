@@ -8,6 +8,8 @@ import type { Env } from "../env.ts";
 import { createSession, SESSION_COOKIE, SESSION_COOKIE_OPTS, signShortLived, verifyShortLived } from "../lib/platform/auth.ts";
 import { ensureOwner, loginWithGoogle, isRefusal } from "../lib/platform/directory.ts";
 import { signupAllowed } from "../lib/platform/demo.ts";
+import { verifyInitData } from "../lib/platform/tg-auth.ts";
+import { userForTgChat, findUserById } from "../lib/platform/directory.ts";
 
 export const auth = new Hono<{ Bindings: Env }>();
 
@@ -151,4 +153,66 @@ auth.get("/google/callback", async (c) => {
   // sign-out path ended up rejected by the browser.
   setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id, user.token_version ?? 0), SESSION_COOKIE_OPTS);
   return c.redirect("/", 302);
+});
+
+/**
+ * Sign in from inside a Telegram Mini App.
+ *
+ * ⚠️ **This creates nothing.** It admits a session for an account that ALREADY linked this
+ * Telegram chat — the row written by the signed `/start` deep link. Google remains the only way an
+ * account comes into existence, so there is still one identity per person and one place that
+ * decides whether a stranger may have one (`loginWithGoogle`).
+ *
+ * Why it exists at all: OAuth cannot complete inside the webview. Telegram opens the consent screen
+ * in an outside browser, so the `state` cookie is never returned and the callback fails
+ * `bad_state` — reported from a phone as «через гугл не можу зареєструватись». The environment
+ * cannot do the flow, so the flow is replaced rather than patched.
+ *
+ * ⚠️ The credential is in the BODY, not a cookie, so there is nothing for a cross-site form to
+ * replay: an attacker who cannot read `initData` cannot mint a session, and one who can read it
+ * already sits inside the victim's Telegram.
+ */
+// The path says MINIAPP rather than «telegram» on purpose: `routes/setup.ts` already owns a
+// `/telegram/*` prefix (the linking endpoints), and lint C7 keeps one prefix in one file so that
+// «which handler wins» never depends on mount order. The two are unrelated doors anyway — one
+// links a chat to an account that is already signed in, this one signs in.
+auth.post("/miniapp", async (c) => {
+  if (!c.env.TG_BOT_TOKEN) return c.json({ error: "telegram_not_configured" }, 503);
+  const body = await c.req.json<{ init_data?: string }>().catch(() => ({} as { init_data?: string }));
+  const tgUser = await verifyInitData(c.env.TG_BOT_TOKEN, String(body.init_data ?? ""));
+  if (!tgUser) return c.json({ error: "bad_init_data" }, 401);
+
+  // `tg_links` is keyed by CHAT, and in a private chat Telegram gives the chat the user's own id —
+  // which is why linking refuses groups (`routes/telegram.ts`). Without that refusal this lookup
+  // would let any member of a linked group sign in as its owner.
+  let userId = await userForTgChat(c.env.DIRECTORY, String(tgUser.id));
+
+  /**
+   * The OWNER's deployment chat, which has no row (2026-08-22, reported: the Mini App said «not
+   * linked» to the one person whose bot demonstrably works).
+   *
+   * The same asymmetry that made unlinking a no-op the day before: a `tg_links` row is written by
+   * the signed `/start` deep link, but the owner never needs one — `worker/index.ts` routes their
+   * chat by `TG_CHAT_ID` alone, and `tgTarget` pushes to it the same way. So an account can have a
+   * fully working bot and nothing in the index, and every reader that consults only the index
+   * concludes there is no link. It also covers a directory that has not taken migration 0008 yet,
+   * where the lookup answers `null` for everybody.
+   *
+   * ⚠️ Same rule as everywhere else (`CLAUDE.md §Безпека`): a deployment-wide secret is the
+   * OWNER'S, never a fallback for everyone. `TG_CHAT_ID` names exactly one chat, and it is
+   * compared as text against the id Telegram just SIGNED — this is not a claim the caller makes.
+   */
+  if (!userId && c.env.TG_CHAT_ID && String(tgUser.id) === String(c.env.TG_CHAT_ID)) {
+    const owner = await ensureOwner(c.env.DIRECTORY, (c.env.OWNER_EMAIL || "").trim().toLowerCase() || "owner@localhost");
+    userId = owner.id;
+  }
+  if (!userId) return c.json({ error: "not_linked" }, 403);
+
+  const user = await findUserById(c.env.DIRECTORY, userId);
+  // The same two facts the request guard checks, asked here for the same reason: a disabled
+  // account must not be handed a fresh 30-day cookie by a second door (§REVOKE).
+  if (!user || user.status === "disabled") return c.json({ error: "not_linked" }, 403);
+
+  setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id, user.token_version ?? 0), SESSION_COOKIE_OPTS);
+  return c.json({ ok: true });
 });

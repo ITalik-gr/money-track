@@ -21,6 +21,8 @@ import { Notifications } from "./pages/Notifications.tsx";
 import { Setup } from "./pages/Setup.tsx";
 import { Login } from "./pages/Login.tsx";
 import { Landing } from "./pages/Landing.tsx";
+import { TelegramLogin } from "./pages/TelegramLogin.tsx";
+import { telegramInitData } from "./lib/telegram.ts";
 import { useState } from "react";
 import { useGetMeQuery } from "./store/api.ts";
 
@@ -73,8 +75,13 @@ function LoggedOut() {
 }
 
 export function App() {
-  const { data, isLoading } = useGetMeQuery();
+  const { data, isLoading, refetch } = useGetMeQuery();
   if (isLoading) return null;
-  if (!data?.authenticated) return <LoggedOut />;
+  if (!data?.authenticated) {
+    // Inside Telegram the landing page is a dead end: its sign-in button goes to Google, and
+    // Google cannot complete in a webview (`lib/telegram.ts`). So the Mini App gets its own gate,
+    // which signs in from the launch payload and, failing that, says what to do about it.
+    return telegramInitData() ? <TelegramLogin onSignedIn={refetch} /> : <LoggedOut />;
+  }
   return <RouterProvider router={router} />;
 }

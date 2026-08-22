@@ -72,11 +72,17 @@ setup.post("/register-telegram", async (c) => {
   // is not the caller's. Everything else in this file acts on the caller's own bank credentials.
   if (!c.env.IS_OWNER) return c.json({ error: "owner_only" }, 403);
   if (!c.env.TG_BOT_TOKEN || !c.env.TG_SECRET) return c.json({ error: "TG_BOT_TOKEN / TG_SECRET not set" }, 400);
-  const { setWebhook } = await import("../lib/messaging/telegram.ts");
+  const { setWebhook, setMyCommands } = await import("../lib/messaging/telegram.ts");
+  const { botCommands } = await import("../lib/messaging/tg-format.ts");
   const origin = new URL(c.req.url).origin;
   const url = `${origin}/tg/${c.env.TG_SECRET}`;
   try {
     await setWebhook(c.env.TG_BOT_TOKEN, url, c.env.TG_SECRET);
+    // The ⌘ menu next to the input field, registered from the code that implements it rather than
+    // by hand in BotFather — a menu entry that answers nothing is worse than no menu. English is
+    // the fallback list (no `language_code`); Ukrainian clients get theirs by interface language.
+    await setMyCommands(c.env.TG_BOT_TOKEN, botCommands("en"));
+    await setMyCommands(c.env.TG_BOT_TOKEN, botCommands("uk"), "uk");
     await setState(c.env.DB, "tg_webhook_url", url);
     return c.json({ ok: true, url });
   } catch (e) {

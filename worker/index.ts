@@ -66,8 +66,13 @@ const app = new Hono<{ Bindings: Env }>();
 //
 // The app had none. It renders model-authored text and bank data in the same document as a
 // session cookie, so the two that matter most are:
-//   - `frame-ancestors 'none'` — nothing may embed this page, which is what makes clickjacking
-//     ("click here" over an invisible Money Track button) impossible;
+//   - `frame-ancestors` — almost nothing may embed this page, which is what makes clickjacking
+//     ("click here" over an invisible Money Track button) impossible. The one exception is
+//     `https://web.telegram.org` (2026-08-21): Telegram Mini Apps run in a native webview on
+//     phones and on desktop, but Telegram WEB frames them, so `'none'` left the app blank in
+//     exactly one client with no error anyone could see. The risk it trades away is small and
+//     specific — clickjacking from there needs an attacker-controlled page on Telegram's own
+//     origin — while the failure it removes is the whole feature, in the place people notice.
 //   - a real CSP — even if a future component ever renders unescaped HTML, an injected script
 //     has no origin it is allowed to run from and nowhere to send what it stole.
 //
@@ -84,7 +89,7 @@ const CSP = [
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  "frame-ancestors 'none'",
+  "frame-ancestors 'self' https://web.telegram.org",
   "base-uri 'self'",
   "form-action 'self'",
   "object-src 'none'",
@@ -94,8 +99,11 @@ const SECURITY_HEADERS: Record<string, string> = {
   "content-security-policy": CSP,
   // Stops a response typed `text/plain` from being sniffed into script/HTML.
   "x-content-type-options": "nosniff",
-  // Legacy twin of frame-ancestors, for anything that predates CSP level 2.
-  "x-frame-options": "DENY",
+  // ⚠️ `x-frame-options` is GONE (2026-08-21) and cannot come back. It has no allow-list form —
+  // `ALLOW-FROM` was removed from every browser — so `DENY` beside the CSP above would block the
+  // Mini App anyway and make the CSP a lie about what the app permits. `frame-ancestors` is
+  // honoured by every browser released since 2015 and takes precedence where both are sent; what
+  // is lost is protection in browsers older than that, which cannot run this app regardless.
   // Full URLs of an app whose paths carry transaction ids are nobody else's business.
   "referrer-policy": "strict-origin-when-cross-origin",
   // Features this app never uses. Camera is deliberately NOT blocked: the receipt input uses

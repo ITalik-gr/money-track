@@ -11,7 +11,7 @@
  * what the text inside it looks like.
  */
 import { currencySign } from "../../../shared/currency.ts";
-import { num, type ServerLocale } from "../platform/i18n.ts";
+import { num, st, type ServerLocale } from "../platform/i18n.ts";
 
 /** Telegram parses `parse_mode: HTML`, so anything user-supplied has to stop being markup. */
 export function escapeHtml(s: string): string {
@@ -58,4 +58,68 @@ export function capMessage(text: string, moreLabel: string): string {
   if (text.length <= TG_MAX) return text;
   const suffix = `\n…\n${moreLabel}`;
   return text.slice(0, TG_MAX - suffix.length).replace(/\n[^\n]*$/, "") + suffix;
+}
+
+
+// ---- the persistent button strip --------------------------------------------
+//
+// Why buttons at all: every command had to be typed or recalled from `/help`, which makes a bot
+// that has ten useful answers feel like it has none. Three rows of eight cover everything a
+// person opens the app for; the rarer verbs (`/mute`, `/unlink`, `/ask`) stay typed, because a
+// button for something you do twice a year is clutter that hides the six you do weekly.
+
+/** The label → command map. See the note on `tgBtn*` in `i18n-tg.ts`: labels ARE the routing keys. */
+const BUTTONS = [
+  ["tgBtnStats", "/stats"], ["tgBtnBudget", "/budget"],
+  ["tgBtnSubs", "/subs"], ["tgBtnGoals", "/goals"],
+  ["tgBtnBalance", "/balance"], ["tgBtnLast", "/last"],
+  ["tgBtnAdvice", "/advice"], ["tgBtnHelp", "/help"],
+] as const;
+
+export function replyKeyboard(locale: ServerLocale): { text: string }[][] {
+  const l = BUTTONS.map(([key]) => ({ text: st(locale, key) }));
+  // Two per row: a phone shows two emoji-plus-word labels without truncating either, and four
+  // rows of two scroll less than eight rows of one.
+  return [l.slice(0, 2), l.slice(2, 4), l.slice(4, 6), l.slice(6, 8)];
+}
+
+/**
+ * Is this incoming text a BUTTON rather than a message? Returns the command it stands for.
+ *
+ * Checked against BOTH languages, not just the reader's current one: someone who switches the app
+ * to English still has the Ukrainian strip open in Telegram until they press something, and a
+ * button that suddenly types «📊 Статистика» at the expense parser would try to save it as a
+ * purchase from a merchant of that name.
+ */
+export function buttonCommand(text: string): string | null {
+  const t = text.trim();
+  for (const [key, cmd] of BUTTONS) {
+    if (t === st("uk", key) || t === st("en", key)) return cmd;
+  }
+  return null;
+}
+
+/**
+ * The command list for Telegram's ⌘ menu.
+ *
+ * Deliberately WIDER than the button strip: the strip is for what you press weekly, the menu is
+ * the full vocabulary, and a person looking for `/mute` should find it without reading `/help`.
+ * Descriptions are short because Telegram truncates them in one line on a phone.
+ */
+export function botCommands(locale: ServerLocale): { command: string; description: string }[] {
+  const uk = locale === "uk";
+  return [
+    { command: "stats", description: uk ? "витрати, доходи, топ категорій" : "spending, income, top categories" },
+    { command: "budget", description: uk ? "конверти й прогноз місяця" : "envelopes and the forecast" },
+    { command: "subs", description: uk ? "підписки й найближчі списання" : "subscriptions and what is due" },
+    { command: "goals", description: uk ? "цілі та їхній темп" : "goals and their pace" },
+    { command: "balance", description: uk ? "власні кошти" : "your own funds" },
+    { command: "last", description: uk ? "останні операції" : "recent transactions" },
+    { command: "advice", description: uk ? "фінансові поради" : "financial advice" },
+    { command: "insight", description: uk ? "тижневий AI-інсайт" : "the weekly AI insight" },
+    { command: "ask", description: uk ? "спитати порадника" : "ask the adviser" },
+    { command: "notify", description: uk ? "які сповіщення увімкнені" : "which notifications are on" },
+    { command: "unlink", description: uk ? "відвʼязати цей чат" : "detach this chat" },
+    { command: "help", description: uk ? "довідка" : "help" },
+  ];
 }
