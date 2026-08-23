@@ -9,7 +9,7 @@ import { backups } from "./routes/backups.ts";
 import { account } from "./routes/account.ts";
 import {
   SESSION_COOKIE, CLEAR_COOKIE_OPTS, verifySession, verifyWebhookToken,
-  DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId, timingSafeEqual,
+  DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId, timingSafeEqual, verifyMcpToken,
 } from "./lib/platform/auth.ts";
 import { withUserHeader } from "./lib/platform/forward.ts";
 import { ensureOwner, findUserById, registerDemoSession } from "./lib/platform/directory.ts";
@@ -40,17 +40,22 @@ async function resolveRequestUser(env: Env, cookieHeader: {
 // of every single API call; an outright revocation still needs the cookie to expire, which is the
 // known trade-off of stateless sessions.
 const ACCESS_TTL_MS = 60_000;
-interface Access { ok: boolean; isOwner: boolean; tokenVersion: number }
+interface Access { ok: boolean; isOwner: boolean; tokenVersion: number; mcpVersion: number }
 const accessCache = new Map<string, Access & { at: number }>();
 async function userAccess(env: Env, userId: string): Promise<Access> {
   const hit = accessCache.get(userId);
-  if (hit && Date.now() - hit.at < ACCESS_TTL_MS) return { ok: hit.ok, isOwner: hit.isOwner, tokenVersion: hit.tokenVersion };
+  if (hit && Date.now() - hit.at < ACCESS_TTL_MS) {
+    return { ok: hit.ok, isOwner: hit.isOwner, tokenVersion: hit.tokenVersion, mcpVersion: hit.mcpVersion };
+  }
   const user = await findUserById(env.DIRECTORY, userId);
   const val: Access = {
     ok: !!user && user.status !== "disabled",
     isOwner: user?.is_owner === 1,
     // Generation the user's cookies must carry to still count (migration 0005).
     tokenVersion: user?.token_version ?? 0,
+    // The same, for MCP bearer tokens (directory 0009). A SEPARATE number so that revoking one
+    // credential does not revoke the other; both are cached in the row the guard already reads.
+    mcpVersion: user?.mcp_version ?? 0,
   };
   accessCache.set(userId, { at: Date.now(), ...val });
   return val;
@@ -512,6 +517,50 @@ const toUserDo = createMiddleware<{ Bindings: Env; Variables: { userId: string; 
 });
 app.all("/api/*", toUserDo);
 app.all("/ingest/*", toUserDo);
+
+/**
+ * MCP endpoint (2026-08-23) — the same data, for a client that is not a browser.
+ *
+ * Authenticated by a bearer token instead of the session cookie, and then forwarded through the
+ * SAME `toUserDo` as every browser request. That reuse is the whole security argument: isolation
+ * here is not a `WHERE user_id` anyone could forget, it is which Durable Object the request is
+ * addressed to, and the address comes from a signature only this Worker's key can produce.
+ *
+ * The checks below are the ones `guard` makes, in the same order and for the same reasons — a
+ * second door with laxer rules is how this project has already shipped cross-tenant access twice
+ * (§Безпека). What is deliberately NOT shared is the middleware itself: `guard` reads cookies and
+ * answers 401 in the browser's terms, and folding two credential types into one function would
+ * make it hard to see, at a glance, that both do the full set.
+ */
+const mcpGuard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>(async (c, next) => {
+  const header = c.req.header("authorization") ?? "";
+  const token = /^Bearer /i.test(header) ? header.slice(7).trim() : undefined;
+  const claim = await verifyMcpToken(c.env, token);
+  // `WWW-Authenticate` is what tells an MCP client it is being refused for lack of credentials
+  // rather than because the server is broken; without it the failure reads as "the server is down".
+  const deny = () => c.json({ error: "unauthorized" }, 401, { "www-authenticate": 'Bearer realm="money-track"' });
+  if (!claim) return deny();
+  const access = await userAccess(c.env, claim.userId);
+  // Disabled or deleted: a valid signature over a closed account is not an authenticated request.
+  if (!access.ok) return deny();
+  // Revoked generation — the half the signature cannot prove (see `verifyMcpToken`).
+  if (claim.mcpVersion !== access.mcpVersion) return deny();
+
+  // Its own rate-limit bucket, so a runaway client cannot spend the browser's allowance and lock
+  // the user out of their own screens. Tools are queries, so the general ceiling applies.
+  const retry = rateLimited(`mcp:${claim.userId}`, RL_GENERAL);
+  if (retry != null) {
+    return c.json({ error: "rate_limited", detail: `too many requests, retry in ${retry}s` }, 429, {
+      "retry-after": String(retry),
+    });
+  }
+
+  c.set("userId", claim.userId);
+  c.set("isOwner", access.isOwner);
+  await next();
+});
+app.use("/mcp", mcpGuard);
+app.all("/mcp", toUserDo);
 
 /**
  * Share-target fallback (§PUSH).

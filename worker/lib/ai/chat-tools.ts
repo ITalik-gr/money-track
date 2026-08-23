@@ -25,6 +25,26 @@ import {
 import { localWallTime, localYmd, localYmSql } from "../finance/time.ts";
 
 /** Unix seconds for a YYYY-MM-DD string, or null. `endOfDay` pushes it to 23:59:59. */
+/**
+ * Which of the tools above only READ.
+ *
+ * Named here, beside the tools themselves, because it is a property of each tool rather than of
+ * whoever is calling it — a second surface that had to remember "and skip remember_fact" would
+ * forget it the first time a tool was added. `financeReadTools()` is what the MCP server exposes
+ * (`routes/mcp.ts`): a credential sitting in an editor's config file gets to look at the ledger,
+ * not to write proposals into it that later move burn and runway.
+ */
+const READ_ONLY = new Set(["query_spend", "find_transactions", "list_categories"]);
+
+/** The read-only subset, for callers that are not the in-app chat. */
+export function financeReadTools(): ChatTool[] {
+  return financeChatTools().filter((t) => READ_ONLY.has(t.name));
+}
+
+export function isReadOnlyTool(name: string): boolean {
+  return READ_ONLY.has(name);
+}
+
 export function financeChatTools(): ChatTool[] {
   const dateProp = { type: "string", description: "A date in YYYY-MM-DD format" };
   return [

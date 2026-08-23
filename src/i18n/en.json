@@ -1778,5 +1778,20 @@
   "setup.currencyTitle": "Display currency",
   "setup.currencySub": "Every total, budget and chart is converted into this currency at today's rate. Transactions keep the currency the bank reported.",
   "setup.currencyAuto": "Follow language",
-  "setup.currencyEffective": "Currently showing amounts in {cur}."
+  "setup.currencyEffective": "Currently showing amounts in {cur}.",
+  "mcp.title": "Claude / MCP access",
+  "mcp.sub": "Let an MCP client — Claude Code, or Claude Desktop — read this ledger directly. It gets your figures, not a copy: totals, operations, budgets and subscriptions, computed by the same code as the screens here. Read-only, and revocable at any time.",
+  "mcp.issue": "Create a token",
+  "mcp.rotate": "Create a new token",
+  "mcp.revoke": "Revoke access",
+  "mcp.revoked": "Access revoked",
+  "mcp.issuedAt": "Connected since {when}",
+  "mcp.once": "Copy it now — it is shown once and cannot be displayed again. Anyone holding it can read your finances.",
+  "mcp.copy": "Copy token",
+  "mcp.copied": "Copied",
+  "mcp.howto": "How to connect",
+  "mcp.cliStep": "Claude Code — run this in a terminal:",
+  "mcp.copyCmd": "Copy command",
+  "mcp.desktopStep": "Claude Desktop — add this to claude_desktop_config.json (Settings → Developer → Edit Config), then restart it:",
+  "mcp.copyCfg": "Copy config"
 }

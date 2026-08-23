@@ -29,6 +29,11 @@ export interface DirectoryUser {
   /** Session generation (migration 0005). Baked into the session signature; bump = sign out
    *  everywhere. See `bumpTokenVersion`. */
   token_version: number;
+  /** MCP bearer-token generation (migration 0009). Same mechanism as `token_version`, separate
+   *  number: revoking the token an editor holds must not sign the browser out. */
+  mcp_version: number;
+  /** When the current MCP token was issued; NULL = never issued, or revoked since. */
+  mcp_issued_at: number | null;
 }
 
 /** What a user's Durable Object reports about itself. Volume only — never amounts. */
@@ -236,6 +241,32 @@ export async function setUserStatus(db: D1Database, id: string, status: UserStat
  */
 export async function bumpTokenVersion(db: D1Database, id: string): Promise<void> {
   await db.prepare("UPDATE users SET token_version = token_version + 1 WHERE id = ?").bind(id).run();
+}
+
+/**
+ * Issue (or rotate) the MCP bearer generation, and return the number the new token must carry.
+ *
+ * Read-back rather than a returned rowid: the caller has to SIGN this number, and inferring it
+ * as "old + 1" would be a second opinion about a value the database just wrote. Two clicks
+ * racing would then mint two tokens claiming the same generation, one of which is already dead.
+ */
+export async function issueMcpVersion(db: D1Database, id: string): Promise<number> {
+  await db.prepare(
+    "UPDATE users SET mcp_version = mcp_version + 1, mcp_issued_at = ? WHERE id = ?",
+  ).bind(Math.floor(Date.now() / 1000), id).run();
+  const row = await db.prepare("SELECT mcp_version FROM users WHERE id = ?").bind(id).first<{ mcp_version: number }>();
+  if (!row) throw new Error("user vanished while issuing an MCP token");
+  return row.mcp_version;
+}
+
+/**
+ * Revoke the MCP token: bump the generation so the signed one stops matching, and clear the
+ * issue date so the screen can say "not connected" instead of showing a date for a dead token.
+ */
+export async function revokeMcp(db: D1Database, id: string): Promise<void> {
+  await db.prepare(
+    "UPDATE users SET mcp_version = mcp_version + 1, mcp_issued_at = NULL WHERE id = ?",
+  ).bind(id).run();
 }
 
 /**

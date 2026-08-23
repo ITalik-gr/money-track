@@ -23,6 +23,7 @@ import { ingest } from "./routes/ingest.ts";
 import { credentials } from "./routes/credentials.ts";
 import { importRoutes } from "./routes/import.ts";
 import { webhook } from "./routes/webhook.ts";
+import { mcp } from "./routes/mcp.ts";
 import { telegram } from "./routes/telegram.ts";
 import { checkRate, isAiPath } from "./lib/platform/ratelimit.ts";
 
@@ -94,6 +95,11 @@ userApp.route("/ingest", ingest);
 // and resolved whose data they belong to; the work itself must happen next to that data.
 userApp.route("/webhook", webhook);
 userApp.route("/tg", telegram);
+// MCP (2026-08-23). Outside `/api` on purpose: the path is pasted into a config file by hand and
+// then never touched again, so it should not carry a prefix that means "the browser's API".
+// Authenticated in the Worker by a bearer token — by the time a request reaches here it has
+// already been resolved to this object, exactly like a session request.
+userApp.route("/mcp", mcp);
 userApp.route("/api", api);
 
 userApp.all("*", (c) => c.json({ error: "not_found", detail: new URL(c.req.url).pathname }, 404));

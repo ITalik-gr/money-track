@@ -14,7 +14,7 @@ import type {
   BudgetHistory, BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
   CredentialStatus, CurrenciesList, DomAnalytics, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
   BankConnections, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
-  KnowledgeDocFull, KnowledgeList, MerchantAnalytics, MonthlyHistory, Networth,
+  KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
@@ -46,7 +46,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule", "Mcp"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -672,6 +672,17 @@ export const api = createApi({
     testPush: b.mutation<PushSendResult, void>({ query: () => ({ url: "/push/test", method: "POST" }) }),
     // §BACKUP: копії даних поза Durable Object. Список і видалення — звичайні запити; сам файл
     // качається прямим посиланням (браузер має зберегти його на диск, а не покласти в стор).
+    /**
+     * §MCP: the bearer token an MCP client holds. The mutation's response is the ONLY time the
+     * token exists on the client — nothing caches it, and the status query can never return it.
+     */
+    getMcp: b.query<McpStatus, void>({ query: () => "/account/mcp", providesTags: ["Mcp"] }),
+    issueMcpToken: b.mutation<McpToken, void>({
+      query: () => ({ url: "/account/mcp", method: "POST" }), invalidatesTags: ["Mcp"],
+    }),
+    revokeMcpToken: b.mutation<McpStatus, void>({
+      query: () => ({ url: "/account/mcp", method: "DELETE" }), invalidatesTags: ["Mcp"],
+    }),
     getBackups: b.query<BackupList, void>({ query: () => "/backups", providesTags: ["Backup"] }),
     runBackup: b.mutation<{ ok: boolean; size: number }, void>({
       query: () => ({ url: "/backups/run", method: "POST" }), invalidatesTags: ["Backup"],
@@ -1038,6 +1049,9 @@ export const {
   useSubscribePushMutation,
   useUnsubscribePushMutation,
   useTestPushMutation,
+  useGetMcpQuery,
+  useIssueMcpTokenMutation,
+  useRevokeMcpTokenMutation,
   useGetBackupsQuery,
   useRunBackupMutation,
   useDeleteBackupMutation,

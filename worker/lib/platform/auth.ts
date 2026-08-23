@@ -111,6 +111,58 @@ export async function verifySession(
 }
 
 /**
+ * MCP bearer token: `mtmcp1.<userId>.<expiryUnix>.<mcpVersion>.<hmac>` (2026-08-23).
+ *
+ * A SECOND credential for the same account, held by a program rather than a browser — Claude
+ * Code, or Claude Desktop through `mcp-remote`. Three properties are deliberate:
+ *
+ *   • **Its own generation number.** `mcp_version` (directory 0009), not `token_version`.
+ *     Rotating the token that sits in an editor's config file must not sign the owner out of
+ *     their phone, and the reverse matters more: "someone has my session" is answered by
+ *     bumping `token_version`, and that answer would be wrong if it silently left a
+ *     year-long API token alive.
+ *   • **Its own prefix, so the two token types cannot be swapped.** The prefix is part of the
+ *     SIGNED payload, so a session cookie is not a valid MCP token even for the same user with
+ *     the same numbers — the HMAC simply does not match. Without that, one leaked credential
+ *     would be usable wherever the other is accepted.
+ *   • **A year, not thirty days.** It lives in a config file nobody reopens; a token that
+ *     expires quietly turns into "the MCP server stopped working" with no visible cause.
+ *     Length is affordable precisely BECAUSE it is revocable — see `revokeMcp`.
+ *
+ * ⚠️ Like `verifySession`, verifying the signature is only HALF the check: the caller must
+ * still compare `mcpVersion` against the directory, and still check the account is not
+ * disabled. A signature proves the number was not edited, not that it is still current.
+ */
+const MCP_VERSION = "mtmcp1";
+const MCP_TTL = 60 * 60 * 24 * 365;
+
+export async function createMcpToken(env: Env, userId: string, mcpVersion: number): Promise<string> {
+  const key = signingKey(env);
+  if (!key) throw new Error("no signing key: set SESSION_SECRET (or APP_PASSWORD)");
+  const exp = String(Math.floor(Date.now() / 1000) + MCP_TTL);
+  const payload = `${MCP_VERSION}.${userId}.${exp}.${mcpVersion}`;
+  return `${payload}.${await hmacHex(key, payload)}`;
+}
+
+/** Returns the user and the generation the token claims, or `null`. Never throws. */
+export async function verifyMcpToken(
+  env: Env, token: string | undefined,
+): Promise<{ userId: string; mcpVersion: number } | null> {
+  const key = signingKey(env);
+  if (!token || !key) return null;
+  const parts = token.split(".");
+  if (parts.length !== 5) return null;
+  const [version, userId, exp, mv, sig] = parts as [string, string, string, string, string];
+  if (version !== MCP_VERSION) return null;
+  // Hex-only ids are also what keeps a demo sandbox out: its name is `demo:<random>`, which
+  // cannot survive this test, so a sandbox can never hold an MCP token no matter what is signed.
+  if (!/^[0-9a-f]+$/.test(userId) || !/^\d+$/.test(exp) || !/^\d+$/.test(mv)) return null;
+  if (Number(exp) < Date.now() / 1000) return null;
+  const expected = await hmacHex(key, `${version}.${userId}.${exp}.${mv}`);
+  return timingSafeEqual(sig, expected) ? { userId, mcpVersion: Number(mv) } : null;
+}
+
+/**
  * Per-user webhook path segment: `<userId>.<hmac>`.
  *
  * Derived rather than stored: a bank webhook URL is registered once and lives for years, so

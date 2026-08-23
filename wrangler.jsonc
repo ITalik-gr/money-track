@@ -24,6 +24,10 @@
 			"/webhook/*",
 			"/tg/*",
 			"/ingest/*",
+			// MCP (§MCP). Outside `/api/*`, so without this line the static-asset router would
+			// answer it — and the symptom would be an MCP client reporting invalid JSON, which
+			// reads as a broken server rather than as "the SPA shell was returned instead".
+			"/mcp",
 			// The service worker normally answers this one itself (a POST share target is
 			// delivered to the SW, never to the network). It is listed anyway for the window where
 			// the SW is updating or was unregistered: without it, a shared photo lands on the

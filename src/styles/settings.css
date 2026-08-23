@@ -667,3 +667,18 @@
 .fb-note > svg { color: var(--muted); flex: none; margin-top: 2px; }
 .fb-note b { color: var(--ink); }
 
+
+/* ---- MCP access (§MCP) --------------------------------------------------- */
+/* A token and a shell command both have to survive being READ: no ellipsis, no horizontal
+   scroll inside a narrow settings column, and a break anywhere rather than at word boundaries —
+   a base-16 signature has no words, and a line clipped mid-signature is silently wrong when
+   pasted. `white-space: pre-wrap` keeps the newlines the command was written with. */
+.mcp-code {
+  display: block; margin: 8px 0; padding: 10px 12px; border-radius: var(--radius);
+  background: var(--surface-2); font-size: 11.5px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
+/* Marks off the one moment the secret is on screen, so it does not read as a permanent field. */
+.mcp-secret { margin-top: 12px; padding: 12px; border: 1px solid var(--accent); border-radius: var(--radius); }
+.mcp-once { font-size: 12.5px; line-height: 1.45; color: var(--accent); }
+.mcp-when { margin: 10px 0 0; }

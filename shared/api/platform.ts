@@ -86,3 +86,22 @@ export interface TranslitFix {
   n: number;
   source: "sibling" | "description";
 }
+
+/**
+ * MCP access (§MCP). The token itself is returned exactly ONCE, by the POST that mints it —
+ * it is not stored anywhere it could be read back, so a status call can only ever report that
+ * one exists. That is the same promise `/api/credentials` makes about a stored API key, and for
+ * the same reason: a credential a screen can re-display is a credential a screen can leak.
+ */
+export interface McpStatus {
+  /** A token is currently valid for this account. */
+  active: boolean;
+  /** When it was issued (unix seconds), or null when there is none. */
+  issued_at: number | null;
+  /** Absolute URL to paste into a client config, built from the request's own origin. */
+  url: string;
+}
+export interface McpToken extends McpStatus {
+  /** Shown once and never again. */
+  token: string;
+}

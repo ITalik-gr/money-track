@@ -9,7 +9,9 @@ import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
 import { CLEAR_COOKIE_OPTS, DEMO_COOKIE, SESSION_COOKIE } from "../lib/platform/auth.ts";
-import { bumpTokenVersion, deleteUser, findUserById } from "../lib/platform/directory.ts";
+import { bumpTokenVersion, deleteUser, findUserById, issueMcpVersion, revokeMcp } from "../lib/platform/directory.ts";
+import { createMcpToken } from "../lib/platform/auth.ts";
+import type { McpStatus, McpToken } from "../../shared/api/index.ts";
 
 export const account = new Hono<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>();
 
@@ -30,6 +32,12 @@ account.post("/logout-all", async (c) => {
   // A sandbox has no directory row to bump; its cookie dies with the sandbox in 24h anyway.
   if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
   await bumpTokenVersion(c.env.DIRECTORY, userId);
+  /**
+   * The MCP token goes too, and that is the point rather than a side effect. This button is the
+   * answer to "I think someone has my credentials"; an answer that leaves a year-long bearer
+   * token alive on some machine would be a worse lie than not offering the button at all.
+   */
+  await revokeMcp(c.env.DIRECTORY, userId);
   setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);
   setCookie(c, DEMO_COOKIE, "", { ...CLEAR_COOKIE_OPTS, httpOnly: true });
   return c.json({ ok: true });
@@ -77,4 +85,61 @@ account.post("/delete", async (c) => {
   setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);
   setCookie(c, DEMO_COOKIE, "", { ...CLEAR_COOKIE_OPTS, httpOnly: true });
   return c.json({ ok: true });
+});
+
+/**
+ * §MCP — a bearer token that lets an MCP client (Claude Code, Claude Desktop via `mcp-remote`)
+ * read this account's ledger. Worker-side for the same reason as the rest of this file: the
+ * credential's generation lives in the directory, which the Durable Object cannot reach.
+ *
+ * Deliberately NOT a list of tokens. One credential per account is what makes the screen
+ * honest — "connected / not connected", with revoke meaning revoke. A list invites the state
+ * where four tokens exist, three of them on machines the owner no longer has.
+ */
+function mcpUrl(reqUrl: string): string {
+  return `${new URL(reqUrl).origin}/mcp`;
+}
+
+account.get("/mcp", async (c) => {
+  const userId = c.get("userId");
+  if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
+  const me = await findUserById(c.env.DIRECTORY, userId);
+  if (!me) return c.json({ error: "not_found" }, 404);
+  return c.json({
+    active: me.mcp_issued_at != null,
+    issued_at: me.mcp_issued_at,
+    url: mcpUrl(c.req.url),
+  } satisfies McpStatus);
+});
+
+/**
+ * Mint, or rotate. There is no separate "rotate" verb because issuing is already destructive to
+ * the previous token (`issueMcpVersion` bumps the generation): a button that could mint a second
+ * live token would quietly turn the one-credential promise above into a list.
+ */
+account.post("/mcp", async (c) => {
+  const userId = c.get("userId");
+  // A sandbox lives 24h and is meant to be looked at, not connected to. It also cannot get here:
+  // `verifyMcpToken` rejects non-hex ids. Refusing at the source keeps the screen from offering
+  // a stranger a credential that would stop working the same day.
+  if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
+  if (!c.env.SESSION_SECRET && !c.env.APP_PASSWORD) {
+    return c.json({ error: "no_signing_key", detail: "SESSION_SECRET is not set" }, 500);
+  }
+  const version = await issueMcpVersion(c.env.DIRECTORY, userId);
+  const token = await createMcpToken(c.env, userId, version);
+  const me = await findUserById(c.env.DIRECTORY, userId);
+  return c.json({
+    token,
+    active: true,
+    issued_at: me?.mcp_issued_at ?? Math.floor(Date.now() / 1000),
+    url: mcpUrl(c.req.url),
+  } satisfies McpToken);
+});
+
+account.delete("/mcp", async (c) => {
+  const userId = c.get("userId");
+  if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
+  await revokeMcp(c.env.DIRECTORY, userId);
+  return c.json({ active: false, issued_at: null, url: mcpUrl(c.req.url) } satisfies McpStatus);
 });

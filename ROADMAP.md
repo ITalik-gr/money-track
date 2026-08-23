@@ -56,6 +56,37 @@
 
 ## 🔥 Черга (роби згори вниз)
 
+### 0a. `moneyUnitDirective` states the WRONG unit to the model (found 2026-08-23, while building §MCP)
+
+> Not from a screen — from reading the two halves side by side. It is one sentence in a prompt,
+> and it is a factual claim about the data that the data contradicts.
+
+**What is wrong.** `moneyUnitDirective` (`lib/ai/prompt.ts`) tells the model: *"every money figure
+in the data you were given is already converted into `<CODE>` **minor units** — including fields
+whose name ends in `_uah`"*. But the payload it accompanies is in **whole units**:
+`collectFinanceSnapshot`'s `context` divides every amount by 100 (`own_funds_uah`,
+`monthly_burn_uah`, `budgets[].limit_uah`, `upcoming[].amount_uah`, …), and so do the chat tools
+(`query_spend.total_uah`, `find_transactions[].amount_uah` — `Math.round(r.amt / 100)`).
+
+**Why it matters.** A model handed a general instruction and a specific field believes the field —
+that is the reasoning the directive itself was written from. Here the instruction is the thing that
+is false, so a model that OBEYS it understates every figure by 100×: 5 000 ₴ of rent read as ₴50.
+It is invisible in review because both readings are plausible sentences about money, and the model
+often sanity-checks its way back to the right order of magnitude — which makes it intermittent
+rather than absent.
+
+**Surfaces:** `insight.ts`, `generate.ts` (advice, budget plan, feed observation, group verdict),
+`tasks.ts` (advisor chat, tx chat). Not §MCP — that surface states its unit per answer and only
+ships the whole-unit half (`routes/mcp.ts`).
+
+**Ціль:** one unit, stated once, true. **Файли:** `worker/lib/ai/prompt.ts`, `advisor.ts`,
+`chat-tools.ts`. **Кроки:** decide which unit the AI payload speaks (whole units is the smaller
+change and matches every existing `_uah` field), fix the directive to say that, and pin it — a
+test that asserts the directive's claim against an actual snapshot, so the two cannot drift again.
+**Готово-коли:** the sentence the model is given matches the numbers it is given, and something
+fails if that stops being true.
+
+
 ### 0. Від власника, з живого користування (2026-08-21) — роби згори вниз
 
 > Знято зі слів власника після дня з продом. **Це найцінніша черга у файлі:** усі дванадцять

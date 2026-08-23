@@ -28,6 +28,7 @@ import { BankConnectionsCard } from "../components/settings/BankConnectionsCard.
 import { ExportCard } from "../components/settings/ExportCard.tsx";
 import { AiActivityCard } from "../components/settings/AiActivityCard.tsx";
 import { BackupCard } from "../components/settings/BackupCard.tsx";
+import { McpCard } from "../components/settings/McpCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
 import { TelegramCard } from "../components/settings/TelegramCard.tsx";
@@ -110,6 +111,11 @@ export function Setup() {
               а форма, доступна лише після реєстрації, збирає відгуки від тих, хто вже проминув
               зламане місце. */}
           <FeedbackCard />
+          {/* Beside the session controls, because it is the same question — which credentials can
+              reach this account — and the revoke buttons should be within one glance of each
+              other. Hidden in the demo: a sandbox lives 24h, so a token minted here would stop
+              working the same day (the server refuses it outright, §MCP). */}
+          {!isDemo && <McpCard />}
           {!isDemo && <SessionsCard />}
           {!isDemo && <DangerZone />}
         </div>
