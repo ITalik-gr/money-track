@@ -39,6 +39,11 @@
         "share_pct": 26
       }
     ],
+    "subscriptions": {
+      "items": [],
+      "monthly_base": 0,
+      "share_pct": 0
+    },
     "lifetime": {
       "total": 2025100,
       "n": 37,

@@ -43,7 +43,7 @@ export async function proposeBudgetLimits(
         "(categories: [{id, name, avg_month_uah, current_limit_uah}]), propose sensible MONTHLY envelope limits for " +
         "EVERY category supplied (same id). If runway is short or the goal is saving, propose a realistic reduction " +
         "in discretionary spending (entertainment, cafés, subscriptions, clothes), but do not over-cut the basics " +
-        "(groceries, utilities, health). Limits are whole numbers in hryvnia — neither inflated nor zero. Answer " +
+        "(groceries, utilities, health). Limits are WHOLE numbers of the display currency — neither inflated nor zero. Answer " +
         "with VALID JSON ONLY: {proposals:[{category_id, limit_uah, reason}], overall} — reason is one short " +
         "phrase, overall is 1-2 sentences about the logic of the plan. No markdown." +
         // Без цієї директиви план бюджетів приходив українською навіть на англійському екрані:
@@ -110,9 +110,20 @@ export async function generateNotifyObservations(
         "An observation must be ACTIONABLE: not \"spending went up\", but what exactly changed and what is worth " +
         "doing about it. " +
         "Do NOT duplicate what already has its own notification: exceeded budget, subscription deadline, price " +
-        "increase, category pace anomaly, liquidity gap, health index. Look for what deterministic detection does " +
+        "increase, category pace anomaly, liquidity gap, health index. The payload carries " +
+        "already_announced_today — the events the app has ALREADY written into the feed in this same run, in the " +
+        "reader's own words. Say none of them again, in any wording. Look for what deterministic detection does " +
         "NOT catch: a shift in the structure of spending, the accumulated effect of small amounts, a link between " +
         "categories, a consequence of the user's situation (situation). " +
+        // The calendar half of the "no invented figures" rule. Shipped 2026-08-26: «Rent due in 11
+        // days» for a rent paid on the 20th — read out of the user's own prose in `situation`,
+        // which is not a schedule, for a payment that is in no upcoming_charges row.
+        "📅 DATES: your ONLY calendar is today, day_of_month, days_left_in_month, runway_days and the " +
+        "upcoming_charges rows (in_days / date / on_day). Never state a due date, a countdown or an \"in N days\" " +
+        "for anything that is not one of those rows — a payment that repeats every month in the history but is not " +
+        "there has NO known date. Never name a month the payload does not name. ⚠️ situation is the user's own " +
+        "prose: \"I pay rent on the 20th\" is background, NOT a schedule you may turn into a deadline. An " +
+        "observation carrying a date that is not in the payload is discarded whole, like an invented amount. " +
         "If nothing is genuinely worth attention, return an empty array. That is a normal and correct answer: " +
         "silence beats noise. " +
         // Спостереження генеруються ЩОДНЯ на майже незмінному знімку, тож без цього блоку модель
@@ -124,8 +135,13 @@ export async function generateNotifyObservations(
         "find something NEW. If there is nothing new, an empty array beats a paraphrase. " +
         // The jargon rule stays, the language claim does not: this said «МОВА: природна
         // українська» AND banned English words outright, which contradicted the directive below.
-        "STYLE: title is a noun phrase, like a news headline (\"Card debt is eating the cushion\", NOT \"Tiny income " +
-        "vs flat does not make\"). No internal jargon in the text: not \"optional/discretionary\" but \"non-essential " +
+        // ⚠️ The example below is English and the answer often is not. Before this line said so, the
+        // feed carried English HEADLINES over Ukrainian bodies — one card, two languages — because
+        // an illustration in a language outvotes a directive about language.
+        "STYLE: title is a noun phrase, like a news headline — the example \"Card debt is eating the cushion\" (as " +
+        "opposed to \"Tiny income vs flat does not make\") illustrates the SHAPE only; write the title in the " +
+        "answer's own language, never in the language of these instructions. No internal jargon in the text: not " +
+        "\"optional/discretionary\" but \"non-essential " +
         "spending\"; not \"burn\" but \"monthly spending\"; not \"runway\" but \"how long the money lasts\" — in the " +
         "answer's own language. " +
         "title ≤ 60 characters, body ≤ 200 characters, no markdown. " +
@@ -173,9 +189,9 @@ export async function generateAdvice(
         "{runway_comment, summary, " +
         "facts:[{label, amount (UAH number or null), category (name or null), delta_pct (number or null), tone ('pos'|'neg'|'neutral')}] (2-5 key facts), " +
         "suggestions:[{title, detail, action}]} — 3-5 pieces of advice, each actionable (what exactly to cut or do, " +
-        "and the effect in UAH). action is either null or {type:'create_budget', label, category_id (from " +
+        "and the effect as an amount). action is either null or {type:'create_budget', label, category_id (from " +
         "top_categories), category_name, amount_uah} when proposing an envelope limit for a category makes sense. " +
-        "Amounts are in hryvnia." +
+        "Amounts are WHOLE units of the display currency named below." +
         (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];
@@ -194,7 +210,7 @@ export async function evaluateGroup(
       type: "text",
       text:
         "You are a financial assistant. Assess one specific GROUP of the user's spending (a trip, an event, a " +
-        "project) from the figures supplied (amounts in UAH): what it cost, how that compares with monthly burn and " +
+        "project) from the figures supplied (amounts in whole currency units): what it cost, how that compares with monthly burn and " +
         "the reserve (runway), whether it is expensive, where most of it went, whether there are anomalies. If the " +
         "payload carries transactions:[{id,label}] you may point at a notable operation inside facts.label or note " +
         "as [tx:ID|short caption] (e.g. [tx:abc|MrGrill 150]). " +

@@ -21,6 +21,24 @@ const STORAGE_KEY = "mt-base-cur";
 let current: BaseCurrency = DEFAULT_BASE;
 let explicit = false;
 
+/**
+ * Subscribers for "the base changed" — the same escape hatch `onLocaleChange` is, and for the same
+ * reason: this module is a plain value, not a store, so anything that must REDRAW when the unit
+ * changes (the brand mark and the favicon, which are the currency's own sign) has no other way to
+ * hear about it. Everything that merely PRINTS the sign is already re-rendered by the API reset
+ * that follows a currency change.
+ */
+const listeners = new Set<(cur: BaseCurrency) => void>();
+
+export function onBaseCurrencyChange(fn: (cur: BaseCurrency) => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function announce() {
+  for (const fn of listeners) fn(current);
+}
+
 /** The user's own choice, if they ever made one. Empty means "follow my language". */
 export function storedBaseCurrency(): BaseCurrency | null {
   try {
@@ -63,14 +81,20 @@ export function signFor(cur: number | null | undefined): string {
  * the reader made — that distinction is what lets "follow my language" stay reachable.
  */
 export function setBaseCurrency(cur: BaseCurrency, persist = true): void {
+  const changed = current !== cur;
   current = cur;
-  if (!persist) return;
-  explicit = true;
-  try {
-    localStorage.setItem(STORAGE_KEY, String(cur));
-  } catch {
-    /* ignore */
+  if (persist) {
+    explicit = true;
+    try {
+      localStorage.setItem(STORAGE_KEY, String(cur));
+    } catch {
+      /* ignore */
+    }
   }
+  // Announced for the non-persisting path too: that is the branch that adopts the server's
+  // EFFECTIVE base from `/rates`, and a reader whose choice was overruled (no rate for it) must
+  // see the mark of the unit they are actually reading, not the one they asked for.
+  if (changed) announce();
 }
 
 /** Drop the explicit choice and fall back on the language default. */
@@ -81,7 +105,10 @@ export function clearBaseCurrency(): void {
   } catch {
     /* ignore */
   }
-  current = baseCurrencyForLocale(getLocale());
+  const next = baseCurrencyForLocale(getLocale());
+  const changed = current !== next;
+  current = next;
+  if (changed) announce();
 }
 
 /**
@@ -111,5 +138,9 @@ current = saved ?? baseCurrencyForLocale(getLocale());
 // whatever that first guess implied — see `onLocaleChange` for the full report.
 // An explicit choice is never overruled: that is what makes it explicit.
 onLocaleChange((l) => {
-  if (!explicit) current = baseCurrencyForLocale(l);
+  if (explicit) return;
+  const next = baseCurrencyForLocale(l);
+  if (next === current) return;
+  current = next;
+  announce();
 });

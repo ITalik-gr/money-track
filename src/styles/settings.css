@@ -54,6 +54,11 @@
 .set-card-h { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; }
 .set-card-h svg { color: var(--muted); flex-shrink: 0; }
 .set-card-sub { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin: 5px 0 13px; }
+/* A segmented control is as wide as its options, never as wide as the card. `.seg` is
+   `inline-flex`, which is correct everywhere else — but `.set-card` is a flex COLUMN, and a flex
+   item stretches to the cross size by default, so four tabs were spread across the whole card
+   with the last one floating in the middle of nowhere. */
+.set-card .seg { align-self: flex-start; max-width: 100%; flex-wrap: wrap; }
 .set-card .stack { gap: 8px; }
 .set-card .stack .btn { justify-content: flex-start; text-align: left; }
 /* The secondary drawer at the BOTTOM of a settings card («tests & maintenance»). It was listed as
@@ -377,6 +382,9 @@
 :root[data-theme="dark"] .sub-ai-block { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sub-ai-block { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); } }
 .sub-ai-hint { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+/* §SUB-FIND: what the search actually looked for. A screenful of unrelated merchants reads as a
+   broken search until the terms are visible — then it reads as the wrong word, which is fixable. */
+.sub-ai-terms { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; font-size: 12px; color: var(--ink-2); }
 .sub-every { gap: 10px; align-items: center; }
 .sub-every input { text-align: center; }
 

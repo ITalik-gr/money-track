@@ -37,7 +37,7 @@ export async function generateFinancialReport(
       type: "text",
       text:
         "You are a senior personal financial analyst. Build a DETAILED periodic report from the user's CANONICAL " +
-        "data supplied below (all amounts in hryvnia, already converted; period describes the type and the bounds). " +
+        "data supplied below (all amounts already converted into WHOLE units of the display currency; period describes the type and the bounds). " +
         "The data has already been computed correctly (cash counted by its real category, transfers between the " +
         "user's own accounts excluded, currencies converted to UAH) — USE these numbers, do not recompute and do not " +
         "invent. The payload carries: current (spend/income/net/savings_rate), previous (the same preceding period, " +
@@ -95,8 +95,8 @@ export async function generateFinancialReport(
         "one phrase), anomalies:[{label, detail, severity ('info'|'warn'|'high')}] (unusual or one-off spending, " +
         "subscription price rises; empty array if none), predictions:{next_period_spend_uah (number or null), " +
         "runway_months (number or null), note}, advice:[{title, detail, action}] (3-5 actionable items with the " +
-        "effect in UAH; action is null or {type:'create_budget', label, category_id, category_name, amount_uah})}. " +
-        "Amounts are whole hryvnia." +
+        "effect as an amount; action is null or {type:'create_budget', label, category_id, category_name, amount_uah})}. " +
+        "Amounts are whole units of the display currency named below." +
         (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];

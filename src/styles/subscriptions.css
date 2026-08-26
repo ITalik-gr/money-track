@@ -1,0 +1,84 @@
+/*
+ * SUBSCRIPTIONS — the plans list, the AI search, and §SUB-PAGE (one subscription).
+ *
+ * Split out of `domains-a.css` on 2026-08-27 under lint C8: adding the subscription PAGE pushed
+ * that file over its ceiling, and the ratchet says the answer is a seam, not a bigger number. The
+ * seam picked itself — this is one screen plus its detail view, which is exactly what a domain
+ * file is, and the styles it needs (`.sub-card*`, `.sub-row`, `.sub-share*`) were already the
+ * largest single block in there.
+ */
+/* ===== SUBSCRIPTIONS ===================================================== */
+.sub-hero { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; }
+.sub-hero .num-hero { font-size: 30px; }
+.sub-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+.sub-row:last-child { border-bottom: none; }
+/* Автознайдені кандидати — 2-колонкова сітка карток (§SUB1) */
+.sub-detected { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+.sub-detected .sub-row { border-bottom: none; padding: 12px 14px; }
+.sub-detected .sub-row:last-child { border-bottom: none; }
+/* AI-кандидати всередині блоку пошуку — теж сітка */
+.sub-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 12px; }
+.sub-cands .sub-row { border: 1px solid var(--line); border-radius: var(--radius); }
+.sub-row .s-body { flex: 1; min-width: 0; }
+.sub-row .s-name { font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-row .s-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.sub-row .s-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; text-align: right; white-space: nowrap; }
+/* §R5: «це не підписка» — закрити кандидата */
+.sub-row .s-dismiss { padding: 6px 9px; color: var(--muted); font-size: 13px; }
+.sub-row .s-dismiss:hover { color: var(--neg, #d64545); }
+/* §R5: опис підписки для AI */
+.sub-card-cat { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
+.sub-card-cat .label { text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.sub-note {
+  width: 100%; margin-top: 10px; resize: vertical; min-height: 38px;
+  font-size: 12.5px; padding: 7px 9px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--bg); color: var(--text);
+}
+.sub-note::placeholder { color: var(--muted); }
+
+/* subscriptions — card grid */
+.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.sub-card {
+  position: relative; padding: 15px; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 12px;
+}
+.sub-card.is-finished { opacity: 0.62; }
+.sub-card-x { position: absolute; top: 10px; right: 10px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 3px 6px; border-radius: 6px; }
+.sub-card-x:hover { color: var(--neg); background: var(--surface-2); }
+.sub-card-top { display: flex; align-items: center; gap: 11px; min-width: 0; padding-right: 20px; }
+/* Now a link (§SUB-PAGE) — inherits colour, so clickable did not mean restyled. */
+.sub-card-name { display: block; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; }
+.sub-card-name:hover { text-decoration: underline; }
+.sub-card-kind { font-size: 12px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-card-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+.sub-card-per { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+.sub-card-fx { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: -6px; }
+.sub-card-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
+.sub-badge { font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 6px; padding: 3px 8px; }
+.sub-badge.done { color: var(--muted); }
+.sub-rem { font-size: 11.5px; color: var(--muted); }
+
+/* §SUB-PAGE — one subscription. Reuses `.merchant-stat` tiles and `.cat-page-stats`, so only the
+   three blocks that have no equivalent elsewhere live here. */
+.sub-page-id { display: flex; align-items: center; gap: 12px; }
+
+/* The real cadence beside the declared one. `.warn` is the whole reason the block exists: a plan
+   that says "monthly" and bills every 14 days is a fact, not a rounding difference. */
+.sub-cadence { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; }
+.sub-cadence-v { font-size: 16px; margin-top: 2px; }
+.sub-cadence.warn { border-color: var(--warn); }
+.sub-cadence-note { font-size: 13px; color: var(--warn); max-width: 44ch; }
+
+/* Three shares, one grid, so the bars line up and can be read against each other — separate rows
+   with their own widths would compare nothing. */
+.sub-share { display: grid; gap: 10px; padding: 16px 18px; }
+.sub-share-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 2fr) 48px; align-items: center; gap: 12px; }
+.sub-share-lbl { font-size: 13px; color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-share-bar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.sub-share-bar > span { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+.sub-share-pct { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.sub-charge-list { padding: 4px 0; }
+.sub-charge-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 18px; font-size: 14px; color: inherit; text-decoration: none; }
+.sub-charge-row:hover { background: var(--hover); }

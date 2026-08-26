@@ -850,3 +850,87 @@ export async function importanceByMonth(
   ).bind(from).all<{ month: string; importance: string; spent: number }>();
   return res.results ?? [];
 }
+
+// ---- §SHAPE: the shape of the spending, not its size ------------------------
+
+export interface ChequeRow { bucket: number; n: number; spent: number }
+
+/**
+ * How the window's spending splits by the SIZE of the individual payment.
+ *
+ * The page could say what the average cheque was and what the biggest one was, and neither answers
+ * the question people actually ask about a month that went wrong: was it a few large payments, or
+ * a hundred small ones? Those have opposite remedies, and the totals look identical.
+ *
+ * ⚠️ The unit here is the WHOLE transaction, not a split part (`-t.amount`, deduped by `GROUP BY
+ * t.id`). A 3 000 payment divided across three categories is still one 3 000 cheque at the till —
+ * bucketing its parts would report three small purchases that nobody made. That is why this is one
+ * of the few canonical queries that does NOT sum `EFF_AMOUNT`; `STATS_JOINS` stays only so the
+ * canonical `SPEND_WHERE` population is identical to every other block on the page.
+ * ⚠️ Refunds are excluded (`t.amount < 0`). A refund passes `SPEND_WHERE` on purpose — it must
+ * SUBTRACT from a total — but it is a negative cheque, and there is no size bucket for that.
+ * `bucket` is the index into the thresholds the caller supplied, so the boundaries live in one
+ * place and can be currency-converted there (§BASE-CUR).
+ */
+export async function chequeSizes(
+  db: AppDb, v: ValueScope, r: Range, thresholds: number[],
+): Promise<ChequeRow[]> {
+  // `CASE` over the caller's thresholds, ascending: the last bucket is open-ended.
+  const cases = thresholds.map((th, i) => `WHEN amt < ${Math.round(th)} THEN ${i}`).join(" ");
+  const res = await db.prepare(
+    `SELECT CASE ${cases} ELSE ${thresholds.length} END AS bucket,
+            COUNT(*) AS n, CAST(ROUND(SUM(amt)) AS INTEGER) AS spent
+     FROM (SELECT t.id AS id, MAX((-t.amount) * ${v.mult}) AS amt
+           FROM transactions t ${STATS_JOINS}
+           WHERE t.time >= ? AND t.time <= ? AND t.amount < 0 AND ${SPEND_WHERE}${v.curFilter}
+           GROUP BY t.id)
+     GROUP BY bucket ORDER BY bucket`,
+  ).bind(r.from, r.to).all<ChequeRow>();
+  return res.results ?? [];
+}
+
+export interface AttributionRow { spent: number; n: number }
+
+/**
+ * Spending that no envelope covers — the blind spot of the whole budgeting feature.
+ *
+ * `/plan` shows the envelopes that EXIST and how full they are. Nothing anywhere said what share
+ * of the money never passes through one, so a person could keep every envelope green while most of
+ * their spending happened outside all of them.
+ *
+ * ⚠️ Membership is "the category has a budget ROW", not "has a limit above zero": §BUDGET-ZERO
+ * makes a zero limit a real decision ("I deliberately spend nothing here"), and counting such a
+ * category as unplanned would report a plan the person made as a plan they failed to make.
+ * ⚠️ The `IS NULL` arm is not belt-and-braces. `NULL NOT IN (…)` is NULL, not true, so an
+ * UNCATEGORISED expense — which is outside every envelope by definition — was silently dropped
+ * from the very figure that measures being outside. SQL three-valued logic, and the result looked
+ * entirely plausible: a smaller number that still moved when the data moved.
+ */
+export async function unbudgetedSpend(db: AppDb, v: ValueScope, r: Range): Promise<AttributionRow> {
+  const res = await db.prepare(
+    `SELECT ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
+       AND (${EFF_CAT_ID} IS NULL
+            OR ${EFF_CAT_ID} NOT IN (SELECT category_id FROM budgets))`,
+  ).bind(r.from, r.to).first<AttributionRow>();
+  return res ?? { spent: 0, n: 0 };
+}
+
+/**
+ * Spending the app cannot attribute at all — no category, effective or otherwise.
+ *
+ * Every other figure on the Statistics page is an answer ABOUT categories, so the honest first
+ * question is how much of the window those answers do not cover. The feed already nags when more
+ * than ten operations are uncategorised, but it counts OPERATIONS — and ten small ones and ten
+ * large ones are very different amounts of doubt.
+ */
+export async function uncategorisedSpend(db: AppDb, v: ValueScope, r: Range): Promise<AttributionRow> {
+  const res = await db.prepare(
+    `SELECT ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
+       AND ${EFF_CAT_ID} IS NULL`,
+  ).bind(r.from, r.to).first<AttributionRow>();
+  return res ?? { spent: 0, n: 0 };
+}

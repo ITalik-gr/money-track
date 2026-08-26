@@ -10,12 +10,13 @@ import type { AdviceHistoryItem } from "../../../shared/api/ai.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } from "../finance/money.ts";
 import { currencySign } from "../../../shared/currency.ts";
-import { nextChargeUnix, plannedUAH, monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
+import { monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
 import { ownFundsMinor } from "../finance/own-funds.ts";
 import { buildWeekdayAnalytics } from "../finance/weekday.ts";
+import { buildTimeContext, buildUpcomingCharges } from "./time-context.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
 import { st, stLit, num, resolveLocale } from "../platform/i18n.ts";
 
@@ -183,6 +184,8 @@ export interface FinanceSnapshot {
   subsMonthly: number;                     // грн/міс (major)
   citable: { id: string; label: string }[]; // операції з id для цитат [tx:ID]
   context: Record<string, unknown>;        // спільний JSON-контекст для AI (без tx-блоків)
+  /** §TIME-CTX: the day numbers and months this payload STATES — the calendar a model answer is checked against. */
+  timeAnchors: { days: number[]; months: number[] };
 }
 
 export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise<FinanceSnapshot> {
@@ -320,16 +323,13 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
   // §2/§5: найбільші операції з id — щоб AI цитував конкретику токеном [tx:ID].
   const citable = await notableTransactions(env, 90, 12);
 
-  // §CTX: списання в найближчі 30 днів — щоб AI радив пріоритет/тайминг платежів.
-  const in30 = now + 30 * 86400;
-  const upcoming = (upcomingRows.results ?? [])
-    // §CUR-PLAN: поле зветься amount_uah, тож і має бути в ₴ — раніше тут ділили на 100
-    // БЕЗ конверсії, і $5-підписка їхала в AI як «5 ₴».
-    .map((p) => ({ title: p.title, at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now), amount_uah: Math.round(plannedUAH(p.period_amount, p.currency_code, rates) / 100), kind: p.kind }))
-    .filter((p) => p.at <= in30)
-    .sort((a, b) => a.at - b.at)
-    .slice(0, 12)
-    .map((p) => ({ title: p.title, in_days: Math.max(0, Math.round((p.at - now) / 86400)), amount_uah: p.amount_uah, kind: p.kind }));
+  // §CTX/§TIME-CTX: the nearest charges — the app's whole answer to "when" (see `time-context.ts`).
+  const upcoming = buildUpcomingCharges(upcomingRows.results ?? [], rates, now);
+
+  // §TIME-CTX: today, the runway in days, and the anchors an AI answer is checked against.
+  const timeCtx = buildTimeContext(
+    now, upcoming, runwayMonths, (trend.results ?? []).map((t) => String(t.m)),
+  );
 
   // §A1: активні факти про світ (наратив). Тут — ЄДИНЕ джерело контексту, тож і Порадник,
   // і Чат бачать факти автоматом (не додаємо їх у чат окремо). applied_to_numbers показує,
@@ -365,6 +365,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
   const context: Record<string, unknown> = {
     period_note: "top_categories/top_merchants/by_event hold totals for the LAST 90 DAYS (3 months); avg_month_uah is the monthly average. monthly_burn_uah is average spending per month. Do NOT confuse the 90-day total with a monthly one — rely on avg_month_uah. by_importance: essential (do not cut), discretionary (wanted), optional (safest to cut). monthly_trend: spend and income by month (6 months) — read the dynamics and seasonality, not just the average. budgets: limit vs actual this month (used_pct>100 means overspent — highlight it). subscriptions_monthly_uah: fixed subscriptions per month (near-constant). upcoming_charges: the nearest charges (in_days) — use them for advice on timing and payment priority. recent_oneoff holds this month's ONE-OFF expenses (taxes, doctor, a large purchase): do NOT project them as recurring. Cite specifics: categories, subscriptions, budgets.",
     period_days: 90,
+    ...timeCtx.fields,
     situation: profile || "(not specified)",
     // §C: реальна картина коштів. liquid_cushion — те, що справді є (заощадження/плюсові рахунки);
     // debt — використаний кредитний ліміт (це БОРГ, не «мінус запас»); own_funds = подушка − борг.
@@ -418,7 +419,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     context.facts_note = "facts holds facts about the world that the user told you (e.g. \"the metro fare rose from 8 to 30 UAH\", \"I left my job\"). Take them into account in your explanations and forecast. applied_to_numbers=true means the fact is ALREADY reflected in avg_month_uah, monthly_burn and runway — do not add its effect a second time. applied_to_numbers=false means the fact is explanatory only (unconfirmed, or carrying no amount adjustment): mention it in words, but do NOT change the figures yet.";
   }
 
-  return { now, funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, citable, context };
+  return { now, funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, citable, context, timeAnchors: timeCtx.anchors };
 }
 
 // §A1: активні факти на `now` (наратив для снапшота). Повертає []-безпечно, якщо таблиці ще нема.

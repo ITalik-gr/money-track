@@ -14,7 +14,6 @@ import { debtMinor } from "../finance/own-funds.ts";
 import { getRates, resolveBaseCurrency, uahToBaseMinor } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
-import { collectNumbers, numbersAreGrounded } from "../ai/grounding.ts";
 import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
 import { goalPace, goalNeedsAttention } from "../finance/goals.ts";
 import {
@@ -24,6 +23,7 @@ import {
 } from "../finance/stats.ts";
 import { draftBudgets, draftBudgetForecast } from "./drafts-budget.ts";
 import { draftStaleImports } from "./drafts-import.ts";
+import { draftAiObservations } from "./drafts-ai.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams } from "../../../shared/notif-i18n.ts";
 
@@ -764,110 +764,24 @@ async function draftTodo(env: Env, now: number): Promise<Draft[]> {
   }];
 }
 
-/**
- * AI-ініціатива: модель дивиться на ГОТОВИЙ канонічний знімок (`collectFinanceSnapshot` —
- * те саме джерело, що Порадник і Чат) і формулює 1-2 спостереження людською мовою.
- *
- * 🔒 Модель НЕ рахує — вона лише називає те, що вже пораховано канонічно. Це головна
- * різниця з «тупими алертами» й водночас запобіжник: вигадану цифру тут ніде взяти,
- * бо в промті прямо заборонено рахувати нові числа.
- */
-
-/** Скільки днів одна тема AI-спостереження вважається «вже сказаною». */
-const AI_TOPIC_COOLDOWN_DAYS = 14;
-/** Ключ у `app_state`: доба, в яку AI-прохід уже відбувся. */
-const AI_LAST_DAY_KEY = "notify_ai_day";
-
-/**
- * Стабільний ключ ТЕМИ спостереження з його заголовка.
- *
- * Числа й пунктуацію викидаємо навмисно: та сама думка щодня приходить із трохи іншою сумою
- * («запасу на 7,5 місяця» → «запасу на 7,3 місяця»), і саме через це вона щоранку виглядала
- * як нова подія й летіла в Telegram. Лишається сама фраза — вона і є темою.
- */
-function aiTopicKey(title: string): string {
-  const norm = title.toLowerCase().replace(/[\d]+/g, " ").replace(/[^\p{L}\s]/gu, " ").replace(/\s+/g, " ").trim();
-  // FNV-1a: короткий детермінований ключ, який влазить у `entity_id` і однаковий між рестартами.
-  let h = 0x811c9dc5;
-  for (let i = 0; i < norm.length; i++) {
-    h ^= norm.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h.toString(16).padStart(8, "0");
-}
-
-async function draftAiObservations(env: Env, now: number): Promise<Draft[]> {
-  if (!env.ANTHROPIC_API_KEY) return [];
-  const day = isoDay(now);
-  // 💸 Запобіжник вартості: `dedup_key` захищає лише від дублів У БАЗІ, а виклик моделі
-  // стався б однаково. Без цієї перевірки кнопка «Перевірити зараз» палила б токени на
-  // кожен клік. За добу — рівно один прохід.
-  //
-  // Маркер лежить в `app_state`, а не виводиться з наявних рядків `ai:<день>:%`: прохід, з якого
-  // не вийшло жодного рядка (усі спостереження відсіяв дедуп тем або `numbersAreGrounded`), теж
-  // коштував грошей, а за старою перевіркою виглядав як «сьогодні ще не рахували» — і наступний
-  // виклик у той самий день платив удруге.
-  if (await getState(env.DB, AI_LAST_DAY_KEY) === day) return [];
-
-  const { collectFinanceSnapshot } = await import("../ai/advisor.ts");
-  const { generateNotifyObservations } = await import("../ai/generate.ts");
-
-  // Теми останніх двох тижнів — і як підказка моделі («не переказуй це знову»), і як фільтр
-  // нижче. Промт сам по собі не гарантія (§Правила: інструкція ≠ перевірка), тож обидва шари.
-  const recent = await env.DB.prepare(
-    `SELECT title, entity_id FROM notifications
-     WHERE kind = 'ai' AND created_at >= ? ORDER BY created_at DESC LIMIT 30`,
-  ).bind(now - AI_TOPIC_COOLDOWN_DAYS * 86400).all<{ title: string; entity_id: string | null }>();
-  const recentRows = recent.results ?? [];
-  const seenTopics = new Set(recentRows.map((r) => r.entity_id ?? aiTopicKey(r.title)));
-
-  // ЄДИНЕ джерело контексту — той самий знімок, що бачать Порадник і Чат (§Інваріанти).
-  // Не будувати збіднений контекст вручну: саме це колись дало «домислену подушку $780».
-  const snap = await collectFinanceSnapshot(env);
-  const payload = { ...(snap.context as object), recent_observation_titles: recentRows.map((r) => r.title) };
-  const { result } = await generateNotifyObservations(env, payload);
-  await setState(env.DB, AI_LAST_DAY_KEY, day);
-
-  // Числа з payload — еталон для перевірки нижче.
-  const known = new Set<number>();
-  collectNumbers(snap.context, known);
-
-  const out: Draft[] = [];
-  for (const o of result.observations ?? []) {
-    if (out.length >= 2) break;                    // ліміт на добу — стрічка не має тонути в балачках моделі
-    const title = o.title?.trim();
-    if (!title) continue;
-    // 🔒 Відкидаємо спостереження з сумою, якої в знімку нема (див. `numbersAreGrounded`).
-    if (!numbersAreGrounded(`${title} ${o.body ?? ""}`, known)) {
-      console.warn("notify/ai: відкинуто спостереження з непідтвердженим числом:", title);
-      continue;
-    }
-    const topic = aiTopicKey(title);
-    if (seenTopics.has(topic)) {
-      console.warn("notify/ai: тема вже була за останні 14 днів, пропускаю:", title);
-      continue;
-    }
-    seenTopics.add(topic);                         // і в межах однієї відповіді теж
-    out.push({
-      kind: "ai",
-      title: title.slice(0, 120),
-      body: (o.body ?? "").trim().slice(0, 400) || null,
-      severity: o.severity === "warn" ? "warn" : "info",
-      // Тема живе в `entity_id`: без неї дедуп довелося б рахувати із заголовка при кожному
-      // читанні, а заголовок ще й обрізається до 120 символів.
-      entity_type: "ai_topic", entity_id: topic,
-      dedup_key: `ai:${day}:${out.length}`,
-    });
-  }
-  return out;
-}
-
 /** Ретеншн: прибираємо ПРОЧИТАНІ старші за RETENTION_DAYS. Непрочитані лишаються назавжди. */
 export async function pruneNotifications(env: Env, now = Math.floor(Date.now() / 1000)): Promise<number> {
   const res = await env.DB.prepare(
     "DELETE FROM notifications WHERE read_at IS NOT NULL AND created_at < ?",
   ).bind(now - RETENTION_DAYS * 86400).run();
   return res.meta.changes ?? 0;
+}
+
+/**
+ * The headlines the deterministic branches just wrote — what the model must not say again.
+ *
+ * Composed here rather than after insertion because the model needs them BEFORE the run ends, and
+ * `renderNotif` is the same composer the feed itself uses, so the two cannot describe one event
+ * differently.
+ */
+function announcedTitles(drafts: Draft[], loc: "uk" | "en"): string[] {
+  return drafts.map((d) => (d.tkey ? renderNotif(loc, d.tkey, d.tparams ?? {}).title : d.title ?? ""))
+    .filter(Boolean).slice(0, 20);
 }
 
 /**
@@ -878,6 +792,7 @@ export async function generateNotifications(
   env: Env, now = Math.floor(Date.now() / 1000),
 ): Promise<{ created: number; pushed: number; pruned: number; skipped: string[] }> {
   const prefs = await getPrefs(env);
+  const loc = await resolveLocale(env);
   const skipped: string[] = [];
 
   // `anomaly` і `win` дивляться на ту саму базу — рахуємо її раз і лише якщо треба.
@@ -902,7 +817,9 @@ export async function generateNotifications(
     // Both `todo` drafters share one preference: they are the same concern — the app asking a
     // person to finish something only they can finish — so muting one must mute both.
     ["todo", async () => [...(await draftTodo(env, now)), ...(await draftStaleImports(env, now))]],
-    ["ai", () => draftAiObservations(env, now)],
+    // ⚠️ LAST on purpose: it is handed the titles of everything the deterministic branches just
+    // produced, so it can stop restating them (see `already_announced_today`).
+    ["ai", () => draftAiObservations(env, now, announcedTitles(drafts, loc))],
   ];
 
   const drafts: Draft[] = [];

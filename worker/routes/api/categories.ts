@@ -2,6 +2,8 @@
 // behaviour: the harness enforces foreign keys, so a step moved after the row is deleted fails.
 import * as categoriesRepo from "../../repo/categories.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
+import * as planningRepo from "../../repo/planning.ts";
+import { monthlyPlannedUAH } from "../../lib/finance/subscriptions.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
@@ -141,7 +143,7 @@ categories.get("/categories/:id/overview", async (c) => {
   // looks like a one-off.
   const TREND_MONTHS = 24;
 
-  const [levels, budgets, trend, split, children, parts, closed, lifetime, merchants, cur, yearAgo, prevWin] = await Promise.all([
+  const [levels, budgets, trend, split, children, parts, closed, lifetime, merchants, cur, yearAgo, prevWin, plans] = await Promise.all([
     stats.categoryMonthlyLevels(c.env, mult, { now: to }),
     budgetStatus(c.env, mult, now),
     categoriesRepo.monthlyTrend(c.env.DB, mult, scope, stats.localMonthStart(to, -(TREND_MONTHS - 1)), to),
@@ -167,6 +169,8 @@ categories.get("/categories/:id/overview", async (c) => {
     categoriesRepo.windowStats(c.env.DB, mult, scope, from, to),
     categoriesRepo.windowStats(c.env.DB, mult, scope, from - YEAR, to - YEAR),
     categoriesRepo.windowStats(c.env.DB, mult, scope, from - (to - from), from - 1),
+    // §CAT-SUBS: the declared plans, so the page can say how much of the category is subscription.
+    planningRepo.activeWithCategory(c.env.DB),
   ]);
 
   // Zero-fill so the axis is continuous: a month with no spending is a real data point, and a gap
@@ -192,6 +196,29 @@ categories.get("/categories/:id/overview", async (c) => {
    * and the lifetime average below carries the "how much a month" question instead.
    */
   const lv = scope.isParent && !scope.isIncome ? levels.get(id) : undefined;
+
+  /**
+   * §CAT-SUBS (ROADMAP §0.1) — «з них підписки».
+   *
+   * A subscription is NOT the category «Підписки»: internet sits under utilities, cloud under
+   * software, insurance under health (§SUB-MONTH already says so for the Advisor). So a category
+   * total answers "how much" and hides "how much of that I could not change this month without
+   * cancelling something" — which is the actual question behind opening a category at all.
+   *
+   * The burden is `monthlyPlannedUAH`, the same canon the Subscriptions page and the Advisor use;
+   * a plan's own `period_amount` is never multiplied here (§CUR-PLAN, §SUB-MONTH).
+   * ⚠️ A parent counts the plans of its CHILDREN too, because its spending figure does — otherwise
+   * the share would be a fraction of a bigger number than it was measured against.
+   * ⚠️ The share is against the canonical monthly LEVEL, which exists only for a top-level expense
+   * category; anywhere else it is null rather than a percentage of a different period.
+   */
+  const childIds = new Set(children.map((ch) => ch.id));
+  const subItems = plans
+    .filter((p) => p.category_id != null && (p.category_id === id || childIds.has(p.category_id)))
+    .map((p) => ({ id: p.id, title: p.title, monthly_base: monthlyPlannedUAH(p, rates, now) }))
+    .filter((p) => p.monthly_base > 0)
+    .sort((a, b) => b.monthly_base - a.monthly_base);
+  const subMonthly = subItems.reduce((sum, p) => sum + p.monthly_base, 0);
   /**
    * Likewise the envelope: budgets live on top-level expense categories, and `budgetStatus` is
    * month-to-date by definition. Showing it beside a window the reader widened to a year would put
@@ -237,6 +264,11 @@ categories.get("/categories/:id/overview", async (c) => {
           };
         });
     })(),
+    subscriptions: {
+      items: subItems,
+      monthly_base: subMonthly,
+      share_pct: lv && lv.level > 0 ? Math.round((subMonthly / lv.level) * 100) : null,
+    },
     lifetime: {
       total: lifetime.total, n: lifetime.n,
       first_at: lifetime.first_at, last_at: lifetime.last_at,

@@ -12,6 +12,7 @@ import { Advisor } from "./pages/Advisor.tsx";
 import { Chat } from "./pages/Chat.tsx";
 import { Plan } from "./pages/Plan.tsx";
 import { Category } from "./pages/Category.tsx";
+import { Subscription } from "./pages/Subscription.tsx";
 import { Categories } from "./pages/Categories.tsx";
 import { Goals } from "./pages/Goals.tsx";
 import { Subscriptions } from "./pages/Subscriptions.tsx";
@@ -49,6 +50,9 @@ const router = createBrowserRouter([
       { path: "categories/:id", element: <Category /> },
       { path: "goals", element: <Goals /> },
       { path: "subs", element: <Subscriptions /> },
+      // §SUB-PAGE — one subscription, the permalink. Same shape as `categories/:id`: below the
+      // list route and a distinct path, so neither can shadow the other.
+      { path: "subs/:id", element: <Subscription /> },
       { path: "events", element: <Events /> },
       { path: "events/:id", element: <EventDetail /> },
       { path: "notifications", element: <Notifications /> },

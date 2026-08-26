@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { useLocale, useT } from "../i18n/index.ts";
 import type { Locale } from "../i18n/index.ts";
 import { Icon } from "../components/ui/Icon.tsx";
-import { baseSign } from "../lib/currency.ts";
+import { Lightbox } from "../components/landing/Lightbox.tsx";
+import type { Shot } from "../components/landing/Lightbox.tsx";
+import { useBrandMark } from "../lib/brand.ts";
 
 // Screenshots, three sizes and one rule per size — the same split the repo already used before
 // this page existed: the ~4000px originals stay in `src/images/` (gitignored — committing them
@@ -14,6 +16,10 @@ import { baseSign } from "../lib/currency.ts";
 // woff2) — a signed-in user should never pay to cache the marketing page's pictures.
 const LOCALES: Locale[] = ["uk", "en"];
 const REPO = "https://github.com/ITalik-gr/money-track";
+// `?ref=` and not the referrer header: every outbound link here carries `noreferrer` (an app that
+// holds bank data should not announce where its visitors came from), so the destination would
+// otherwise see this traffic as direct and have no way to tell it apart.
+const PORTFOLIO = "https://italik.dev/?ref=money-track";
 const MCP_URL = "https://money.italik.dev/mcp";
 
 // Section links. The `href` is the real fragment, so each is a shareable URL and middle-click
@@ -54,6 +60,13 @@ export function Landing() {
   const t = useT();
   const { locale, setLocale } = useLocale();
   const [dark, setDark] = useState(() => document.documentElement.getAttribute("data-theme") === "dark");
+  // Logged out there is no saved currency, so this is whatever the language implies — dollar on the
+  // English page, hryvnia on the Ukrainian one — and it changes with the language toggle above it.
+  const mark = useBrandMark();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // `null` rather than a boolean plus an index: two pieces of state that must agree about whether
+  // the viewer is open is the shape that ends up open on nothing.
+  const [lightbox, setLightbox] = useState<number | null>(null);
 
   // Same two writes `Layout` does, and for the same reason: the meta tag has to follow, or the
   // browser/PWA chrome keeps the previous theme's colour until a reload.
@@ -64,6 +77,24 @@ export function Landing() {
     try { localStorage.setItem("mt-theme", next); } catch { /* private mode — the toggle still works for this visit */ }
     setDark(!dark);
   }
+
+  // The phone menu closes the two ways a dropdown is expected to: Escape, and a click anywhere
+  // else. Without them it is a panel that can only be dismissed by hitting the same 38px button
+  // again — which is the moment people stop opening it at all.
+  const headRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMenuOpen(false); };
+    const onDown = (e: PointerEvent) => {
+      if (!headRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown);
+    };
+  }, [menuOpen]);
 
   // Smooth scroll, hand-rolled — and that is not a preference. In this app BODY is the scrolling
   // box (`html, body { height: 100% }` + `body { overflow-x: hidden }`), and Chrome's smooth
@@ -158,6 +189,31 @@ export function Landing() {
     [t("landing.s3Title"), t("landing.s3Body"), [t("landing.s3Tag1"), t("landing.s3Tag2"), t("landing.s3Tag3"), t("landing.s3Tag4")]],
   ];
 
+  // One list, two readers: the page lays them out and the viewer pages through them, so the arrows
+  // can never walk to a screenshot the page does not show.
+  const shots: Shot[] = [
+    { src: "/shots/dashboard.webp", w: 2200, h: 1291, alt: t("landing.shotDashAlt"), cap: t("landing.shotDashCap") },
+    { src: "/shots/chat.webp", w: 2200, h: 808, alt: t("landing.shotChatAlt"), cap: t("landing.shotChatCap") },
+    { src: "/shots/statistics.webp", w: 2200, h: 1292, alt: t("landing.shotStatsAlt"), cap: t("landing.shotStatsCap") },
+    { src: "/shots/transactions.webp", w: 2200, h: 1292, alt: t("landing.shotTxAlt"), cap: t("landing.shotTxCap") },
+    { src: "/shots/subscriptions.webp", w: 2200, h: 1293, alt: t("landing.shotSubsAlt"), cap: t("landing.shotSubsCap") },
+    { src: "/shots/report.webp", w: 2200, h: 1291, alt: t("landing.shotReportAlt"), cap: t("landing.shotReportCap") },
+  ];
+
+  // A screenshot is a button, not a decoration: the tile is unreadable on purpose (a whole screen
+  // at 500px), so the only thing that makes the gallery worth its weight is being able to open it.
+  const shotFigure = (i: number, className: string, eager?: boolean) => {
+    const sh = shots[i];
+    return (
+      <figure className={className}>
+        <button type="button" className="lp-shot-open" onClick={() => setLightbox(i)} aria-label={t("landing.lbOpen")}>
+          <img src={sh.src} width={sh.w} height={sh.h} loading={eager ? "eager" : "lazy"} alt={sh.alt} />
+        </button>
+        <figcaption>{sh.cap}</figcaption>
+      </figure>
+    );
+  };
+
   const features: [Parameters<typeof Icon>[0]["name"], string, string][] = [
     ["stats", t("landing.fAnalyticsTitle"), t("landing.fAnalyticsBody")],
     ["plan", t("landing.fBudgetTitle"), t("landing.fBudgetBody")],
@@ -171,14 +227,35 @@ export function Landing() {
     <div className="landing">
       <div className="lp-glow" aria-hidden="true" />
 
-      <header className="lp-top lp-w">
+      <header className="lp-top lp-w" ref={headRef}>
         <div className="lp-brand">
-          <span className="mark">{baseSign()}</span>
+          <span className="mark">{mark}</span>
           <span className="name">money<span className="dot">·</span>track</span>
         </div>
+        {/* Phone menu. The links, the language switch, the theme and the sign-in are ONE element
+            that changes layout — a second copy of them for the small screen is two things to keep
+            in step, and the one nobody looks at is the one that rots. */}
+        <button
+          type="button"
+          className={`lp-burger${menuOpen ? " open" : ""}`}
+          aria-expanded={menuOpen}
+          aria-controls="lp-menu"
+          aria-label={t("landing.menu")}
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          <Icon name={menuOpen ? "plus" : "menu"} size={18} />
+        </button>
+        <div className={`lp-top-side${menuOpen ? " open" : ""}`} id="lp-menu">
         <nav className="lp-nav" aria-label={t("landing.navAria")}>
           {NAV.map(([id, key]) => (
-            <a key={id} className="lp-nav-link" href={`#${id}`} onClick={(e) => jumpTo(e, id)}>{t(key)}</a>
+            <a
+              key={id}
+              className="lp-nav-link"
+              href={`#${id}`}
+              onClick={(e) => { setMenuOpen(false); jumpTo(e, id); }}
+            >
+              {t(key)}
+            </a>
           ))}
         </nav>
         <div className="lp-top-right">
@@ -193,6 +270,7 @@ export function Landing() {
             <Icon name={dark ? "sun" : "moon"} size={16} />
           </button>
           <a className="btn sm ghost lp-top-signin" href="/auth/google/start">{t("landing.signIn")}</a>
+        </div>
         </div>
       </header>
 
@@ -214,10 +292,7 @@ export function Landing() {
 
         {/* The demo's own dashboard, at the demo's own seeded data. Width/height are on the tag so
             the hero does not reflow when it decodes — the CTA sits right under it on a phone. */}
-        <figure className="lp-shot lp-shot-hero">
-          <img src="/shots/dashboard.webp" width={2200} height={1291} alt={t("landing.shotDashAlt")} />
-          <figcaption>{t("landing.shotDashCap")}</figcaption>
-        </figure>
+        {shotFigure(0, "lp-shot lp-shot-hero", true)}
       </section>
 
       <div className="lp-w">
@@ -320,10 +395,13 @@ export function Landing() {
             own ledger and passed the grounding check before the text reached the screen — which is
             precisely the thing the paragraph above can only assert. Cropped to the answer: the
             empty half of a chat window is not part of the point. */}
-        <figure className="lp-w lp-shot lp-ai-shot">
-          <img src="/shots/chat.webp" width={2200} height={808} loading="lazy" alt={t("landing.shotChatAlt")} />
-          <figcaption>{t("landing.shotChatCap")}</figcaption>
-        </figure>
+        {/* ⚠️ The `.lp-w` measure goes on a WRAPPER, never on the figure itself: `.lp-shot` sets
+            `margin: 0` and is declared later in the stylesheet, so it silently cancels the
+            `margin-inline: auto` that centres it — which is exactly how this shot ended up hanging
+            off the left edge of the band. */}
+        <div className="lp-w">
+          {shotFigure(1, "lp-shot lp-ai-shot")}
+        </div>
       </section>
 
       <section className="lp-sec lp-w">
@@ -333,22 +411,9 @@ export function Landing() {
           <p className="lp-lead">{t("landing.shotsLead")}</p>
         </header>
         <div className="lp-shots-grid">
-          <figure className="lp-shot">
-            <img src="/shots/statistics.webp" width={2200} height={1292} loading="lazy" alt={t("landing.shotStatsAlt")} />
-            <figcaption>{t("landing.shotStatsCap")}</figcaption>
-          </figure>
-          <figure className="lp-shot">
-            <img src="/shots/transactions.webp" width={2200} height={1292} loading="lazy" alt={t("landing.shotTxAlt")} />
-            <figcaption>{t("landing.shotTxCap")}</figcaption>
-          </figure>
-          <figure className="lp-shot">
-            <img src="/shots/subscriptions.webp" width={2200} height={1293} loading="lazy" alt={t("landing.shotSubsAlt")} />
-            <figcaption>{t("landing.shotSubsCap")}</figcaption>
-          </figure>
-          <figure className="lp-shot">
-            <img src="/shots/report.webp" width={2200} height={1291} loading="lazy" alt={t("landing.shotReportAlt")} />
-            <figcaption>{t("landing.shotReportCap")}</figcaption>
-          </figure>
+          {shots.slice(2).map((sh, i) => (
+            <Fragment key={sh.src}>{shotFigure(i + 2, "lp-shot")}</Fragment>
+          ))}
         </div>
       </section>
 
@@ -447,12 +512,16 @@ export function Landing() {
               {t("landing.source")}<Icon name="arrowUpRight" size={12} />
             </a>
             {t("landing.authorPre")}{" "}
-            <a href="https://italik.dev/" target="_blank" rel="me noreferrer noopener">
+            <a href={PORTFOLIO} target="_blank" rel="me noreferrer noopener">
               italik.dev<Icon name="arrowUpRight" size={12} />
             </a>
           </span>
         </footer>
       </div>
+
+      {lightbox !== null && (
+        <Lightbox shots={shots} index={lightbox} onClose={() => setLightbox(null)} onIndex={setLightbox} />
+      )}
     </div>
   );
 }

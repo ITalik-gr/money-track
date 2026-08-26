@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1197 1197" width="1197" height="1197" role="img" aria-label="money track">
+  <!--
+    Brand mark, euro variant. The two other marks (`public/favicon.svg`, `icons/mark-uah.svg`) are
+    drawn artwork from `docs/logo-src/`; this one is a `text` element, because there is no drawn
+    euro to use. It is placed to MATCH them rather than by eye: the ink box of both drawn marks is
+    centred at (599, 598.5) in this viewBox and about 563 units tall, so `font-size`, `x` and `y`
+    here are computed from the font's own ink metrics to land in the same place. Re-measure them
+    whenever the artwork changes size, which has already happened once.
+
+    Consequences of being text, and why they are acceptable HERE: the glyph falls back to whatever
+    grotesque the viewer has (a euro is a euro), and no PNG is generated from this file, so the one
+    renderer that ignores parts of SVG text is never involved.
+    There is deliberately no `dominant-baseline` and no `text-anchor`: `y` is a plain alphabetic
+    baseline and `x` is the pen position, which every renderer agrees on.
+    NOTE: no double hyphen may appear inside this comment (invalid XML, refused by strict renderers).
+  -->
+  <rect width="1197" height="1197" rx="280" fill="#0F1620"/>
+  <circle cx="784" cy="891" r="39" fill="#2E6BE6"/>
+  <text x="320.91" y="865.27" fill="#ffffff" font-family="Helvetica, Arial, sans-serif"
+        font-size="747.9" font-weight="700">€</text>
+</svg>

@@ -16,8 +16,8 @@ import type {
   BankConnections, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
-  AiChange, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
-  SavedFilter, SavingsGoal, SearchResults, SetupStatus, SliceDrill, SparkData, SpendPatterns,
+  AiChange, AiDetectResult, SubscriptionOverview, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
+  SavedFilter, SavingsGoal, SearchResults, SpendingShape, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
   BackupList, RestoreResult, PushStatus, PushSendResult, RatesSnapshot,
@@ -156,6 +156,18 @@ export const api = createApi({
     getCategoryOverview: b.query<CategoryOverview, { id: number; from: number; to: number }>({
       query: ({ id, from, to }) => `/categories/${id}/overview?from=${from}&to=${to}`,
       providesTags: ["Category", "Tx", "Budget"],
+    }),
+    // §SUB-PAGE: one subscription with its analytics. Tagged `Planned` + `Tx` — a charge arriving
+    // or a plan being edited both change every figure on that page.
+    // §SHAPE: cheque sizes + what falls outside every envelope + what has no category at all.
+    getSpendingShape: b.query<SpendingShape, { from: number; to: number; currency?: number | null }>({
+      query: ({ from, to, currency }) =>
+        `/analytics/spending-shape?from=${from}&to=${to}${currency ? `&currency=${currency}` : ""}`,
+      providesTags: ["Tx", "Budget", "Category"],
+    }),
+    getSubscriptionOverview: b.query<SubscriptionOverview, number>({
+      query: (id) => `/planned/${id}/overview`,
+      providesTags: ["Planned", "Tx"],
     }),
     getTxAiChanges: b.query<AiChange[], string>({
       query: (id) => `/transactions/${id}/ai-changes`, providesTags: ["Tx"],
@@ -481,7 +493,7 @@ export const api = createApi({
       query: () => ({ url: "/planned/apply-categories", method: "POST" }),
       invalidatesTags: ["Tx", "Planned"],
     }),
-    aiDetectPlanned: b.mutation<{ query?: string; candidates: { title: string; period_amount: number; currency_code: number; n: number; avg_interval_days: number; last_time?: number; category_id?: number | null }[]; error?: string }, string>({
+    aiDetectPlanned: b.mutation<AiDetectResult, string>({
       query: (description) => ({ url: "/planned/ai-detect", method: "POST", body: { description } }),
     }),
     // owner-only user administration (D2)
@@ -975,6 +987,8 @@ export const {
   useGetCurrenciesQuery,
   useGetForecastQuery,
   useGetIncomeAnalyticsQuery,
+  useGetSpendingShapeQuery,
+  useGetSubscriptionOverviewQuery,
   useGetUpcomingSubsQuery,
   useGetReceiptItemsQuery,
   useGetPatternsQuery,

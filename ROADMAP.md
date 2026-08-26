@@ -85,37 +85,6 @@ The one place Claude appears by name is a comment.
 `oauth.test.ts` has the second client's redirect shape pinned beside Claude's.
 
 
-### 0a. `moneyUnitDirective` states the WRONG unit to the model (found 2026-08-23, while building §MCP)
-
-> Not from a screen — from reading the two halves side by side. It is one sentence in a prompt,
-> and it is a factual claim about the data that the data contradicts.
-
-**What is wrong.** `moneyUnitDirective` (`lib/ai/prompt.ts`) tells the model: *"every money figure
-in the data you were given is already converted into `<CODE>` **minor units** — including fields
-whose name ends in `_uah`"*. But the payload it accompanies is in **whole units**:
-`collectFinanceSnapshot`'s `context` divides every amount by 100 (`own_funds_uah`,
-`monthly_burn_uah`, `budgets[].limit_uah`, `upcoming[].amount_uah`, …), and so do the chat tools
-(`query_spend.total_uah`, `find_transactions[].amount_uah` — `Math.round(r.amt / 100)`).
-
-**Why it matters.** A model handed a general instruction and a specific field believes the field —
-that is the reasoning the directive itself was written from. Here the instruction is the thing that
-is false, so a model that OBEYS it understates every figure by 100×: 5 000 ₴ of rent read as ₴50.
-It is invisible in review because both readings are plausible sentences about money, and the model
-often sanity-checks its way back to the right order of magnitude — which makes it intermittent
-rather than absent.
-
-**Surfaces:** `insight.ts`, `generate.ts` (advice, budget plan, feed observation, group verdict),
-`tasks.ts` (advisor chat, tx chat). Not §MCP — that surface states its unit per answer and only
-ships the whole-unit half (`routes/mcp.ts`).
-
-**Ціль:** one unit, stated once, true. **Файли:** `worker/lib/ai/prompt.ts`, `advisor.ts`,
-`chat-tools.ts`. **Кроки:** decide which unit the AI payload speaks (whole units is the smaller
-change and matches every existing `_uah` field), fix the directive to say that, and pin it — a
-test that asserts the directive's claim against an actual snapshot, so the two cannot drift again.
-**Готово-коли:** the sentence the model is given matches the numbers it is given, and something
-fails if that stops being true.
-
-
 ### 0. Від власника, з живого користування (2026-08-21) — роби згори вниз
 
 > Знято зі слів власника після дня з продом. **Це найцінніша черга у файлі:** усі дванадцять
@@ -157,8 +126,8 @@ fails if that stops being true.
 питання «скільки я віддаю за підписки» лишити сторінці Підписок і каноновому
 `monthlyPlannedUAH`. Плюс дешевий блок на сторінці категорії: «з них підписки: X ₴ (N планів)» —
 `planned_id` уже є на транзакціях, тож це один запит і жодного нового поняття.
-**Готово-коли:** власник вирішив, чи прибирати категорію; блок «з них підписки» на сторінці
-категорії.
+**Готово-коли:** власник вирішив, чи прибирати категорію.
+✅ 2026-08-27 — блок «з них підписки» на сторінці категорії зроблено (§CAT-SUBS).
 
 #### 0.2 Перевірити правильність кожного блока статистики
 
@@ -174,6 +143,23 @@ fails if that stops being true.
 
 ⚠️ Те саме правило, що для 0.1: кожен новий блок має відповідати на питання, на яке сторінка ЩЕ не
 відповідає. Спершу список кандидатів із формулюванням питання, ПОТІМ код.
+
+**Зроблено 2026-08-27 (§SUB-PAGE + §CAT-SUBS)** — пʼять із них, усі на новій сторінці підписки та
+на сторінці категорії, кожен із власним питанням:
+1. «Скільки ця підписка вже мені коштувала» — сума ВСІХ привʼязаних списань від першого.
+2. «Чи вона подорожчала» — останнє списання проти оголошеного, у валюті білінгу (курс ≠ ціна).
+3. «Чи списують так часто, як каже план» — реальна каденція між списаннями проти оголошеної.
+4. «Скільки це на рік» + «яку частку займає» — від підписок, від категорії, від місячних витрат.
+5. «Скільки з категорії — це підписки» (§CAT-SUBS), із часткою від канонічного місячного рівня.
+
+**Зроблено 2026-08-27 (§SHAPE)** — три блоки на вкладці «Тренди», про ФОРМУ періоду, а не розмір:
+6. «Кілька великих платежів чи сотня дрібних» — розподіл за розміром чека (середній чек і максимум
+   — рівно ті дві цифри, що це ховають).
+7. «Яка частка витрат не проходить через жоден конверт» — сліпа пляма всієї фічі бюджетів.
+8. «Скільки ГРОШЕЙ застосунок не зміг віднести до категорії» — чесна засторога до всіх інших чисел
+   на сторінці (стрічка рахує операції, а не суму).
+
+Черга 0.3 закрита: вісім блоків замість 5-7.
 
 ### 1. STYLES phase 0.5 + 4 — needs the owner's EYE (`STYLES.md`)
 
@@ -238,6 +224,25 @@ loose. Revert is one line.
 ## 📌 Беклог (з відомим корінням, без дати)
 
 ### Фічі, відкладені свідомо
+
+**Many banks, one analytics surface (researched 2026-08-27 — see `BANKS.md §7`)**
+> The owner's stated goal: a person connects several of their own banks — and one day crypto — and
+> gets one analytics surface over all of it. Research is done; nothing is built.
+- ⬜ **Pick the aggregator, then do the refactor it forces.** You do not integrate banks abroad,
+  you integrate ONE aggregator: ~9 700 US institutions publish no personal API, exactly as Privat
+  does not (`BANKS.md §1`, at national scale). Recommended order: **Teller** (self-serve, free 100
+  live connections, US) → **SimpleFIN** (~$15/yr paid by the USER, read-only, the self-hosted-PFM
+  route) → **Enable Banking** (EU, free restricted tier) → Plaid only when a sales call is worth
+  it. ⚠️ GoCardless/Nordigen's free tier is CLOSED to new signups — do not plan around it.
+- ⬜ **The real cost is not the HTTP, it is `bankCredential(env, id)`** (§BANK-CRED): it resolves
+  ONE credential per provider, and an aggregator returns one per INSTITUTION. `bank_connections`
+  already has the right shape (a row per credential) — that is where the link flow lands.
+- ⬜ **Two written-down assumptions break on the first foreign account:** a zone-less wall clock is
+  Kyiv (§BANK-PARSE) and a closed budget month is stored in hryvnia (§BASE-CUR). §APP_TZ is the
+  harder one — a per-deployment constant that has to become per-user.
+- ⬜ **Crypto is two jobs, not one:** exchange accounts = read-only API keys (the user's, stored
+  like the mono token); on-chain wallets = a public address and no credential at all (**Zerion**
+  API — ⚠️ Zapper's shut down 2026-08-03). Either way `role: 'investment'`, never the cushion (§R3).
 
 **Банки — стан на 2026-08-13 (деталі в `BANKS.md`)**
 - ✅ Кроки 1–7 із `BANKS.md §5` закриті: один писар транзакцій, спільна нормалізація (+ виправлено

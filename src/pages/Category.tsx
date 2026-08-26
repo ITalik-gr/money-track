@@ -442,6 +442,33 @@ export function Category() {
         here, and a sub-category you cannot reach because it was quiet this month is the §CAT-PAGE
         bug in a smaller form.
       */}
+      {/*
+        §CAT-SUBS — «з них підписки». A subscription is not the category «Підписки»: internet sits
+        under utilities, cloud under software. So the total above answers "how much" and hides "how
+        much of it is fixed until I cancel something" — which is usually why the category was
+        opened. Each row links to its own §SUB-PAGE, where that decision can actually be made.
+      */}
+      {data.subscriptions.items.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>{t("cat.subsTitle")}</h2>
+            <span className="label">
+              {data.subscriptions.share_pct != null
+                ? t("cat.subsShare", { pct: data.subscriptions.share_pct })
+                : t("cat.subsMonthly")}
+            </span>
+          </div>
+          <div className="card sub-charge-list">
+            {data.subscriptions.items.map((p) => (
+              <Link key={p.id} className="sub-charge-row" to={`/subs/${p.id}`}>
+                <span>{p.title}</span>
+                <Money minor={p.monthly_base} decimals={false} />
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* A breakdown of ONE part is not a breakdown — it says «100% of this category is this
           category» and fills a card to say it. Below two parts the chips alone are the honest
           content of this section. */}

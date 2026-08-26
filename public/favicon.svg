@@ -1,11 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="money track">
-  <!-- Same mark as the in-app brand chip (`.brand .mark`): ink square, surface glyph, accent dot.
-       The app icon and the header logo must be the same object — two different marks read as two
-       different products the moment the PWA sits next to the browser tab.
-       Colours are the live tokens (`--ink`, `--surface`, `--accent`); the old envelope was still
-       on the pre-redesign dark-green palette. -->
-  <rect width="64" height="64" rx="15" fill="#0f1620"/>
-  <text x="32" y="34" fill="#ffffff" font-family="Menlo, Consolas, 'DejaVu Sans Mono', monospace"
-        font-size="36" font-weight="700" text-anchor="middle" dominant-baseline="central">₴</text>
-  <circle cx="47.5" cy="47.5" r="4.5" fill="#2e6be6"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1197 1197" width="1197" height="1197" role="img" aria-label="money track">
+  <!--
+    Brand mark, dollar variant. Regenerated from `docs/logo-src/dollar-logo.svg` (the author's artwork) with one
+    change: the rounded corner. Keep them in step by regenerating rather than by editing here.
+
+    The glyph is a PATH, not a `text` element, which is why this file renders identically in a
+    browser tab, in `sips` (which generates the PNG icons from it) and in an Android launcher: no
+    font to be missing, no baseline attribute to be interpreted differently.
+
+    The maskable icon uses the same artwork WITHOUT the radius (`docs/icon-maskable.svg`): a
+    launcher applies its own shape, and a rounded rect inside a circular mask shows as a clipped
+    corner.
+    NOTE: no double hyphen may appear inside this comment. It is not valid XML, and a strict SVG
+    renderer refuses the whole document over it while browsers quietly forgive it.
+  -->
+  <rect width="1197" height="1197" rx="280" fill="#0F1620"/>
+  <circle cx="784" cy="891" r="39" fill="#2E6BE6"/>
+  <path d="M630.288 891V839.241C683.157 836.499 723.352 822.103 754.411 796.052C785.47 770.001 801 735.381 801 695.276C801 652.087 788.439 620.209 760.691 599.985C732.601 577.02 692.406 559.538 633.257 548.227H630.288V415.459C670.596 421.286 704.853 432.598 738.881 455.906L788.668 392.493C738.881 360.615 686.012 343.477 630.174 340.734V306H583.584V340.62C536.995 343.362 496.458 357.759 465.399 383.81C434.34 409.86 418.81 444.48 418.81 484.585C418.81 524.689 431.371 556.567 459.119 576.791C483.898 597.015 527.404 614.153 583.242 625.808V761.203C539.622 755.376 496.116 735.152 452.838 700.532L397 761.203C452.838 807.478 515.185 833.186 583.47 839.013V891H630.288ZM633.257 640.09C664.316 648.659 683.043 657.229 695.375 666.141C704.625 677.795 710.905 689.106 710.905 706.588C710.905 724.069 704.625 735.381 689.095 747.035C673.565 758.689 654.724 764.174 633.257 767.259V640.09ZM524.663 516.234C515.414 507.665 509.133 493.269 509.133 478.872C509.133 461.733 515.414 450.079 527.632 438.425C543.162 426.771 558.691 421.286 583.47 418.201V542.285C552.411 533.373 533.912 524.804 524.663 516.234Z" fill="white"/>
 </svg>

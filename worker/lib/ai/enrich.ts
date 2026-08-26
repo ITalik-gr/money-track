@@ -144,13 +144,11 @@ interface TxRow {
   id: string; account_id: string; source: string; merchant: string | null;
   comment: string | null; mcc: number | null; amount: number; currency_code: number;
   raw_json: string | null; user_note: string | null; category_id: number | null;
-  time: number;
+  ai_note: string | null; time: number;   // §SUB-ALIAS: ai_note is part of the subscription haystack
 }
 
-// §R6 Консенсус мерчанта (детерміністично, без AI): нормалізований «корінь» назви з
-// сирого опису — стабільний ключ, що терпить змінні хвости (номери замовлень, міста).
-// Беремо найдовше буквене слово ≥4 символів (Apple, Glovo, Aromakava...).
-
+// §R6 Консенсус мерчанта: нормалізований «корінь» назви з сирого опису — стабільний ключ, що
+// терпить змінні хвости (номери замовлень, міста): найдовше буквене слово ≥4 символів.
 // §Хвіст: чи існує РУЧНИЙ (навчений користувачем) alias для сирого опису цієї операції.
 // Ручні правки священні: enrich їх не перетирає, консенсус важить вище.
 async function manualAliasFor(env: Env, rawDesc: string | null): Promise<boolean> {
@@ -284,7 +282,7 @@ async function applyEnrichment(
   // Підказка про підписки зі схожою назвою (порожня, якщо жодна не перегукується — тоді
   // зайвих токенів AI не отримує, вартість лишається рівною).
   const rawDescForSub = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description ?? null : null;
-  const subscriptions = await relatedSubsHint(env.DB, { merchant: tx.merchant, description: rawDescForSub });
+  const subscriptions = await relatedSubsHint(env.DB, { merchant: tx.merchant, description: rawDescForSub, ai_note: tx.ai_note, comment: tx.comment });
 
   const { result, usage } = await enrichTransaction(env, {
     merchant: tx.merchant, comment: tx.comment, mcc: tx.mcc,
@@ -299,9 +297,12 @@ async function applyEnrichment(
 
   // §R5: після очищення назви ще раз пробуємо детермінований матч підписки (раптом сира
   // назва не збіглась, а людська — так) → лінк tx↔підписка + її категорія має пріоритет.
+  // ⚠️ §SUB-ALIAS: the note the model JUST wrote is part of the haystack — that is where the answer
+  // lives when the biller's name and the user's differ («X Corp.» ↔ his Twitter subscription).
   const sub = tx.amount < 0
     ? await matchActiveSubscription(env.DB, {
-        merchant: cleanName, description: rawDescForSub, amount: tx.amount, currency_code: tx.currency_code,
+        merchant: cleanName, description: rawDescForSub, amount: tx.amount,
+        currency_code: tx.currency_code, ai_note: result.note ?? tx.ai_note, comment: tx.comment,
       })
     : null;
   // §FK-GUARD: перевіряємо ВСІ id від AI одним запитом. Категорія підписки (`sub`) —

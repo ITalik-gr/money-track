@@ -53,3 +53,81 @@ export function groundFacts<T extends { amount?: number | null }>(facts: T[], pa
   collectNumbers(payload, known);
   return facts.filter((f) => f.amount == null || numbersAreGrounded(String(f.amount), known));
 }
+
+/**
+ * Is a DATE or a DAY COUNT the model wrote one it was GIVEN?
+ *
+ * `numbersAreGrounded` has a floor of 100 on purpose — counts and percentages are not sums, and a
+ * guard that rejects «за 7 днів» is a guard everyone removes. That floor left the whole CALENDAR
+ * unchecked, and the feed shipped the consequence: «Rent due in 11 days, cushion covers only 0.8
+ * months» on 2026-08-26, for rent the user pays on the 20th. The rent is not a `planned_payment` at
+ * all, so it was in no `upcoming_charges` row and had no date anywhere in the payload — the model
+ * read the user's own prose in `situation` («12500 кожного 20 числа») as a schedule and invented a
+ * distance to it. Every figure in that sentence was under 100, so the money guard saw nothing.
+ *
+ * A wrong day is worse than a wrong sum: a sum can be re-read on the screen beside it, while a
+ * deadline is acted on directly, and «in 11 days» for something due in 25 reads as certainty.
+ *
+ * `anchors` is the set of day numbers the payload actually states (`in_days`, the day-of-month of a
+ * scheduled charge, today's day, the window lengths). An EMPTY anchor set rejects every time claim,
+ * which is the correct reading of "we told it no schedule".
+ */
+// ⚠️ `\b` is ASCII-only even under /u, so it never fires after «днів» — the Ukrainian half of
+// this pattern silently matched nothing until the test caught it. A letter lookahead works
+// in both scripts.
+const DAY_COUNT_RE = /(\d{1,3})\s*(?:днів|дні|дня|дн\.|day|days|доби|добу|діб)(?!\p{L})/giu;
+const DAY_OF_MONTH_RE = /(?<!\d)(\d{1,2})\s*(?:-?(?:го|те|му|е)|числа|st|nd|rd|th)(?!\p{L})/giu;
+/**
+ * Month STEMS, index = 0-based month. Matched as a word start (`(?<!\p{L})stem`) so «серп» finds
+ * «серпня» and «серпень» without a declension table.
+ *
+ * ⚠️ English "may" is deliberately absent: it is a modal verb far more often than a month, and a
+ * guard that discards every sentence containing "may cost" is a guard someone deletes. The
+ * Ukrainian stem for May is kept — «трав» has no such second life in a sentence about money.
+ */
+const MONTH_WORDS: string[][] = [
+  ["january", "січ"], ["february", "лют"], ["march", "берез"], ["april", "квіт"],
+  ["трав"], ["june", "черв"], ["july", "лип"], ["august", "серп"],
+  ["september", "верес"], ["october", "жовт"], ["november", "листоп"], ["december", "груд"],
+];
+
+export function timeClaimsAreGrounded(
+  text: string, anchors: Set<number>, months: Set<number>,
+): boolean {
+  const low = text.toLowerCase();
+  for (const re of [DAY_COUNT_RE, DAY_OF_MONTH_RE]) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(low))) {
+      const n = Number(m[1]);
+      // Exact match, no tolerance: 20 and 21 are different days, and "about the 20th" is not a
+      // thing anyone acts on differently.
+      if (!anchors.has(n)) return false;
+    }
+  }
+  // A month the payload never names is a projection ("your money ends before October"), i.e. a
+  // calendar claim computed by eye out of a runway figure.
+  for (let i = 0; i < MONTH_WORDS.length; i++) {
+    if (months.has(i)) continue;
+    if (MONTH_WORDS[i].some((w) => new RegExp(`(?<!\\p{L})${w}`, "u").test(low))) return false;
+  }
+  return true;
+}
+
+/**
+ * Does the text read in the language the app asked for?
+ *
+ * The prompts are English (§LANG-ARCH) and the language is requested by one final directive, so a
+ * Ukrainian reader kept getting English TITLES over Ukrainian bodies — one card, two languages,
+ * which reads as a broken app rather than as a missing translation. The prompt's own STYLE examples
+ * were English headlines, which is a pull no directive outvotes.
+ *
+ * Script, not vocabulary: a Ukrainian sentence carrying «Claude» and «Spotify» is correct, and a
+ * ratio test says so while a word list never could.
+ */
+export function scriptMatchesLocale(text: string, locale: "uk" | "en"): boolean {
+  const cyr = (text.match(/\p{Script=Cyrillic}/gu) ?? []).length;
+  const lat = (text.match(/\p{Script=Latin}/gu) ?? []).length;
+  if (cyr + lat < 8) return true;              // "PS Plus 350" — too short to have a language
+  return locale === "uk" ? cyr > lat : lat > cyr;
+}

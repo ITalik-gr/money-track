@@ -27,6 +27,7 @@ import { ClickableKpis, ImportanceBreakdown, SpendingPatterns } from "../compone
 import { FxCostCard } from "../components/stats/FxCostCard.tsx";
 import { AvgCheckByCategory, CategoryBreakdown, PeriodCompare } from "../components/stats/StatsCategories.tsx";
 import { DeeperAnalytics, TopSpendDays, toCumulative } from "../components/stats/StatsTrends.tsx";
+import { SpendingShape } from "../components/stats/StatsShape.tsx";
 import { AccountsBlock, EventsBlock, MerchantsBlock } from "../components/stats/StatsMerchants.tsx";
 import { MonthCompare } from "../components/stats/StatsCompare.tsx";
 
@@ -247,6 +248,9 @@ export function Stats() {
                 <WeekdaySpend preset={range} currency={currency} />
                 <Habits />
                 <DeeperAnalytics series={data.series} sign={sign} from={from} to={to} currency={currency} />
+                {/* §SHAPE: what the period is MADE of — cheque sizes, what falls outside every
+                    envelope, and what has no category at all. */}
+                <SpendingShape from={from} to={to} currency={currency} sign={sign} />
                 <IncomeBreakdown preset={range} currency={currency} sign={sign} />
               </>
             )}

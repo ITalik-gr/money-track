@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { getLocale, dateFmt } from "../i18n/locale.ts";
 import { useT, translate } from "../i18n/index.ts";
 import {
@@ -13,6 +14,7 @@ import {
   useGetPlannedActualsQuery,
   useGetRatesQuery,
 } from "../store/api.ts";
+import type { AiDetectResult } from "../../shared/api/index.ts";
 import { Money } from "../components/ui/Money.tsx";
 import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
@@ -218,7 +220,9 @@ export function Subscriptions() {
                   <div className="sub-card-top">
                     <MerchantLogo merchant={p.title} color="var(--c-plum)" fallbackLabel={p.title} />
                     <div style={{ minWidth: 0 }}>
-                      <div className="sub-card-name">{p.title}</div>
+                      {/* §SUB-PAGE: the name is the way in. A card that shows four figures and
+                          cannot be opened is where every "why is this so expensive" question dies. */}
+                      <Link className="sub-card-name" to={`/subs/${p.id}`}>{p.title}</Link>
                       <div className="sub-card-kind">
                         {p.kind === "installment" ? t("sub.kindInstallment")
                           : p.kind === "income" ? t("sub.kindIncome") : t("sub.kindSubscription")}
@@ -348,15 +352,20 @@ function AiDetect() {
   const { data: cats } = useGetCategoriesQuery();
   const catName = useMemo(() => new Map((cats ?? []).map((c) => [c.id, c.name])), [cats]);
   const [desc, setDesc] = useState("");
-  const [cands, setCands] = useState<{ title: string; period_amount: number; currency_code: number; n: number; avg_interval_days: number; last_time?: number; category_id?: number | null }[] | null>(null);
+  const [cands, setCands] = useState<AiDetectResult["candidates"] | null>(null);
+  // §SUB-FIND: WHAT was searched for, shown beside the results. A screenful of unrelated merchants
+  // reads as a broken search until you can see it looked for «X» — then it reads as the wrong word,
+  // which is a thing the person can fix.
+  const [terms, setTerms] = useState<string[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
 
   async function run() {
-    setMsg(null); setCands(null);
+    setMsg(null); setCands(null); setTerms([]);
     try {
       const r = await detect(desc.trim()).unwrap();
       if (r.error) { setMsg(r.error.includes("not set") ? t("sub.aiKeyMissing") : r.error); return; }
       setCands(r.candidates);
+      setTerms(r.terms ?? []);
       if (!r.candidates.length) setMsg(t("sub.aiNoMatch"));
     } catch { setMsg(t("sub.aiFailed")); }
   }
@@ -379,6 +388,9 @@ function AiDetect() {
             {isLoading ? t("sub.aiSearching") : t("sub.aiSearch")}
           </button>
         </div>
+        {terms.length > 0 && (
+          <div className="sub-ai-terms">{t("sub.aiTerms")} {terms.map((x) => <span key={x} className="chip sm">{x}</span>)}</div>
+        )}
         {msg && <div className="muted" style={{ fontSize: 13, marginTop: 10 }}>{msg}</div>}
         {cands && cands.length > 0 && (
           <div className="sub-cands">

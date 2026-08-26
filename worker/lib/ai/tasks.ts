@@ -77,7 +77,7 @@ export async function chatAdvice(
     "timing, risk. " +
     "When the question is simple, be brief; when it is complex, or the user asks you to dig in or advise, answer " +
     "IN DETAIL and with structure (a short conclusion → the reasoning on their own numbers → 2-4 concrete, " +
-    "actionable steps with the effect in UAH). " +
+    "actionable steps with the effect as an amount). " +
     "⚠️ FUNDS (critical — never conflate these): liquid_cushion_uah is the real liquid CUSHION (cash, cards, jars) " +
     "and the key number for \"how long do I last\". debt_uah is the used credit LIMIT — that is DEBT, not \"negative " +
     "savings\". investment_reserve_uah is crypto or brokerage: the last line of defence, NOT the cushion and NOT part " +
@@ -95,7 +95,7 @@ export async function chatAdvice(
     "schedule, a plan by month). Do NOT attach a chart or table to every answer, and never when a sentence is enough. " +
     "At most one visualisation per answer, built only from real numbers in the context.\\n" +
     "• Mini chart (horizontal bars for comparison): a line \"[chart:Title]\", then one \"Label|number\" per line " +
-    "(number in UAH, no symbols), closed with \"[/chart]\". Example: [chart:Spending by category]\\nGroceries|4500\\n" +
+    "(a bare number in whole currency units, no symbols), closed with \"[/chart]\". Example: [chart:Spending by category]\\nGroceries|4500\\n" +
     "Cafés|3200\\n[/chart]. Max 6 rows.\\n" +
     "• Table (when several columns are needed, e.g. a payoff plan or limit vs actual): a line \"[table:Title]\", then " +
     "a header row \"Col1|Col2|Col3\", then data rows the same way, closed with \"[/table]\". Max 6 data rows, 4 columns.";
@@ -108,7 +108,7 @@ export async function chatAdvice(
       type: "text",
       text:
         toolNote +
-        "Here is the user's full financial context (amounts in UAH): " + JSON.stringify(context) +
+        "Here is the user's full financial context (amounts in WHOLE units of the display currency): " + JSON.stringify(context) +
         ". Rely ONLY on this data; if something needed is missing, say so honestly rather than inventing " +
         "transactions or numbers." +
         // The requested SHAPE of the answer must match the output budget it will be given. A demo
@@ -216,7 +216,7 @@ export async function budgetChat(
         "essential ones sharply; optional ones can be squeezed harder. Explain WHY that particular figure. " +
         "When you propose concrete limits, put them in proposals so the user can accept them in one tap. " +
         "Answer with VALID JSON ONLY: {reply (2-5 sentences, **bold** allowed), " +
-        "proposals:[{category_id (only from the list), limit_uah (whole UAH), reason (briefly why)}] " +
+        "proposals:[{category_id (only from the list), limit_uah (a whole number of the display currency), reason (briefly why)}] " +
         "(an empty array if this is just an answer with no new limit proposals)}." +
         (await replyLangDirective(env, "conversation")) + (await moneyUnitDirective(env)),
     },

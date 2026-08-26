@@ -8,7 +8,8 @@ import { useGetNotificationsQuery, useGetMeQuery, useLogoutMutation, useGetPerio
 import { useLocale, useT } from "../../i18n/index.ts";
 import type { Locale } from "../../i18n/index.ts";
 import type { TranslationKey } from "../../i18n/index.ts";
-import { baseSign, getBaseCurrency, setBaseCurrency } from "../../lib/currency.ts";
+import { getBaseCurrency, setBaseCurrency } from "../../lib/currency.ts";
+import { useBrandMark } from "../../lib/brand.ts";
 import { asBaseCurrency } from "../../../shared/currency.ts";
 import { api } from "../../store/api.ts";
 import { store } from "../../store/index.ts";
@@ -179,6 +180,9 @@ function DemoBanner({ expiresAt }: { expiresAt?: number | null }) {
 
 export function Layout() {
   const { dark, toggle } = useTheme();
+  // The mark follows the display currency (`lib/brand.ts`) — the sidebar chip and the topbar one
+  // are the same mark, so they read it once.
+  const mark = useBrandMark();
   const [moreOpen, setMoreOpen] = useState(false);
   const t = useT();
   const { data: me } = useGetMeQuery();
@@ -192,7 +196,7 @@ export function Layout() {
       <CommandPalette />
       <aside className="sidebar">
         <div className="brand">
-          <span className="mark">{baseSign()}</span>
+          <span className="mark">{mark}</span>
           <span className="name">money<span className="dot">·</span>track</span>
         </div>
 
@@ -231,7 +235,7 @@ export function Layout() {
         {isDemo && <DemoBanner expiresAt={me?.demo_expires_at} />}
         <header className="topbar">
           <Link to="/" className="topbar-brand">
-            <span className="mark">{baseSign()}</span>
+            <span className="mark">{mark}</span>
             <span className="name">money<span className="dot" style={{ color: "var(--accent)" }}>·</span>track</span>
           </Link>
           <div className="topbar-right">

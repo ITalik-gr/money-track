@@ -50,7 +50,7 @@ export function financeChatTools(): ChatTool[] {
   return [
     {
       name: "query_spend",
-      description: "Compute the user's total spending or income over a period (in UAH, converted at the stored rate), optionally filtered by category or merchant and grouped. For questions like \"how much did I spend or earn on X during Y\".",
+      description: "Compute the user's total spending or income over a period (in WHOLE units of the display currency, converted at the stored rate), optionally filtered by category or merchant and grouped. For questions like \"how much did I spend or earn on X during Y\".",
       input_schema: {
         type: "object",
         properties: {
@@ -66,7 +66,7 @@ export function financeChatTools(): ChatTool[] {
     },
     {
       name: "find_transactions",
-      description: "Find individual operations by filter (returns id, date, merchant, amount in UAH, category). Use it when you need to show example operations rather than just a total. An id can be cited as [tx:ID|caption].",
+      description: "Find individual operations by filter (returns id, date, merchant, amount in whole currency units, category). Use it when you need to show example operations rather than just a total. An id can be cited as [tx:ID|caption].",
       input_schema: {
         type: "object",
         properties: {
@@ -75,7 +75,7 @@ export function financeChatTools(): ChatTool[] {
           to_date: { ...dateProp, description: "To this date (inclusive). Optional." },
           category: { type: "string", description: "Category name, partial match. Optional." },
           flow: { type: "string", enum: ["spend", "income", "any"], description: "Defaults to any." },
-          min_amount_uah: { type: "number", description: "Minimum absolute amount in UAH. Optional." },
+          min_amount_uah: { type: "number", description: "Minimum absolute amount, in whole currency units (500 means 500, not 50000). Optional." },
           limit: { type: "number", description: "How many to return (1-25, default 12)." },
         },
       },

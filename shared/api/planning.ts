@@ -22,6 +22,22 @@ export interface RecurringCandidate {
   category_id?: number | null;
 }
 
+/**
+ * §SUB-FIND — what the "describe it and I'll find it" search returns.
+ *
+ * `terms` travels back so the screen can say WHAT was searched for. Without it a screenful of
+ * unrelated merchants reads as a broken search rather than as a search for the wrong word — which
+ * is exactly how «X підписка» → OnTaxi looked.
+ */
+export interface AiDetectResult {
+  terms: string[];
+  candidates: {
+    title: string; period_amount: number; currency_code: number; n: number;
+    last_time?: number; category_id?: number | null; avg_interval_days: number;
+  }[];
+  error?: string;
+}
+
 // Автобюджет: пропозиція лімітів із канонічного місячного рівня категорії. Копійки.
 export interface AutoBudgetItem {
   category_id: number; name: string; color: string | null;
@@ -186,4 +202,34 @@ export interface SavingsGoal {
   created_at?: number | null;
   current: number; // ефективний прогрес (баланс банки або ручний)
   pace: GoalPace;  // §GOAL-PACE — server-computed, so the card and the feed cannot diverge
+}
+
+/**
+ * §SUB-PAGE — one subscription with the analytics a decision about it needs.
+ *
+ * `*_base` is the reader's display currency (§BASE-CUR); `period_amount`, `last_amount` and each
+ * charge's `amount` stay in the currency actually billed, because a price rise is only visible
+ * there — an exchange-rate move is not the biller charging more.
+ */
+export interface SubscriptionOverview {
+  plan: {
+    id: number; title: string; kind: string; period: string; period_count: number;
+    period_amount: number | null; currency_code: number;
+    category_id: number | null; category_name: string | null;
+    note: string | null; start_date: number; end_date: number | null;
+    is_active: boolean; monthly_base: number;
+  };
+  next_charge: { at: number; in_days: number } | null;
+  actual: {
+    n: number; first_time: number | null; last_time: number | null;
+    total_base: number; avg_base: number | null;
+    last_amount: number | null; last_currency: number | null;
+    price_change_pct: number | null;
+    /** Measured between real charges; null under two charges. The declared one is what the plan claims. */
+    real_interval_days: number | null; declared_interval_days: number;
+  };
+  charges: { id: string; time: number; amount: number; currency_code: number; amount_base: number }[];
+  share: { of_subscriptions_pct: number | null; of_category_pct: number | null; of_burn_pct: number | null };
+  annual_base: number;
+  category_monthly_base: number | null;
 }

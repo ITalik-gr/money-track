@@ -19,6 +19,9 @@
 @import "./styles/topbar.css";
 @import "./styles/dashboard.css";
 @import "./styles/domains-a.css";
+/* Subscriptions: the list, the AI search and §SUB-PAGE. Split out of domains-a.css (C8 ratchet);
+   imported straight after it so nothing about the cascade order changed. */
+@import "./styles/subscriptions.css";
 @import "./styles/chat.css";
 @import "./styles/settings.css";
 @import "./styles/settings-shell.css";

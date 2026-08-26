@@ -59,7 +59,11 @@ const EXCEPTIONS = {
   // ceiling, and the answer was a seam rather than a bigger number.
   "worker/lib/ai/advisor.ts": 909,
   // The notification centre: one drafting function per event kind, plus the Telegram push.
-  "worker/lib/messaging/notify.ts": 1000,
+  // 2026-08-27: 1000 → 861. The three guards added after «Rent due in 11 days» (calendar, language,
+  // repetition) pushed the file over, and the answer was a seam rather than a bigger number — the
+  // AI branch moved to `drafts-ai.ts`, beside `drafts-budget`/`drafts-import`. Third time C3 has
+  // forced that call and third time it named the right seam.
+  "worker/lib/messaging/notify.ts": 861,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
   // "one number, one home", and cutting it up would give that number two homes again.
   "worker/lib/finance/stats.ts": 500,

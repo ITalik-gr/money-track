@@ -373,6 +373,20 @@ export interface CategoryOverview {
    */
   composition: { id: number; name: string; color: string | null; self: boolean; spent: number; n: number; share_pct: number }[];
   /**
+   * §CAT-SUBS — how much of this category is a DECLARED subscription.
+   *
+   * A subscription is not the category «Підписки»: internet sits under utilities, cloud under
+   * software. So the category total answers "how much" and hides "how much of it is fixed until I
+   * cancel something", which is the question behind opening a category in the first place.
+   * `share_pct` is against the canonical monthly level, and null wherever that level does not
+   * exist (a sub-category, an income bucket) rather than a percentage of some other period.
+   */
+  subscriptions: {
+    items: { id: number; title: string; monthly_base: number }[];
+    monthly_base: number;
+    share_pct: number | null;
+  };
+  /**
    * §CAT-PAGE — the whole history, independent of the selected window.
    *
    * Exists because the owner opened categories that were empty for the current month and read that
@@ -439,4 +453,20 @@ export interface CategoryOverview {
    * `prev` is `null` when the previous window holds no charges — an average of nothing is not 0.
    */
   avg_check: { now: number; prev: number | null; n: number; prev_n: number } | null;
+}
+
+/**
+ * §SHAPE — the shape of a period, not its size. Three blocks that survive being compared between
+ * two months with identical totals.
+ *
+ * `up_to` is null for the open-ended top bucket; both bounds are in the reader's display currency
+ * (§BASE-CUR), converted from round hryvnia steps so two months stay comparable.
+ * `share_pct` is null where the window has no spending at all — 0% and "nothing happened" are
+ * different statements, and a page that prints 0% over an empty month says the wrong one.
+ */
+export interface SpendingShape {
+  spend: number;
+  buckets: { from: number; up_to: number | null; n: number; spent: number; share_pct: number }[];
+  unbudgeted: { spent: number; n: number; share_pct: number | null };
+  uncategorised: { spent: number; n: number; share_pct: number | null };
 }

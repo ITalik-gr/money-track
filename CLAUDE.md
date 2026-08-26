@@ -4,10 +4,10 @@
 > Тут — усе глобальне, що треба знати ЗАВЖДИ: стек, інваріанти, як працює статистика,
 > категоризація, AI-модель, ops. Історія «раунд-за-раундом» тут НЕ живе (вона в git/пам'яті).
 > Оновлено 2026-08-22. Стан: **у проді**, платформа-фаза закрита, **структурний рефактор
-> (ARCH, фази 0–5) закритий**, стилі розділені на пʼятнадцять файлів (лінти C8/C9),
+> (ARCH, фази 0–5) закритий**, стилі розділені на шістнадцять файлів (лінти C8/C9),
 > **реєстрація ВІДКРИТА** і тільки через Google; Telegram — ДРУГИЙ ключ до наявного акаунта
 > (§TG-MINIAPP), не спосіб його створити.
-> Міграції: `finance` до **0045**, `directory` до **0010**. Тестів — **702**.
+> Міграції: `finance` до **0045**, `directory` до **0010**. Тестів — **748**.
 > Черга — `ROADMAP.md`, архів — `HISTORY.md`.
 
 ## 📁 Система документів (як усе влаштовано)
@@ -446,6 +446,52 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   доходять до 54 — у діапазоні дірки від видалених, і «правдоподібний» id від моделі влучає в неіснуючий
   рядок → `D1_ERROR: FOREIGN KEY constraint failed` на enrich. Хелпер `existingCategoryIds()` (enrich.ts)
   фільтрує `category_id` + `tag_ids` одним запитом; alias пише лише перевірений id.
+- **§SUB-FIND / §SUB-ALIAS (2026-08-27): підписку впізнають за ВСІМА її назвами, і шукають по
+  всьому, що застосунок про операцію знає.** Дві скарги, одна причина — і мерчант, і пошук читали
+  тільки `transactions.merchant`:
+  ⚠️ «твітер» не знаходив нічого, бо списання лежить як «X Corp.» — при тому що власник САМЕ на тій
+  операції пояснив AI, що це його підписка на твітер, і модель це записала в `ai_note`. Відповідь
+  була в базі, а запит у неї не дивився. Тепер `searchHaystack` (`repo/planning.ts`) і
+  `txHaystack` (`lib/finance/subscriptions.ts`) = мерчант + СИРИЙ опис банку + коментар + `ai_note`.
+  **Новий матч по тексту операції бере цей хейстек, а не `merchant`.** Те саме правило, що §RULES-UI.
+  ⚠️ «X підписка» повертав OnTa**x**i, E**x**pres і PADDLE.NET — `LIKE '%X%'`. Модель тепер віддає
+  СПИСОК назв бренда (`X Corp`, `Twitter`, `твітер`), а термін коротший за `MIN_TERM = 3` не
+  шукається взагалі — навіть якщо його дала модель.
+  ⚠️ `LIKE` і `LOWER()` у SQLite складають регістр ЛИШЕ для ASCII, тож «Твітер» не збігався з
+  «твітер». `likeVariants` шле обидва написання — повний Unicode-фолд потребує колації, якої в D1
+  немає.
+  ⚠️ **`planNeedles` (§SUB-ALIAS): план знають і за його `note`** — слова ≥4 літер, мінус ті, що є
+  в кожній нотатці («підписка», «оплата», «monthly»). Без цього план «Twitter» не чіпляв жодного
+  списання «X Corp.»: `planned_id` лишався порожнім, категорію вгадував AI, а `plannedActuals`
+  показував нуль — тобто стрічка оголошувала «списань не видно» про підписку, яку платять щомісяця.
+  Це безпечно саме тому, що назва — лише ОДИН із гейтів: валюта й сума (±10%) мусять збігтись.
+  Тримається `subscriptions.test.ts` + `planning-consistency.test.ts`.
+- **§SUB-DATE (2026-08-27): місячний план тримає СВОЄ число, хоч би скільки днів було в місяці.**
+  `nextChargeUnix` крокував `Date.setMonth(+1)`, а JS розвʼязує 31 лютого ПЕРЕПОВНЕННЯМ: план від
+  31-го йшов 31 січ → 3 бер → 3 кві — лютий пропущено, і далі назавжди 3-тє число. Дата, що тихо
+  відходить від дня, коли людина реально платить, потрапляє в інший бюджетний місяць, а зникле
+  списання — саме те, якого ніхто не шукає. Тепер кожне списання рахується ВІД СТАРТУ, день
+  затискається до останнього дня місяця, а якорем є КИЇВСЬКИЙ день (§APP_TZ) через `localWallTime`.
+- **§SUB-PAGE (2026-08-27): у підписку можна провалитись** — `/subs/:id`, дані з
+  `GET /planned/:id/overview` (`lib/finance/subscription-overview.ts`). План був рядком у списку:
+  назва, сума, наступна дата — жодне з питань, які людина справді має про підписку. Сторінка
+  відповідає на пʼять: скільки вже сплачено (сума ВСІХ привʼязаних списань), чи подорожчала
+  (останнє списання проти оголошеного — **в тій валюті, якою списали**: рух курсу це не
+  подорожчання), чи списують так часто, як каже план (**реальна каденція між списаннями** проти
+  оголошеної — «місячний» план, що списується кожні 14 днів, доти не було видно нічим), скільки це
+  на рік, і яку частку займає — від підписок, від своєї категорії, від місячних витрат.
+  ⚠️ Усі числа — з канону (`monthlyPlannedUAH`, `categoryMonthlyLevels`, `sumLevels`,
+  `nextChargeUnix`). Сторінка нічого не перераховує: інакше вона й Порадник могли б розійтись про
+  ту саму підписку.
+  ⚠️ Завершений план НЕ показує наступного списання: надрукувати дату, на яку воно б випало, —
+  це застосунок, що сперечається з уже прийнятим рішенням.
+  ⚠️ Без `STATS_JOINS` навмисно: списання підписки — ЦІЛА транзакція, яку банк або зробив, або ні.
+  Спліт каже, куди пішли гроші, а не скільки взяв білер. Тримається `subscription-page.test.ts` (11).
+- **§CAT-SUBS (2026-08-27, ROADMAP §0.1): на сторінці категорії — блок «з них підписки».**
+  Підписка ≠ категорія «Підписки» (інтернет у Комуналці, хмара в Софті), тож підсумок категорії
+  відповідає «скільки», але ховає «скільки з цього зафіксовано, поки щось не скасуєш». Частка —
+  від канонічного місячного РІВНЯ, і `null` там, де рівня не існує (підкатегорія, дохід), а не
+  відсоток від іншого періоду. Батько рахує й плани своїх ДІТЕЙ — бо його сума витрат теж їх рахує.
 - **Наступне списання плану — лише `nextChargeUnix(startDate, period, count, now)`** (subscriptions.ts, ЄДИНЕ джерело; враховує `period_count` — «кожні N періодів»). Не дублювати логіку в ендпоінтах.
 - **§INCOME-PLAN (2026-08-14, міграція 0044): дохід теж отримав РОЗКЛАД.**
   `planned_payments.kind` знав лише `subscription|installment` — обидва це відтік. Тому і
@@ -832,6 +878,33 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   поточним курсом: вигадана комісія читається точно так само, як справжня.
   ⚠️ Без `STATS_JOINS` навмисно: конвертація сталась із ЦІЛОЮ транзакцією один раз, тож питати про
   половинки спліту — це питати те, на що банк не відповідав. Тримається `fx-cost.test.ts` (8).
+- **§SHAPE (2026-08-27): три питання про ФОРМУ періоду, а не про його розмір** —
+  `lib/finance/spending-shape.ts` + `GET /analytics/spending-shape`, блок на вкладці «Тренди».
+  Усе інше на Статистиці відповідає «скільки й куди»; два місяці з однаковим підсумком і
+  однаковими категоріями можуть бути зовсім різними місяцями, і різниця — саме те, з чим можна
+  щось зробити:
+  • **розмір чека** — кілька великих платежів чи сотня дрібних? Ліки протилежні, підсумки
+    однакові, а середній чек і максимум — рівно ті дві цифри, що це ховають;
+  • **поза конвертами** — `/plan` показує конверти, які Є; ніде не було сказано, яка частка грошей
+    не проходить через жоден. Усі конверти зелені, а більшість витрат — повз них;
+  • **без категорії** — у ГРОШАХ. Стрічка рахує операції, але десять дрібних і десять великих —
+    різна міра сумніву, а це та частка, якої не покриває жодне інше число на сторінці.
+  ⚠️ **Одиниця бакета — ЦІЛА транзакція, а не частка спліту** (`-t.amount`, дедуп `GROUP BY t.id`).
+  Платіж 3 000 ₴, розкладений на три категорії, — це один чек на касі; бакетувати його частини
+  означало б показати три дрібні покупки, яких ніхто не робив. Тому це єдиний канонічний запит,
+  що НЕ сумує `EFF_AMOUNT`; `STATS_JOINS` лишається тільки щоб популяція `SPEND_WHERE` збігалась
+  із рештою сторінки.
+  ⚠️ **Рефанд — не чек відʼємного розміру** (`t.amount < 0`): він навмисно проходить `SPEND_WHERE`
+  (§REFUND — має ВІДНІМАТИСЬ від підсумку), але розміру в нього немає.
+  ⚠️ **Межі бакетів — у ₴ і конвертуються** (`CHEQUE_STEPS_UAH_MINOR` + `uahToBaseMinor`), як
+  `MOVERS_FLOOR_UAH_MINOR` у §CADENCE. Вони НАВМИСНО круглі, а не виведені з даних: межа, що
+  рухається з місяцем, робить два місяці незрівнянними — а саме заради порівняння блок і існує.
+  ⚠️ **Нульовий ліміт — це конверт** (§BUDGET-ZERO): рахувати таку категорію як «без плану»
+  означало б назвати прийняте рішення його відсутністю.
+  ⚠️ **`NULL NOT IN (…)` — це NULL, а не true.** Операція БЕЗ категорії поза конвертами за
+  визначенням, але тризначна логіка тихо викидала її з числа, яке саме це й міряє. Результат
+  виглядав цілком правдоподібно: менше число, що при цьому рухалось разом із даними.
+  Тримається `spending-shape.test.ts` (9 сценаріїв).
 - **§WEEKDAY — витрати за днями тижня (2026-08-07): `lib/finance/weekday.ts`, ЄДИНЕ джерело.**
   Дві речі, без яких графік бреше, і обидві живуть у домені, а не в роуті:
   (а) **день тижня береться в `APP_TZ`** (`localDowSql`, не голий `strftime('%w')`) — у UTC кожна
@@ -1011,6 +1084,57 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   вісь неможливо відрізнити від справжнього числа**.
 
 **AI**
+- **§TIME-CTX (2026-08-27): the app never states a date it was not given.** The feed shipped «Rent
+  due in 11 days, cushion covers only 0.8 months total» — for a rent the user pays on the 20th.
+  Rent is not a `planned_payment`, so it was in no `upcoming_charges` row and had no date anywhere
+  in the payload; the snapshot did not even carry TODAY. The model filled both gaps out of the
+  user's own prose in `situation` («12500 кожного 20 числа»), which is background, not a schedule.
+  ⚠️ **Every figure in that sentence was under 100** — below the floor of `numbersAreGrounded`, and
+  therefore invisible to the guard that exists precisely for invented numbers. **A wrong day is
+  worse than a wrong sum:** a sum is re-read against the screen beside it, a deadline is acted on.
+  Single source — `worker/lib/ai/time-context.ts`: `buildTimeContext` produces BOTH the calendar
+  handed over (`today`, `day_of_month`, `days_left_in_month`, `runway_days`, `time_note`) and the
+  ANCHORS an answer is checked against, because those are one fact seen twice. `buildUpcomingCharges`
+  moved there too — a charge now travels with its `date`/`on_day`, not only with a distance.
+  ⚠️ **`timeClaimsAreGrounded` (`lib/ai/grounding.ts`) is the check** — day counts, days of the
+  month and month NAMES, matched exactly (20 and 21 are different days). An EMPTY anchor set
+  rejects every time claim: that is the honest reading of "we told it no schedule".
+  ⚠️ `\b` is ASCII-only even under `/u`, so it never fires after «днів» — the Ukrainian half of the
+  pattern matched nothing at all until a test caught it. Letter lookaheads, not `\b`.
+  ⚠️ English "may" is deliberately NOT a month stem: a guard that discards every sentence with
+  "may cost" is a guard someone deletes.
+- **§AI-UNIT (2026-08-27): одиниця, про яку сказано моделі, мусить бути тією, яку їй дали.**
+  `moneyUnitDirective` казав «мінорні одиниці», а КОЖЕН payload, який він супроводжує, — у ЦІЛИХ:
+  `collectFinanceSnapshot.context` ділить усе на 100, і так само чинять інструменти чату
+  (`Math.round(r.amt / 100)`). Модель, що має загальну інструкцію й конкретне поле, вірить полю —
+  саме з цієї логіки директиву й написано, — тож хибною тут була САМА інструкція: слухняна модель
+  занижувала все в 100 разів (12 500 ₴ оренди читались як ₴125). Пережило дванадцять аудитів, бо
+  обидва прочитання — правдоподібні речення про гроші, і модель часто «дотягує» порядок назад:
+  переміжно, а не завжди.
+  ⚠️ **Одиницю й валюту називає РІВНО одне місце — `moneyUnitDirective`.** Десять промтів поруч
+  писали «amounts in UAH» / «whole hryvnia», тобто називали валюту, якою payload може й не бути
+  (§BASE-CUR), — і директива тут же наказувала моделі це ігнорувати. Прибрано звідусіль.
+  ⚠️ Приклад у реченні («12500 означає 12 500, а не 125») — не окраса: «whole units» модель
+  прочитує повз, число — ні.
+  Тримається `worker/test/ai-units.test.ts` — твердження звіряється з РЕАЛЬНИМ знімком, а не з
+  іншим реченням (інакше тест запінив би саму одруківку), плюс сканує `lib/ai/*` на повернення
+  назви валюти в промти.
+- **§AI-FEED (2026-08-27): the AI branch of the feed lives in `lib/messaging/drafts-ai.ts`** (lint
+  C3, third time it named the right seam), and it now carries three checks the prompt alone had
+  been asked to enforce — the same rule as §Правила «перевірка > інструкція»:
+  ⚠️ **Language** — `scriptMatchesLocale`: the feed carried English HEADLINES over Ukrainian
+  bodies, because the prompt's own STYLE example is an English headline and an illustration in a
+  language outvotes a directive about language. Script ratio, not a word list — a Ukrainian
+  sentence naming «Claude» and «Spotify» is correct.
+  ⚠️ **Repetition in time** — `repeatsRecentTopic`: ONE shared content word (≥5 letters, minus a
+  stoplist of words that name no topic). «Cushion lasts 24 days» and «Rent due in 11 days, cushion
+  covers only 0.8 months» share exactly one word, and a threshold of two would pass the very pair
+  the guard was written for. The stoplist is the load-bearing part; a word naming a category, an
+  account or a merchant never belongs in it.
+  ⚠️ **Repetition in the same RUN** — `already_announced_today`: the AI branch runs LAST and is
+  handed the rendered titles of every deterministic event just drafted, so «Utilities bill jumped
+  53% above budget» no longer lands beside the budget event saying exactly that. It had no way to
+  know: the prompt forbade the duplication and never named what had fired.
 - **Інструкція моделі — не гарантія. Якщо число з AI потрапляє в UI, поруч має стояти
   детермінована перевірка** (`numbersAreGrounded`, `lib/ai/grounding.ts`). Промт уже забороняв
   вигадувати суми — модель однаково видала дві різні цифри про одне й те саме в одному сповіщенні.

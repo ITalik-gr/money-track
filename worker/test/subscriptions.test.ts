@@ -16,6 +16,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   monthlyPlannedUAH, sumMonthlyPlannedUAH, plannedUAH, nextChargeUnix, chargesBetween,
+  planMatches, planNeedles,
 } from "../lib/finance/subscriptions.ts";
 
 /** ₴ per unit, as `getRates` hands them over (its own row for 980). */
@@ -90,4 +91,65 @@ test("chargesBetween is a SCHEDULE, not an average — the other half of §SUB-M
   const charges = chargesBetween([weekly as never], RATES, from, to);
   assert.ok(charges.length >= 4, `a weekly plan charges at least 4 times in May, got ${charges.length}`);
   assert.ok(charges.every((c) => c.amount === 10000));
+});
+
+/**
+ * §SUB-DATE (2026-08-27) — a monthly plan keeps its DAY, whatever the month is worth.
+ *
+ * `nextChargeUnix` stepped a `Date` with `setMonth(+1)`, and JavaScript resolves 31 February by
+ * rolling over into March. A plan anchored on the 31st therefore went 31 Jan → 3 Mar → 3 Apr:
+ * February skipped outright, and every later charge on the 3rd — a schedule that silently walks
+ * away from the day the person actually pays on, into a different budget month.
+ */
+test("§SUB-DATE: the 31st clamps to the last day, it does not roll into next month", () => {
+  const jan31 = Date.UTC(2026, 0, 31, 10, 0, 0) / 1000;
+  const day = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+
+  // Standing on 1 February, the next charge is IN February — not in March.
+  assert.equal(day(nextChargeUnix(jan31, "month", 1, Date.UTC(2026, 1, 1) / 1000)), "2026-02-28");
+  // And the anchor survives it: March is a 31-day month again.
+  assert.equal(day(nextChargeUnix(jan31, "month", 1, Date.UTC(2026, 2, 1) / 1000)), "2026-03-31");
+  assert.equal(day(nextChargeUnix(jan31, "month", 1, Date.UTC(2026, 3, 1) / 1000)), "2026-04-30");
+});
+
+test("§SUB-DATE: an ordinary day is untouched, years out", () => {
+  const start = Date.UTC(2024, 0, 20, 9, 0, 0) / 1000;
+  const day = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
+  // The rent case from the feed: paid on the 20th, and still the 20th two years on.
+  assert.equal(day(nextChargeUnix(start, "month", 1, Date.UTC(2026, 7, 27) / 1000)), "2026-09-20");
+  // A quarterly plan lands on the same day, three months apart.
+  assert.equal(day(nextChargeUnix(start, "month", 3, Date.UTC(2026, 7, 27) / 1000)), "2026-10-20");
+});
+
+test("§SUB-DATE: a plan whose start is in the future returns that start", () => {
+  const start = Date.UTC(2026, 11, 5, 8, 0, 0) / 1000;
+  assert.equal(nextChargeUnix(start, "month", 1, Date.UTC(2026, 7, 27) / 1000), start);
+});
+
+/**
+ * §SUB-ALIAS (2026-08-27) — a subscription is known by more than its title.
+ *
+ * The report: the plan is «Twitter», the statement says «X Corp.», and the two never met — so the
+ * charge got no `planned_id`, its category was guessed, and the feed announced «списань не видно»
+ * for a subscription being paid every month. The extra names come from the plan's own note, the
+ * field the user already fills in to explain what this is.
+ */
+test("§SUB-ALIAS: the plan's note supplies the names its title does not", () => {
+  const plan = { title: "Twitter", note: "X Corp (твітер) підписка, списується щомісяця" };
+  assert.equal(planMatches(plan, "X CORP. PAYMENT"), true, "the billing name, from the note");
+  assert.equal(planMatches(plan, "твітер"), true, "and the name the person actually uses");
+  assert.equal(planMatches(plan, "TWITTER INC"), true, "the title still works");
+  assert.equal(planMatches(plan, "OnTaxi Kyiv"), false);
+});
+
+test("§SUB-ALIAS: the words every note contains identify nothing, so they are dropped", () => {
+  // Without the stoplist «підписка» would match any statement line carrying the word, and every
+  // plan would claim every other plan's charges.
+  const plan = { title: "Netflix", note: "підписка, оплата щомісяця, сервіс" };
+  assert.deepEqual(planNeedles(plan), ["Netflix"]);
+  assert.equal(planMatches(plan, "SPOTIFY підписка"), false);
+});
+
+test("§SUB-ALIAS: an empty note changes nothing", () => {
+  assert.deepEqual(planNeedles({ title: "Spotify", note: null }), ["Spotify"]);
 });

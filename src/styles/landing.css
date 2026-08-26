@@ -16,6 +16,9 @@
  */
 
 .landing {
+  /* One gutter, named once: the phone menu is positioned against it, and a second literal would
+     drift the day the page's margins change. */
+  --lp-gutter: clamp(18px, 4vw, 36px);
   min-height: 100dvh;
   display: flex; flex-direction: column;
   /* The page owns the horizontal rhythm; every section is width-capped by `.lp-w` instead, so a
@@ -26,23 +29,57 @@
 /* One soft wash behind the hero, painted with the accent token so it follows the theme. It is a
    single element rather than a `body` gradient: the page scrolls past it and the rest stays flat. */
 .lp-glow {
-  position: absolute; inset: 0 0 auto; height: 620px; pointer-events: none; z-index: 0;
+  /* ⚠️ NEGATIVE z-index, and that is the whole trick. A positioned element with `z-index: 0`
+     paints ABOVE the static content of its siblings (paint order: block backgrounds → inline
+     content → positioned boxes), so the wash used to cover the page — and the fix for that was a
+     blanket `.landing > * { position: relative; z-index: 1 }`, which then quietly re-positioned
+     every descendant it was never meant to touch: it cancelled this element's own `absolute`
+     (620px of blank page above the header), and later it cancelled the lightbox's `fixed` so the
+     overlay rendered at the bottom of the document where nobody could see it. One negative number
+     replaces the blanket rule and the two bugs it caused. */
+  position: absolute; inset: 0 0 auto; height: 620px; pointer-events: none; z-index: -1;
   background:
     radial-gradient(90% 120% at 15% -10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
     linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, transparent), transparent 78%);
 }
-/* `:not(.lp-glow)` is load-bearing: without it this rule (same specificity, declared later) wins
-   over the wash's own `position: absolute`, drops it back into the flow, and its 620px height
-   becomes 620px of blank page above the header. */
-.landing > *:not(.lp-glow) { position: relative; z-index: 1; }
-
 /* Every band shares one measure — including the screenshot row, which was briefly given its own
    wider one and immediately read as a section that had slipped sideways rather than as emphasis. */
-.lp-w { width: min(100%, 1120px); margin-inline: auto; padding-inline: clamp(18px, 4vw, 36px); }
+.lp-w { width: min(100%, 1120px); margin-inline: auto; padding-inline: var(--lp-gutter); }
+
+/* Prose gets `text-wrap: pretty`: no orphan on the last line, and the ragged edge is evened out.
+   This page is the one place in the app where a paragraph is a designed object rather than a label
+   above a number — every one of these is short, so a single dangling word is a large fraction of
+   the block. Listed explicitly rather than set on `.landing p`: the caption under a screenshot and
+   the note under the CTA are prose too, and neither is a `<p>` in a content column. */
+.lp-sub, .lp-lead, .lp-note,
+.lp-step p, .lp-feature p, .lp-key p, .lp-priv-item span, .lp-point span,
+.lp-mcp-list li, .lp-disclosure p, .lp-final p, .lp-shot figcaption, .lp-stack-item span,
+.lp-flow-desc, .lp-flow-foot, .lp-flow-out span, .lp-foot p {
+  text-wrap: pretty;
+}
 
 /* ── Top bar ─────────────────────────────────────────────────────────────── */
-.lp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 18px; }
-.lp-top-right { display: flex; align-items: center; gap: 8px; }
+/* The header is the one band that must paint OVER what follows it: the phone menu is a panel
+   anchored to it, and a later sibling wins the paint order at equal z-index — which is why the
+   dropdown appeared *behind* the hero, showing the headline straight through the white panel. */
+.lp-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-top: 18px; position: relative; z-index: 10;
+}
+/* Everything except the brand. One element, two layouts: a row on a desktop, a dropdown panel on a
+   phone. The alternative — a second copy of the links for the small screen — is two lists to keep
+   in step, and the one nobody looks at is the one that goes stale. */
+.lp-top-side { display: flex; flex: 1; align-items: center; gap: 16px; min-width: 0; }
+.lp-top-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.lp-burger {
+  display: none; place-items: center; width: 38px; height: 38px; flex: none;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+/* No close glyph in the icon set, and adding one for a single button is how a set grows sideways:
+   a plus turned 45° IS the ×, and it animates between the two states for free. */
+.lp-burger svg { transition: transform var(--dur-2) var(--ease-out); }
+.lp-burger.open svg { transform: rotate(45deg); }
 .lp-brand { display: flex; align-items: center; gap: 9px; }
 .lp-brand .mark {
   display: grid; place-items: center; width: 27px; height: 27px;
@@ -53,7 +90,7 @@
 /* Section links. They are the only navigation on the page, so they read as text rather than as
    buttons: four chips beside a language toggle, a theme switch and a sign-in button would make
    the top bar the busiest thing on the screen. */
-.lp-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.lp-nav { display: flex; align-items: center; gap: 4px; min-width: 0; margin-inline: auto; }
 .lp-nav-link {
   padding: 6px 10px; border-radius: var(--radius-xs);
   color: var(--ink-2); font-size: 13.5px; text-decoration: none; white-space: nowrap;
@@ -127,6 +164,15 @@
 /* Deliberately not a fake browser chrome: the tab bar and traffic lights are decoration that says
    "mockup". A crisp border, the app's own radius, and a caption naming what is on screen. */
 .lp-shot { margin: 0; min-width: 0; }
+/* The whole picture is the control. A bare `<img>` with a click handler is invisible to a keyboard
+   and announces nothing; a button around it is both, and `display: block` keeps it from adding the
+   inline-baseline gap that would show up as a hairline under every frame. */
+.lp-shot-open {
+  display: block; width: 100%; padding: 0; border: none; background: none;
+  cursor: zoom-in; border-radius: var(--radius-lg);
+}
+.lp-shot-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.lp-shot-open:hover img { border-color: var(--muted); }
 .lp-shot img {
   display: block; width: 100%; height: auto;
   border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
@@ -373,20 +419,94 @@
    scroll the most; `order` puts them under the row rather than between the brand and the buttons,
    and the row scrolls sideways on its own so a long translation cannot widen the page. */
 @media (max-width: 860px) {
-  .lp-top { flex-wrap: wrap; row-gap: 4px; }
-  .lp-nav {
-    order: 3; width: 100%; margin-inline: -8px;
-    /* Spread rather than pack: four links on one phone row read as a row of destinations, while
-       the same four bunched left read as an overflowing list. The scroll stays as the fallback —
-       a longer translation must be reachable, never a reason for the page to widen. */
-    justify-content: space-between; gap: 0;
-    overflow-x: auto; scrollbar-width: none;
+  .lp-burger { display: grid; }
+  /* A panel, not a second row. The four links spread across a phone's width read as a strip of
+     labels floating under the logo — related to nothing, and the first thing the eye has to skip
+     past to reach the headline. Behind a burger they are exactly as reachable and cost no height. */
+  .lp-top-side {
+    display: none; position: absolute; top: calc(100% + 10px); z-index: 30;
+    /* Aligned with the page gutter rather than the screen edge: a panel whose rounded corner
+       touches the bezel reads as a layout that overflowed, not as a menu. */
+    left: var(--lp-gutter); right: var(--lp-gutter);
+    flex-direction: column; align-items: stretch; gap: 4px; padding: 8px;
+    border: 1px solid var(--line-strong); border-radius: var(--radius);
+    background: var(--surface); box-shadow: var(--shadow-card);
   }
-  .lp-nav::-webkit-scrollbar { display: none; }
-  .lp-nav-link { padding: 6px 8px; font-size: 13px; }
+  .lp-top-side.open { display: flex; }
+  .lp-nav { flex-direction: column; align-items: stretch; gap: 2px; margin-inline: 0; }
+  .lp-nav-link { padding: 11px 12px; font-size: 15px; }
+  /* The controls keep their own row at the bottom of the panel, separated: they are settings for
+     the page, not places to go. */
+  .lp-top-right {
+    margin: 4px 0 0; padding-top: 10px; border-top: 1px solid var(--line);
+    justify-content: space-between;
+  }
+  .lp-top-signin { margin-left: auto; }
 }
 @media (max-width: 620px) {
   .lp-hero h1 { max-width: none; }
   /* The badge is one phrase, so it wraps as one block rather than splitting mid-sentence. */
   .lp-eyebrow { display: flex; }
+}
+
+/* ── Lightbox ────────────────────────────────────────────────────────────── */
+/* Opened from any screenshot on the page (`components/landing/Lightbox.tsx`). Fixed rather than a
+   `<dialog>`: the top layer would escape the theme's `data-theme` scoping in older Safari, and
+   nothing here needs the focus trap a modal dialog buys. */
+.lp-lb {
+  position: fixed; inset: 0; z-index: 200;
+  /* ⚠️ The picture is CENTRED IN THE VIEWPORT, and the arrows are pinned to the edges — they are
+     not flex siblings of it. As a row they were laid out around the frame, and the frame is as
+     wide as its widest child: a two-line caption made it wider than a short one, and a 2.5:1 chat
+     shot is a different width from a 1.7:1 dashboard. So the image sat off-centre inside its own
+     slot and both arrows moved every time you paged. Nothing about where a control sits may
+     depend on the content it pages through. */
+  display: grid; place-items: center;
+  padding-block: clamp(12px, 3vw, 32px);
+  /* The inline padding is the arrows' lane: without it a wide screenshot slides under them. */
+  padding-inline: clamp(64px, 9vw, 108px);
+  /* Dark enough that the page behind stops competing: at 88% the headline was still legible
+     through it, and a scrim you can read through reads as a rendering bug. */
+  background: rgb(8 12 18 / 94%);
+  animation: lp-lb-in var(--dur-2) var(--ease-out);
+}
+@keyframes lp-lb-in { from { opacity: 0; } to { opacity: 1; } }
+.lp-lb-frame {
+  margin: 0; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  min-width: 0; max-width: 100%;
+}
+.lp-lb-frame img {
+  display: block; max-width: min(100%, 1600px); max-height: 80vh; width: auto; height: auto;
+  border-radius: var(--radius); box-shadow: 0 30px 80px -20px rgb(0 0 0 / 70%);
+}
+.lp-lb-frame figcaption {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 14px;
+  max-width: 80ch; color: rgb(255 255 255 / 74%); font-size: 13px; text-align: center;
+  text-wrap: pretty;
+}
+.lp-lb-count { font-family: var(--font-mono); font-size: 12px; color: rgb(255 255 255 / 50%); }
+/* The controls are white on a dark scrim in BOTH themes — the scrim is the ground here, not the
+   page, so `--ink`/`--surface` would flip them into invisibility in dark mode. */
+.lp-lb-x, .lp-lb-nav {
+  display: grid; place-items: center; flex: none; width: 42px; height: 42px;
+  border: 1px solid rgb(255 255 255 / 18%); border-radius: var(--radius-pill);
+  background: rgb(255 255 255 / 8%); color: #fff; cursor: pointer;
+}
+.lp-lb-x:hover, .lp-lb-nav:hover { background: rgb(255 255 255 / 18%); }
+.lp-lb-x { position: absolute; top: clamp(12px, 3vw, 24px); right: clamp(12px, 3vw, 24px); }
+.lp-lb-nav { position: absolute; top: 50%; transform: translateY(-50%); }
+.lp-lb-nav.prev { left: clamp(10px, 2.5vw, 28px); }
+.lp-lb-nav.next { right: clamp(10px, 2.5vw, 28px); }
+.lp-lb-x svg { transform: rotate(45deg); } /* the plus is the close glyph — see `.lp-burger` */
+.lp-lb-nav.prev svg { transform: rotate(90deg); }
+.lp-lb-nav.next svg { transform: rotate(-90deg); }
+/* On a phone the arrows move UNDER the picture: at 390px a 42px control on each side takes a
+   fifth of the width away from the thing being looked at. They stay pinned to the viewport, so
+   they still do not move between shots — only the lane they sit in changes. */
+@media (max-width: 620px) {
+  .lp-lb { padding-inline: 12px; padding-bottom: 78px; }
+  .lp-lb-frame img { max-height: 62vh; }
+  .lp-lb-nav { top: auto; bottom: 18px; transform: none; }
+  .lp-lb-nav.prev { left: calc(50% - 52px); }
+  .lp-lb-nav.next { right: calc(50% - 52px); }
 }

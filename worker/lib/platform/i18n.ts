@@ -297,6 +297,7 @@ const S = {
 
   errDocNotFound: { uk: "Документ не знайдено", en: "Document not found" },
   errGroupNotFound: { uk: "Групу не знайдено", en: "Group not found" },
+  errPlanNotFound: { uk: "Підписку не знайдено", en: "Subscription not found" },
   factTextRequired: { uk: "Потрібен текст факту", en: "The fact needs some text" },
   errDocTitleRequired: { uk: "Потрібна назва документа", en: "A document title is required" },
   errDocEmpty: { uk: "Документ порожній", en: "The document is empty" },

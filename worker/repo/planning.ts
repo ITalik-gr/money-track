@@ -215,9 +215,61 @@ export interface MerchantMatch {
  * cut the freshest week out of a report; this was the same cut, in the flow whose whole purpose
  * is "turn a recent repeating charge into a plan".
  */
+/**
+ * The text a subscription search looks through — the merchant, the RAW bank description, the
+ * user's comment and the AI's own note about the operation.
+ *
+ * ⚠️ `ai_note` is the point (2026-08-27). The owner had told the AI, on the transaction itself,
+ * that «X Corp.» is his Twitter subscription; the model understood and wrote it down — and then
+ * searching for «твітер» found nothing, because the search read `merchant` alone. The app had the
+ * answer stored and refused to look at it. Same shape as §RULES-UI: what the engine matches and
+ * what the person sees must be the same text.
+ * ⚠️ `raw_json.$.description` before `merchant`, for the same reason as `textHaystack` in
+ * `repo/rules.ts` — for an enriched row `merchant` is a clean name the bank never sent.
+ */
+const searchHaystack = (a = "t.") =>
+  `COALESCE(${a}merchant, '') || ' ' || COALESCE(json_extract(${a}raw_json, '$.description'), '') ` +
+  `|| ' ' || COALESCE(${a}comment, '') || ' ' || COALESCE(${a}ai_note, '')`;
+
+/**
+ * Case variants of one search term.
+ *
+ * SQLite's `LIKE` folds case for ASCII ONLY, and `LOWER()` does the same — so «твітер» never
+ * matches «Твітер» and a Cyrillic search silently depends on how the text happened to be typed.
+ * Two variants (as given, and capitalised) cover what actually occurs in merchant names and notes;
+ * a full Unicode fold would need a collation D1 does not offer.
+ */
+function likeVariants(term: string): string[] {
+  const low = term.toLowerCase();
+  const cap = low.charAt(0).toUpperCase() + low.slice(1);
+  return [...new Set([low, cap, term])].map((v) => `%${v}%`);
+}
+
+/**
+ * Spending grouped by merchant+currency for a free-text search — the §F4 "describe it" flow.
+ *
+ * ⚠️ **Holds are COUNTED**, like everywhere else (canon, `stats.ts`): monobank only sends executed
+ * operations, and when a hold settles the SAME id is overwritten, so there is no double count.
+ * Two of the three planning queries carried `t.hold = 0` and nothing said why — the visible cost
+ * was that the average charge shown in this SEARCH differed from the one `merchantProfile` uses
+ * for the plan created by clicking that very row. The rule already records that `hold = 0` once
+ * cut the freshest week out of a report; this was the same cut, in the flow whose whole purpose
+ * is "turn a recent repeating charge into a plan".
+ * ⚠️ **Several terms, OR-ed** (2026-08-27): one keyword cannot span a rename. The model is asked
+ * for the brand's aliases («X», «Twitter», «твітер») precisely because the ledger holds one of
+ * them and the person remembers another.
+ * ⚠️ **Terms shorter than `MIN_TERM` are dropped by the caller, never searched.** `LIKE '%X%'`
+ * matches OnTa**x**i, E**x**pres and PADDLE.NET — that screenful of noise was the bug report.
+ */
 export async function merchantMatches(
-  db: AppDb, query: string, since: number,
+  db: AppDb, terms: string[], since: number,
 ): Promise<MerchantMatch[]> {
+  const binds: string[] = [];
+  const clauses: string[] = [];
+  for (const term of terms.slice(0, 6)) {
+    for (const v of likeVariants(term)) { clauses.push(`${searchHaystack()} LIKE ?`); binds.push(v); }
+  }
+  if (!clauses.length) return [];
   const r = await db.prepare(
     `SELECT t.merchant, t.currency_code, -AVG(t.amount) AS avg_amount, COUNT(*) AS n,
             MIN(t.time) AS first_time, MAX(t.time) AS last_time,
@@ -225,10 +277,10 @@ export async function merchantMatches(
              WHERE x.merchant = t.merchant AND x.category_id IS NOT NULL
              GROUP BY x.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id
      FROM transactions t
-     WHERE t.amount < 0 AND t.is_transfer = 0 AND t.merchant LIKE ? AND t.time >= ?
+     WHERE t.amount < 0 AND t.is_transfer = 0 AND t.time >= ? AND (${clauses.join(" OR ")})
      GROUP BY t.merchant, t.currency_code
      HAVING n >= 1 ORDER BY n DESC, last_time DESC LIMIT 8`,
-  ).bind(`%${query}%`, since).all<MerchantMatch>();
+  ).bind(since, ...binds).all<MerchantMatch>();
   return r.results ?? [];
 }
 
@@ -282,4 +334,52 @@ export async function dismissMerchant(db: AppDb, merchant: string, at: number): 
   await db.prepare(
     "INSERT OR IGNORE INTO planned_dismissed (merchant, created_at) VALUES (?, ?)",
   ).bind(merchant.toLowerCase(), at).run();
+}
+
+// ---- one plan, in detail (§SUB-PAGE) ----------------------------------------
+
+/** Every column of one plan, whether or not it is still active. */
+export async function byId(db: AppDb, id: number): Promise<PlannedPayment | null> {
+  return await db.prepare("SELECT * FROM planned_payments WHERE id = ?").bind(id).first<PlannedPayment>();
+}
+
+export interface PlanCharge {
+  id: string; time: number; amount: number; currency_code: number; amount_base: number;
+}
+
+/**
+ * The actual charges linked to a plan, newest first.
+ *
+ * ⚠️ Two amounts, deliberately. `amount` stays in the currency the card was charged in — that is
+ * the figure on the statement and the one a price rise is visible in. `amount_base` is the same
+ * charge rolled up into the reader's unit (§BASE-CUR), which is the only way a total or a share
+ * of anything means something. Showing one and calling it the other is how a $5 subscription once
+ * weighed 5 ₴ (§CUR-PLAN).
+ * ⚠️ No `STATS_JOINS`: a subscription charge is a whole transaction that either happened or did
+ * not. Splitting one across categories is a statement about where the money went, not about what
+ * the biller took, and asking for the split half here would report a charge the bank never made.
+ */
+export async function planCharges(
+  db: AppDb, id: number, mult: string, limit = 36,
+): Promise<PlanCharge[]> {
+  const r = await db.prepare(
+    `SELECT t.id, t.time, ABS(t.amount) AS amount, t.currency_code,
+            CAST(ROUND(ABS(t.amount) * ${mult}) AS INTEGER) AS amount_base
+     FROM transactions t
+     WHERE t.planned_id = ? AND t.amount < 0 AND t.is_transfer = 0
+     ORDER BY t.time DESC LIMIT ?`,
+  ).bind(id, limit).all<PlanCharge>();
+  return r.results ?? [];
+}
+
+export interface PlanTotals { n: number; first_time: number | null; last_time: number | null; total_base: number }
+
+export async function planTotals(db: AppDb, id: number, mult: string): Promise<PlanTotals> {
+  const r = await db.prepare(
+    `SELECT COUNT(*) AS n, MIN(t.time) AS first_time, MAX(t.time) AS last_time,
+            CAST(ROUND(COALESCE(SUM(ABS(t.amount) * ${mult}), 0)) AS INTEGER) AS total_base
+     FROM transactions t
+     WHERE t.planned_id = ? AND t.amount < 0 AND t.is_transfer = 0`,
+  ).bind(id).first<PlanTotals>();
+  return r ?? { n: 0, first_time: null, last_time: null, total_base: 0 };
 }

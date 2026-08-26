@@ -20,6 +20,11 @@
       }
     ],
     "composition": [],
+    "subscriptions": {
+      "items": [],
+      "monthly_base": 0,
+      "share_pct": null
+    },
     "lifetime": {
       "total": 0,
       "n": 0,

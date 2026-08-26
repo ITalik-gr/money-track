@@ -40,8 +40,8 @@ export async function generateInsight(
         "Answer with VALID JSON ONLY, no markdown: {headline (1 sentence — the main thing about the period), " +
         "facts:[{label, amount (UAH number or null), category (name or null), delta_pct (change against the previous " +
         "period, +/- number or null), tone ('pos'|'neg'|'neutral')}] (2-5 facts — where most went, notable changes, " +
-        "anomalies, the split by importance), note (one short concrete piece of advice, or null)}. Amounts in " +
-        "hryvnia." +
+        "anomalies, the split by importance), note (one short concrete piece of advice, or null)}. Amounts are " +
+        "WHOLE units of the display currency named below — never restate them in another currency." +
         (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },
   ];

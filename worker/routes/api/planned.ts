@@ -9,7 +9,7 @@ import * as planningRepo from "../../repo/planning.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes } from "./_shared.ts";
 import type { PlannedActual } from "../../../shared/types.ts";
-import type { UpcomingSubs, RecurringCandidate, PlanFromHabit, PlannedRow } from "../../../shared/api/planning.ts";
+import type { UpcomingSubs, RecurringCandidate, PlanFromHabit, PlannedRow, AiDetectResult, SubscriptionOverview } from "../../../shared/api/planning.ts";
 
 export const planned = apiRoutes();
 
@@ -66,8 +66,22 @@ planned.post("/planned", async (c) => {
   return c.json({ ok: true, id, occurrences, end_date });
 });
 
-// AI-детект підписки за описом (§F4): користувач описує словами → AI дістає пошуковий
-// запит; шукаємо схожі транзакції, рахуємо середню суму/валюту/каденцію → кандидат.
+/**
+ * §SUB-FIND — "describe the subscription and I'll find it in your history".
+ *
+ * The model's job is NAMES, not search: a brand is one thing under several strings («X», «Twitter»,
+ * «твітер»), the ledger holds one of them and the person remembers another. It used to return a
+ * single `merchant_query`, and the two failures that produced were the bug report of 2026-08-27:
+ *   • «твітер» found nothing, because the charge is stored as «X Corp.» — while the user had
+ *     already told the AI, on that very transaction, that it is his Twitter subscription, and the
+ *     model had written it into `ai_note`. The app knew and did not look (fixed in `searchHaystack`).
+ *   • «X підписка» returned OnTa**x**i, E**x**pres and PADDLE.NET — `LIKE '%X%'` over a one-letter
+ *     term. Hence MIN_TERM: a term too short to identify anything is dropped, never searched.
+ * If the model gives nothing usable we fall back to the user's OWN words, which is worse at
+ * spelling and better than an empty screen.
+ */
+const MIN_TERM = 3;
+
 planned.post("/planned/ai-detect", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { description } = await c.req.json<{ description?: string }>();
@@ -75,25 +89,42 @@ planned.post("/planned/ai-detect", async (c) => {
 
   const { callHaikuJson } = await import("../../lib/ai/json.ts");
   const { MODEL_SMART } = await import("../../lib/ai/models.ts");
-  let query = "";
+  let terms: string[] = [];
   try {
-    // Sonnet 5 — точніше витягує ключове слово мерчанта з вільного опису підписки.
-    const { result } = await callHaikuJson<{ merchant_query: string }>(
+    const { result } = await callHaikuJson<{ terms?: string[] }>(
       c.env,
-      [{ type: "text", text: "Користувач описує рекурентний платіж (підписку). Витягни коротке ключове слово для пошуку мерчанта в транзакціях (латиницею або як у виписці, напр. «моя підписка на Anthropic»→«Anthropic», «інтернет Київстар»→«Київстар»). Відповідай ВИКЛЮЧНО JSON {\"merchant_query\": \"...\"}." }],
+      [{
+        type: "text",
+        text:
+          "The user is describing a recurring payment (a subscription) they want found in their bank history. " +
+          "Return the SEARCH TERMS a bank statement might actually carry for it — the brand's names in every " +
+          "form it is billed or spoken about: the current legal/billing name, the well-known former name, and " +
+          "the Cyrillic transliteration when the user's language is Ukrainian. " +
+          "Example: \"моя підписка на твітер\" → [\"X Corp\", \"Twitter\", \"твітер\", \"X\"]; " +
+          "\"інтернет Київстар\" → [\"Київстар\", \"Kyivstar\"]. " +
+          "2-5 terms, each a NAME and nothing else — no words like \"subscription\", \"monthly\" or \"payment\", " +
+          "which appear in half the statement and identify nothing. " +
+          "Answer with VALID JSON ONLY: {\"terms\": [\"...\"]}",
+      }],
       [{ type: "text", text: description.slice(0, 300) }],
-      120,
+      200,
       MODEL_SMART,
     );
-    query = (result.merchant_query ?? "").trim();
+    terms = (result.terms ?? []).map((t) => String(t).trim()).filter(Boolean);
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }
-  if (!query) return c.json({ candidates: [] });
+  // ⚠️ The floor is applied to the MODEL's answer too, not only to ours: it happily returns "X"
+  // for X Corp., which is a true name and a useless query.
+  let usable = terms.filter((t) => t.length >= MIN_TERM);
+  if (!usable.length) {
+    usable = description.split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= MIN_TERM).slice(0, 4);
+  }
+  if (!usable.length) return c.json({ terms, candidates: [] } satisfies AiDetectResult);
 
-  // Схожі витрати за ~200 днів згруповані по мерчанту+валюті (без переказів/холдів).
+  // Схожі витрати за ~200 днів згруповані по мерчанту+валюті (без переказів).
   const since = Math.floor(Date.now() / 1000) - 200 * 86400;
-  const matches = await planningRepo.merchantMatches(c.env.DB, query, since);
+  const matches = await planningRepo.merchantMatches(c.env.DB, usable, since);
 
   const candidates = matches.map((r) => ({
     title: r.merchant,
@@ -104,7 +135,23 @@ planned.post("/planned/ai-detect", async (c) => {
     category_id: r.category_id,
     avg_interval_days: r.n > 1 ? Math.round((r.last_time - r.first_time) / (r.n - 1) / 86400) : 30,
   }));
-  return c.json({ query, candidates });
+  return c.json({ terms: usable, candidates } satisfies AiDetectResult);
+});
+
+/**
+ * §SUB-PAGE — one subscription, with the analytics a decision about it needs.
+ *
+ * Declared ABOVE `/planned/:id` handlers is not required (this literal is longer), but it is
+ * declared before them anyway so the file reads in the order Hono matches (lint C7).
+ */
+planned.get("/planned/:id/overview", async (c) => {
+  const { subscriptionOverview } = await import("../../lib/finance/subscription-overview.ts");
+  // A path id is not a query param with a sensible default: `Number("abc")` is NaN, and NaN in a
+  // `.bind()` is a silent zero that answers "no such plan" as though the plan had been deleted.
+  const id = Number(c.req.param("id"));
+  const out = Number.isFinite(id) ? await subscriptionOverview(c.env, id) : null;
+  if (!out) return c.json({ error: st(c.get("locale"), "errPlanNotFound") }, 404);
+  return c.json(out satisfies SubscriptionOverview);
 });
 
 planned.delete("/planned/:id", async (c) => {

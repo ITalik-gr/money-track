@@ -26,7 +26,7 @@ import type {
   Overview, MonthlyHistory, SafeToSpend, CapitalTrend, Networth, Compare, Forecast,
   IncomeAnalytics, CashflowCalendar, ReceiptItemsAnalytics, PriceDrift, SpendPatterns,
   CategoryDrill, SliceDrill, MerchantAnalytics, SparkData, FinanceHealth, CategorySpend,
-  CurrenciesList, WeekdayAnalytics, DomAnalytics, Habits, FxCost,
+  CurrenciesList, WeekdayAnalytics, DomAnalytics, Habits, FxCost, SpendingShape,
 } from "../../../shared/api/index.ts";
 
 export const analytics = apiRoutes();
@@ -543,6 +543,22 @@ analytics.get("/analytics/by-category", async (c) => {
  * blocks with different windows, and a name that covers both would have to be vague enough to
  * stop saying what it returns.
  */
+/**
+ * §SHAPE — the shape of the window: cheque sizes, spending outside every envelope, and spending
+ * the app cannot attribute. See `lib/finance/spending-shape.ts` for why each one exists.
+ */
+analytics.get("/analytics/spending-shape", async (c) => {
+  const { spendingShape } = await import("../../lib/finance/spending-shape.ts");
+  const url = new URL(c.req.url);
+  const rates = await getRates(c.env);
+  const now = Math.floor(Date.now() / 1000);
+  const to = numParam(url, "to", now);
+  const from = numParam(url, "from", to - 30 * 86400);
+  const curParam = url.searchParams.get("currency");
+  const { mult, curFilter } = valueMode(rates, curParam ? Number(curParam) : null);
+  return c.json(await spendingShape(c.env, { mult, curFilter }, { from, to }, rates) satisfies SpendingShape);
+});
+
 analytics.get("/analytics/day-of-month", async (c) => {
   const url = new URL(c.req.url);
   const rates = await getRates(c.env);

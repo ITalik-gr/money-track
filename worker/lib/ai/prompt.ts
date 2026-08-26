@@ -228,16 +228,27 @@ export async function replyLangDirective(env: Env, mode: "content" | "conversati
  *
  * Deliberately ONE short paragraph placed with the language directive, in the DYNAMIC block: it
  * must not split the 1h prompt cache that the knowledge corpus depends on.
+ *
+ * ⚠️ **It also states the SCALE, and until 2026-08-27 it stated it WRONGLY** (§0a). The sentence
+ * said "minor units" while every payload it accompanies is in WHOLE units — `collectFinanceSnapshot`
+ * divides by 100 (`own_funds_uah`, `monthly_burn_uah`, `budgets[].limit_uah`, …), and so do the chat
+ * tools (`Math.round(r.amt / 100)`). A model handed a general instruction and a specific field
+ * believes the field — which is the reasoning this directive was written from — so here the
+ * INSTRUCTION was the false half, and a model that obeyed it understated everything 100×: 12 500 ₴
+ * of rent read as ₴125. Invisible in review, because both readings are plausible sentences about
+ * money and the model often sanity-checks its way back — which made it intermittent, not absent.
+ * Pinned by `worker/test/ai-units.test.ts`: the claim is checked against a real snapshot.
  */
 export async function moneyUnitDirective(env: Env): Promise<string> {
   const { resolveBaseCurrency } = await import("../finance/money.ts");
   const { currencyCode, currencySign } = await import("../../../shared/currency.ts");
   const base = await resolveBaseCurrency(env);
-  return ` 💱 CURRENCY: every money figure in the data you were given is already converted into ` +
-    `${currencyCode(base)} minor units — including fields whose name ends in "_uah", which is a ` +
-    `historical suffix and does NOT mean hryvnia. Write amounts with "${currencySign(base)}" and ` +
-    `never name or convert into another currency, unless a single transaction states its own ` +
-    `currency alongside the amount.`;
+  return ` 💱 CURRENCY AND UNITS: every money figure in the data you were given is already converted ` +
+    `into ${currencyCode(base)} and is stated in WHOLE units, never in cents — a value of 12500 ` +
+    `means 12 500 ${currencySign(base)}, not 125. Fields whose name ends in "_uah" are a historical ` +
+    `suffix and do NOT mean hryvnia. Write amounts with "${currencySign(base)}" and never name or ` +
+    `convert into another currency, unless a single transaction states its own currency alongside ` +
+    `the amount.`;
 }
 
 /**

@@ -284,3 +284,76 @@ expiry on the connection row — and `bank_connections` is where it would live.
 - **A new bank must not be able to change existing numbers.** New account, new rows, same canon —
   and if a new account type (a ФОП turnover account) does not belong in the cushion, that decision
   is made before the first sync, not after someone notices their runway moved.
+
+---
+
+## 7. Going international: what English-speaking users actually bank with (researched 2026-08-27)
+
+The goal the owner stated: *eventually a person connects many of their own banks — and one day
+crypto — and gets one analytics surface over all of it.* This section is the research behind that,
+so the next session does not start from a blank search box. **None of it is built.**
+
+### 7.1 You do not integrate "banks". You integrate ONE aggregator.
+
+The US has ~9 700 institutions with a connection worth having (Chase, Bank of America, Wells
+Fargo, Citi, Capital One, US Bank, Ally, SoFi, Navy Federal, plus thousands of credit unions), and
+almost none of them publish a public API for a private person — the same wall §1 hit with Privat,
+at national scale. Everyone who "supports 10 000 banks" is reselling an aggregator. So the honest
+unit of work is **one more `BankProvider` per aggregator**, not per bank — which is exactly the
+shape §5 already prepared, and the reason `BankProvider.statement` was made a provider property in
+the first place (§BANK-FETCH).
+
+| Provider | Region | Self-serve? | Shape of the deal | Fit here |
+|---|---|---|---|---|
+| **Teller** | US only | **Yes** | Free developer tier — 100 live connections, unrestricted sandbox; rate-limited, limits undocumented | **Best first move.** Clean REST, no sales call, and 100 connections is more than this app will have for a long time |
+| **Plaid** | US · CA · UK · EU (~9.7k institutions) | Sandbox yes, production sales-led | Custom pricing | The coverage everyone compares against; the paperwork arrives with it |
+| **SimpleFIN Bridge** | US | **Yes** | ~$15/yr paid by the USER, 25 institutions × 25 apps, read-only, daily refresh | The *self-hosted PFM* answer (Actual, Firefly III both use it). Costs us nothing and the credential is the user's |
+| **Enable Banking** | EU/EEA · UK | **Yes** | Free "Restricted Production" for accounts you link yourself, then paid | The replacement for the free tier everyone lost |
+| **GoCardless Bank Account Data** (ex-Nordigen) | EU · UK | **No — new signups disabled** | was the free indie tier | Do not plan around it |
+| TrueLayer / Tink / Yapily / Salt Edge / MX / Finicity | UK / EU / US | sales-led | enterprise | Only if this ever stops being one person's app |
+
+⚠️ **The read-only distinction is not a detail.** Every option above is account *data*; payment
+initiation is a different licence and a different risk profile, and this app has never needed it —
+the same line already drawn for the mono token ("it only reads the statement").
+
+### 7.2 What it costs us to add one, in this codebase
+
+Cheaper than it looks, because §BANK-FETCH / §BANK-PARSE / §INGEST-WRITE were built for exactly
+this. A new aggregator provider needs: `normalizeTx` (their shape → ours), `statement.fetch` +
+pacing, an OAuth-ish **link flow** — and that last one is the genuinely new piece. mono and Privat
+are a pasted token; an aggregator is a hosted widget (Teller Connect, Plaid Link) that returns an
+`access_token` per *institution*, so one user has N credentials instead of one.
+
+⚠️ **`bankCredential(env, id)` resolves ONE credential per provider (§BANK-CRED).** Multi-bank means
+that becomes one per *connection*, and `bank_connections` (which already exists and already has a
+row per credential) becomes the key. That refactor is the real cost of this feature — not the HTTP.
+
+⚠️ **A second country breaks two assumptions that are correct today and written down as such:** a
+zone-less wall clock is Kyiv (§BANK-PARSE) and a closed budget month is stored in hryvnia
+(§BASE-CUR). Neither is wrong now; both are wrong the day a US account arrives. §APP_TZ is the
+harder of the two — it is a per-deployment constant, and it would have to become per-user.
+
+### 7.3 Crypto, when it comes
+
+Two different jobs, and conflating them is how crypto trackers get balances wrong:
+- **Exchange accounts** — read-only API keys (trading and withdrawal disabled at the exchange).
+  The key is the user's; we store it the way `user_secrets` already stores the mono token.
+- **On-chain wallets** — a public address is enough, no credential at all. **Zerion API** is the
+  live option (self-serve key, wallet holdings + DeFi positions + PnL in one call). ⚠️ **Zapper's
+  API shut down on 3 Aug 2026** — do not plan around anything a 2025 blog post recommends.
+
+⚠️ **Crypto is `role: 'investment'`, never the liquid cushion (§R3)** — the split the app already
+makes for a brokerage account. A volatile balance counted as runway is a wrong answer that looks
+like a feature.
+
+### 7.4 The recommendation, in order
+
+1. **Teller** — self-serve, free, US, and it forces the multi-credential refactor while the app is
+   still small enough for that to be cheap.
+2. **SimpleFIN** — the cheapest coverage per hour of work, and it fits the "bring your own key"
+   posture this app already has everywhere else.
+3. **Enable Banking** for the EU, once one aggregator is proven end to end.
+4. Plaid only when there is a reason to have the sales conversation.
+
+Sources: openbankingtracker.com (aggregator comparison, free-tier guide), teller.io, GoCardless
+Bank Account Data signup notice, zerion.io/api, Zapper shutdown notice.

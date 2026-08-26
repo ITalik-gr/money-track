@@ -45,7 +45,10 @@ const MAX_LINES = 700;
 // 2026-08-22: 1105 → 1000. The chat page's phone layout pushed this part 26 lines over, and an
 // exception may never rise — so the chat block became `chat.css`, the fourteenth part, and the
 // cap follows the file DOWN. A cap left at its old height is headroom nobody decided to grant.
-const EXCEPTIONS = { "domains-a.css": 1000 };
+// 2026-08-27: 1000 → 948. §SUB-PAGE pushed it one line over, and the ratchet held again — the
+// whole subscriptions block (its largest) became `subscriptions.css`, the sixteenth part, and the
+// cap follows the file down rather than being nudged up by one.
+const EXCEPTIONS = { "domains-a.css": 949 };
 
 const problems = [];
 

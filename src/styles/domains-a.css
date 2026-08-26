@@ -907,56 +907,6 @@
 .donut-center .dc-val { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
 .donut-center .dc-lbl { font-size: 11px; color: var(--muted); }
 
-/* ===== SUBSCRIPTIONS ===================================================== */
-.sub-hero { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; }
-.sub-hero .num-hero { font-size: 30px; }
-.sub-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
-.sub-row:last-child { border-bottom: none; }
-/* Автознайдені кандидати — 2-колонкова сітка карток (§SUB1) */
-.sub-detected { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
-.sub-detected .sub-row { border-bottom: none; padding: 12px 14px; }
-.sub-detected .sub-row:last-child { border-bottom: none; }
-/* AI-кандидати всередині блоку пошуку — теж сітка */
-.sub-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 12px; }
-.sub-cands .sub-row { border: 1px solid var(--line); border-radius: var(--radius); }
-.sub-row .s-body { flex: 1; min-width: 0; }
-.sub-row .s-name { font-size: 14.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sub-row .s-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
-.sub-row .s-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; text-align: right; white-space: nowrap; }
-/* §R5: «це не підписка» — закрити кандидата */
-.sub-row .s-dismiss { padding: 6px 9px; color: var(--muted); font-size: 13px; }
-.sub-row .s-dismiss:hover { color: var(--neg, #d64545); }
-/* §R5: опис підписки для AI */
-.sub-card-cat { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
-.sub-card-cat .label { text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
-.sub-note {
-  width: 100%; margin-top: 10px; resize: vertical; min-height: 38px;
-  font-size: 12.5px; padding: 7px 9px; border-radius: 9px;
-  border: 1px solid var(--line); background: var(--bg); color: var(--text);
-}
-.sub-note::placeholder { color: var(--muted); }
-
-/* subscriptions — card grid */
-.sub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-.sub-card {
-  position: relative; padding: 15px; border-radius: var(--radius);
-  background: var(--surface); border: 1px solid var(--line);
-  display: flex; flex-direction: column; gap: 12px;
-}
-.sub-card.is-finished { opacity: 0.62; }
-.sub-card-x { position: absolute; top: 10px; right: 10px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 3px 6px; border-radius: 6px; }
-.sub-card-x:hover { color: var(--neg); background: var(--surface-2); }
-.sub-card-top { display: flex; align-items: center; gap: 11px; min-width: 0; padding-right: 20px; }
-.sub-card-name { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sub-card-kind { font-size: 12px; color: var(--muted); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sub-card-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
-.sub-card-per { font-size: 12px; color: var(--muted); font-weight: 400; margin-left: 4px; }
-.sub-card-fx { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: -6px; }
-.sub-card-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
-.sub-badge { font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 6px; padding: 3px 8px; }
-.sub-badge.done { color: var(--muted); }
-.sub-rem { font-size: 11.5px; color: var(--muted); }
-
 /* tx detail — 2 columns + compact tags */
 /* Шапка деталей операції: мерчант ліворуч, сума праворуч. */
 .txd-hero { display: flex; justify-content: space-between; align-items: center; gap: 14px; }
