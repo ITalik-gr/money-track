@@ -10,9 +10,11 @@
 >
 > Written 2026-08-12. Status: **phase 0 done** (76 dead blocks removed) and **the file is split**
 > into nine parts under `src/styles/`, proved byte-identical; lint C8 keeps it that way.
-> Five parts have been added since (`settings-shell.css`, `budgets.css`, `analytics.css`,
-> `transactions.css`, `chat.css` — fourteen in total) — see §6.1: a NEW part is
-> how an overflowing one is relieved, because an exception may not grow.
+> Six parts have been added since (`settings-shell.css`, `budgets.css`, `analytics.css`,
+> `transactions.css`, `chat.css`, `landing.css` — fifteen in total) — see §6.1: a NEW part is
+> how an overflowing one is relieved, because an exception may not grow. `landing.css` is the one
+> that arrived for a different reason: the marketing page was living at the bottom of `topbar.css`,
+> which owns the SIGNED-IN chrome, so the split there is about ownership rather than size.
 > Phase 0.5 (the 8 conflicting duplicates) and phase 4 (true domain grouping) still need the
 > owner's eye — see §6.
 

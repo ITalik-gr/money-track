@@ -1,0 +1,392 @@
+/* Public landing — the logged-out marketing page.
+ *
+ * Its own part since 2026-08-26 (it lived at the bottom of `topbar.css`, which owns the signed-in
+ * chrome and has nothing to do with it). This page is the ONLY screen a visitor sees before the
+ * product, so it is also the only place in the app where marketing rhythm — full-bleed sections,
+ * an oversized headline, a dark panel — is allowed. It still spends the product's tokens: no
+ * gradient soup, no glass, no purple. The rebuild brief was literally «дуже аі слоп виглядає».
+ *
+ * The rules that shape it:
+ *   · SECTIONS, not a stack of identical cards. Three bordered boxes in a row read as a template,
+ *     so the page alternates: shot → strip → numbered steps → grid → dark panel → code → grid.
+ *   · REAL SCREENSHOTS carry the product claim. A drawn dashboard is a promise the app has to keep
+ *     twice; a screenshot of the demo is the app itself, and the visitor can go check it in a click.
+ *   · The one diagram left (`.lp-flow`) draws the single thing a screenshot CANNOT show: that the
+ *     screen and the model read the same canonical layer.
+ */
+
+.landing {
+  min-height: 100dvh;
+  display: flex; flex-direction: column;
+  /* The page owns the horizontal rhythm; every section is width-capped by `.lp-w` instead, so a
+     full-bleed band (the dark AI panel) can reach the edges without breaking out of a container. */
+  padding: 0 0 clamp(32px, 5vw, 56px);
+  position: relative;
+}
+/* One soft wash behind the hero, painted with the accent token so it follows the theme. It is a
+   single element rather than a `body` gradient: the page scrolls past it and the rest stays flat. */
+.lp-glow {
+  position: absolute; inset: 0 0 auto; height: 620px; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(90% 120% at 15% -10%, color-mix(in srgb, var(--accent) 13%, transparent), transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 4%, transparent), transparent 78%);
+}
+/* `:not(.lp-glow)` is load-bearing: without it this rule (same specificity, declared later) wins
+   over the wash's own `position: absolute`, drops it back into the flow, and its 620px height
+   becomes 620px of blank page above the header. */
+.landing > *:not(.lp-glow) { position: relative; z-index: 1; }
+
+/* Every band shares one measure — including the screenshot row, which was briefly given its own
+   wider one and immediately read as a section that had slipped sideways rather than as emphasis. */
+.lp-w { width: min(100%, 1120px); margin-inline: auto; padding-inline: clamp(18px, 4vw, 36px); }
+
+/* ── Top bar ─────────────────────────────────────────────────────────────── */
+.lp-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 18px; }
+.lp-top-right { display: flex; align-items: center; gap: 8px; }
+.lp-brand { display: flex; align-items: center; gap: 9px; }
+.lp-brand .mark {
+  display: grid; place-items: center; width: 27px; height: 27px;
+  border-radius: 9px; background: var(--ink); color: var(--surface); font-weight: 700; font-size: 14px;
+}
+.lp-brand .name { font-family: var(--font-mono); font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+.lp-brand .dot { color: var(--accent); }
+/* Section links. They are the only navigation on the page, so they read as text rather than as
+   buttons: four chips beside a language toggle, a theme switch and a sign-in button would make
+   the top bar the busiest thing on the screen. */
+.lp-nav { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.lp-nav-link {
+  padding: 6px 10px; border-radius: var(--radius-xs);
+  color: var(--ink-2); font-size: 13.5px; text-decoration: none; white-space: nowrap;
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.lp-nav-link:hover { background: var(--surface-2); color: var(--ink); }
+/* The jump lands at the top of the section, so it needs the page's own breathing room under the
+   viewport edge — without it the kicker sits flush against the top and reads as a cut-off page. */
+.lp-sec[id] { scroll-margin-top: 24px; }
+/* ⚠️ There is deliberately NO `scroll-behavior: smooth` here. In this app BODY is the scrolling
+   box (`html, body { height: 100% }` plus `body { overflow-x: hidden }`, the iOS rubber-band
+   guard), and on that element the whole smooth-scroll machinery is inert in Chrome: a fragment
+   link does not move the page, `scrollIntoView({behavior:"smooth"})` returns silently, and
+   `scroll-behavior: smooth` additionally makes plain `scrollTop` writes stop working. The
+   animation therefore lives in `Landing.tsx`, where it can be seen to run. */
+/* Source link — quiet text in the footer, not a call to action. */
+.lp-src {
+  display: inline-flex; align-items: center; gap: 5px;
+  color: var(--muted); font-size: 12.5px; text-decoration: none;
+}
+.lp-src:hover { color: var(--ink); }
+.lp-theme {
+  display: grid; place-items: center; width: 32px; height: 32px; flex: none;
+  border: 1px solid transparent; border-radius: var(--radius-sm);
+  background: none; color: var(--muted); cursor: pointer;
+}
+.lp-theme:hover { background: var(--surface-2); color: var(--ink); }
+.lp-top-signin { flex: none; }
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+.lp-hero {
+  display: grid; grid-template-columns: 1fr; gap: clamp(32px, 5vw, 52px);
+  align-items: center; padding-top: clamp(40px, 7vw, 76px); padding-bottom: clamp(28px, 5vw, 48px);
+}
+/* The screenshot is wide and detailed, so past the breakpoint it takes the larger half — the copy
+   is short by design and reads fine at 46ch. */
+@media (min-width: 940px) { .lp-hero { grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); } }
+.lp-hero-copy { min-width: 0; }
+.lp-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px; margin-bottom: 18px; padding: 5px 12px;
+  width: fit-content;
+  border-radius: var(--radius-pill); border: 1px solid var(--line-strong); background: var(--surface);
+  color: var(--ink-2); font-size: var(--fs-sm); font-weight: 500;
+}
+.lp-eyebrow b { color: var(--ink); font-weight: 600; }
+.lp-hero h1 {
+  margin: 0; max-width: 19ch;
+  /* The one place in the app with a fluid heading: DESIGN.md bans `clamp()` for product UI
+     because it is read at a fixed DPI — a landing headline is read at whatever the visitor has. */
+  font-size: clamp(31px, 4.2vw, 47px); line-height: 1.06; letter-spacing: -0.03em;
+}
+.lp-hero h1 em { font-style: normal; color: var(--accent); }
+.lp-sub { margin: 20px 0 0; max-width: 48ch; color: var(--ink-2); font-size: clamp(15px, 1.6vw, 18px); line-height: 1.55; }
+.lp-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+.lp-note { margin: 14px 0 0; color: var(--muted); font-size: 12.5px; }
+/* Failure replaces the note rather than stacking under it, so the CTA never shifts while it is
+   being read. */
+.lp-note.is-error { color: var(--neg); }
+/* Pointer events stay on while the sandbox seeds (the button is a link and `startDemo` guards
+   re-entry), so the cursor does not turn into "disabled" mid-wait. */
+.lp-cta .btn.is-busy { opacity: 0.82; cursor: progress; }
+.lp-spin {
+  width: 14px; height: 14px; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: lp-spin 0.7s linear infinite;
+  /* The label carries the meaning, so prefers-reduced-motion can stop this without losing it. */
+}
+@keyframes lp-spin { to { transform: rotate(360deg); } }
+
+/* ── Screenshot frame ────────────────────────────────────────────────────── */
+/* Deliberately not a fake browser chrome: the tab bar and traffic lights are decoration that says
+   "mockup". A crisp border, the app's own radius, and a caption naming what is on screen. */
+.lp-shot { margin: 0; min-width: 0; }
+.lp-shot img {
+  display: block; width: 100%; height: auto;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+  background: var(--surface); box-shadow: 0 2px 4px rgb(15 22 32 / 5%), 0 30px 60px -34px rgb(15 22 32 / 40%);
+}
+.lp-shot figcaption { margin-top: 10px; color: var(--muted); font-size: 12.5px; }
+/* The hero shot leans slightly out of the measure on wide screens — the page gains depth without
+   a single decorative element, and nothing is cropped because the overflow is toward the margin. */
+@media (min-width: 1180px) { .lp-shot-hero { margin-right: -6%; } }
+
+/* ── Stack strip ─────────────────────────────────────────────────────────── */
+.lp-stack {
+  display: grid; gap: 14px 28px; padding: 20px clamp(18px, 4vw, 28px);
+  border-block: 1px solid var(--line); margin-top: clamp(16px, 3vw, 28px);
+}
+@media (min-width: 720px) { .lp-stack { grid-template-columns: auto repeat(4, minmax(0, 1fr)); align-items: center; } }
+.lp-stack-label {
+  font-family: var(--font-mono); font-size: var(--fs-xs); text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--muted);
+}
+.lp-stack-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.lp-stack-item b { font-size: 13.5px; }
+.lp-stack-item span { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+/* ── Section scaffolding ─────────────────────────────────────────────────── */
+.lp-sec { padding-top: clamp(56px, 9vw, 104px); }
+.lp-sec-head { max-width: 62ch; }
+.lp-kicker {
+  display: block; margin-bottom: 12px;
+  font-family: var(--font-mono); font-size: var(--fs-xs); text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--accent);
+}
+.lp-sec-head h2 {
+  margin: 0; font-size: clamp(24px, 3.4vw, 36px); line-height: 1.12; letter-spacing: -0.022em;
+}
+.lp-lead { margin: 14px 0 0; color: var(--ink-2); font-size: clamp(14.5px, 1.4vw, 16.5px); line-height: 1.6; }
+
+/* ── How it works: three numbered steps ──────────────────────────────────── */
+.lp-steps {
+  list-style: none; margin: clamp(28px, 4vw, 40px) 0 0; padding: 0;
+  display: grid; gap: 0; counter-reset: none;
+}
+@media (min-width: 860px) { .lp-steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 clamp(20px, 3vw, 36px); } }
+/* A rule across the top instead of a card border: the three steps are one sequence, and boxing
+   them would say "three independent things" — which is precisely the template look being removed. */
+.lp-step { padding: 20px 0 12px; border-top: 2px solid var(--ink); }
+.lp-step + .lp-step { border-top-color: var(--line-strong); }
+@media (min-width: 860px) { .lp-step + .lp-step { border-top-color: var(--ink); } }
+.lp-step-n {
+  display: block; margin-bottom: 10px;
+  font-family: var(--font-mono); font-size: 12px; color: var(--muted); letter-spacing: 0.06em;
+}
+.lp-step h3 { margin: 0; font-size: 17px; letter-spacing: -0.01em; }
+.lp-step p { margin: 8px 0 0; color: var(--ink-2); font-size: 14px; line-height: 1.6; }
+.lp-tags { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 14px 0 0; padding: 0; }
+.lp-tag {
+  padding: 3px 9px; border-radius: var(--radius-xs); background: var(--surface-2);
+  color: var(--ink-2); font-size: 12px; white-space: nowrap;
+}
+
+/* ── Feature grid ────────────────────────────────────────────────────────── */
+.lp-features {
+  display: grid; gap: clamp(14px, 2vw, 18px); margin-top: clamp(28px, 4vw, 40px);
+  grid-template-columns: repeat(auto-fit, minmax(clamp(240px, 30%, 320px), 1fr));
+}
+.lp-feature {
+  padding: clamp(18px, 2.4vw, 22px);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+.lp-feature-ico {
+  display: grid; place-items: center; width: 30px; height: 30px; margin-bottom: 14px;
+  border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-strong);
+}
+.lp-feature h3 { margin: 0; font-size: 15.5px; letter-spacing: -0.01em; }
+.lp-feature p { margin: 8px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
+
+/* ── Screenshot row ──────────────────────────────────────────────────────── */
+.lp-shots-grid { display: grid; gap: clamp(16px, 2.5vw, 24px); margin-top: clamp(28px, 4vw, 40px); }
+/* Four screens, two by two — an odd one out would sit beside a hole, which reads as a broken
+   layout rather than as a composition. The wide one (the chat answer) lives in the AI band above,
+   where it is making a point rather than filling a cell. */
+@media (min-width: 860px) { .lp-shots-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ── AI panel (the one dark band) ────────────────────────────────────────── */
+/* Full-bleed and inverted: this is the claim the whole project is built around, so it gets the
+   page's only change of ground. Ink rather than the accent — a saturated blue band is the SaaS
+   default this design explicitly refuses (DESIGN.md §1). */
+.lp-ai {
+  margin-top: clamp(56px, 9vw, 104px); padding-block: clamp(44px, 7vw, 76px);
+  /* The band is the INVERSE of the page in both themes: ink ground, surface text. Everything
+     inside it therefore mixes against `--surface`, which flips with the theme on its own. */
+  background: var(--ink); color: var(--surface);
+  /* The one thing that does NOT follow from that: the accent. Lightening it works over the dark
+     band a light theme produces and turns to pale blue on white when the band inverts, so the
+     dark theme darkens it instead. Declared once as a variable — the alternative was three
+     rules each remembering to have a dark-theme twin, and the third would have been forgotten. */
+  --lp-on-accent: color-mix(in srgb, var(--accent) 70%, #fff);
+}
+:root[data-theme="dark"] .lp-ai { --lp-on-accent: color-mix(in srgb, var(--accent) 72%, #000); }
+.lp-ai-grid { display: grid; gap: clamp(28px, 4vw, 48px); align-items: center; }
+@media (min-width: 940px) { .lp-ai-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr); } }
+.lp-ai .lp-kicker { color: var(--lp-on-accent); }
+.lp-ai h2 { margin: 0; font-size: clamp(24px, 3.4vw, 36px); line-height: 1.12; letter-spacing: -0.022em; }
+.lp-ai .lp-lead { color: color-mix(in srgb, var(--surface) 76%, transparent); }
+.lp-points { list-style: none; margin: clamp(22px, 3vw, 30px) 0 0; padding: 0; display: grid; gap: 14px; }
+.lp-point { display: flex; gap: 11px; align-items: flex-start; }
+.lp-point svg { flex: none; margin-top: 2px; color: var(--lp-on-accent); }
+.lp-point b { display: block; font-size: 14px; }
+.lp-point span { display: block; margin-top: 3px; font-size: 13.5px; line-height: 1.55; color: color-mix(in srgb, var(--surface) 68%, transparent); }
+
+/* The single diagram left on the page: one canonical layer, two consumers. Drawn because it is
+   the one claim a screenshot cannot make — both outputs look identical when they agree. */
+.lp-flow {
+  margin: 0; padding: clamp(16px, 2.2vw, 22px);
+  border: 1px solid color-mix(in srgb, var(--surface) 16%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 7%, transparent);
+}
+.lp-flow-src {
+  display: flex; flex-direction: column; gap: 3px; padding: 14px 16px;
+  border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--surface) 14%, transparent);
+}
+.lp-flow-tag { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.08em; opacity: 0.6; }
+.lp-flow-name { font-family: var(--font-mono); font-size: 15px; font-weight: 600; }
+.lp-flow-desc { font-size: 12.5px; opacity: 0.7; line-height: 1.45; }
+/* Two short connectors instead of an SVG — the shape carries the meaning and CSS keeps it
+   theme-aware for free. */
+.lp-flow-split { display: grid; grid-template-columns: 1fr 1fr; justify-items: center; height: 20px; }
+.lp-flow-split span { width: 1px; height: 100%; background: color-mix(in srgb, var(--surface) 26%, transparent); }
+.lp-flow-outs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lp-flow-out {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--surface) 14%, transparent);
+  border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 6%, transparent);
+}
+.lp-flow-out svg { color: var(--lp-on-accent); }
+.lp-flow-out b { font-size: 13.5px; }
+.lp-flow-out span { font-size: 12px; opacity: 0.68; line-height: 1.4; }
+.lp-flow-foot {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid color-mix(in srgb, var(--surface) 14%, transparent);
+  font-size: 12.5px; line-height: 1.5; opacity: 0.72;
+}
+
+/* The chat screenshot sitting on the dark band. It needs its own frame colours: the page-level
+   `.lp-shot` border and drop shadow are tuned for a light ground and vanish here, leaving the
+   screenshot's own white edge to bleed into the ink. */
+.lp-ai-shot { margin-top: clamp(32px, 5vw, 48px); }
+.lp-ai-shot img {
+  border-color: color-mix(in srgb, var(--surface) 18%, transparent);
+  box-shadow: 0 24px 60px -30px rgb(0 0 0 / 55%);
+}
+.lp-ai-shot figcaption { color: color-mix(in srgb, var(--surface) 62%, transparent); }
+
+/* ── MCP ─────────────────────────────────────────────────────────────────── */
+.lp-mcp-grid { display: grid; gap: clamp(24px, 4vw, 44px); align-items: start; margin-top: clamp(24px, 3vw, 34px); }
+@media (min-width: 940px) { .lp-mcp-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); } }
+.lp-code {
+  padding: 16px 18px; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  background: var(--surface-2);
+}
+.lp-code-label {
+  display: block; margin-bottom: 8px;
+  font-family: var(--font-mono); font-size: var(--fs-xs); text-transform: uppercase;
+  letter-spacing: 0.1em; color: var(--muted);
+}
+/* The URL is the whole setup step, so it is shown at reading size and allowed to wrap rather than
+   scroll — a truncated address is one nobody can retype. */
+.lp-code code {
+  display: block; font-family: var(--font-mono); font-size: 14px; color: var(--ink);
+  word-break: break-all; line-height: 1.5;
+}
+.lp-mcp-list { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 10px; }
+.lp-mcp-list li { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; line-height: 1.55; color: var(--ink-2); }
+.lp-mcp-list svg { flex: none; margin-top: 3px; color: var(--pos); }
+
+/* ── What an account needs ───────────────────────────────────────────────── */
+.lp-keys-grid {
+  display: grid; gap: clamp(14px, 2vw, 18px); margin-top: clamp(24px, 3vw, 34px);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+}
+.lp-key {
+  padding: clamp(18px, 2.4vw, 22px);
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+}
+.lp-key-h { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14.5px; }
+.lp-key-h svg { color: var(--muted); }
+.lp-key-opt {
+  margin-left: auto; padding: 2px 8px; border-radius: var(--radius-xs);
+  background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 500;
+}
+.lp-key p { margin: 10px 0 0; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
+
+/* ── Data & privacy ──────────────────────────────────────────────────────── */
+.lp-priv-grid {
+  display: grid; gap: clamp(16px, 2.5vw, 26px); margin-top: clamp(24px, 3vw, 34px);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+}
+.lp-priv-item { border-top: 1px solid var(--line-strong); padding-top: 14px; }
+.lp-priv-item b { display: block; font-size: 14px; }
+.lp-priv-item span { display: block; margin-top: 6px; color: var(--ink-2); font-size: 13.5px; line-height: 1.6; }
+/* Disclosure: quiet, but its own block and above the last call to action — what leaves the app is
+   a thing to read before connecting a bank, not a thing to skim past on the way to a button. */
+.lp-disclosure {
+  display: flex; gap: 10px; margin-top: clamp(24px, 4vw, 34px); padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2);
+}
+.lp-disclosure svg { color: var(--muted); flex-shrink: 0; margin-top: 2px; }
+.lp-disclosure p { margin: 0; max-width: 84ch; color: var(--ink-2); font-size: 12.5px; line-height: 1.55; }
+
+/* ── Closing call to action ──────────────────────────────────────────────── */
+.lp-final {
+  margin-top: clamp(56px, 9vw, 104px); padding: clamp(32px, 5vw, 52px) clamp(20px, 4vw, 44px);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-lg); background: var(--surface);
+  box-shadow: var(--shadow-card); text-align: center;
+}
+.lp-final h2 { margin: 0; font-size: clamp(22px, 3vw, 32px); letter-spacing: -0.02em; }
+.lp-final p { margin: 12px auto 0; max-width: 52ch; color: var(--ink-2); font-size: 15px; line-height: 1.6; }
+.lp-final .lp-cta { justify-content: center; }
+.lp-final .lp-note { text-align: center; }
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+.lp-foot {
+  margin-top: auto; padding-top: clamp(40px, 6vw, 64px);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  color: var(--muted); font-size: 12.5px;
+}
+.lp-foot p { margin: 0; max-width: 62ch; }
+/* The author link is the page's only outbound click, so the emphasis sits here rather than on the
+   disclaimer beside it; the icon says up front that it leaves the app. */
+.lp-author { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; }
+.lp-author a {
+  display: inline-flex; align-items: center; gap: 4px;
+  color: var(--ink-2); font-weight: 500; text-decoration: none;
+  border-bottom: 1px solid var(--line-strong); padding-bottom: 1px;
+}
+.lp-author a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+.lp-author svg { opacity: 0.7; }
+
+/* Phone: the top bar becomes two rows — brand + controls, then the section links on their own
+   line. Hiding the links instead would take the page's only navigation away from the readers who
+   scroll the most; `order` puts them under the row rather than between the brand and the buttons,
+   and the row scrolls sideways on its own so a long translation cannot widen the page. */
+@media (max-width: 860px) {
+  .lp-top { flex-wrap: wrap; row-gap: 4px; }
+  .lp-nav {
+    order: 3; width: 100%; margin-inline: -8px;
+    /* Spread rather than pack: four links on one phone row read as a row of destinations, while
+       the same four bunched left read as an overflowing list. The scroll stays as the fallback —
+       a longer translation must be reachable, never a reason for the page to widen. */
+    justify-content: space-between; gap: 0;
+    overflow-x: auto; scrollbar-width: none;
+  }
+  .lp-nav::-webkit-scrollbar { display: none; }
+  .lp-nav-link { padding: 6px 8px; font-size: 13px; }
+}
+@media (max-width: 620px) {
+  .lp-hero h1 { max-width: none; }
+  /* The badge is one phrase, so it wraps as one block rather than splitting mid-sentence. */
+  .lp-eyebrow { display: flex; }
+}

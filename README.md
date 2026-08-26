@@ -1,11 +1,11 @@
 # Money Track
 
-A personal finance tracker built as a **portfolio project** — with heavy use of AI, and a lot of
-deliberate effort spent making sure the AI never got to lie about the numbers.
+A personal finance tracker with an AI advisor that is not allowed to invent a figure.
 
-It connects to a Ukrainian bank (Monobank) or a CSV export, categorizes every transaction with a
-deterministic-first pipeline, and layers an AI financial advisor on top that reasons over the
-**same canonical numbers** the UI shows — never its own.
+It connects to a Ukrainian bank (Monobank) or reads a statement file, categorizes every transaction
+with a deterministic-first pipeline, and answers questions about your money from the **same
+canonical numbers** the screens show — never its own. Every figure an AI answer contains is checked
+against your data before it renders.
 
 It also exposes your own ledger to **Claude as an MCP server** — the app is both the MCP resource
 server and its own OAuth 2.1 authorization server, so connecting Claude Desktop, claude.ai or the
@@ -14,27 +14,33 @@ mobile app is a URL and a consent screen, with nothing to paste and nothing stor
 > **Try it:** [`/demo`](https://money.italik.dev/demo) — spins up a private,
 > throwaway sandbox seeded with ~6 months of realistic data. No sign-up, resets in 24 hours.
 
-![Dashboard](docs/screenshots/dashboard-welcome.jpg)
+![Dashboard](docs/screenshots/dashboard.jpg)
 
 <table>
 <tr>
-<td width="50%"><img src="docs/screenshots/dashboard-statistic.jpg" alt="Statistics — overview" /></td>
-<td width="50%"><img src="docs/screenshots/dashboard-statistic-2.jpg" alt="Statistics — trends" /></td>
+<td width="50%"><img src="docs/screenshots/statistics-1.jpg" alt="Statistics — overview" /></td>
+<td width="50%"><img src="docs/screenshots/statistics-2.jpg" alt="Statistics — trends" /></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/advisor.jpg" alt="AI advisor" /></td>
+<td><img src="docs/screenshots/chat.jpg" alt="AI chat answering from the ledger" /></td>
 <td><img src="docs/screenshots/report.jpg" alt="Generated monthly report" /></td>
+</tr>
+<tr>
+<td><img src="docs/screenshots/transactions.jpg" alt="Transactions with search and filters" /></td>
+<td><img src="docs/screenshots/subscriptions.jpg" alt="Subscriptions and recurring payments" /></td>
 </tr>
 </table>
 
-<sup>Screenshots are from the live demo — the same seeded dataset anyone gets at `/demo`.</sup>
+<sup>Screenshots are from the live demo — the same seeded dataset anyone gets at `/demo`.
+These are 2000px copies; the landing page serves smaller WebP ones from `public/shots/`.</sup>
 
 ---
 
 ## What it does
 
-- **Bank sync** — Monobank webhook + ~90-day backfill, or a CSV statement import. A `BankProvider`
-  abstraction normalizes sign/currency/minor-units in exactly one place per bank.
+- **Bank sync** — Monobank webhook + ~90-day backfill, or a CSV/XLS statement import (any bank), a
+  receipt photo, or a typed line. A `BankProvider` abstraction normalizes
+  sign/currency/minor-units in exactly one place per bank, and one writer handles every ingest path.
 - **Deterministic categorization** (AI is the *last* resort): learned merchant alias → active
   subscription match → merchant consensus → MCC/text rules → AI enrichment.
 - **Analytics** that are correct by construction: multi-currency roll-up into whichever base
@@ -44,8 +50,15 @@ mobile app is a URL and a consent screen, with nothing to paste and nothing stor
 - **AI advisor & chat** with tool-use (queries the full transaction history), weekly/monthly
   reports, a proactive notification feed, and a fact layer ("the metro fare went 8 → 30 ₴") that
   can adjust the forecast — but only after you confirm it.
-- **Budgets, goals, event/trip budgets, net-worth history, a financial-health index**, subscription
-  price-drift detection, a command palette (⌘K), and a bilingual UI (English / Ukrainian).
+- **Envelope budgets that remember the last month** — the leftover *and* the overspend carry into
+  the next one, and each envelope projects where the month will close rather than where it already
+  is.
+- **Plans on a schedule, not a guess** — recurring charges with their real cadence, price-drift
+  detection when a subscription quietly goes up, and expected income as a schedule (so the 3rd of
+  the month stops looking like ruin).
+- **Goals, jars, event/trip budgets, net-worth history, a financial-health index**, a notification
+  feed that drafts what is worth saying (web push or Telegram), a command palette (⌘K), nightly
+  encrypted backups to R2 with a one-transaction restore, and a bilingual UI (English / Ukrainian).
 - **An MCP server over your own data** — connect Claude and ask it about your finances directly.
   Read-only, revocable, and it answers from the same canonical figures the screens do. See
   [below](#your-ledger-as-an-mcp-server).
@@ -67,7 +80,7 @@ flowchart TB
 
     subgraph Worker["Cloudflare Worker (Hono)"]
         Router["Thin router<br/>auth · OAuth 2.1 AS · /me · admin · webhook verify · static"]
-        Directory[("D1 directory<br/>users · invites · demo · shared rates")]
+        Directory[("D1 directory<br/>users · demo · shared rates<br/>OAuth clients · grants")]
     end
 
     subgraph DO["Durable Object — ONE per user"]
@@ -88,7 +101,7 @@ flowchart TB
     UserApp --> Shim --> Canon
     UserApp --> R2
     UserApp -->|"grounded snapshot"| Anthropic
-    Router -->|"login / invite"| Directory
+    Router -->|"login · grants"| Directory
     Mono -->|"signed webhook"| Router
     Router -->|"forward"| UserApp
 ```
@@ -129,7 +142,7 @@ token minted for a different audience is precisely what the MCP spec forbids. So
 front door and the grant is issued here: RFC 7591 dynamic client registration, PKCE `S256` only,
 RFC 8707 resource indicators, rotating refresh tokens, single-use authorization codes.
 
-What I'd point a reviewer at:
+Worth a look:
 
 - **The tools are not a second implementation.** The in-app advisor already had a query API the
   model calls back into; the MCP surface is a *filter* over it plus one aggregate snapshot. Writing
@@ -162,17 +175,20 @@ identically while everything is going right.
 
 ---
 
-## Built with AI — and kept honest
+## Keeping the numbers honest
 
-This is the part I'd actually want reviewed. The project was built with heavy AI assistance, and the
-central engineering problem was not *generating* code — it was **stopping the AI (and myself) from
-quietly making the numbers wrong.** The rule throughout: *a check beats an instruction.*
+A finance app that is confidently wrong is worse than one that is missing a feature, and a language
+model will produce a plausible figure for anything you ask it. So the central problem here was never
+*generating* the answer — it was **making it impossible for a wrong number to reach the screen
+quietly.** The rule throughout: *a check beats an instruction.*
 
 - **One source of truth for every number.** All money math lives in `worker/lib/finance/stats.ts`
-  (`SPEND_WHERE`, `EFF_AMOUNT`, the ₴ roll-up, importance, recurring vs one-off). The AI advisor and
-  chat consume the *same* `collectFinanceSnapshot()` the UI does — so the chat's figures always
-  equal the dashboard's. The most expensive bugs in this project all came from a *second* place
-  deciding what a number meant.
+  (`SPEND_WHERE`, `EFF_AMOUNT`, the multi-currency roll-up, importance, recurring vs one-off). The
+  AI advisor and chat consume the *same* `collectFinanceSnapshot()` the UI does — so the chat's
+  figures always equal the dashboard's. The most expensive bugs in this project all came from a
+  *second* place deciding what a number meant — and the roll-up is the example that keeps giving:
+  "reduce a ledger to one unit" and "reduce it to hryvnia" had quietly become the same sentence in
+  the code, which is fine until an English-speaking reader holds no hryvnia.
 
 - **`numbersAreGrounded()`** — the notification AI is told to only restate pre-computed figures. It
   still, on real data, produced a single notification quoting *two different totals for the same
@@ -187,7 +203,7 @@ quietly making the numbers wrong.** The rule throughout: *a check beats an instr
 
 - **Checks that force a decision, not just catch a bug.** The file-size check paid for itself the
   hour it landed: a new endpoint pushed a file over its cap, and instead of raising the number the
-  net-worth reconstruction moved to where it belonged. That is the point of all seven of them — the
+  net-worth reconstruction moved to where it belonged. That is the point of all ten of them — the
   rule stays true without anyone having to re-read the file to confirm it.
 
 - **A green local run is not a green production run.** The OAuth consent screen shipped working —
@@ -207,7 +223,9 @@ quietly making the numbers wrong.** The rule throughout: *a check beats an instr
   user's screen.
 
 - **Working documents, not artifacts.** `CLAUDE.md` (durable reference + invariants), `DESIGN.md`
-  (design system + decision log), `ROADMAP.md` (the live queue) and `HISTORY.md` (closed-phase design notes) are how the work was actually planned and kept coherent across sessions.
+  (design system + decision log), `ARCHITECTURE.md` (the layers and what each check buys),
+  `STYLES.md`, `BANKS.md` and `ROADMAP.md` (the live queue) are how the work is actually planned and
+  kept coherent — each rule in them is written next to the failure that bought it.
 
 ---
 
@@ -275,22 +293,26 @@ worker/
   user-app.ts         Hono app that runs INSIDE each user's Durable Object
   do/UserDO.ts        the per-user Durable Object (+ demo seeding, backfill alarm)
   routes/             transport only: parse, validate, pick a status code   (no SQL — check C1)
+  routes/api/         18 files, one per first path segment — the file OWNS the whole prefix
   routes/mcp.ts       the MCP server (JSON-RPC), running inside the user's DO
   routes/oauth.ts     OAuth 2.1: registration, consent, tokens
   routes/wellknown.ts the two discovery documents (RFC 9728 / RFC 8414)
   services/           scenarios: the handlers whose STEP ORDER is the behaviour
   lib/finance/stats.ts ⭐ canonical money/analytics SQL — the single source of truth
-  lib/finance/*       categorize, subscriptions, transfers, goals, weekday, habits, networth
+  lib/finance/time.ts every calendar boundary, in Europe/Kyiv — never the runtime's UTC
+  lib/finance/money.ts the display currency: which unit an answer is in, and the rates
+  lib/finance/*       budgets, categorize, subscriptions, transfers, goals, fx, cadence, habits
   lib/ai/*            transport · models · cost · JSON · prompts, then one file per AI feature
   lib/platform/*      auth, directory, secrets, demo, quotas, i18n, OAuth + security headers
-  lib/bank/*          monobank + the provider registry, CSV import
+  lib/bank/*          the provider registry, statement parsing, backfill/poll pacing, connections
   repo/               the ONLY layer that issues SQL
   test/               golden snapshots: analytics, writes, ingest, CSV import, AI streaming
   demo/dataset.json   committed demo snapshot (generated by scripts/seed-demo.mjs)
 shared/api/           every API response shape, declared ONCE and imported by both sides
 src/                  React app (pages/, components/, store/, lib/, i18n/)
 migrations/           D1 schema (finance) — 45 migrations
-migrations-directory/ D1 schema (directory) — users/invites/demo/shared state/OAuth clients
+migrations-directory/ D1 schema (directory) — identity only: users, demo counters, shared rates,
+                      Telegram links, OAuth clients/codes/grants (10 migrations; no money here)
 scripts/              the checks `npm run check` runs (see below), seed-demo, migration embed
 ```
 
@@ -304,9 +326,10 @@ MIT — see [`LICENSE`](LICENSE).
 
 ## Status
 
-Live in production. Feature-complete as a single-user app; later phases turned it into an isolated
-multi-user platform with a public demo and a bilingual UI, then opened the data to Claude over MCP.
-Built as a portfolio piece — not a commercial product.
+Live in production at [money.italik.dev](https://money.italik.dev). Feature-complete as a
+single-user app; later phases turned it into an isolated multi-user platform with a public demo and
+a bilingual UI, then opened the data to Claude over MCP. Sign-up is open — one Google click, no
+invite.
 
 An MCP surface for other assistants (ChatGPT / OpenAI's connector flow) is on the roadmap; the
 authorization server and the tool layer are already generic, so it is mostly a matter of matching a

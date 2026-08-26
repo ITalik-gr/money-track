@@ -30,6 +30,10 @@
 .btn.ghost:hover { background: var(--surface-2); border-color: transparent; }
 /* Компактний розмір — для дій у заголовках секцій, рядках, чіпах (не переважає текст поруч) */
 .btn.sm { padding: 6px 12px; font-size: 13px; border-radius: var(--radius-xs); gap: 6px; }
+/* `lg` moved here from the landing block on 2026-08-26: it is a size of the shared button,
+   not a landing rule, and `Add.tsx` uses it too — a size living in the marketing page's
+   stylesheet is a rule that disappears the day that page is rewritten. */
+.btn.lg { padding: 12px 22px; font-size: 15px; border-radius: var(--radius); gap: 8px; }
 .btn.xs { padding: 4px 10px; font-size: 12px; border-radius: var(--radius-xs); gap: 5px; }
 
 /* ---- reusable Select (проєктний) ---------------------------------------- */
