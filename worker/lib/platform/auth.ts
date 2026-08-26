@@ -47,11 +47,13 @@ const VERSION = "v3";
  * meant every password change silently logged everyone out, and once Google OAuth is the
  * only door there is no password to sign with at all.
  */
-function signingKey(env: Env): string | undefined {
+export function signingKey(env: Env): string | undefined {
   return env.SESSION_SECRET || env.APP_PASSWORD || undefined;
 }
 
-async function hmacHex(key: string, msg: string): Promise<string> {
+/** Exported so the OAuth layer signs with the SAME primitive — a second HMAC helper is a
+ *  second thing to get wrong, and both would look correct in isolation. */
+export async function hmacHex(key: string, msg: string): Promise<string> {
   const k = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(key),

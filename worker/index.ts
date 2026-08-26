@@ -7,11 +7,15 @@ import { auth } from "./routes/auth.ts";
 import { admin } from "./routes/admin.ts";
 import { backups } from "./routes/backups.ts";
 import { account } from "./routes/account.ts";
+import { oauth } from "./routes/oauth.ts";
+import { wellKnown } from "./routes/wellknown.ts";
 import {
   SESSION_COOKIE, CLEAR_COOKIE_OPTS, verifySession, verifyWebhookToken,
   DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId, timingSafeEqual, verifyMcpToken,
 } from "./lib/platform/auth.ts";
+import { canonicalResource, verifyAccessToken, MCP_SCOPE } from "./lib/platform/oauth.ts";
 import { withUserHeader } from "./lib/platform/forward.ts";
+import { SECURITY_HEADERS } from "./lib/platform/security-headers.ts";
 import { ensureOwner, findUserById, registerDemoSession } from "./lib/platform/directory.ts";
 
 // Resolve who a request belongs to: a real signed-in user, or an ephemeral demo sandbox. Demo
@@ -87,34 +91,6 @@ const app = new Hono<{ Bindings: Env }>();
 // `style-src` does need 'unsafe-inline' — React writes `style` attributes all over the app
 // (chart geometry, bar widths), and those are inline styles as far as CSP is concerned.
 // `connect-src 'self'`: the client talks to its own API only; Anthropic is called server-side.
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "frame-ancestors 'self' https://web.telegram.org",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join("; ");
-
-const SECURITY_HEADERS: Record<string, string> = {
-  "content-security-policy": CSP,
-  // Stops a response typed `text/plain` from being sniffed into script/HTML.
-  "x-content-type-options": "nosniff",
-  // ⚠️ `x-frame-options` is GONE (2026-08-21) and cannot come back. It has no allow-list form —
-  // `ALLOW-FROM` was removed from every browser — so `DENY` beside the CSP above would block the
-  // Mini App anyway and make the CSP a lie about what the app permits. `frame-ancestors` is
-  // honoured by every browser released since 2015 and takes precedence where both are sent; what
-  // is lost is protection in browsers older than that, which cannot run this app regardless.
-  // Full URLs of an app whose paths carry transaction ids are nobody else's business.
-  "referrer-policy": "strict-origin-when-cross-origin",
-  // Features this app never uses. Camera is deliberately NOT blocked: the receipt input uses
-  // `capture`, and browsers that gate that on Permissions-Policy would break photo upload.
-  "permissions-policy": "geolocation=(), microphone=(), payment=(), usb=()",
-};
 
 // Applied to EVERY response, including the API and the DO's, so a JSON endpoint opened
 // directly in a tab is covered by the same rules as the app shell.
@@ -123,7 +99,19 @@ app.use("*", async (c, next) => {
   // `ASSETS.fetch` returns an immutable response; `c.res = new Response(...)` is how Hono
   // hands back a copy whose headers can be written.
   const res = new Response(c.res.body, c.res);
-  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+  /**
+   * ⚠️ A CSP the HANDLER already wrote is left alone; everything else is overwritten.
+   *
+   * Exactly one route needs this — the OAuth consent screen, which must permit a form submission
+   * to the client's callback (`cspForFormTarget`). Before the exemption existed, this loop
+   * replaced its policy with the default one and the "Allow" button silently did nothing: the
+   * browser blocked the POST, the page stayed put, and the only trace was a console line nobody
+   * sees inside a desktop client's OAuth window.
+   */
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) {
+    if (k === "content-security-policy" && res.headers.has(k)) continue;
+    res.headers.set(k, v);
+  }
   // CSP is skipped on localhost: `npm run dev` serves Vite's own inline preamble and HMR client,
   // which `script-src 'self'` would block — the dev server would come up blank and the cause
   // would look like a build error. The header still ships everywhere that is not localhost,
@@ -140,6 +128,12 @@ app.get("/api/health", (c) => c.json({ ok: true, ts: Date.now() }));
 
 // Google OAuth — the real door (PLATFORM.md §3). Open by design: it IS the login.
 app.route("/auth", auth);
+
+// §MCP-OAUTH — this deployment is also the authorization server for its own MCP endpoint.
+// Outside the session guard by necessity: discovery is anonymous, and `/oauth/authorize` is
+// exactly the place someone arrives WITHOUT a session. Each handler states its own authority.
+app.route("/", wellKnown);
+app.route("/", oauth);
 
 // The transitional single-password gate (`POST /api/login`) is GONE (user decision, 2026-07-26).
 // Google is now the only door. Its one real job besides logging in — creating the owner row —
@@ -535,10 +529,31 @@ app.all("/ingest/*", toUserDo);
 const mcpGuard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>(async (c, next) => {
   const header = c.req.header("authorization") ?? "";
   const token = /^Bearer /i.test(header) ? header.slice(7).trim() : undefined;
-  const claim = await verifyMcpToken(c.env, token);
-  // `WWW-Authenticate` is what tells an MCP client it is being refused for lack of credentials
-  // rather than because the server is broken; without it the failure reads as "the server is down".
-  const deny = () => c.json({ error: "unauthorized" }, 401, { "www-authenticate": 'Bearer realm="money-track"' });
+  /**
+   * TWO kinds of credential, one door.
+   *
+   * `mtmcp1` is the personal token minted in Settings and pasted into a config file; `mtoat1` is
+   * an OAuth access token issued to a client the user consented to. Both are ours, both carry the
+   * same `mcp_version` kill switch, and only the second is audience-bound — because only the
+   * second is handed to a third party that could be tempted to present it elsewhere.
+   *
+   * ⚠️ NOTHING ELSE is accepted. The spec's rule ("MCP servers MUST NOT accept or transit any
+   * other tokens") is satisfied structurally here: verification is a signature check against this
+   * deployment's own key, so there is no issuer to be confused about.
+   */
+  const claim = (await verifyMcpToken(c.env, token))
+    ?? (await verifyAccessToken(c.env, token, canonicalResource(c.req.url)));
+  /**
+   * `WWW-Authenticate` does two jobs, and the second is what makes the connector work at all:
+   * `resource_metadata` is how a client learns WHERE to authenticate. Claude falls back to probing
+   * `/.well-known/*` without it, and only honours the header on a 401 — never on a 200 — so this
+   * response has to be the refusal, not a polite empty result.
+   */
+  const deny = () => c.json({ error: "unauthorized" }, 401, {
+    "www-authenticate": `Bearer realm="money-track", ` +
+      `resource_metadata="${new URL(c.req.url).origin}/.well-known/oauth-protected-resource", ` +
+      `scope="${MCP_SCOPE}"`,
+  });
   if (!claim) return deny();
   const access = await userAccess(c.env, claim.userId);
   // Disabled or deleted: a valid signature over a closed account is not an authenticated request.

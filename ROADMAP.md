@@ -56,6 +56,35 @@
 
 ## 🔥 Черга (роби згори вниз)
 
+### 0b. MCP for a SECOND assistant (ChatGPT), when it is wanted
+
+> Asked for on 2026-08-24, deliberately not started: it is a real piece of work and nothing depends
+> on it. Parked here so the reason it is cheap does not get forgotten.
+
+**Where it already stands.** Almost none of this is Claude-specific. `/mcp` is a plain Streamable
+HTTP MCP server; the authorization server implements the standards (RFC 7591 DCR, PKCE S256,
+RFC 8707 resource indicators, RFC 9728 + RFC 8414 discovery) rather than anything Anthropic-shaped.
+The one place Claude appears by name is a comment.
+
+**What will actually need work,** and it is all at the edges:
+- **Redirect URIs.** OpenAI's callback host has to be accepted; ours are pre-registered per client
+  through DCR, so this may need nothing at all — but it must be VERIFIED against the real client,
+  not assumed. The loopback exemption is already there for CLI clients.
+- **Discovery probing differs per client.** Claude falls back to
+  `/.well-known/oauth-protected-resource/<path>` then the bare path; another client may probe a
+  different order or expect OIDC-style metadata. Cheap to add, invisible when missing — the symptom
+  is "cannot reach the server" with zero traffic at the OAuth endpoints.
+- **The consent page's CSP** lists the client's redirect origin, derived from the registered value,
+  so it should follow automatically. Worth an explicit check: this is the exact thing that shipped
+  broken for Claude (§MCP-OAUTH).
+- **Tool schema strictness.** Some clients validate JSON Schema more strictly than Anthropic's
+  tool-use does (e.g. requiring `additionalProperties`), and `financeChatTools()` was written for
+  the latter. A schema the client rejects means the tool silently does not exist.
+
+**Готово-коли:** a second assistant connects with no change to `chat-tools.ts`, and
+`oauth.test.ts` has the second client's redirect shape pinned beside Claude's.
+
+
 ### 0a. `moneyUnitDirective` states the WRONG unit to the model (found 2026-08-23, while building §MCP)
 
 > Not from a screen — from reading the two halves side by side. It is one sentence in a prompt,

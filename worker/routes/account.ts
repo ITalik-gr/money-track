@@ -11,6 +11,7 @@ import type { Env } from "../env.ts";
 import { CLEAR_COOKIE_OPTS, DEMO_COOKIE, SESSION_COOKIE } from "../lib/platform/auth.ts";
 import { bumpTokenVersion, deleteUser, findUserById, issueMcpVersion, revokeMcp } from "../lib/platform/directory.ts";
 import { createMcpToken } from "../lib/platform/auth.ts";
+import { countUserGrants, deleteUserGrants } from "../lib/platform/oauth-store.ts";
 import type { McpStatus, McpToken } from "../../shared/api/index.ts";
 
 export const account = new Hono<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>();
@@ -38,6 +39,7 @@ account.post("/logout-all", async (c) => {
    * token alive on some machine would be a worse lie than not offering the button at all.
    */
   await revokeMcp(c.env.DIRECTORY, userId);
+  await deleteUserGrants(c.env.DIRECTORY, userId);
   setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);
   setCookie(c, DEMO_COOKIE, "", { ...CLEAR_COOKIE_OPTS, httpOnly: true });
   return c.json({ ok: true });
@@ -107,6 +109,9 @@ account.get("/mcp", async (c) => {
   if (!me) return c.json({ error: "not_found" }, 404);
   return c.json({
     active: me.mcp_issued_at != null,
+    // Programs that completed the OAuth consent flow. Counted rather than listed: a client
+    // registers itself anew on each reconnect, so a list would name the same editor four times.
+    connected_clients: await countUserGrants(c.env.DIRECTORY, userId),
     issued_at: me.mcp_issued_at,
     url: mcpUrl(c.req.url),
   } satisfies McpStatus);
@@ -132,6 +137,7 @@ account.post("/mcp", async (c) => {
   return c.json({
     token,
     active: true,
+    connected_clients: await countUserGrants(c.env.DIRECTORY, userId),
     issued_at: me?.mcp_issued_at ?? Math.floor(Date.now() / 1000),
     url: mcpUrl(c.req.url),
   } satisfies McpToken);
@@ -141,5 +147,11 @@ account.delete("/mcp", async (c) => {
   const userId = c.get("userId");
   if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
   await revokeMcp(c.env.DIRECTORY, userId);
-  return c.json({ active: false, issued_at: null, url: mcpUrl(c.req.url) } satisfies McpStatus);
+  /**
+   * ⚠️ Bumping the generation is only HALF of a revocation. It expires every access token, but a
+   * refresh token is a stored row and would go on minting fresh ones for two months. A button
+   * labelled "revoke access" that leaves a working credential behind is worse than no button.
+   */
+  await deleteUserGrants(c.env.DIRECTORY, userId);
+  return c.json({ active: false, connected_clients: 0, issued_at: null, url: mcpUrl(c.req.url) } satisfies McpStatus);
 });

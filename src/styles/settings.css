@@ -682,3 +682,7 @@
 .mcp-secret { margin-top: 12px; padding: 12px; border: 1px solid var(--accent); border-radius: var(--radius); }
 .mcp-once { font-size: 12.5px; line-height: 1.45; color: var(--accent); }
 .mcp-when { margin: 10px 0 0; }
+/* "Is anything reading my finances right now" — the answer, before any click. Muted when nothing
+   is connected, so the lit state is the one that draws the eye. */
+.mcp-state { font-size: 12.5px; font-weight: 550; color: var(--muted); margin: 0 0 8px; }
+.mcp-state.on { color: var(--accent); }

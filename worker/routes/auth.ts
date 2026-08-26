@@ -17,6 +17,20 @@ const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 const STATE_COOKIE = "mt_oauth_state";
 const NONCE_COOKIE = "mt_oauth_nonce";
+const NEXT_COOKIE = "mt_login_next";
+
+/**
+ * A post-login destination, narrowed to what cannot leave this origin.
+ *
+ * Must start with a single `/` — `//evil.example` and `/\\evil.example` are both read as
+ * protocol-relative URLs by browsers, which is how a "path" becomes somebody else's site. An
+ * absolute URL is refused outright rather than parsed and compared: there is no legitimate reason
+ * for one here, so accepting any is a rule that only an attacker benefits from.
+ */
+function safeNext(v: string | undefined): string | null {
+  if (!v || !v.startsWith("/") || v.startsWith("//") || v.startsWith("/\\")) return null;
+  return v.length <= 512 ? v : null;
+}
 
 /** Callback URL must match the one registered in Google Cloud Console, byte for byte. */
 function redirectUri(reqUrl: string): string {
@@ -48,6 +62,17 @@ auth.get("/google/start", async (c) => {
   const cookieOpts = { httpOnly: true, secure: true, sameSite: "Lax", path: "/", maxAge: 600 } as const;
   setCookie(c, STATE_COOKIE, await signShortLived(c.env, state), cookieOpts);
   setCookie(c, NONCE_COOKIE, await signShortLived(c.env, nonce), cookieOpts);
+  /**
+   * Where to land afterwards (§MCP-OAUTH). Needed because `/oauth/authorize` can be reached by
+   * someone who is not signed in, and dropping them on `/` would leave the window Claude opened
+   * showing a dashboard while the connection it was opened for is abandoned mid-flow.
+   *
+   * ⚠️ SIGNED and carried in a cookie, never echoed through the query string: an unsigned `next`
+   * on a login URL is an open redirect with a login page in front of it. `safeNext` additionally
+   * refuses anything that is not a plain same-origin path.
+   */
+  const next = safeNext(c.req.query("next"));
+  if (next) setCookie(c, NEXT_COOKIE, await signShortLived(c.env, next), cookieOpts);
 
   const url = new URL(GOOGLE_AUTH);
   url.searchParams.set("client_id", c.env.GOOGLE_CLIENT_ID);
@@ -152,7 +177,11 @@ auth.get("/google/callback", async (c) => {
   // satisfied by every Set-Cookie for this name, and a second hand-written list is how the
   // sign-out path ended up rejected by the browser.
   setCookie(c, SESSION_COOKIE, await createSession(c.env, user.id, user.token_version ?? 0), SESSION_COOKIE_OPTS);
-  return c.redirect("/", 302);
+  // Re-validated after unsigning: the signature proves we wrote it, `safeNext` proves it is still
+  // the kind of value we meant to write. Both, because the two checks fail differently.
+  const next = safeNext(await verifyShortLived(c.env, getCookie(c, NEXT_COOKIE)) ?? undefined);
+  if (next) setCookie(c, NEXT_COOKIE, "", { ...SESSION_COOKIE_OPTS, maxAge: 0 });
+  return c.redirect(next ?? "/", 302);
 });
 
 /**

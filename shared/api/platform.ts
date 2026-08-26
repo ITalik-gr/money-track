@@ -98,6 +98,9 @@ export interface McpStatus {
   active: boolean;
   /** When it was issued (unix seconds), or null when there is none. */
   issued_at: number | null;
+  /** How many programs hold an OAuth grant right now (§MCP-OAUTH) — a separate credential from
+   *  the pasted token, so a screen showing only `active` would call a connected account empty. */
+  connected_clients: number;
   /** Absolute URL to paste into a client config, built from the request's own origin. */
   url: string;
 }

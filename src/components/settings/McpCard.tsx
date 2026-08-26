@@ -10,32 +10,40 @@ import { useGetMcpQuery, useIssueMcpTokenMutation, useRevokeMcpTokenMutation } f
 const when = dateFmt({ day: "numeric", month: "short", year: "numeric" });
 
 /**
- * §MCP — connect an MCP client (Claude Code, Claude Desktop) to this account's ledger.
+ * §MCP — connect Claude to this ledger.
  *
- * The card exists because the token cannot be shown twice. It is minted, displayed once, and from
- * then on the server can only say whether one is valid — the same promise `/api/credentials` makes
- * about a stored API key, for the same reason: a credential a screen can re-display is a
- * credential a screen can leak. So the copy step has to be here, beside the button that mints it,
- * rather than on a "view token" screen that could not exist.
+ * The card is arranged around what someone actually needs, in order: whether anything is connected
+ * right now, the address to paste, and how to disconnect. Everything else — the setup steps, and
+ * the personal token for headless use — is folded away, because it is read once and never again.
  *
- * The setup commands are shown filled in with the real token while it is on screen, and with a
- * placeholder afterwards. A person who has just minted a credential is going to paste it
- * somewhere; leaving them to assemble the command by hand is how it ends up in shell history with
- * a typo, and then the failure looks like the server rejecting them.
+ * ⚠️ **"Revoke" is a card-level control, not part of the token drawer** (fixed 2026-08-24). It
+ * used to render only when a personal token existed, so the people most likely to want it — anyone
+ * who connected Claude Desktop through the consent screen and never minted a token at all — had no
+ * button. The account had a live grant and the screen offered no way to end it, which is the one
+ * failure a permissions card must not have.
+ *
+ * ⚠️ Revoking ends BOTH kinds of access at once, and the button says so. They share one generation
+ * (`users.mcp_version`), so a label promising to disconnect only one of them would be false.
  */
 export function McpCard() {
   const t = useT();
   const { data, isError, error, refetch } = useGetMcpQuery();
   const [issue, issueState] = useIssueMcpTokenMutation();
-  const [revoke] = useRevokeMcpTokenMutation();
+  const [revoke, revokeState] = useRevokeMcpTokenMutation();
   const [token, setToken] = useState<string | null>(null);
 
   const url = data?.url ?? `${location.origin}/mcp`;
-  // The placeholder is deliberately not a fake token shape: something that LOOKS like a token
-  // invites a paste of the example itself, which then fails authentication for a reason nobody
-  // can see from the error.
+  const connected = data?.connected_clients ?? 0;
+  const hasToken = data?.active ?? false;
+  const anyAccess = connected > 0 || hasToken;
+
+  // Deliberately not a fake token shape: an example that LOOKS like a credential invites a paste
+  // of the example itself, which then fails authentication for a reason nobody can see.
   const secret = token ?? "<YOUR-TOKEN>";
-  const cli = `claude mcp add --transport http money-track ${url} \\\n  --header "Authorization: Bearer ${secret}"`;
+  // With OAuth in place this needs no credential: `/mcp` answers 401 with a pointer to the
+  // discovery document, and Claude Code opens a browser for consent by itself.
+  const cli = `claude mcp add --transport http money-track ${url}`;
+  const cliToken = `claude mcp add --transport http money-track ${url} \\\n  --header "Authorization: Bearer ${secret}"`;
   const desktop = JSON.stringify({
     mcpServers: {
       "money-track": {
@@ -59,22 +67,28 @@ export function McpCard() {
 
       {isError && <ErrorNote error={error} what={t("mcp.title")} onRetry={refetch} />}
 
+      {/* State first: "is anything reading my finances right now" is the question this card exists
+          to answer, and it should not need a click. */}
+      <p className={anyAccess ? "mcp-state on" : "mcp-state"}>
+        {connected > 0 ? t("mcp.connected", { n: connected })
+          : hasToken ? t("mcp.tokenOnly")
+          : t("mcp.notConnected")}
+      </p>
+
+      {/* The address is the whole setup on every Claude surface with a connector screen — Desktop,
+          claude.ai, the phone — so it leads. Leading with the credential taught people to paste a
+          secret they do not need. */}
+      <code className="mono mcp-code">{url}</code>
       <div className="stack">
-        <button
-          className="btn"
-          disabled={issueState.isLoading}
-          onClick={async () => {
-            try {
-              const r = await issue().unwrap();
-              setToken(r.token);
-            } catch (e) { toast.error(errText(e)); }
-          }}
-        >
-          {data?.active ? t("mcp.rotate") : t("mcp.issue")}
-        </button>
-        {data?.active && (
+        <button className="btn" onClick={() => copy(url)}>{t("mcp.copyUrl")}</button>
+      </div>
+      <p className="set-card-sub mcp-when">{t("mcp.connectHint")}</p>
+
+      {anyAccess && (
+        <div className="stack" style={{ marginTop: 12 }}>
           <button
             className="btn"
+            disabled={revokeState.isLoading}
             onClick={async () => {
               try {
                 await revoke().unwrap();
@@ -85,26 +99,50 @@ export function McpCard() {
           >
             {t("mcp.revoke")}
           </button>
-        )}
-      </div>
-
-      {data?.active && data.issued_at != null && !token && (
-        <p className="set-card-sub mcp-when">{t("mcp.issuedAt", { when: when.format(data.issued_at * 1000) })}</p>
-      )}
-
-      {token && (
-        <div className="mcp-secret">
-          <p className="mcp-once">{t("mcp.once")}</p>
-          <code className="mono mcp-code">{token}</code>
-          <button className="btn" onClick={() => copy(token)}>{t("mcp.copy")}</button>
+          <p className="set-card-sub">{t("mcp.revokeHint")}</p>
         </div>
       )}
 
       <details className="tg-more">
         <summary>{t("mcp.howto")}</summary>
-        <p className="set-card-sub">{t("mcp.cliStep")}</p>
+        <p className="set-card-sub">{t("mcp.uiStep")}</p>
+        <p className="set-card-sub mcp-when">{t("mcp.cliStep")}</p>
         <code className="mono mcp-code">{cli}</code>
         <button className="btn" onClick={() => copy(cli)}>{t("mcp.copyCmd")}</button>
+      </details>
+
+      <details className="tg-more">
+        <summary>{t("mcp.tokenTitle")}</summary>
+        <p className="set-card-sub">{t("mcp.tokenWhy")}</p>
+        <div className="stack">
+          <button
+            className="btn"
+            disabled={issueState.isLoading}
+            onClick={async () => {
+              try {
+                setToken((await issue().unwrap()).token);
+              } catch (e) { toast.error(errText(e)); }
+            }}
+          >
+            {hasToken ? t("mcp.rotate") : t("mcp.issue")}
+          </button>
+        </div>
+
+        {hasToken && data?.issued_at != null && !token && (
+          <p className="set-card-sub mcp-when">{t("mcp.issuedAt", { when: when.format(data.issued_at * 1000) })}</p>
+        )}
+
+        {token && (
+          <div className="mcp-secret">
+            <p className="mcp-once">{t("mcp.once")}</p>
+            <code className="mono mcp-code">{token}</code>
+            <button className="btn" onClick={() => copy(token)}>{t("mcp.copy")}</button>
+          </div>
+        )}
+
+        <p className="set-card-sub mcp-when">{t("mcp.cliStep")}</p>
+        <code className="mono mcp-code">{cliToken}</code>
+        <button className="btn" onClick={() => copy(cliToken)}>{t("mcp.copyCmd")}</button>
         <p className="set-card-sub mcp-when">{t("mcp.desktopStep")}</p>
         <code className="mono mcp-code">{desktop}</code>
         <button className="btn" onClick={() => copy(desktop)}>{t("mcp.copyCfg")}</button>

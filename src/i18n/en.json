@@ -1780,7 +1780,7 @@
   "setup.currencyAuto": "Follow language",
   "setup.currencyEffective": "Currently showing amounts in {cur}.",
   "mcp.title": "Claude / MCP access",
-  "mcp.sub": "Let an MCP client — Claude Code, or Claude Desktop — read this ledger directly. It gets your figures, not a copy: totals, operations, budgets and subscriptions, computed by the same code as the screens here. Read-only, and revocable at any time.",
+  "mcp.sub": "Let Claude read this ledger directly — Claude Desktop, claude.ai, the phone, or Claude Code. It gets your figures, not a copy: totals, operations, budgets and subscriptions, computed by the same code as the screens here. Read-only, and revocable at any time.",
   "mcp.issue": "Create a token",
   "mcp.rotate": "Create a new token",
   "mcp.revoke": "Revoke access",
@@ -1793,5 +1793,16 @@
   "mcp.cliStep": "Claude Code — run this in a terminal:",
   "mcp.copyCmd": "Copy command",
   "mcp.desktopStep": "Claude Desktop — add this to claude_desktop_config.json (Settings → Developer → Edit Config), then restart it:",
-  "mcp.copyCfg": "Copy config"
+  "mcp.copyCfg": "Copy config",
+  "mcp.copyUrl": "Copy the address",
+  "mcp.connectHint": "Paste it into Claude → Settings → Connectors → Add custom connector. Claude will open a page here asking you to approve.",
+  "mcp.connected": "Connected programs: {n}",
+  "mcp.uiStep": "Claude Desktop, claude.ai and the mobile app: Settings → Connectors → Add custom connector, paste the address, approve on the page that opens. Nothing else to fill in.",
+  "mcp.tokenTitle": "Token instead of sign-in (for headless use)",
+  "mcp.tokenWhy": "Only needed where a browser cannot open to approve — a server, CI, a script. Everywhere else the address above is enough and no secret has to be stored anywhere.",
+  "mcp.notConnected": "Not connected yet",
+  "mcp.tokenOnly": "A token is active (no app connected through sign-in)",
+  "mcp.revokeHint": "Disconnects every app and invalidates the token. Anything connected stops reading within a minute.",
+  "dash.mcpHintBody": "You can point Claude at this ledger — it reads your real figures and answers about them, in Claude Desktop, on claude.ai or on your phone.",
+  "dash.mcpHintCta": "Connect"
 }

@@ -69,6 +69,12 @@ const DIR_EMPTY_OK: Record<string, string> = {
   shared_state: "counters; demo caps drive them",
   feedback: "written by a public endpoint",
   migrations: "the migration ledger itself",
+  // §MCP-OAUTH: state of a flow in progress, not reference data. A pre-seeded client or a
+  // pre-seeded code would be a grant nobody consented to sitting in every test database, and
+  // oauth.test.ts drives all three tables through the endpoints that own them.
+  oauth_clients: "registered by the flow; oauth.test.ts drives them",
+  oauth_codes: "single-use codes, minted mid-flow",
+  oauth_grants: "refresh grants, minted at token exchange",
 };
 
 function tablesIn(dir: string): string[] {

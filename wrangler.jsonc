@@ -28,6 +28,12 @@
 			// answer it — and the symptom would be an MCP client reporting invalid JSON, which
 			// reads as a broken server rather than as "the SPA shell was returned instead".
 			"/mcp",
+			// §MCP-OAUTH. `/.well-known/*` is the one Anthropic's own docs single out as the
+			// classic Cloudflare failure: without it the asset router serves the SPA shell, the
+			// client never finds the authorization server, and the only symptom is "couldn't
+			// reach the MCP server" with no traffic at the OAuth endpoints at all.
+			"/.well-known/*",
+			"/oauth/*",
 			// The service worker normally answers this one itself (a POST share target is
 			// delivered to the SW, never to the network). It is listed anyway for the window where
 			// the SW is updating or was unregistered: without it, a shared photo lands on the

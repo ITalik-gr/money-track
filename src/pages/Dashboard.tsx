@@ -14,6 +14,7 @@ import { UpcomingSubs } from "../components/dashboard/UpcomingSubs.tsx";
 import { QuickBar } from "../components/dashboard/QuickBar.tsx";
 import { SetupNudge } from "../components/dashboard/SetupNudge.tsx";
 import { PrefsHint } from "../components/dashboard/PrefsHint.tsx";
+import { McpHint } from "../components/dashboard/McpHint.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
@@ -45,6 +46,11 @@ export function Dashboard() {
 
       <SetupNudge />
       <PrefsHint />
+      {/* After PrefsHint: that one is about the app being wrong for you right now, this one is an
+          offer. Only one of the two ever shows on a given day in practice — the preferences hint
+          only appears before anything has been chosen, which is long before anyone wires up an
+          editor. */}
+      <McpHint />
 
       <QuickBar />
 

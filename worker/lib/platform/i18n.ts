@@ -53,9 +53,11 @@ export async function resolveLocale(env: Env): Promise<ServerLocale> {
  * part of the same object literal, and `tsc` derives the key union from it.
  */
 import { TG } from "./i18n-tg.ts";
+import { CONSENT } from "./i18n-consent.ts";
 
 const S = {
   ...TG,
+  ...CONSENT,
   // ---- fallback labels for missing data ------------------------------------
   // These end up as chart legends and list rows, not as prose. Kept short for that reason.
   uncategorized: { uk: "без категорії", en: "uncategorized" },
@@ -333,6 +335,7 @@ const S = {
     uk: "Непідтримувана валюта. Доступні: ₴ UAH, $ USD, € EUR.",
     en: "Unsupported currency. Available: ₴ UAH, $ USD, € EUR.",
   },
+
 } as const;
 
 export type ServerStringKey = keyof typeof S;
