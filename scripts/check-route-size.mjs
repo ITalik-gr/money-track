@@ -66,7 +66,11 @@ const EXCEPTIONS = {
   "worker/lib/messaging/notify.ts": 861,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
   // "one number, one home", and cutting it up would give that number two homes again.
-  "worker/lib/finance/stats.ts": 500,
+  // 2026-08-27: 500 → 398, and the exception is kept only because the file is still over the cap.
+  // §LEVEL-WINDOW pushed it over, and the seam was the same one `budgetStatus` took in August: the
+  // SQL canon stays here, the JUDGEMENT about it over a window moved to `levels.ts` and is
+  // re-exported. "One home" is about the definition, not about the file it is typed into.
+  "worker/lib/finance/stats.ts": 398,
   // Categorisation, transfer review and text parsing — three model calls that share a taxonomy.
   "worker/lib/ai/enrich.ts": 530,
 };

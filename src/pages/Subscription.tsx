@@ -180,7 +180,7 @@ export function Subscription() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="var(--ink-3)" />
                 <YAxis {...Y_AXIS} tick={{ fontSize: 11 }} stroke="var(--ink-3)" />
-                <Tooltip content={<ChargeTip />} cursor={{ fill: "var(--hover)" }} />
+                <Tooltip content={<ChargeTip />} cursor={{ fill: "var(--surface-2)" }} />
                 {declaredLine != null && (
                   <ReferenceLine y={declaredLine} stroke="var(--ink-3)" strokeDasharray="4 4" />
                 )}

@@ -274,115 +274,6 @@ export async function recurringOneoffSplit(
   return { ref_from: refFrom, recurring: get("recurring"), oneoff: get("oneoff"), oneoff_items: items.results ?? [] };
 }
 
-// ---- Канонічний «місячний рівень» категорії (ЄДИНЕ джерело) -----------------
-// Проблема: різні екрани рахували «місячну» суму по різних вікнах — 6-міс середнє /
-// 90д÷3 / останній платіж. Після стрибка ціни fixed-косту (орендодавець підняв ставку)
-// вони не збігались. Тут — один рівень на категорію, узгоджений скрізь:
-//   • fixed-кост (регулярний, СТАБІЛЬНИЙ — низький CV, як рента/підписка): рівень = ОСТАННІЙ
-//     повний місяць (ловить стрибок ціни, бо середнє відстає);
-//   • змінна категорія (продукти/розваги — високий CV): рівень = середнє за вікно (згладжене).
-// Рахуємо лише по ПОВНИХ місяцях (поточний частковий виключено). Зведено в ₴ (mult).
-export interface MonthLevel { level: number; mean: number; last: number; active_months: number; cv: number; fixed: boolean }
-export async function categoryMonthlyLevels(
-  env: Env, mult: string, opts: { months?: number; now?: number } = {},
-): Promise<Map<number, MonthLevel>> {
-  const K = opts.months ?? 6;
-  const now = opts.now ?? Math.floor(Date.now() / 1000);
-  const from = localMonthStart(now, -K);
-  const monthStart = localMonthStart(now);
-  // Ключі й групування МУСЯТЬ бути в одній зоні, інакше `months.get(k)` промахується і місяць
-  // мовчки читається як нульовий — тобто рівень категорії просто занижується.
-  const keys: string[] = [];
-  for (let i = K; i >= 1; i--) keys.push(localYm(localMonthStart(now, -i)));
-
-  const rows = await env.DB.prepare(
-    `SELECT ${EFF_CAT_ID} AS id, ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
-     FROM transactions t ${STATS_JOINS}
-     WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE}
-     GROUP BY ${EFF_CAT_ID}, m`,
-  ).bind(from, monthStart).all<{ id: number | null; m: string; spent: number }>();
-
-  const byCat = new Map<number, Map<string, number>>();
-  for (const r of rows.results ?? []) {
-    if (r.id == null) continue;
-    (byCat.get(r.id) ?? byCat.set(r.id, new Map()).get(r.id)!).set(r.m, r.spent);
-  }
-
-  const cvOf = (arr: number[]): number => {
-    if (!arr.length) return 0;
-    const m = arr.reduce((s, v) => s + v, 0) / arr.length;
-    if (m <= 0) return 0;
-    const v = arr.reduce((s, x) => s + (x - m) ** 2, 0) / arr.length;
-    return Math.sqrt(v) / m;
-  };
-
-  const out = new Map<number, MonthLevel>();
-  for (const [id, months] of byCat) {
-    const series = keys.map((k) => months.get(k) ?? 0);
-    const mean = Math.round(series.reduce((s, v) => s + v, 0) / K);
-    const last = series[series.length - 1] ?? 0;
-    const activeMonths = series.filter((v) => v > 0).length;
-    // Fixed-кост розпізнаємо за СТАБІЛЬНІСТЮ ОСТАННІХ місяців, а не всього вікна: рента/підписка —
-    // останні платежі майже однакові (CV≈0), тож рівень = їх середнє (ловить стрибок ціни). Змінні
-    // категорії (продукти/розваги) мають розкид навіть недавно → рівень = середнє за все вікно
-    // (не хапаємо випадковий пік останнього місяця). Крок ренти визнається за 2-3 міс нового рівня.
-    const recentNz = series.slice(-3).filter((v) => v > 0);
-    const fixed = recentNz.length >= 2 && cvOf(recentNz) <= 0.12;
-    // §REFUND: місяць може вийти ВІД'ЄМНИМ (повернення перевищило витрати — напр. скасували
-    // велику покупку минулого місяця). Рівень «мінус 400 ₴/міс» безглуздий і тягнув би burn
-    // униз, тож підлога 0.
-    const level = Math.max(0, fixed ? Math.round(recentNz.reduce((s, v) => s + v, 0) / recentNz.length) : mean);
-    out.set(id, { level, mean, last, active_months: activeMonths, cv: Math.round(cvOf(series.filter((v) => v > 0)) * 100) / 100, fixed });
-  }
-
-  // §A1: коригування рівня ПІДТВЕРДЖЕНИМИ фактами (шар фактів). Тут — ЄДИНЕ місце,
-  // де факт рухає число (не в ендпоінті), тож burn/runway/Патерни/чат лишаються узгодженими.
-  // Лише confirmed_at IS NOT NULL і активний на `now`. multiplier масштабує рівень
-  // (метро 8→30 = ×3.75), delta_minor додає копійки/міс (±). Обидва — в ₴-мінор, як level.
-  await applyFactAdjustments(env, out, now);
-  return out;
-}
-
-async function applyFactAdjustments(env: Env, out: Map<number, MonthLevel>, now: number): Promise<void> {
-  try {
-    // §BASE-CUR: `level` is in the reader's base, `delta_minor` is stored in hryvnia (the facts
-    // table has no currency column). A raw addition would add 3 000 dollars to a dollar level.
-    // A multiplier is unitless and needs no conversion — which is exactly why it must not be
-    // converted either.
-    const { getRates, uahToBase } = await import("./money.ts");
-    const uah = uahToBase(await getRates(env));
-    const rows = await env.DB.prepare(
-      `SELECT category_id AS id, adjust_kind AS kind, adjust_value AS val
-       FROM facts
-       WHERE confirmed_at IS NOT NULL AND category_id IS NOT NULL
-         AND adjust_kind IS NOT NULL AND adjust_value IS NOT NULL
-         AND effective_from <= ? AND (expires_at IS NULL OR expires_at > ?)`,
-    ).bind(now, now).all<{ id: number; kind: string; val: number }>();
-    for (const f of rows.results ?? []) {
-      const cur = out.get(f.id);
-      if (f.kind === "multiplier") {
-        if (cur) cur.level = Math.round(cur.level * f.val); // 0×val=0 → категорію без історії не чіпаємо
-      } else if (f.kind === "delta_minor") {
-        const val = f.val * uah;
-        if (cur) cur.level = Math.round(cur.level + val);
-        else if (val > 0) out.set(f.id, { level: Math.round(val), mean: 0, last: 0, active_months: 0, cv: 0, fixed: false });
-      }
-    }
-  } catch {
-    // Таблиця facts може ще не бути на remote (міграція 0020) — не валимо канонічну статистику.
-  }
-}
-
-// Канонічний МІСЯЧНИЙ BURN (₴-мінор) = сума місячних рівнів усіх категорій (ЄДИНЕ джерело).
-// Замінив «витрати_90д ÷ 3» у пораднику/бюджетах: узгоджено з Патернами (`usual`) й уникає
-// роздування разовими лумпами (податок/лікар) — рівень категорії їх усереднює/виключає.
-// Runway = ліквідна подушка ÷ цей burn. Бере готову мапу categoryMonthlyLevels (без зайвого запиту).
-export function sumLevels(levels: Map<number, MonthLevel>): number {
-  let s = 0;
-  for (const v of levels.values()) s += v.level;
-  return s;
-}
-
 // ---- Прогноз витрати «зі здоровим глуздом» ----------------------------------
 // Проблема наївного темпу (`spent / elapsedFrac`): рано в місяці або для «лумпів»
 // (податки, оренда, одна заправка) він роздуває прогноз у рази — 3000₴ податку на 9-й
@@ -417,9 +308,16 @@ export {
   localYmSql, localFmtSql, type LocalParts,
 } from "./time.ts";
 import {
-  localWeekStart, localMonthStart, localQuarterStart, localYearStart, localYm, localYmSql,
+  localWeekStart, localMonthStart, localQuarterStart, localYearStart,
   localFmtSql,
 } from "./time.ts";
+/**
+ * The canonical monthly LEVEL and the burn built from it live in `levels.ts` (lint C3, 2026-08-27)
+ * and are re-exported here: they are canon, and every caller has always reached them through this
+ * module. Same arrangement as `time.ts` — one definition, two spellings of the import.
+ */
+export { categoryMonthlyLevels, sumLevels, type MonthLevel } from "./levels.ts";
+
 export type PeriodMode = "calendar" | "rolling";
 export type Preset = "week" | "month" | "quarter" | "year";
 
