@@ -316,7 +316,7 @@ import {
  * and are re-exported here: they are canon, and every caller has always reached them through this
  * module. Same arrangement as `time.ts` — one definition, two spellings of the import.
  */
-export { categoryMonthlyLevels, sumLevels, type MonthLevel } from "./levels.ts";
+export { categoryMonthlyLevels, sumLevels, burnShape, type MonthLevel, type BurnShape } from "./levels.ts";
 
 export type PeriodMode = "calendar" | "rolling";
 export type Preset = "week" | "month" | "quarter" | "year";

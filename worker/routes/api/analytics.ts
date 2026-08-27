@@ -633,7 +633,7 @@ analytics.get("/analytics/spark", async (c) => {
 
 // §H: детермінований Індекс фінздоров'я (без AI) + запис скору за добу для тренду в часі.
 analytics.get("/analytics/health", async (c) => {
-  const { financeHealth } = await import("../../lib/ai/advisor.ts");
+  const { financeHealth } = await import("../../lib/finance/health.ts");
   const h = await financeHealth(c.env);
   const now = Math.floor(Date.now() / 1000);
   // §APP_TZ: доба — київська. Скор пишеться при кожному відкритті сторінки, тож із UTC-ключем

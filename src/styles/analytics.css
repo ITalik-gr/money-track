@@ -73,3 +73,28 @@
    block that failed to load. */
 .shape-facts { grid-template-columns: repeat(2, 1fr); margin-top: 12px; }
 .shape-facts .fact-sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+/* §MONTH-VIEW / §MONTH-STACK (2026-08-27) ---------------------------------- */
+
+/* The month stepper REPLACES the range picker, so it occupies the same row and the same height:
+   a control that jumps position when the mode changes reads as the page re-laying itself out. */
+.month-nav { display: inline-flex; align-items: center; gap: 6px; }
+.month-nav-lbl {
+  min-width: 116px; text-align: center; font-size: var(--fs-md); font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.month-nav .seg-btn { min-width: 32px; }
+.month-nav .seg-btn:disabled { opacity: 0.4; cursor: default; }
+/* Why the "now" blocks are missing — said in the flow, not tucked into a tooltip nobody opens. */
+.month-note {
+  padding: 10px 14px; border: 1px dashed var(--line); border-radius: var(--r-md);
+  color: var(--ink-2); line-height: 1.45;
+}
+
+/* The total, under the segments it sums. A rule and not a bare row: the tooltip lists up to nine
+   categories, and without a separator the sum reads as a tenth category. */
+.chart-tip .r.tip-total { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); font-weight: 500; }
+
+/* The stack legend can run to nine entries, so it wraps rather than squeezing the chart. */
+.ms-legend { flex-wrap: wrap; gap: 6px 14px; padding: 10px 2px 0; }
+.ms-unit { color: var(--muted); margin-left: auto; }

@@ -72,6 +72,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -108,6 +109,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -144,6 +146,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -180,6 +183,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -216,6 +220,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -252,6 +257,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -288,6 +294,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -324,6 +331,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -360,6 +368,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -396,6 +405,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -432,6 +442,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -468,6 +479,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -504,6 +516,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -540,6 +553,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -576,6 +590,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -612,6 +627,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -648,6 +664,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -684,6 +701,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"

@@ -57,7 +57,7 @@ const EXCEPTIONS = {
   // 2026-08-08: 1080 → 909 after the chat's TOOLS moved to `lib/ai/chat-tools.ts`. The ratchet
   // did its job — English prompts are longer than the Ukrainian they replaced, the file hit the
   // ceiling, and the answer was a seam rather than a bigger number.
-  "worker/lib/ai/advisor.ts": 909,
+  "worker/lib/ai/advisor.ts": 769,
   // The notification centre: one drafting function per event kind, plus the Telegram push.
   // 2026-08-27: 1000 → 861. The three guards added after «Rent due in 11 days» (calendar, language,
   // repetition) pushed the file over, and the answer was a seam rather than a bigger number — the
@@ -72,7 +72,6 @@ const EXCEPTIONS = {
   // re-exported. "One home" is about the definition, not about the file it is typed into.
   "worker/lib/finance/stats.ts": 398,
   // Categorisation, transfer review and text parsing — three model calls that share a taxonomy.
-  "worker/lib/ai/enrich.ts": 530,
 };
 
 function tsFiles(dir, prefix = dir + "/") {

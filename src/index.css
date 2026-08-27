@@ -19,6 +19,11 @@
 @import "./styles/topbar.css";
 @import "./styles/dashboard.css";
 @import "./styles/domains-a.css";
+/* Advisor: the runway card, the two-column shell, the state row, the advice history. Split out of
+   domains-a.css (C8 ratchet, 2026-08-27) and imported IMMEDIATELY after it, in the position its
+   rules already occupied — a part moved to a different point in the order changes which rule wins
+   for anything it overlaps, silently. */
+@import "./styles/advisor.css";
 /* Subscriptions: the list, the AI search and §SUB-PAGE. Split out of domains-a.css (C8 ratchet);
    imported straight after it so nothing about the cascade order changed. */
 @import "./styles/subscriptions.css";

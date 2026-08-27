@@ -213,3 +213,12 @@
 
 /* Same measurements as `.cat-page-stats` — it is the same kind of row, one question lower. */
 .cat-life { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+
+/* §BUDGET-REACH (2026-08-27) — the limit contradicts the app's own level. Amber, not red: the
+   envelope is not broken, the TARGET is — and red beside a red percentage would read as the same
+   alarm twice. */
+.env-unreachable {
+  display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap;
+  margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line);
+  font-size: var(--fs-xs); line-height: 1.4; color: var(--c-ochre);
+}

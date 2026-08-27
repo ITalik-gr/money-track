@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useT } from "../i18n/index.ts";
+import { dateFmt } from "../i18n/locale.ts";
 import { useSearchParams } from "react-router-dom";
 import {
   useGetCurrenciesQuery, useGetOverviewQuery, useGetPeriodModeQuery, useSetPeriodModeMutation,
@@ -10,6 +11,7 @@ import { CashflowChart } from "../components/stats/CashflowChart.tsx";
 import { CumulativeChart } from "../components/stats/CumulativeChart.tsx";
 import { IncomeBreakdown } from "../components/stats/IncomeBreakdown.tsx";
 import { MonthlyHistory } from "../components/stats/MonthlyHistory.tsx";
+import { MonthStack } from "../components/stats/MonthStack.tsx";
 import { SpendDonut } from "../components/stats/SpendDonut.tsx";
 import { StatsSkeleton } from "../components/ui/Skeleton.tsx";
 import { ReceiptItems } from "../components/stats/ReceiptItems.tsx";
@@ -70,6 +72,23 @@ function periodLength(range: RangeKey, mode: "calendar" | "rolling", from: numbe
   return Math.round((+new Date(d.getFullYear() + 1, 0, 1) - +new Date(d.getFullYear(), 0, 1)) / 86400000);
 }
 
+// §i18n: NEVER `new Intl.*` inline — a formatter built at module scope freezes the locale it was
+// imported with, and switching language would leave every date in the old one.
+const monthLongFmt = dateFmt({ month: "long", year: "numeric" });
+
+/** The CURRENT month as `YYYY-MM`, in the reader's own clock — the boundary `?ym=` may not cross. */
+function curYm(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** `2026-07` ± n months, as `YYYY-MM`. */
+function shiftYm(ym: string, n: number): string {
+  const [y, m] = ym.split("-").map(Number);
+  const d = new Date(y, m - 1 + n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 export function Stats() {
   const t = useT();
   const [params, setParams] = useSearchParams();
@@ -81,13 +100,41 @@ export function Stats() {
     const p = new URLSearchParams(prev); p.set(key, val); return p;
   }, { replace: true });
 
+  /**
+   * §MONTH-VIEW (2026-08-27) — `?ym=2026-07` turns the WHOLE page into that month.
+   *
+   * The server already took explicit `from`/`to`/`bucket` whenever no `preset` was given, and
+   * every period-scoped block below already accepts `{from, to, currency}` — so browsing a past
+   * month needed no new endpoint, only a way to ask. Before this the page could compare one month
+   * against another and never simply SHOW an earlier one, which is what the owner asked for:
+   * «хочу саме місяці переглядати, і повний перегляд як сторінку статистики всю».
+   *
+   * ⚠️ A month is only honoured when it is genuinely PAST. `?ym=` pointing at the current month
+   * would mean the same period twice under two mechanisms — and the two disagree, because the
+   * preset path stops at TODAY while an explicit range would run to the month's end and quietly
+   * divide by days that have not happened.
+   */
+  const ymParam = params.get("ym");
+  const ym = ymParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(ymParam) && ymParam < curYm() ? ymParam : null;
+  const ymBounds = useMemo(() => {
+    if (!ym) return null;
+    const [y, m] = ym.split("-").map(Number);
+    // Local wall-clock month edges, not UTC: the server's own boundaries are Kyiv days (§APP_TZ),
+    // and a UTC edge would pull three hours of the neighbouring month into the window.
+    return { from: Math.floor(+new Date(y, m - 1, 1) / 1000), to: Math.floor(+new Date(y, m, 1) / 1000) };
+  }, [ym]);
+
   const [currency, setCurrency] = useState<Cur>(null); // null = rolled up into the display base
   const { data: currencies } = useGetCurrenciesQuery();
   const { data: pm } = useGetPeriodModeQuery();
   const [setPeriodMode] = useSetPeriodModeMutation();
   const mode = pm?.mode ?? "calendar";
 
-  const { data, isFetching, error, refetch } = useGetOverviewQuery({ preset: range, currency });
+  // A named month drops `preset` entirely — the two paths must never both be sent, or the server
+  // answers for the preset and the page labels it with the month.
+  const { data, isFetching, error, refetch } = useGetOverviewQuery(
+    ymBounds ? { from: ymBounds.from, to: ymBounds.to, bucket: "day", currency } : { preset: range, currency },
+  );
   // §BASE-CUR: `currency` is null in the DEFAULT mode ("rolled up"), and rolled up is the reader's
   // base — not the hryvnia. This single expression is threaded into every block on the page, so
   // `?? 980` here signed all five tabs with ₴ while the numbers under it were dollars.
@@ -111,6 +158,8 @@ export function Stats() {
   // рано в періоді роздуває цифру в рази (детальний, історично-якірний прогноз — на Головній/у Патернах).
   const projected = data && mode === "calendar" && days < periodLen && days >= periodLen * 0.4
     ? Math.round(avgDay * periodLen) : null;
+  // A month label a person reads, in their own locale — never a raw `2026-07`.
+  const ymLabel = ym ? monthLongFmt.format(new Date(Number(ym.slice(0, 4)), Number(ym.slice(5)) - 1, 1)) : null;
   const periodNote = mode === "calendar"
     ? t(({ week: "stats.period.week", month: "stats.period.month", quarter: "stats.period.quarter", year: "stats.period.year" } as const)[range])
     : t("stats.period.rolling", { days: RANGES[range].days });
@@ -120,21 +169,50 @@ export function Stats() {
       <div className="page-head">
         <div>
           <div className="greet">{t("stats.title")}</div>
-          <div className="sub">{t("stats.sub")} · {periodNote}</div>
+          <div className="sub">{t("stats.sub")} · {ymLabel ?? periodNote}</div>
         </div>
         <div className="page-head-actions">
-          <div className="seg">
-            {(Object.keys(RANGES) as RangeKey[]).map((k) => (
-              <button key={k} className={`seg-btn ${range === k ? "active" : ""}`} onClick={() => setParam("range", k)}>
-                {t(RANGES[k].labelKey)}
+          {/* §MONTH-VIEW: in month mode the period controls are REPLACED, not merely ignored. A
+              range picker still on screen while a named month decides the window is a control
+              that does nothing — the same defect as `budgets.rollover` before §BUDGET-MEMORY. */}
+          {ym ? (
+            <div className="month-nav">
+              <button className="seg-btn" aria-label={t("stats.month.prev")} title={t("stats.month.prev")}
+                onClick={() => setParam("ym", shiftYm(ym, -1))}>‹</button>
+              <span className="month-nav-lbl">{ymLabel}</span>
+              <button className="seg-btn" aria-label={t("stats.month.next")} title={t("stats.month.next")}
+                disabled={shiftYm(ym, 1) >= curYm()}
+                onClick={() => setParam("ym", shiftYm(ym, 1))}>›</button>
+              <button className="pill-toggle" onClick={() => setParams((prev) => {
+                const p = new URLSearchParams(prev); p.delete("ym"); return p;
+              }, { replace: true })}>
+                <Icon name="calendar" size={14} />{t("stats.month.back")}
               </button>
-            ))}
-          </div>
-          <button className="pill-toggle" title={t("stats.modeTip")}
-            onClick={() => setPeriodMode(mode === "calendar" ? "rolling" : "calendar")}>
-            <Icon name={mode === "calendar" ? "calendar" : "repeat"} size={14} />
-            {mode === "calendar" ? t("stats.mode.calendar") : t("stats.mode.rolling")}
-          </button>
+            </div>
+          ) : (
+            <>
+              <div className="seg">
+                {(Object.keys(RANGES) as RangeKey[]).map((k) => (
+                  <button key={k} className={`seg-btn ${range === k ? "active" : ""}`} onClick={() => setParam("range", k)}>
+                    {t(RANGES[k].labelKey)}
+                  </button>
+                ))}
+              </div>
+              <button className="pill-toggle" title={t("stats.modeTip")}
+                onClick={() => setPeriodMode(mode === "calendar" ? "rolling" : "calendar")}>
+                <Icon name={mode === "calendar" ? "calendar" : "repeat"} size={14} />
+                {mode === "calendar" ? t("stats.mode.calendar") : t("stats.mode.rolling")}
+              </button>
+              {/* §MONTH-VIEW: the WAY IN. The mode shipped reachable only by typing `?ym=` into the
+                  address bar or by finding a bar to click on another tab — i.e. a feature that
+                  exists and cannot be found is a feature that does not exist. Opens the last
+                  COMPLETE month; the ‹ › stepper takes over from there. */}
+              <button className="pill-toggle" title={t("stats.month.browseTip")}
+                onClick={() => setParam("ym", shiftYm(curYm(), -1))}>
+                <Icon name="calendar" size={14} />{t("stats.month.browse")}
+              </button>
+            </>
+          )}
           {currencies && currencies.length > 1 && (
             <Select
               className="ph-cur-sel"
@@ -155,6 +233,9 @@ export function Stats() {
       </div>
 
       <div className="stack" style={{ gap: 18 }}>
+        {/* Said out loud rather than left to be noticed: a block that vanishes without explanation
+            reads as a bug, and this one vanishes on purpose. */}
+        {ym && <div className="month-note label">{t("stats.month.nowOnly", { month: ymLabel ?? "" })}</div>}
         {!data && isFetching && <StatsSkeleton />}
         {/* Без цієї гілки впалий запит давав просто порожню сторінку без пояснення. */}
         <ErrorNote error={error} what={t("stats.error")} onRetry={refetch} />
@@ -164,7 +245,12 @@ export function Stats() {
           <>
             {tab === "overview" && (
               <>
-                <AiInsightCard days={days} />
+                {/* §MONTH-VIEW: these four describe TODAY, not the month being read — the AI
+                    insight is generated over a trailing window, FX cost and price drift over their
+                    own, habits over the last complete months, and the monthly-history strip always
+                    ends at now. Printing any of them under a July heading is the app answering a
+                    question about July with a figure about August (§CAT-PAGE's rule). */}
+                {!ym && <AiInsightCard days={days} />}
                 <ClickableKpis data={data} sign={sign} net={net} avgDay={avgDay} from={from} to={to} currency={currency} />
                 <div className="stat-facts">
                   <div className="fact">
@@ -196,7 +282,7 @@ export function Stats() {
                 </div>
                 <ImportanceBreakdown data={data} sign={sign} from={from} to={to} currency={currency} />
                 <SpendingPatterns />
-                <FxCostCard sign={sign} />
+                {!ym && <FxCostCard sign={sign} />}
                 <section>
                   <div className="section-head"><h2>{t("stats.cashflow.title")}</h2><span className="label">{t("stats.cashflow.sub")}</span></div>
                   <div className="card cashflow">
@@ -223,14 +309,17 @@ export function Stats() {
                 </section>
                 <AvgCheckByCategory rows={data.byCategory} sign={sign} />
                 <ReceiptItems from={from} to={to} sign={sign} />
-                <PriceDrift />
+                {!ym && <PriceDrift />}
                 <PeriodCompare range={range} mode={mode} currency={currency} sign={sign} />
               </>
             )}
 
             {tab === "trends" && (
               <>
-                <MonthlyHistory />
+                {!ym && <MonthlyHistory />}
+                {/* §MONTH-STACK — how much each month cost AND what it was made of, joined. Also
+                    the way IN to a past month: clicking a bar sets `?ym=`. */}
+                {!ym && <MonthStack sign={sign} />}
                 <section>
                   <div className="section-head"><h2>{t("stats.trends.title")}</h2><span className="label">{t("stats.trends.sub")}</span></div>
                   <div className="card cashflow"><CashflowChart rows={rows} height={240} /></div>
@@ -246,7 +335,7 @@ export function Stats() {
                   <div className="card cashflow"><CumulativeChart rows={toCumulative(data.series, { mode, to, days, periodLen })} sign={sign} height={220} /></div>
                 </section>
                 <WeekdaySpend preset={range} currency={currency} />
-                <Habits />
+                {!ym && <Habits />}
                 <DeeperAnalytics series={data.series} sign={sign} from={from} to={to} currency={currency} />
                 {/* §SHAPE: what the period is MADE of — cheque sizes, what falls outside every
                     envelope, and what has no category at all. */}

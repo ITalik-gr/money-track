@@ -202,7 +202,7 @@ budgets.post("/budgets/auto", async (c) => {
 // AI-план бюджету: пропозиції місячних лімітів-конвертів (приймаються на /plan).
 budgets.post("/budgets/propose", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { proposeBudgets } = await import("../../lib/ai/advisor.ts");
+  const { proposeBudgets } = await import("../../lib/ai/budget.ts");
   try {
     return c.json(await proposeBudgets(c.env));
   } catch (e) {
@@ -214,7 +214,7 @@ budgets.post("/budgets/propose", async (c) => {
 budgets.post("/budgets/chat", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const { messages } = await c.req.json<{ messages: { role: "user" | "assistant"; content: string }[] }>();
-  const { budgetChatReply } = await import("../../lib/ai/advisor.ts");
+  const { budgetChatReply } = await import("../../lib/ai/budget.ts");
   try {
     return c.json(await budgetChatReply(c.env, normChatMessages(messages)));
   } catch (e) {

@@ -4,7 +4,8 @@
     "ok": true,
     "id": 5,
     "occurrences": null,
-    "end_date": null
+    "end_date": null,
+    "linked": 0
   },
   "db": {
     "transactions": [

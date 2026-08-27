@@ -61,6 +61,14 @@ export interface Overview {
  * (`EFF_IMPORTANCE` defaults to `discretionary`, so no spending falls outside).
  */
 export interface MonthlyHistory {
+  /**
+   * §MONTH-STACK — the segments of the stacked bar, in draw order, ranked by their total across
+   * the WHOLE window. Declared once for the series rather than per month, because a stack whose
+   * segments change identity from bar to bar cannot be compared, which is the only reason to draw
+   * the months side by side. The last entry may be the `other` fold; `id: null` without `other`
+   * is the uncategorised segment.
+   */
+  categories: { id: number | null; name: string; color: string | null; other?: boolean }[];
   months: {
     month: string; spend: number; income: number;
     /**
@@ -69,6 +77,8 @@ export interface MonthlyHistory {
      */
      savings_rate_pct: number | null;
     essential: number; discretionary: number; optional: number;
+    /** §MONTH-STACK — spend per segment, keyed by the category id as a string (or `"other"`/`"none"`). */
+    by_category: Record<string, number>;
   }[];
 }
 

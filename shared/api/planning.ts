@@ -20,6 +20,13 @@ export interface RecurringCandidate {
   avg_interval_days: number;
   currency_code?: number;
   category_id?: number | null;
+  /**
+   * §AI-RECURRING — this candidate came from the MODEL looking at a single charge, not from a
+   * rhythm in the history. It is a guess, it is labelled as one on screen, and it exists because
+   * the deterministic detector cannot say anything until the second month — by which time the
+   * person has forgotten signing up.
+   */
+  ai?: boolean;
 }
 
 /**
@@ -96,6 +103,14 @@ export interface BudgetStatusRow {
   projected_ratio: number;
   /** The projection was deliberately NOT extrapolated (a lump landed, or a fixed cost is pending). */
   lumpy: boolean;
+  /** §BUDGET-REACH — the canonical monthly level for this category, ₴ minor. Null without history. */
+  level: number | null;
+  /**
+   * §BUDGET-REACH — the limit sits meaningfully BELOW the level the app itself computes, i.e. the
+   * target cannot be met by arithmetic, not by discipline. Reported, never auto-corrected: a limit
+   * is a decision, and `level` travels alongside so the screen can offer the number.
+   */
+  unreachable: boolean;
 }
 export type BudgetStatusList = BudgetStatusRow[];
 
@@ -225,9 +240,23 @@ export interface SubscriptionOverview {
     total_base: number; avg_base: number | null;
     last_amount: number | null; last_currency: number | null;
     price_change_pct: number | null;
-    /** Measured between real charges; null under two charges. The declared one is what the plan claims. */
+    /**
+     * §RHYTHM — the MEDIAN gap between real charges, not the mean across the whole span. One
+     * missing charge used to turn a monthly plan into «кожні ~41 дн». Null under two charges.
+     */
     real_interval_days: number | null; declared_interval_days: number;
+    /** The day of the month it bills on, when the charges agree on one — the answer a person can check. */
+    billing_day: number | null;
+    /** Gaps ≥1.5× the median: a month the biller skipped, or a charge nothing linked to the plan. */
+    skipped_gaps: number;
   };
+  /**
+   * §PRICE-STEPS — every price this subscription has been billed at, oldest first, in the BILLING
+   * currency. The card can only say "the last charge vs the declared amount"; this says when the
+   * price actually moved and by how much, which is the question behind "чи подорожчала".
+   * A single entry means the price has never changed.
+   */
+  price_steps: { amount: number; currency_code: number; since: number; n: number }[];
   charges: { id: string; time: number; amount: number; currency_code: number; amount_base: number }[];
   share: { of_subscriptions_pct: number | null; of_category_pct: number | null; of_burn_pct: number | null };
   annual_base: number;

@@ -205,7 +205,7 @@ async function executeJob(env: Env, kind: JobKind, params: unknown): Promise<unk
     await generateAndStoreReport(env, p.type ?? "week", { force: true, scope: p.scope ?? "last", range: p.range });
     return undefined;
   }
-  const { proposeBudgets } = await import("./advisor.ts");
+  const { proposeBudgets } = await import("./budget.ts");
   return await proposeBudgets(env); // єдиний вид без власного сховища — результат живе в рядку
 }
 

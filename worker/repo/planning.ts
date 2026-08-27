@@ -1,7 +1,6 @@
 // Planned payments / subscriptions. See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
-import { localFmtSql } from "../lib/finance/time.ts";
 
 /**
  * The fields `chargesBetween()` and `monthlyPlannedUAH()` need to build a schedule.
@@ -149,48 +148,80 @@ export async function deactivate(db: AppDb, id: number): Promise<void> {
 
 // ---- subscription detection -------------------------------------------------
 
-export interface DetectedCandidate {
+/**
+ * Every candidate CHARGE, unaggregated — the grouping is judgement and lives in
+ * `lib/finance/recurring.ts` (§SUB-DETECT).
+ *
+ * It used to be one `GROUP BY t.merchant, t.amount`, which recognised a subscription by the exact
+ * amount repeating under the exact merchant string. That cannot see a foreign-currency
+ * subscription at all (it settles at the day's rate, so the amount differs every month — which is
+ * most of the ones a person actually has), split «X Corp.» from «X Corp», and never measured
+ * rhythm: exact-amount equality was standing in for it. SQL cannot express "same merchant roughly"
+ * (`coreToken`) or an amount BUCKET, and forcing it to would produce a second definition of both.
+ *
+ * §G2: transfers and bucket 13 (with its children) stay excluded here — "balance rounding" and
+ * money sent to a person are not subscriptions, and that is a property of the LEDGER, not of the
+ * grouping. Holds are counted, as everywhere else in canon.
+ *
+ * ⚠️ `LIMIT` is a cost ceiling, not a rule: newest first, so a long ledger loses its oldest rows
+ * rather than a random half. The window (`since`) is what really bounds this.
+ */
+export interface DetectedCharge {
   merchant: string;
-  amount: number;
-  n: number;
-  first_time: number;
-  last_time: number;
-  months: number;
+  amount: number;            // minor units, POSITIVE
+  time: number;
   currency_code: number;
   category_id: number | null;
 }
 
-/**
- * Recurring-charge candidates: the same merchant and amount, in ≥2 distinct months. Heuristic,
- * no AI.
- *
- * §G2: transfers and bucket 13 (with its children) are excluded, or "balance rounding" and money
- * sent to a person become "subscriptions". §G3: the sub-select proposes the most common category
- * among the matches, so accepting a candidate does not land it uncategorised.
- */
-export async function detectCandidates(
-  db: AppDb, since: number, now = Math.floor(Date.now() / 1000),
-): Promise<DetectedCandidate[]> {
-  // ⚠️ APP_TZ (2026-08-21): `months >= 2` is the gate that turns a repeated charge into a
-  // proposed subscription, and a UTC month boundary moved a charge made just after midnight into
-  // the previous month — occasionally supplying the second month all by itself.
+export async function detectCharges(db: AppDb, since: number, limit = 4000): Promise<DetectedCharge[]> {
   const r = await db.prepare(
-    `SELECT t.merchant, -t.amount AS amount, COUNT(*) AS n,
-            MIN(t.time) AS first_time, MAX(t.time) AS last_time,
-            COUNT(DISTINCT ${localFmtSql(now, "%Y-%m")}) AS months,
-            t.currency_code AS currency_code,
-            (SELECT x.category_id FROM transactions x
-             WHERE x.merchant = t.merchant AND x.amount = t.amount AND x.category_id IS NOT NULL
-             GROUP BY x.category_id ORDER BY COUNT(*) DESC LIMIT 1) AS category_id
+    `SELECT t.merchant, -t.amount AS amount, t.time, t.currency_code,
+            COALESCE(c.parent_id, t.category_id) AS category_id
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
-     WHERE t.amount < 0 AND t.is_transfer = 0
+     WHERE t.amount < 0 AND t.is_transfer = 0 AND t.transfer_pair_id IS NULL
        AND t.merchant IS NOT NULL AND t.merchant <> '' AND t.time >= ?
        AND COALESCE(c.parent_id, t.category_id) IS NOT 13
-     GROUP BY t.merchant, t.amount
-     HAVING n >= 2 AND months >= 2
-     ORDER BY n DESC, last_time DESC LIMIT 40`,
-  ).bind(since).all<DetectedCandidate>();
+     ORDER BY t.time DESC LIMIT ?`,
+  ).bind(since, limit).all<DetectedCharge>();
+  return r.results ?? [];
+}
+
+/**
+ * §AI-RECURRING — charges the MODEL flagged as a subscription, grouped by merchant.
+ *
+ * The deterministic detector needs two months to see a rhythm. This is the other half: on the day
+ * the first charge lands, enrich has already looked at the operation and can say "this is a
+ * subscription" — and that is the one moment the user still remembers signing up.
+ *
+ * ⚠️ Rows already tied to a plan are excluded, and so is bucket 13 (§G2): a proposal to create
+ * something that exists is worse than no proposal, and a transfer is never a subscription.
+ * ⚠️ The newest charge decides the amount, not an average: with one or two charges there is
+ * nothing to average, and the latest price is the one that will be billed next.
+ */
+export interface AiRecurringRow {
+  merchant: string; amount: number; currency_code: number;
+  n: number; first_time: number; last_time: number; category_id: number | null;
+}
+
+export async function aiRecurringCandidates(db: AppDb, since: number): Promise<AiRecurringRow[]> {
+  const r = await db.prepare(
+    `SELECT t.merchant,
+            (SELECT -x.amount FROM transactions x
+             WHERE x.merchant = t.merchant AND x.currency_code = t.currency_code AND x.amount < 0
+             ORDER BY x.time DESC LIMIT 1) AS amount,
+            t.currency_code, COUNT(*) AS n,
+            MIN(t.time) AS first_time, MAX(t.time) AS last_time,
+            COALESCE(c.parent_id, t.category_id) AS category_id
+     FROM transactions t
+     LEFT JOIN categories c ON c.id = t.category_id
+     WHERE t.ai_recurring = 1 AND t.amount < 0 AND t.is_transfer = 0 AND t.planned_id IS NULL
+       AND t.merchant IS NOT NULL AND t.merchant <> '' AND t.time >= ?
+       AND COALESCE(c.parent_id, t.category_id) IS NOT 13
+     GROUP BY t.merchant, t.currency_code
+     ORDER BY last_time DESC LIMIT 12`,
+  ).bind(since).all<AiRecurringRow>();
   return r.results ?? [];
 }
 
@@ -321,6 +352,21 @@ export async function declaredTitles(db: AppDb): Promise<Set<string>> {
     "SELECT LOWER(title) AS title FROM planned_payments WHERE is_active = 1",
   ).all<{ title: string }>();
   return new Set((r.results ?? []).map((d) => d.title));
+}
+
+/**
+ * The declared plans as NAMEABLE things — title plus note, which is where a plan's other names
+ * live (§SUB-ALIAS: the plan «Twitter» carries «X Corp.» in its note).
+ *
+ * `declaredTitles` above answers a narrower question ("is this exact string already a plan") and
+ * still has its caller in `habits.ts`. Detection needs the wider one, or it proposes creating a
+ * plan the user already has under the brand's other name.
+ */
+export async function declaredPlans(db: AppDb): Promise<{ title: string; note: string | null }[]> {
+  const r = await db.prepare(
+    "SELECT title, note FROM planned_payments WHERE is_active = 1",
+  ).all<{ title: string; note: string | null }>();
+  return r.results ?? [];
 }
 
 /** §R5: candidates the user has closed with "this is not a subscription". */

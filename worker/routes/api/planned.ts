@@ -63,7 +63,19 @@ planned.post("/planned", async (c) => {
     currency_code: b.currency_code ?? 980,
     amount_varies: !!b.amount_varies,
   });
-  return c.json({ ok: true, id, occurrences, end_date });
+  // §PLAN-LINK: a plan is declared BECAUSE it has been charging for a while, so the history it
+  // describes already exists. Without this the plan opened with zero charges and every screen said
+  // «списань не видно» about a subscription paid every month — see `linkPlanHistory`.
+  // ⚠️ An income plan has no outflow to link, and linking is best-effort: failing to attach the
+  // past must not fail the creation the user asked for.
+  let linked = 0;
+  if (b.kind !== "income") {
+    try {
+      const { linkPlanHistoryById } = await import("../../lib/finance/subscriptions.ts");
+      linked = (await linkPlanHistoryById(c.env.DB, id)).linked;
+    } catch { /* the plan exists; the back-link can be redone from Settings */ }
+  }
+  return c.json({ ok: true, id, occurrences, end_date, linked });
 });
 
 /**
@@ -154,6 +166,26 @@ planned.get("/planned/:id/overview", async (c) => {
   return c.json(out satisfies SubscriptionOverview);
 });
 
+/**
+ * §PLAN-LINK — re-run the back-link for ONE plan, from its own page.
+ *
+ * The page can now SEE a hole in the schedule (§RHYTHM `skipped_gaps`), and a screen that points
+ * at a problem it could fix itself but does not is worse than one that stays quiet. The real case:
+ * Apple bills on the 6th without fail, five charges in the ledger, four linked — so the page read
+ * «кожні ~41 дн» and warned about drift, over one row nothing had attached.
+ *
+ * Declared above `/planned/:id` for the same reason as `/overview` (lint C7 reads top-down).
+ */
+planned.post("/planned/:id/relink", async (c) => {
+  const { linkPlanHistoryById } = await import("../../lib/finance/subscriptions.ts");
+  // A PATH id is not a query param: `numParam` clamps a query default, while here a non-numeric
+  // segment is a bad request, and `Number("abc")` is NaN — which `.bind()` would treat as a silent
+  // zero and answer "no such plan" as though it had been deleted (§Обробка помилок).
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: st(c.get("locale"), "errPlanNotFound") }, 404);
+  return c.json(await linkPlanHistoryById(c.env.DB, id));
+});
+
 planned.delete("/planned/:id", async (c) => {
   await planningRepo.deactivate(c.env.DB, Number(c.req.param("id")));
   return c.json({ ok: true });
@@ -162,11 +194,21 @@ planned.delete("/planned/:id", async (c) => {
 // §R5: редагувати підписку (наразі — опис для AI; розширювано за потреби).
 planned.patch("/planned/:id", async (c) => {
   const b = await c.req.json<{ note?: string | null; category_id?: number | null }>();
-  await planningRepo.update(c.env.DB, Number(c.req.param("id")), {
+  const id = Number(c.req.param("id"));
+  await planningRepo.update(c.env.DB, id, {
     ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
     ...(b.category_id !== undefined ? { category_id: b.category_id } : {}),
   });
-  return c.json({ ok: true });
+  // §PLAN-LINK: both editable fields CHANGE WHAT THE PLAN MATCHES. The note carries the plan's
+  // other names (§SUB-ALIAS — «X Corp.» is the owner's Twitter), and the category is what an
+  // uncategorised charge can now be filed under. Adding either and seeing nothing happen is the
+  // same dead end the create route had.
+  let linked = 0;
+  try {
+    const { linkPlanHistoryById } = await import("../../lib/finance/subscriptions.ts");
+    linked = (await linkPlanHistoryById(c.env.DB, id)).linked;
+  } catch { /* best-effort, as on create */ }
+  return c.json({ ok: true, linked });
 });
 
 /**
@@ -228,28 +270,54 @@ planned.post("/planned/apply-categories", async (c) => {
   return c.json(r);
 });
 
-// Detect recurring payments (§7 "детект підписок"): same merchant+amount charged in
-// ≥2 distinct months over the last ~120 days, on a roughly monthly cadence. Heuristic,
-// no AI. Excludes merchants already declared as active planned payments.
+/**
+ * §SUB-DETECT — recurring charges the user has NOT declared.
+ *
+ * The grouping and every threshold live in `lib/finance/recurring.ts`; the route reads the ledger
+ * and subtracts what the user has already answered for. The old version grouped by exact
+ * merchant+amount in SQL and therefore could not see a single foreign-currency subscription — see
+ * that file for what that cost.
+ */
 planned.get("/planned/detect", async (c) => {
   const now = Math.floor(Date.now() / 1000);
-  const since = now - 200 * 86400; // ширше вікно — щоб зловити квартальні/рідші підписки
-  // §G2: ВИКЛЮЧАЄМО перекази (is_transfer) і бакет «Перекази і зняття» (13 + діти) —
-  // інакше в кандидати лізуть «Округлення балансу», перекази брату/людям тощо.
-  // §G3: пропонуємо суджену категорію (найчастіша серед матчів) для звʼязку з підпискою.
-  const rows = await planningRepo.detectCandidates(c.env.DB, since);
-  const declaredSet = await planningRepo.declaredTitles(c.env.DB);
-  // §R5: виключаємо закриті користувачем кандидати («це не підписка»).
-  const dismissedSet = await planningRepo.dismissedMerchants(c.env.DB);
+  const since = now - 400 * 86400; // ширше вікно — щоб зловити квартальні/рідші підписки
+  const { recurringCandidates } = await import("../../lib/finance/recurring.ts");
+  const { planNeedles, planMatches } = await import("../../lib/finance/subscriptions.ts");
 
-  const candidates = rows
+  const [charges, aiFlagged, declared, dismissedSet] = await Promise.all([
+    planningRepo.detectCharges(c.env.DB, since),
+    // §AI-RECURRING: the model's guess from a SINGLE charge — 120 days, because a subscription
+    // nobody has confirmed in four months is one they have decided not to.
+    planningRepo.aiRecurringCandidates(c.env.DB, now - 120 * 86400),
+    planningRepo.declaredPlans(c.env.DB),
+    // §R5: виключаємо закриті користувачем кандидати («це не підписка»).
+    planningRepo.dismissedMerchants(c.env.DB),
+  ]);
+
+  const deterministic = recurringCandidates(charges, now);
+  // §AI-RECURRING rides BEHIND the deterministic ones and never replaces one: a rhythm measured in
+  // the ledger is evidence, a model reading one charge is a guess, and the screen labels them
+  // differently for that reason. A merchant the rhythm already found is not proposed twice.
+  const found = new Set(deterministic.map((r) => r.merchant.toLowerCase()));
+  const aiRows: RecurringCandidate[] = aiFlagged
+    .filter((r) => !found.has(r.merchant.toLowerCase()))
     .map((r) => ({
-      ...r,
-      avg_interval_days: r.n > 1 ? Math.round((r.last_time - r.first_time) / (r.n - 1) / 86400) : 0,
-    }))
-    // Каденція від ~тижня до ~кварталу (виключає щоденні однакові покупки, напр. каву).
-    .filter((r) => r.avg_interval_days >= 6 && r.avg_interval_days <= 100)
-    .filter((r) => !declaredSet.has(r.merchant.toLowerCase()))
+      merchant: r.merchant, amount: r.amount, n: r.n,
+      first_time: r.first_time, last_time: r.last_time,
+      // One charge is one month. Claiming two would put a rhythm behind a guess.
+      months: 1,
+      // The plan has to start somewhere and monthly is what a subscription overwhelmingly is; the
+      // user edits it on the form, and §PLAN-LINK will attach whatever actually matches.
+      avg_interval_days: 30,
+      currency_code: r.currency_code, category_id: r.category_id, ai: true,
+    }));
+
+  const candidates = [...deterministic, ...aiRows]
+    // ⚠️ §SUB-ALIAS: a declared plan is known by EVERY one of its names, not by its title alone.
+    // Comparing titles byte-for-byte left «X Corp.» proposed as new while the plan «Twitter» that
+    // covers it sat two rows above — the app offering to create what it already has.
+    .filter((r) => !declared.some((p) => planMatches(p, r.merchant)
+      || planNeedles(p).some((n) => n.toLowerCase() === r.merchant.toLowerCase())))
     .filter((r) => !dismissedSet.has(r.merchant.toLowerCase()));
 
   return c.json(candidates satisfies RecurringCandidate[]);

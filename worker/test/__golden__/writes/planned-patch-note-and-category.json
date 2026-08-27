@@ -1,7 +1,8 @@
 {
   "status": 200,
   "body": {
-    "ok": true
+    "ok": true,
+    "linked": 0
   },
   "db": {
     "transactions": [

@@ -9,7 +9,12 @@
         "savings_rate_pct": 67,
         "essential": 271600,
         "discretionary": 1200000,
-        "optional": 0
+        "optional": 0,
+        "by_category": {
+          "1": 241700,
+          "3": 29900,
+          "8": 1200000
+        }
       },
       {
         "month": "2026-01",
@@ -18,7 +23,12 @@
         "savings_rate_pct": 70,
         "essential": 160400,
         "discretionary": 1200000,
-        "optional": 0
+        "optional": 0,
+        "by_category": {
+          "1": 145100,
+          "3": 15300,
+          "8": 1200000
+        }
       },
       {
         "month": "2026-02",
@@ -27,7 +37,12 @@
         "savings_rate_pct": 67,
         "essential": 296500,
         "discretionary": 1200000,
-        "optional": 0
+        "optional": 0,
+        "by_category": {
+          "1": 274100,
+          "3": 22400,
+          "8": 1200000
+        }
       },
       {
         "month": "2026-03",
@@ -36,7 +51,12 @@
         "savings_rate_pct": 68,
         "essential": 249000,
         "discretionary": 1200000,
-        "optional": 0
+        "optional": 0,
+        "by_category": {
+          "1": 235900,
+          "3": 13100,
+          "8": 1200000
+        }
       },
       {
         "month": "2026-04",
@@ -45,7 +65,12 @@
         "savings_rate_pct": 67,
         "essential": 275900,
         "discretionary": 1200000,
-        "optional": 0
+        "optional": 0,
+        "by_category": {
+          "1": 252000,
+          "3": 23900,
+          "8": 1200000
+        }
       },
       {
         "month": "2026-05",
@@ -54,7 +79,53 @@
         "savings_rate_pct": 53,
         "essential": 390400,
         "discretionary": 1400000,
-        "optional": 460000
+        "optional": 460000,
+        "by_category": {
+          "1": 287600,
+          "2": 185000,
+          "3": -17200,
+          "6": 135000,
+          "8": 1260000,
+          "11": 200000,
+          "12": 200000
+        }
+      }
+    ],
+    "categories": [
+      {
+        "id": 8,
+        "name": "Дім і побут",
+        "color": "#1F6E4C"
+      },
+      {
+        "id": 1,
+        "name": "Продукти",
+        "color": "#1F6E4C"
+      },
+      {
+        "id": 11,
+        "name": "Подорожі",
+        "color": "#127C86"
+      },
+      {
+        "id": 12,
+        "name": "Підписки",
+        "color": "#D99414"
+      },
+      {
+        "id": 2,
+        "name": "Кафе і ресторани",
+        "color": "#D99414"
+      },
+      {
+        "id": 6,
+        "name": "Розваги",
+        "color": "#127C86"
+      },
+      {
+        "id": 3,
+        "name": "Транспорт",
+        "color": "#2450C8"
       }
     ]
   }

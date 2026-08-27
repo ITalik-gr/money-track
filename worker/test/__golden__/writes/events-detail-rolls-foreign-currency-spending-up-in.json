@@ -46,6 +46,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": null,
         "category_color": null,
         "account_title": "Картка ₴"
@@ -82,6 +83,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Транспорт",
         "category_color": "#2450C8",
         "account_title": "Рахунок $"
@@ -118,6 +120,7 @@
         "name_locked": 0,
         "reimbursed": 0,
         "reimburses_total": 0,
+        "ai_recurring": null,
         "category_name": "Подорожі",
         "category_color": "#127C86",
         "account_title": "Картка ₴"

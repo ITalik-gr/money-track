@@ -12,7 +12,9 @@
       "ratio": 0.19173333333333334,
       "projected": 530899,
       "projected_ratio": 0.3539326666666667,
-      "lumpy": false
+      "lumpy": false,
+      "level": 254000,
+      "unreachable": false
     },
     {
       "id": 2,
@@ -25,7 +27,9 @@
       "ratio": 1.85,
       "projected": 300000,
       "projected_ratio": 3,
-      "lumpy": false
+      "lumpy": false,
+      "level": null,
+      "unreachable": false
     }
   ]
 }

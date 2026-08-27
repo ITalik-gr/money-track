@@ -452,7 +452,13 @@ function Detected() {
             <div key={`${c.merchant}-${c.amount}`} className="sub-row card">
               <MerchantLogo merchant={c.merchant} color="var(--c-teal)" fallbackLabel={c.merchant} />
               <div className="s-body">
-                <div className="s-name">{c.merchant}</div>
+                <div className="s-name">
+                  {c.merchant}
+                  {/* §AI-RECURRING: a guess from ONE charge is labelled as one. A rhythm measured
+                      in the ledger and a model's opinion are different kinds of claim, and a row
+                      that hides which it is teaches the user to distrust both. */}
+                  {c.ai && <span className="s-ai" title={t("sub.aiGuessTitle")}>{t("sub.aiGuess")}</span>}
+                </div>
                 <div className="s-meta">
                   {c.n}× · {cad.period_count === 1
                     ? t(cad.period === "week" ? "sub.weekly" : "sub.monthly")
@@ -462,10 +468,15 @@ function Detected() {
               </div>
               <div className="s-amt"><Money minor={c.amount} currency={c.currency_code ?? 980} decimals={false} /></div>
               <button className="btn primary sm" disabled={isLoading}
-                onClick={() => addPlanned(plannedFromCandidate({
-                  title: c.merchant, period_amount: c.amount, currency_code: c.currency_code,
-                  avg_interval_days: c.avg_interval_days, last_time: c.last_time, category_id: c.category_id,
-                }))}>{t("sub.add")}</button>
+                onClick={async () => {
+                  try {
+                    const r = await addPlanned(plannedFromCandidate({
+                      title: c.merchant, period_amount: c.amount, currency_code: c.currency_code,
+                      avg_interval_days: c.avg_interval_days, last_time: c.last_time, category_id: c.category_id,
+                    })).unwrap();
+                    toast.success(r.linked > 0 ? t("sub.addedLinked", { n: r.linked }) : t("sub.added"));
+                  } catch (e) { toast.error(errText(e)); }
+                }}>{t("sub.add")}</button>
               <button className="btn ghost s-dismiss" title={t("sub.dismissTitle")}
                 onClick={() => dismiss(c.merchant)} aria-label={t("sub.dismissAria")}>✕</button>
             </div>
@@ -498,7 +509,7 @@ function AddForm() {
     if ((kind === "subscription" || kind === "income") && !perMinor) { toast.error(t("sub.amountRequired")); return; }
     if (kind === "installment" && (!totMinor || !perMinor)) { toast.error(t("sub.installmentRequired")); return; }
     try {
-      await addPlanned({
+      const r = await addPlanned({
         title: title.trim(), kind, period, period_count: Math.max(1, Math.round(Number(periodCount) || 1)),
         currency_code: currency,
         start_date: Math.floor(Date.now() / 1000),
@@ -507,7 +518,9 @@ function AddForm() {
         amount_varies: kind === "income" ? varies : false,
       }).unwrap();
       setTitle(""); setPeriodAmount(""); setTotalAmount(""); setPeriodCount("1");
-      toast.success(t("sub.added"));
+      // §PLAN-LINK: the back-link is invisible work on a page the user is not looking at yet, and
+      // "found 7 charges" is the difference between a plan that works and one that looks empty.
+      toast.success(r.linked > 0 ? t("sub.addedLinked", { n: r.linked }) : t("sub.added"));
     } catch (e) { toast.error(errText(e)); }
   }
 

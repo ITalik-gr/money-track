@@ -399,3 +399,63 @@ test("§BUDGET-MEMORY: the whole-plan track record", async (t) => {
     restore();
   }
 });
+
+/**
+ * §BUDGET-REACH — a limit the app's OWN level says cannot be met.
+ *
+ * The real case: «Комуналка і звʼязок» limited at 1 087 against months of 1 246 / 1 285 / 2 531 /
+ * 1 458. The auto-budget set that limit AT the canonical level — and the level was understated 1.5×
+ * by the bug §LEVEL-WINDOW fixed. The envelope has read «153% перевищено» ever since, about a
+ * target no amount of discipline could reach. The app was disagreeing with itself and reporting
+ * the user as the one at fault.
+ */
+test("§BUDGET-REACH: a limit under the app's own level is flagged, never corrected", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const db = migratedDb();
+    seed(db);
+    const NOW = Math.floor(Date.parse(FROZEN_NOW_ISO) / 1000);
+    const mid = (mAgo: number): number => {
+      const d = new Date(NOW * 1000);
+      return Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - mAgo, 15, 9, 0, 0) / 1000);
+    };
+    // Every complete month of the level window carries a utility bill — the owner's real figures,
+    // which average far above the limit the auto-budget set from the understated level.
+    // ⚠️ The window is six months here, not the four his ledger covers: a category quiet in two of
+    // them would divide by six and land back under the limit, which is §LEVEL-WINDOW's own point
+    // and would make this test pass or fail for the wrong reason.
+    const amounts = [124_600, 128_500, 130_000, 253_100, 145_800, 140_000];
+    amounts.forEach((amount, i) => {
+      const at = mid(amounts.length - i);
+      db.raw.prepare(
+        `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, merchant, category_id, created_at)
+         VALUES (?, 'acc-uah', 'mono', ?, ?, 980, 'Utilities', 7, ?)`,
+      ).run(`u-${i}`, at, -amount, at);
+    });
+    // The limit the auto-budget set from the understated level.
+    db.raw.prepare("INSERT INTO budgets (category_id, period, amount, currency_code) VALUES (7, 'month', 108700, 980)").run();
+
+    const rows = await budgetStatus(testEnv(db) as never, "1.0", NOW);
+    const util = rows.find((r) => r.id === 7);
+    assert.ok(util, "the envelope exists");
+    assert.equal(util.unreachable, true, "the limit is below the level the app itself computes");
+    assert.ok((util.level ?? 0) > util.base_amount, "and the level travels with it, so the screen can offer the number");
+    // ⚠️ The limit is UNCHANGED. It is a decision — possibly a deliberate squeeze — and raising it
+    // silently would discard the user's own work (§RULES-UI apply, §SIMILAR, the §AI-AUDIT guard).
+    assert.equal(util.base_amount, 108700);
+  } finally { restore(); }
+});
+
+test("§BUDGET-REACH: a deliberate ZERO envelope is never called unreachable", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const db = migratedDb();
+    seed(db);
+    const NOW = Math.floor(Date.parse(FROZEN_NOW_ISO) / 1000);
+    // §BUDGET-ZERO: «сюди я свідомо не витрачаю» is a plan, not a miscalculation. Without the
+    // guard every level above zero would flag it, i.e. every zero envelope, always.
+    db.raw.prepare("INSERT INTO budgets (category_id, period, amount, currency_code) VALUES (6, 'month', 0, 980)").run();
+    const rows = await budgetStatus(testEnv(db) as never, "1.0", NOW);
+    assert.equal(rows.find((r) => r.id === 6)?.unreachable, false);
+  } finally { restore(); }
+});

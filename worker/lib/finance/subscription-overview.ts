@@ -23,7 +23,37 @@ import { getRates } from "./money.ts";
 import { valueMode, categoryMonthlyLevels, sumLevels } from "./stats.ts";
 import { catNameSql } from "./categories-i18n.ts";
 import { nextChargeUnix, monthlyPlannedUAH, sumMonthlyPlannedUAH } from "./subscriptions.ts";
+import { chargeRhythm } from "./recurring.ts";
 import { resolveLocale } from "../platform/i18n.ts";
+
+/**
+ * §PRICE-STEPS — the distinct prices this plan has actually been billed at, oldest first.
+ *
+ * "Has it got more expensive" was answered by ONE comparison: the latest charge against the
+ * declared amount. That says whether it is expensive TODAY and nothing about when it moved, which
+ * is the half a person needs to decide whether to keep it. A run of charges at the same price is
+ * one step; the step's `since` is the first charge at that price.
+ *
+ * ⚠️ Grouped with the SAME ±10% tolerance as `amountMatches` and §SUB-DETECT's buckets: the plan
+ * is linked to these charges by that tolerance, so treating a 2 ₴ FX wobble as a price rise here
+ * would contradict the rule that attached the charge in the first place.
+ * ⚠️ Compared only WITHIN one currency. A biller that switched from dollars to hryvnia did not
+ * raise its price by 4 000%.
+ */
+const STEP_TOLERANCE = 0.1;
+
+function priceSteps(charges: { time: number; amount: number; currency_code: number }[]) {
+  const asc = [...charges].sort((a, b) => a.time - b.time);
+  const out: { amount: number; currency_code: number; since: number; n: number }[] = [];
+  for (const c of asc) {
+    const last = out[out.length - 1];
+    const same = last && last.currency_code === c.currency_code
+      && Math.abs(c.amount - last.amount) <= last.amount * STEP_TOLERANCE;
+    if (same) { last.n++; continue; }
+    out.push({ amount: c.amount, currency_code: c.currency_code, since: c.time, n: 1 });
+  }
+  return out;
+}
 
 const pct = (part: number, whole: number): number | null =>
   whole > 0 ? Math.round((part / whole) * 1000) / 10 : null;
@@ -56,10 +86,16 @@ export async function subscriptionOverview(
   // ⚠️ The REAL cadence, measured between the charges that actually happened — not the declared
   // one. "Monthly" is what the plan says; a biller charging every 14 days, or one that stopped
   // charging in March, is exactly what this page exists to make visible.
+  //
+  // ⚠️ §RHYTHM: through the canon, which is the MEDIAN gap. This used to be
+  // `(last − first) / (n − 1)` right here — a mean, and one missing charge destroys it. Real case:
+  // Apple bills on the 6th of every month, five charges in the ledger, four linked to the plan;
+  // the page announced «кожні ~41 дн» and warned that the rhythm had drifted. Both were one
+  // missing row. The same function now answers this and §SUB-DETECT, so the page and the
+  // "we found a subscription" proposal cannot disagree about the same series.
   const times = charges.map((c) => c.time).sort((a, b) => a - b);
-  const realInterval = times.length > 1
-    ? Math.round((times[times.length - 1] - times[0]) / (times.length - 1) / 86400)
-    : null;
+  const rhythm = chargeRhythm(times);
+  const realInterval = rhythm.interval_days;
   const declaredInterval = Math.round(
     (plan.period === "week" ? 7 : 30.44) * Math.max(1, plan.period_count ?? 1),
   );
@@ -95,7 +131,9 @@ export async function subscriptionOverview(
       last_amount: last?.amount ?? null, last_currency: last?.currency_code ?? null,
       price_change_pct: priceChangePct,
       real_interval_days: realInterval, declared_interval_days: declaredInterval,
+      billing_day: rhythm.day_of_month, skipped_gaps: rhythm.skipped,
     },
+    price_steps: priceSteps(charges),
     charges,
     share: {
       of_subscriptions_pct: pct(monthlyBase, subsMonthly),

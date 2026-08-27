@@ -1,0 +1,53 @@
+/* ===== ADVISOR ===========================================================
+   Split out of `domains-a.css` on 2026-08-27: that part hit its ceiling again and lint C8 is a
+   RATCHET — an exception may never rise, so an overflow gets a seam. The Advisor is a whole
+   screen (the runway card, its gauge, the two-column shell, the state row and the advice
+   history), which is exactly the boundary `analytics.css` was cut on in August.
+   ⚠️ A media query belongs in the SAME file as the declaration it overrides: `@media` adds no
+   specificity, so a conditional rule left behind loses to an unconditional one in a file imported
+   later, silently (the Settings bug of 2026-08-22). Both of the ones below moved with their rules.
+   ========================================================================= */
+
+/* ===== ADVISOR (runway + gauge) ========================================== */
+/* GRID, not flex (fixed 2026-07-26 — B5). The card has three children: gauge, KPI strip and the
+   runway comment. The comment already carried `grid-column: 1 / -1`, but the card was `flex`,
+   where that declaration means nothing — so the comment stayed a third flex sibling, took width
+   from the KPI strip, squeezed it to its `min-width`, and `auto-fit minmax(148px)` then resolved
+   to a SINGLE column: five metrics stacked down the left with half the card empty. Two columns
+   with an explicit full-width second row say the intended layout instead of hoping flex-wrap
+   lands on it. (Same failure as `.advisor-grid.single` — a layout declaration with no container
+   to honour it.) */
+.runway-card {
+  display: grid; grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px 28px; align-items: center; padding: 20px 22px;
+}
+/* Метрики — щільна авто-fit KPI-стрічка (заповнює ширину, без порожнеч праворуч на десктопі). */
+.runway-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 16px 24px; min-width: 0; }
+.runway-metric .label { margin-bottom: 3px; }
+.runway-val { font-size: 22px; }
+/* §BURN-SHAPE: the one-off share, under the burn it is part of. Muted and small on purpose —
+   it qualifies the hero figure, it does not compete with it. */
+.runway-sub { font-size: 12px; line-height: 1.35; color: var(--ink-3); margin-top: 2px; }
+.runway-comment { grid-column: 1 / -1; margin: 6px 0 0; font-size: 14px; line-height: 1.55; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-2); }
+/* Narrow: the gauge stops being a column of its own and sits above the metrics. */
+@media (max-width: 640px) {
+  .runway-card { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .runway-metrics { width: 100%; }
+}
+.gauge { position: relative; flex-shrink: 0; line-height: 0; }
+.gauge-center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+.gauge-val { font-size: 30px; line-height: 1; }
+
+/* §R6 Advisor — 2 колонки: головна (поради, ширша для читабельності) + рейл (розбивка/огляд/історія) */
+.advisor-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+.advisor-grid > * { min-width: 0; }
+.advisor-rail { position: sticky; top: 84px; }
+@media (max-width: 980px) { .advisor-grid { grid-template-columns: 1fr; } .advisor-rail { position: static; } }
+
+/* Таб «Стан фінансів»: індекс на всю ширину (gauge+складові), під ним Факти | Корпус знань. */
+.advisor-state { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; margin-top: 18px; }
+.advisor-state > * { min-width: 0; }
+/* Індекс здоров'я, календар потоку і НЕТВОРТ — на всю ширину: це графіки з віссю часу,
+   у півколонці підписи місяців зливались, а нетворт узагалі стояв на 50% (фідбек користувача). */
+.advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card { grid-column: 1 / -1; }
+@media (max-width: 760px) { .advisor-state { grid-template-columns: 1fr; } }

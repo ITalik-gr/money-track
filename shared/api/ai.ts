@@ -34,6 +34,13 @@ export interface Advice {
   debt: number;
   investment?: number;
   monthly_burn: number;
+  /**
+   * §BURN-SHAPE — the SAME burn, split into the half that repeats and the half that does not.
+   * `recurring + lumpy === monthly_burn`; they are parts of it, never additions to it. Absent on
+   * advice generated before 2026-08-27.
+   */
+  burn_recurring?: number;
+  burn_lumpy?: number;
   runway_months: number | null;
   usage?: AiUsageBrief;
   generated_at: number;

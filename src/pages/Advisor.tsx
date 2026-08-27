@@ -151,7 +151,15 @@ export function Advisor() {
                 <Metric label={t("adv.investReserve")} v={<Money minor={advice.investment} decimals={false} />}
                   info={t("adv.investReserveInfo")} />
               )}
-              <Metric label={t("adv.burnPerMonth")} v={<Money minor={advice.monthly_burn} decimals={false} />} />
+              {/* §BURN-SHAPE: the burn, with the part that does NOT repeat named under it. The bare
+                  figure was the one the owner called impossible — it averages a quarterly tax and a
+                  one-off dentist into every month, which is honest arithmetic and an unrecognisable
+                  sentence. The sub-line is shown only when there IS a lump worth naming. */}
+              <Metric label={t("adv.burnPerMonth")} v={<Money minor={advice.monthly_burn} decimals={false} />}
+                info={advice.burn_lumpy ? t("adv.burnSplitInfo") : undefined}
+                sub={advice.burn_lumpy && advice.burn_lumpy > 0
+                  ? <>{t("adv.burnSplit", { n: "" })}<Money minor={advice.burn_lumpy} decimals={false} /></>
+                  : undefined} />
               <Metric label={t("adv.cushionLasts")} v={months != null ? t("adv.monthsShort", { n: Math.max(0, months) }) : "—"} tone={tone}
                 info={t("adv.cushionLastsInfo")} />
             </div>
@@ -356,11 +364,12 @@ function AdviceActionButton({ action }: { action: AdviceAction }) {
   );
 }
 
-function Metric({ label, v, tone, info }: { label: string; v: React.ReactNode; tone?: string; info?: string }) {
+function Metric({ label, v, tone, info, sub }: { label: string; v: React.ReactNode; tone?: string; info?: string; sub?: React.ReactNode }) {
   return (
     <div className="runway-metric">
       <div className="label" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>{label}{info && <InfoTip>{info}</InfoTip>}</div>
       <div className={`runway-val num-hero ${tone === "pos" ? "pos" : tone === "neg" ? "neg" : tone === "warn" ? "" : ""}`}>{v}</div>
+      {sub && <div className="runway-sub">{sub}</div>}
     </div>
   );
 }

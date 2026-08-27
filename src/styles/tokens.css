@@ -148,3 +148,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+
+
+/* Typographic wrapping (2026-08-27) ---------------------------------------------
+   A short block that drops ONE word onto its own line reads as a layout fault, and every empty
+   state, hint and section subtitle in the app is exactly that length. `balance` evens the lines
+   of short blocks; `pretty` only protects the last line, which is what longer prose needs (it is
+   cheaper, and `balance` is capped at a few lines by the spec anyway).
+   ⚠️ Headings included on purpose: a two-word card title breaking after the first is the most
+   visible instance of this. */
+.ec-hint, .ec-title, .label, .sub, .section-head .label,
+.merchant-stat-sub, .env-unreachable, .sub-cadence-note, .month-note,
+h1, h2, h3, .greet { text-wrap: balance; }
+p, .runway-comment, .chat-msg p { text-wrap: pretty; }

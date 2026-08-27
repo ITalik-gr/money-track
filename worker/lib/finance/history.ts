@@ -14,7 +14,17 @@ import type { Env } from "../../env.ts";
 import { getRates } from "./money.ts";
 import { valueMode, localMonthStart, localYm } from "./stats.ts";
 import { savingsRatePct } from "./finance.ts";
+import { resolveLocale, st } from "../platform/i18n.ts";
 import type { MonthlyHistory } from "../../../shared/api/analytics.ts";
+
+/**
+ * §MONTH-STACK — how many categories a stacked bar can carry before it stops being readable.
+ *
+ * Everything past this is folded into one "other" segment. The cut is by the category's total
+ * across the WHOLE window, never per month: a series whose segments change identity from bar to
+ * bar is not comparable, which is the only reason to draw the months side by side.
+ */
+const STACK_CATEGORIES = 8;
 
 export async function collectMonthlyHistory(env: Env, months: number): Promise<MonthlyHistory> {
   const analyticsRepo = await import("../../repo/analytics.ts");
@@ -23,12 +33,43 @@ export async function collectMonthlyHistory(env: Env, months: number): Promise<M
   const now = Math.floor(Date.now() / 1000);
   const from = localMonthStart(now, -(months - 1));
 
-  const [rows, imp] = await Promise.all([
+  const loc = await resolveLocale(env);
+  const [rows, imp, cats] = await Promise.all([
     analyticsRepo.monthlyHistory(env.DB, { mult }, now, from),
     // One extra grouped query rather than a second endpoint: it is the same months over the same
     // window, and two requests would let the halves answer for different periods.
     analyticsRepo.importanceByMonth(env.DB, { mult }, now, from),
+    // §MONTH-STACK: the same window again, by category. One more grouped query rather than a
+    // second endpoint, for the reason directly above — two requests could answer for two periods.
+    analyticsRepo.categoryByMonth(env.DB, loc, { mult }, now, from),
   ]);
+
+  // Rank by the window total, then keep the top N and fold the rest into one segment.
+  const catTotal = new Map<string, { id: number | null; name: string; color: string | null; total: number }>();
+  for (const r of cats) {
+    const key = String(r.id ?? "none");
+    const cur = catTotal.get(key) ?? {
+      id: r.id, color: r.color,
+      // A row with no category is real money (§MONTH-STACK) and needs a name a person can read.
+      name: r.name ?? st(loc, "uncategorized"), total: 0,
+    };
+    cur.total += r.spent;
+    catTotal.set(key, cur);
+  }
+  const ranked = [...catTotal.entries()].sort((a, b) => b[1].total - a[1].total);
+  const keep = new Map(ranked.slice(0, STACK_CATEGORIES).map(([k, v]) => [k, v]));
+  const hasOther = ranked.length > STACK_CATEGORIES;
+  const stackKeys: MonthlyHistory["categories"] = [...keep.values()].map((v) => ({ id: v.id, name: v.name, color: v.color }));
+  if (hasOther) stackKeys.push({ id: null, name: st(loc, "other"), color: null, other: true });
+
+  const stackByMonth = new Map<string, Record<string, number>>();
+  for (const r of cats) {
+    const key = String(r.id ?? "none");
+    const bucket = keep.has(key) ? key : "other";
+    const m = stackByMonth.get(r.month) ?? {};
+    m[bucket] = (m[bucket] ?? 0) + r.spent;
+    stackByMonth.set(r.month, m);
+  }
 
   const byMonth = new Map<string, { essential: number; discretionary: number; optional: number }>();
   for (const r of imp) {
@@ -53,7 +94,10 @@ export async function collectMonthlyHistory(env: Env, months: number): Promise<M
     // The one number that says whether things are getting BETTER. A rising total is ambiguous —
     // a bigger rent and a bigger takeaway habit look identical in it — but the share of income
     // that survives the month is not.
-    out.push({ month: key, spend, income, savings_rate_pct: savingsRatePct(income, spend), ...w });
+    out.push({
+      month: key, spend, income, savings_rate_pct: savingsRatePct(income, spend), ...w,
+      by_category: stackByMonth.get(key) ?? {},
+    });
   }
-  return { months: out };
+  return { months: out, categories: stackKeys };
 }

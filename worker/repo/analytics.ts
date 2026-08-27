@@ -851,6 +851,34 @@ export async function importanceByMonth(
   return res.results ?? [];
 }
 
+/**
+ * §MONTH-STACK — the same months, broken down by CATEGORY.
+ *
+ * Deliberately the same shape as `importanceByMonth` above, because it is the same question asked
+ * of a different dimension: one grouped query over one window, so the two halves of a chart cannot
+ * end up describing different periods.
+ *
+ * ⚠️ The roll-up is `EFF_CAT_ID` — a subcategory reports as its parent, exactly as every other
+ * category figure on the page does. A stack whose segments were leaves would not add up to the
+ * category totals sitting beside it.
+ * ⚠️ Uncategorised spend comes back with `id: null` and is NOT dropped: it is real money, and a
+ * stack that silently omits it would be shorter than the month's own total — the one property
+ * that makes a stacked bar readable at all.
+ */
+export async function categoryByMonth(
+  db: AppDb, loc: NotifLocale, v: Pick<ValueScope, "mult">, now: number, from: number,
+): Promise<{ month: string; id: number | null; name: string | null; color: string | null; spent: number }[]> {
+  const res = await db.prepare(
+    `SELECT ${localYmSql(now)} AS month, ${EFF_CAT_ID} AS id,
+            ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color,
+            ${amountSum(v.mult)} AS spent
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND ${SPEND_WHERE}
+     GROUP BY month, ${EFF_CAT_ID} ORDER BY month`,
+  ).bind(from).all<{ month: string; id: number | null; name: string | null; color: string | null; spent: number }>();
+  return res.results ?? [];
+}
+
 // ---- §SHAPE: the shape of the spending, not its size ------------------------
 
 export interface ChequeRow { bucket: number; n: number; spent: number }

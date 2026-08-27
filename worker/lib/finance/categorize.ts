@@ -69,11 +69,19 @@ export async function categorize(
 
   // 1b. Активна підписка (детерміністично, без AI): той самий мерчант+сума+валюта, що
   // й оголошена підписка → її категорія. Раніше AI вгадував це наосліп (Apple $1 → «Розваги»).
+  // ⚠️ §PLAN-LINK: a plan may carry NO category. It still identifies the operation, so the link is
+  // kept and the chain CONTINUES — returning here with a null category would let a category-less
+  // plan block the rules and the AI that could still have filed the charge, which is the plan
+  // making the app worse at the one job it was not asked to do.
+  let plannedId: number | null = null;
   if (input.amount != null && input.amount < 0 && input.currency_code != null) {
     const sub = await matchActiveSubscription(db, {
       merchant: null, description: desc || null, amount: input.amount, currency_code: input.currency_code,
     });
-    if (sub) return { category_id: sub.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: sub.planned_id, source: "subscription", detail: sub.title ?? null };
+    if (sub?.category_id != null) {
+      return { category_id: sub.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: sub.planned_id, source: "subscription", detail: sub.title ?? null };
+    }
+    plannedId = sub?.planned_id ?? null;
   }
 
   // 2. Rules: mcc match, then text substring. Highest priority wins.
@@ -84,7 +92,7 @@ export async function categorize(
       )
       .bind(String(input.mcc))
       .first<{ category_id: number }>();
-    if (r) return { category_id: r.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null, source: "rule_mcc", detail: String(input.mcc) };
+    if (r) return { category_id: r.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: plannedId, source: "rule_mcc", detail: String(input.mcc) };
   }
   /**
    * Text rules match the description AND the comment, joined.
@@ -106,10 +114,10 @@ export async function categorize(
     const lower = haystack.toLowerCase();
     for (const rule of textRules.results ?? []) {
       if (lower.includes(rule.pattern.toLowerCase())) {
-        return { category_id: rule.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: null, source: "rule_text", detail: rule.pattern };
+        return { category_id: rule.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: plannedId, source: "rule_text", detail: rule.pattern };
       }
     }
   }
 
-  return { category_id: null, display_name: null, is_transfer: false, real_category_id: null, planned_id: null, source: null, detail: null };
+  return { category_id: null, display_name: null, is_transfer: false, real_category_id: null, planned_id: plannedId, source: null, detail: null };
 }

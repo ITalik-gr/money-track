@@ -121,6 +121,21 @@ export function EnvelopeGrid() {
                 {t("eg.projected", { pct: projPct })} · <Money minor={e.projected} decimals={false} />
               </div>
             )}
+            {/* §BUDGET-REACH — the limit sits below the level the app itself computes, so «153%
+                перевищено» is a verdict on arithmetic, not on the person. Named here rather than
+                left to be inferred: without it the envelope reports failure every month for a
+                target nothing could meet. The limit is NOT changed — the fix lives on /plan, where
+                changing a limit is what the screen is for. */}
+            {e.unreachable && e.level != null && (
+              <div className="env-unreachable">
+                {/* One sentence, with the figure INSIDE it. The first version interpolated an
+                    empty `{level}` and appended the amount after — so it rendered «звичайні
+                    витрати () — ціль недосяжна» with the number orphaned on the next line. */}
+                <span>{t("eg.unreachable")}</span>
+                <b><Money minor={e.level} decimals={false} /></b>
+                <span>{t("eg.unreachableTail")}</span>
+              </div>
+            )}
           </Link>
         );
       })}

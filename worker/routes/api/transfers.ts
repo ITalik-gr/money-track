@@ -18,7 +18,7 @@ transfers.post("/transfers/detect", async (c) => {
 // Малий батч за виклик, клієнт повторює поки remaining > 0. Навчене застосовується без AI.
 transfers.post("/transfers/categorize", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { categorizeTransfers } = await import("../../lib/ai/enrich.ts");
+  const { categorizeTransfers } = await import("../../lib/ai/transfers-ai.ts");
   try {
     return c.json(await categorizeTransfers(c.env));
   } catch (e) {
@@ -28,7 +28,7 @@ transfers.post("/transfers/categorize", async (c) => {
 
 // Скільки переказів/знять ще без реальної категорії (для стану кнопки).
 transfers.get("/transfers/status", async (c) => {
-  const { transfersPending } = await import("../../lib/ai/enrich.ts");
+  const { transfersPending } = await import("../../lib/ai/transfers-ai.ts");
   return c.json({ pending: await transfersPending(c.env) });
 });
 
@@ -36,7 +36,7 @@ transfers.get("/transfers/status", async (c) => {
 // (зі збереженням у БД) для перегляду/правки. needs_attention = AI не впевнений/не визначив.
 transfers.post("/transfers/review", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
-  const { reviewTransfers } = await import("../../lib/ai/enrich.ts");
+  const { reviewTransfers } = await import("../../lib/ai/transfers-ai.ts");
   const limit = Number(new URL(c.req.url).searchParams.get("limit") ?? 12);
   try {
     return c.json(await reviewTransfers(c.env, limit));
@@ -50,7 +50,7 @@ transfers.post("/transfers/review/one", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const b = await c.req.json<{ id?: string; hint?: string }>();
   if (!b.id || !b.hint?.trim()) return c.json({ error: "id and hint required" }, 400);
-  const { reviewTransferWithHint } = await import("../../lib/ai/enrich.ts");
+  const { reviewTransferWithHint } = await import("../../lib/ai/transfers-ai.ts");
   try {
     const row = await reviewTransferWithHint(c.env, b.id, b.hint);
     return row ? c.json(row) : c.json({ error: "not_found" }, 404);

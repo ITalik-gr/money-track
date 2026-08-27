@@ -461,17 +461,26 @@ export const api = createApi({
     proposeBudgets: b.mutation<BudgetPlanResult, void>({
       query: () => ({ url: "/budgets/propose", method: "POST" }),
     }),
-    addPlanned: b.mutation<unknown, Record<string, unknown>>({
+    // §PLAN-LINK: creating a plan now also links the charges it already has, so the TRANSACTIONS
+    // changed too — without the "Tx" tag the new subscription's own page would open on the cached
+    // "no charges" answer, which is the very state this was written to end.
+    addPlanned: b.mutation<{ ok: boolean; id: number; linked: number }, Record<string, unknown>>({
       query: (body) => ({ url: "/planned", method: "POST", body }),
-      invalidatesTags: ["Planned"],
+      invalidatesTags: ["Planned", "Tx"],
     }),
     deletePlanned: b.mutation<unknown, number>({
       query: (id) => ({ url: `/planned/${id}`, method: "DELETE" }),
       invalidatesTags: ["Planned"],
     }),
-    updatePlanned: b.mutation<unknown, { id: number; note?: string | null; category_id?: number | null }>({
+    // §PLAN-LINK: re-run the back-link for ONE plan, from its own page. Invalidates `Tx` too —
+    // the whole point is that transactions changed.
+    relinkPlanned: b.mutation<{ linked: number; recategorised: number }, number>({
+      query: (id) => ({ url: `/planned/${id}/relink`, method: "POST" }),
+      invalidatesTags: ["Planned", "Tx"],
+    }),
+    updatePlanned: b.mutation<{ ok: boolean; linked: number }, { id: number; note?: string | null; category_id?: number | null }>({
       query: ({ id, ...body }) => ({ url: `/planned/${id}`, method: "PATCH", body }),
-      invalidatesTags: ["Planned"],
+      invalidatesTags: ["Planned", "Tx"],
     }),
     dismissPlannedCandidate: b.mutation<{ ok: boolean }, string>({
       query: (merchant) => ({ url: "/planned/dismiss", method: "POST", body: { merchant } }),
@@ -746,7 +755,16 @@ export const api = createApi({
       query: (id) => ({ url: `/knowledge/${encodeURIComponent(id)}`, method: "DELETE" }), invalidatesTags: ["Knowledge"],
     }),
     // §H: детермінований Індекс фінздоров'я. Провайдить Advice → перерахунок при зміні фактів/порад.
-    getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Advice"] }),
+    /**
+     * §HEALTH — tagged by what it actually READS (2026-08-27).
+     *
+     * It was `["Advice"]`, which is not one of its inputs: the score is built from account balances
+     * (the cushion and the debt) and from transactions (the levels, the burn, the income series).
+     * So a new transaction or a balance sync left the Dashboard's health badge showing the previous
+     * answer for as long as the page stayed mounted — a stale number beside fresh ones, which is
+     * the shape of staleness nobody notices because the figure is plausible either way.
+     */
+    getHealth: b.query<FinanceHealth, void>({ query: () => "/analytics/health", providesTags: ["Tx", "Account", "Advice"] }),
     // Спарклайни (6-міс тренд у списках категорій/мерчантів). Оновлюється з новими операціями.
     getSpark: b.query<SparkData, void>({ query: () => "/analytics/spark", providesTags: ["Summary"] }),
     // §HABITS: що зʼявилось у регулярних витратах і що замовкло. Вікно фіксоване (9 міс) —
@@ -1036,6 +1054,7 @@ export const {
   useDetectTransfersMutation,
   useApplySubscriptionCategoriesMutation,
   useUpdatePlannedMutation,
+  useRelinkPlannedMutation,
   useDismissPlannedCandidateMutation,
   usePlanFromHabitMutation,
   useCategorizeTransfersMutation,

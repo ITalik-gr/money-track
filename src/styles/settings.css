@@ -602,7 +602,10 @@
 .health-factor .hf-dot.neg { background: var(--neg); }
 .health-factor .hf-val { font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--fs-lg); white-space: nowrap; }
 .health-trend { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.health-trend .spark { display: block; }
+/* The sparkline keeps its own aspect and never stretches: it sits between a label and a delta in
+   a flex row, and `flex-shrink` would squeeze the curve rather than the text beside it. */
+.health-trend .spark { display: block; flex: 0 0 auto; overflow: visible; }
+.health-trend .label { flex: 0 1 auto; min-width: 0; }
 .health-trend-delta { margin-left: auto; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .corpus-card { padding: 18px 20px; }

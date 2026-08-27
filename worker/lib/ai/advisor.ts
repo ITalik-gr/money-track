@@ -2,8 +2,8 @@
 // подаємо разом із профілем ситуації в Haiku → поради-картки. Кешуємо в app_state.
 import type { Env } from "../../env.ts";
 import type { ChatMsg, OnText } from "./ai.ts";
-import { type BudgetChatResult, budgetChat, chatAdvice } from "./tasks.ts";
-import { type AdviceResult, type AiFact, evaluateGroup, generateAdvice, proposeBudgetLimits } from "./generate.ts";
+import { chatAdvice } from "./tasks.ts";
+import { type AdviceResult, type AiFact, evaluateGroup, generateAdvice } from "./generate.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
 import type { AdviceHistoryItem } from "../../../shared/api/ai.ts";
@@ -11,7 +11,7 @@ import { getState, setState } from "../finance/repo.ts";
 import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } from "../finance/money.ts";
 import { currencySign } from "../../../shared/currency.ts";
 import { monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
-import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, sumLevels, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
+import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, burnShape, type BurnShape, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
 import { ownFundsMinor } from "../finance/own-funds.ts";
@@ -45,6 +45,9 @@ export interface StoredAdvice extends AdviceResult {
   debt: number;           // копійки, UAH — борг по кредитці (від'ємні власні)
   investment: number;     // копійки, UAH — інвест-резерв (крипта/брокер), не подушка
   monthly_burn: number;   // копійки, UAH/міс
+  /** §BURN-SHAPE — parts OF `monthly_burn`, not additions to it. Absent before 2026-08-27. */
+  burn_recurring?: number;
+  burn_lumpy?: number;
   runway_months: number | null;  // ЧЕСНИЙ: подушка / burn
   usage?: AiUsageBrief;
   generated_at: number;
@@ -100,7 +103,7 @@ export async function fundsBreakdown(env: Env, ratesIn?: Rates): Promise<FundsBr
   };
 }
 
-async function ownFundsUAH(env: Env, ratesIn?: Rates): Promise<number> {
+export async function ownFundsUAH(env: Env, ratesIn?: Rates): Promise<number> {
   return (await fundsBreakdown(env, ratesIn)).net;
 }
 
@@ -109,58 +112,15 @@ async function ownFundsUAH(env: Env, ratesIn?: Rates): Promise<number> {
 // Дефолтна (проста, прозора) реалізація — далі можна уточнювати ваги/криві.
 export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
 export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[] }
-export async function financeHealth(env: Env): Promise<FinanceHealth> {
-  const now = Math.floor(Date.now() / 1000);
-
-  const from6 = localMonthStart(now, -6);
-  const monthStart = localMonthStart(now);
-  // One snapshot for the whole answer (§D5) — health mixes funds with spending levels, and the
-  // two halves resting on different rates would be a disagreement nobody could see.
-  const rates = await getRates(env);
-  const { mult } = valueMode(rates, null);
-  const [funds, levels, incomeRows] = await Promise.all([
-    fundsBreakdown(env, rates),
-    categoryMonthlyLevels(env, mult, { now }),
-    // Дохід по ПОВНИХ місяцях (поточний частковий виключено) — для норми/стабільності.
-    env.DB.prepare(
-      `SELECT ${localYmSql(now)} AS m, ${incomeSum(mult)} AS income
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time < ? GROUP BY m ORDER BY m`,
-    ).bind(from6, monthStart).all<{ m: string; income: number }>(),
-  ]);
-
-  const burn = sumLevels(levels); // ₴-мінор/міс (канон)
-  const incomes = (incomeRows.results ?? []).map((r) => r.income).filter((v) => v > 0);
-  const avgIncome = incomes.length ? incomes.reduce((s, v) => s + v, 0) / incomes.length : 0;
-  const runway = burn > 0 ? funds.cushion / burn : (funds.cushion > 0 ? 12 : 0);
-  const savingsRate = avgIncome > 0 ? (avgIncome - burn) / avgIncome : 0;
-  const debtRatio = avgIncome > 0 ? funds.debt / avgIncome : (funds.debt > 0 ? 3 : 0);
-  const mean = incomes.length ? incomes.reduce((s, v) => s + v, 0) / incomes.length : 0;
-  const cv = mean > 0 && incomes.length > 1
-    ? Math.sqrt(incomes.reduce((s, v) => s + (v - mean) ** 2, 0) / incomes.length) / mean : 0;
-
-  const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-  const sRunway = clamp01(runway / 6);          // 6 міс подушки = максимум
-  const sSavings = clamp01(savingsRate / 0.2);  // 20%+ = максимум
-  const sDebt = funds.debt <= 0 ? 1 : clamp01(1 - debtRatio / 3); // 3 міс доходу боргу = 0
-  const sStable = clamp01(1 - cv);
-  const score = Math.round((sRunway * 0.35 + sSavings * 0.30 + sDebt * 0.20 + sStable * 0.15) * 100);
-  const band: FinanceHealth["band"] = score >= 70 ? "good" : score >= 45 ? "ok" : "risk";
-
-  const pct = (x: number) => `${Math.round(x * 100)}%`;
-  // Labels and hints are rendered as-is by `HealthIndexCard`/`HealthMini`, so they follow the
-  // reader's locale like any other UI string (B3).
-  const loc = await resolveLocale(env);
-  return {
-    score, band,
-    components: [
-      { key: "runway", label: st(loc, "healthRunway"), value: runway >= 12 ? st(loc, "healthMonthsMax") : st(loc, "healthMonths", { n: Math.round(runway * 10) / 10 }), score: Math.round(sRunway * 100), hint: st(loc, "healthRunwayHint") },
-      { key: "savings", label: st(loc, "healthSavings"), value: pct(savingsRate), score: Math.round(sSavings * 100), hint: st(loc, "healthSavingsHint") },
-      { key: "debt", label: st(loc, "healthDebt"), value: funds.debt <= 0 ? st(loc, "healthNoDebt") : st(loc, "healthDebtRatio", { n: Math.round(debtRatio * 10) / 10 }), score: Math.round(sDebt * 100), hint: st(loc, "healthDebtHint") },
-      { key: "stability", label: st(loc, "healthStability"), value: pct(1 - cv), score: Math.round(sStable * 100), hint: st(loc, "healthStabilityHint") },
-    ],
-  };
-}
+/**
+ * The financial health INDEX lives in `lib/finance/health.ts` (lint C3, 2026-08-27).
+ *
+ * The seam: everything here answers "how is the user doing" as PROSE fed to a model; a score out
+ * of 100 with four weighted components is a different job with its own thresholds, and it was the
+ * part that kept growing. `health.ts` imports `fundsBreakdown` from here and exports nothing back,
+ * so the edge runs one way; the single caller (the route) imports it directly rather than through
+ * a re-export, which would close a cycle — same arrangement as `budget.ts`.
+ */
 
 export async function getProfile(env: Env): Promise<string> {
   return (await getState(env.DB, "finance_profile")) ?? "";
@@ -180,6 +140,8 @@ export interface FinanceSnapshot {
   funds: FundsBreakdown;
   ownFunds: number;                        // копійки, нетто (подушка − борг)
   monthlyBurn: number;                     // копійки/міс (sumLevels — канон)
+  /** §BURN-SHAPE: the same burn, split into what repeats and what does not. `total === monthlyBurn`. */
+  burn: BurnShape;
   runwayMonths: number | null;             // ЧЕСНИЙ: подушка / burn
   subsMonthly: number;                     // грн/міс (major)
   citable: { id: string; label: string }[]; // операції з id для цитат [tx:ID]
@@ -293,7 +255,12 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
   const ownFunds = funds.net;
   // P1 (2026-07-14): burn = сума місячних рівнів категорій (канон), а не «витрати_90д ÷ 3».
   // Узгоджено з Патернами/Бюджетами; не роздувається разовими лумпами (податок/лікар).
-  const monthlyBurn = sumLevels(levels);
+  // §BURN-SHAPE: the same total, plus WHICH HALF of it repeats. `burnShape().total` IS `sumLevels`
+  // — one function, so the sentence the model writes and the number the card shows are the same
+  // money. The owner called 44 784 impossible; 28 707 recurring + 16 077 lumpy is the same figure
+  // with the part he did not recognise named.
+  const burn = burnShape(levels);
+  const monthlyBurn = burn.total;
   // §C: ЧЕСНИЙ runway — від ліквідної подушки, не від нетто (нетто може бути від'ємним через борг).
   const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
   const profile = await getProfile(env);
@@ -379,6 +346,11 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     accounts_note: "accounts lists the user's accounts with their role and DESCRIPTION (note). role='investment' (crypto, brokerage) is NOT part of the cushion by default (it stays out of liquid_cushion and runway), but it is the last line for an extreme case. Take each account's note into account. Do not propose selling investments unless the situation is critical.",
     runway_note: "runway_months = liquid cushion / monthly burn (how long the real money lasts WITHOUT investments). Base it on the cushion, not on the net figure.",
     monthly_burn_uah: Math.round(monthlyBurn / 100),
+    // §BURN-SHAPE. Both are parts of `monthly_burn_uah`, never additions to it — the note says so,
+    // because a model handed three money figures will otherwise add two of them somewhere.
+    monthly_burn_recurring_uah: Math.round(burn.recurring / 100),
+    monthly_burn_lumpy_uah: Math.round(burn.lumpy / 100),
+    burn_shape_note: "monthly_burn_uah = monthly_burn_recurring_uah + monthly_burn_lumpy_uah. Never add them to the burn — they ARE the burn, split. Recurring is what repeats every month (rent, groceries, utilities, subscriptions). Lumpy is money that left the account but does NOT arrive monthly: a quarterly tax, a dentist, one month of buying electronics — it is averaged into the burn because it is real, and naming it is usually the most useful thing you can say about why the burn looks high. If the user disputes their burn, this split is the answer.",
     runway_months: runwayMonths,
     recent_oneoff: {
       total_uah: Math.round(split.oneoff.spent / 100),
@@ -418,7 +390,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     context.facts_note = "facts holds facts about the world that the user told you (e.g. \"the metro fare rose from 8 to 30 UAH\", \"I left my job\"). Take them into account in your explanations and forecast. applied_to_numbers=true means the fact is ALREADY reflected in avg_month_uah, monthly_burn and runway — do not add its effect a second time. applied_to_numbers=false means the fact is explanatory only (unconfirmed, or carrying no amount adjustment): mention it in words, but do NOT change the figures yet.";
   }
 
-  return { now, funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, citable, context, timeAnchors: timeCtx.anchors };
+  return { now, funds, ownFunds, monthlyBurn, burn, runwayMonths, subsMonthly, citable, context, timeAnchors: timeCtx.anchors };
 }
 
 // §A1: активні факти на `now` (наратив для снапшота). Повертає []-безпечно, якщо таблиці ще нема.
@@ -450,7 +422,7 @@ async function activeFacts(env: Env, now: number): Promise<ActiveFact[]> {
 
 export async function buildAdvice(env: Env): Promise<StoredAdvice> {
   const snap = await collectFinanceSnapshot(env);
-  const { funds, ownFunds, monthlyBurn, runwayMonths, citable, context } = snap;
+  const { funds, ownFunds, monthlyBurn, burn, runwayMonths, citable, context } = snap;
   const now = snap.now;
   const payload = { ...context, citable_operations: citable }; // [{id, label}] — для цитат [tx:ID]
 
@@ -463,6 +435,8 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
     debt: funds.debt,
     investment: funds.investment,
     monthly_burn: monthlyBurn,
+    burn_recurring: burn.recurring,
+    burn_lumpy: burn.lumpy,
     runway_months: runwayMonths,
     usage: briefUsage(usage),
     generated_at: now,
@@ -622,129 +596,16 @@ export async function getStoredAdvice(env: Env): Promise<StoredAdvice | null> {
   return raw ? (JSON.parse(raw) as StoredAdvice) : null;
 }
 
-// AI-планувальник бюджету: середні витрати по категоріях + ситуація → пропозиції
-// місячних лімітів-конвертів (приймаються одним тапом на сторінці «Бюджети»).
-export interface BudgetProposalRow {
-  category_id: number;
-  name: string;
-  color: string | null;
-  avg_month: number;      // копійки, середнє за 3 міс
-  current_limit: number;  // копійки, поточний ліміт (0 якщо нема)
-  suggested: number;      // копійки, пропозиція AI
-  reason: string;
-}
-export interface BudgetPlanResult {
-  rows: BudgetProposalRow[];
-  overall: string;
-  runway_months: number | null;
-  generated_at: number;
-}
-
-export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
-  const loc = await resolveLocale(env);
-  const now = Math.floor(Date.now() / 1000);
-  const from90 = now - 90 * 86400;
-
-  const rates = await getRates(env);
-  const { mult } = valueMode(rates, null);
-  const [ownFunds, spendRows, budgetRows] = await Promise.all([
-    ownFundsUAH(env, rates),
-    env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND ${SPEND_WHERE}
-       GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
-    ).bind(from90).all<{ category_id: number; name: string; color: string | null; spent: number }>(),
-    env.DB.prepare("SELECT category_id, amount FROM budgets WHERE period = 'month'").all<{ category_id: number; amount: number }>(),
-  ]);
-
-  const cats = spendRows.results ?? [];
-  const currentLimit = new Map<number, number>();
-  for (const b of budgetRows.results ?? []) if (b.category_id != null) currentLimit.set(b.category_id, b.amount);
-
-  // Канонічний місячний рівень (fixed=останній платіж, змінні=середнє) — узгоджено з рештою.
-  const levels = await categoryMonthlyLevels(env, mult, { now });
-  const catLevel = (id: number, spent90: number) => levels.get(id)?.level ?? Math.round(spent90 / 3);
-
-  // P1: burn = сума канонічних місячних рівнів (узгоджено з порадником/патернами).
-  const monthlyBurn = sumLevels(levels);
-  const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
-
-  const payload = {
-    situation: (await getProfile(env)) || "(not specified)",
-    own_funds_uah: Math.round(ownFunds / 100),
-    monthly_burn_uah: Math.round(monthlyBurn / 100),
-    runway_months: runwayMonths,
-    categories: cats.map((c) => ({
-      id: c.category_id,
-      name: c.name,
-      avg_month_uah: Math.round(catLevel(c.category_id, c.spent) / 100),
-      current_limit_uah: Math.round((currentLimit.get(c.category_id) ?? 0) / 100),
-    })),
-  };
-
-  const { result, usage } = await proposeBudgetLimits(env, payload);
-  logUsage("budget-plan", usage);
-  const byId = new Map(result.proposals.map((p) => [p.category_id, p]));
-
-  const rows: BudgetProposalRow[] = cats.map((c) => {
-    const p = byId.get(c.category_id);
-    const avgMonth = catLevel(c.category_id, c.spent);
-    return {
-      category_id: c.category_id,
-      name: c.name,
-      color: c.color,
-      avg_month: avgMonth,
-      current_limit: currentLimit.get(c.category_id) ?? 0,
-      suggested: p ? Math.round(p.limit_uah * 100) : avgMonth,
-      reason: p?.reason ?? "",
-    };
-  });
-
-  return { rows, overall: result.overall, runway_months: runwayMonths, generated_at: now };
-}
-
-// §3: діалоговий бюджет — будуємо контекст (категорії з avg/ліміт/вагомість) і ведемо чат.
-export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<BudgetChatResult & { usage: AiUsageBrief }> {
-  const loc = await resolveLocale(env);
-  const now = Math.floor(Date.now() / 1000);
-  const from90 = now - 90 * 86400;
-  const rates = await getRates(env);
-  const { mult } = valueMode(rates, null);
-  const [ownFunds, spendRows, budgetRows] = await Promise.all([
-    ownFundsUAH(env, rates),
-    env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${amountSum(mult)} AS spent, ${EFF_IMPORTANCE} AS importance
-       FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND ${SPEND_WHERE}
-       GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 14`,
-    ).bind(from90).all<{ id: number; name: string; spent: number; importance: string }>(),
-    env.DB.prepare("SELECT category_id, amount FROM budgets WHERE period = 'month'").all<{ category_id: number; amount: number }>(),
-  ]);
-  const limit = new Map<number, number>();
-  for (const b of budgetRows.results ?? []) if (b.category_id != null) limit.set(b.category_id, b.amount);
-  const cats = spendRows.results ?? [];
-  const levels = await categoryMonthlyLevels(env, mult, { now });
-  const catLevel = (id: number, spent90: number) => levels.get(id)?.level ?? Math.round(spent90 / 3);
-  // P1: burn = сума канонічних місячних рівнів (узгоджено з порадником/патернами).
-  const monthlyBurn = sumLevels(levels);
-
-  const ctx = {
-    situation: (await getProfile(env)) || "(not specified)",
-    own_funds_uah: Math.round(ownFunds / 100),
-    monthly_burn_uah: Math.round(monthlyBurn / 100),
-    categories: cats.map((c) => ({
-      id: c.id, name: c.name, importance: c.importance,
-      avg_month_uah: Math.round(catLevel(c.id, c.spent) / 100),
-      current_limit_uah: Math.round((limit.get(c.id) ?? 0) / 100),
-    })),
-  };
-
-  const { result, usage } = await budgetChat(env, ctx, messages);
-  logUsage("budget-chat", usage);
-  return { ...result, usage: briefUsage(usage) };
-}
-
+/**
+ * §3 — the AI budget planner lives in `lib/ai/budget.ts` (lint C3, 2026-08-27).
+ *
+ * The seam: everything left in this file answers "how is the user doing" out of ONE snapshot;
+ * proposing envelope limits and arguing about them in chat is a different job with its own
+ * payload. The dependency runs one way — `budget.ts` imports the snapshot primitives from here,
+ * and the three call sites import it directly rather than through a re-export, because a
+ * re-export would close an import cycle (the same reason `facts.ts` was split out of this file
+ * on 2026-08-07).
+ */
 // Чат-порадник: діалог по фінансах із контекстом (профіль + власні + burn + топ-категорії
 // + помітні транзакції з id, які AI може цитувати чипами; + прикріплені юзером операції).
 export async function chatReply(

@@ -15,6 +15,7 @@
  * Both paths call this function now, so there is nowhere left to diverge.
  */
 import type { Env } from "../../env.ts";
+import type { BudgetStatusRow } from "../../../shared/api/planning.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "./categories-i18n.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
@@ -24,54 +25,15 @@ import {
   categoryMonthlyLevels, projectSpend, localMonthStart, localYm,
 } from "./stats.ts";
 
-export interface BudgetStatus {
-  id: number;
-  name: string;
-  /**
-   * ЕФЕКТИВНИЙ ліміт місяця, ₴-мінор = `base_amount + carried`.
-   *
-   * §BUDGET-MEMORY: the carry is folded in HERE, in the canon, rather than added by each reader.
-   * Everything downstream — the envelope grid, `draftBudgets`, the weekly Telegram push, the AI
-   * snapshot — asks "how much of the envelope is left" and gets one answer. The alternative was
-   * what actually shipped for ten months: `budgets.rollover` existed since migration 0017, this
-   * function never read it, and the Plan page derived a carry of its own in the CLIENT. So the
-   * plan screen and the envelope grid quoted different limits for the same envelope.
-   */
-  amount: number;
-  /** Ліміт, ЯК ЙОГО ВВЕЛИ, без перенесеного залишку. */
-  base_amount: number;
-  /**
-   * Перенесено з минулого місяця, ₴-мінор. **Може бути ВІД'ЄМНИМ** — перевитрата переїжджає так
-   * само, як і залишок, і саме ця симетрія робить конверт конвертом, а не м'яким побажанням.
-   *
-   * Віддається окремим полем, бо конверт мусить уміти сказати, ЗВІДКИ в нього ці гроші: ліміт,
-   * що сам собою виріс на 800 ₴, читається як помилка застосунку.
-   */
-  carried: number;
-  /** Прапорець `budgets.rollover` — чи бере цей конверт залишок минулого місяця. */
-  rollover: boolean;
-  /** витрачено з початку місяця, ₴-мінор (канон) */
-  spent: number;
-  /** spent / amount; ≥1 = перевитрата */
-  ratio: number;
-  /**
-   * §BUDGET-FORECAST — де місяць закриється при цьому темпі, ₴-мінор.
-   *
-   * A budget without this is a rear-view mirror: "over limit" arrives on the day nothing can be
-   * done about it. The projection is the SAME `projectSpend` the Patterns screen uses — one
-   * definition of "where this is heading", so the envelope and the pace radar cannot disagree.
-   */
-  projected: number;
-  /** projected / amount; ≥1 = піде за межу, якщо нічого не змінити */
-  projected_ratio: number;
-  /**
-   * The projection was NOT extrapolated (a lump already landed, or a fixed cost has not been paid
-   * yet this month). Exposed rather than hidden: `projected === spent` means two very different
-   * things, and a UI that cannot tell them apart would present "on track" for a rent payment that
-   * simply has not gone out yet.
-   */
-  lumpy: boolean;
-}
+/**
+ * The envelope's state, as the API declares it (`shared/api/planning.ts`).
+ *
+ * ⚠️ It was declared a SECOND time right here, with its own doc comments and the same fields —
+ * the exact defect lints C2/C4 exist for, and invisible while the two copies happened to agree.
+ * They stopped agreeing the moment §BUDGET-REACH added a field: `tsc` caught it only because the
+ * ROUTE carries `satisfies`, i.e. one layer further out than where the drift was.
+ */
+export type BudgetStatus = BudgetStatusRow;
 
 /**
  * Скільки минулий місяць передає в наступний, ₴-мінор.
@@ -151,6 +113,13 @@ export async function closeBudgetMonths(
   await budgetsRepo.closeMonth(env.DB, rows, now);
   return { ym, closed: rows.length };
 }
+
+/**
+ * How far under the level a limit has to sit before it counts as unreachable rather than as a
+ * deliberate squeeze. 15%: a stretch target is a legitimate thing to set, and a banner on every
+ * envelope someone tightened on purpose is a banner nobody reads.
+ */
+const REACH_MARGIN = 0.15;
 
 export async function budgetStatus(
   env: Env, mult: string, now = Math.floor(Date.now() / 1000),
@@ -247,6 +216,29 @@ export async function budgetStatus(
       amount, base_amount: baseAmount, carried, rollover,
       spent, ratio,
       projected, projected_ratio: zero ? ratio : projected / denom, lumpy,
+      level: lv?.level ?? null,
+      /**
+       * §BUDGET-REACH (2026-08-27) — the app set a limit BELOW the level it itself computes.
+       *
+       * Not "you overspend": the canonical level is this app's own statement of what the category
+       * costs per month, so a limit under it is the app disagreeing with itself and then reporting
+       * the user as the one at fault, every month, forever.
+       *
+       * The real case: «Комуналка і звʼязок» limited at 1 087 against real months of
+       * 1 246 / 1 285 / 2 531 / 1 458. The auto-budget set that limit AT the level — and the level
+       * was understated 1.5× by the bug §LEVEL-WINDOW fixed. The envelope has read «153%
+       * перевищено» ever since, for a target that is arithmetically unreachable.
+       *
+       * ⚠️ Reported, never auto-corrected. A limit is a DECISION — possibly a deliberate cut — and
+       * silently raising it would discard the user's own work, the same rule as §RULES-UI apply,
+       * §SIMILAR and the §AI-AUDIT revert guard. The screen offers the number; the person accepts it.
+       * ⚠️ A ZERO envelope is never unreachable: «сюди я свідомо не витрачаю» is a plan, not a
+       * miscalculation, and every level above zero would otherwise flag it (§BUDGET-ZERO).
+       * ⚠️ Needs ≥2 months of real activity behind the level: one month is an anecdote, and the
+       * same threshold `trackRecord` uses for the record it reads.
+       */
+      unreachable: !zero && lv != null && lv.active_months >= 2
+        && lv.level > baseAmount * (1 + REACH_MARGIN),
     };
   });
 }
