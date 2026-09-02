@@ -1,44 +1,20 @@
-# Architecture — layering, checks, and what is left
+# ARCHITECTURE — layering and the checks that hold it
 
-> **Status: the structural refactor is CLOSED.** All six phases (0–5) landed between 2026-08-03
-> and 2026-08-07. What survives here is the durable part: the target layering, the checks that
-> keep it from decaying, what was deliberately left out, and the short tail that is still open.
+> **Status: the structural refactor is CLOSED** (phases 0–5, 2026-08-03 → 2026-08-07). `api.ts` no
+> longer exists: 179 inline queries went to `worker/repo/`, 138 routes to 16 files under
+> `routes/api/`, `ai.ts` 1 335 → 212 lines, and the client's 86 hand-written response types became
+> one declaration each in `shared/api/`. Tests 23 → 232 (795 today).
 >
-> **The narrative** — the measured "before" state, the diagnosis, the duplication register with
-> what each entry actually turned out to be, the phase-by-phase plan and the session log — was
-> moved to `HISTORY.md` (§"Архів: ARCHITECTURE.md") on 2026-08-07. Read it when you need to know
-> *why* something is shaped the way it is; you do not need it to work in the tree.
+> **Read this before a structural change or a new lint.** The narrative — the measured "before",
+> the duplication register, the phase plan, the open-source checklist — is in `HISTORY.md`.
+> Invariants → `docs/*.md`. Queue → `ROADMAP.md`.
 >
-> Queue lives in `ROADMAP.md`. Invariants and "how things work today" live in `CLAUDE.md`.
+> Why the job existed, in one sentence: `CLAUDE.md` claimed "`routes/*` is transport, `lib/*` is
+> logic" while one route file held 179 raw SQL queries — and a query that lives inline cannot be
+> imported, so the next feature writes its own, and "spending" quietly acquires two definitions.
+> That mechanism had already fired four times in production (§CUR-PLAN, §SUB-MONTH, §REFUND, §SPLIT).
 
----
-
-## 1. Why this job existed (one paragraph)
-
-The reported symptom was "the files are large". The actual defect was that `CLAUDE.md` said
-"`routes/*` is transport, `lib/*` is logic" while `worker/routes/api.ts` held **179 raw SQL
-queries** in 3 331 lines. That gap is where a whole bug class grows:
-
-```
-a query lives inline in a handler
-   → nothing can import it
-      → the next feature writes its own
-         → "spending" now has two definitions
-            → they drift silently (SQL is a string; tsc cannot see inside it)
-```
-
-The mechanism had already fired four times in production — §CUR-PLAN, §SUB-MONTH, §REFUND,
-§SPLIT (all documented in `CLAUDE.md`). Splitting the file without moving the SQL would have been
-cosmetics.
-
-**Result:** `api.ts` no longer exists. 179 queries → `worker/repo/`, 138 routes → 16 files under
-`routes/api/`, `ai.ts` 1 335 → 212 lines, the client's 86 hand-written response types → one
-declaration each in `shared/api/`. Tests 23 → **232**. No behaviour changed except two bugs that
-were found by the new tests and fixed deliberately, each with a re-recorded golden.
-
----
-
-## 2. Target architecture (this is the current state, not a plan)
+## 1. Target architecture (this is the current state, not a plan)
 
 ```
 routes/     transport: parse, validate, choose a status code, serialise
@@ -73,7 +49,7 @@ Three boundaries worth stating explicitly, because each was decided by doing:
 
 ---
 
-## 3. Checks that keep it from decaying
+## 2. Checks that keep it from decaying
 
 The principle — **"a check beats an instruction"** — had already paid for itself twice here (the
 SQL linter, `numbersAreGrounded`). Each rule above now has a deterministic guard, and `npm run check`
@@ -151,7 +127,7 @@ during the refactor both mattered precisely because they trained the opposite ha
 
 ---
 
-## 4. Deliberately NOT done
+## 3. Deliberately NOT done
 
 - **No second AI provider, no second bank.** An abstraction with one implementation is speculation;
   a seam is cheap and pays for itself. Both seams exist (`json.ts`, `BankProvider`).
@@ -162,90 +138,25 @@ during the refactor both mattered precisely because they trained the opposite ha
 - **The client was not refactored** beyond what the type contract required. `src/pages/Stats.tsx`
   (1 379 lines) is untouched.
 
----
-
-## 5. What is still open
-
-The queue itself lives in `ROADMAP.md`; this is the short version with the reasoning that decided
-the order.
-
-1. **The last 3 inline queries in the route layer**, all in `telegram.ts` — down from 10 on
-   2026-08-07. `import.ts` and `setup.ts` moved once `worker/test/integrations.test.ts` existed
-   (11 scenarios), and `webhook.ts` once `ingest.test.ts` had grown to 11. The rule held
-   throughout and is the reusable part: **no query moves before something can catch a mistake**,
-   because a mistake on these paths shows up not as a red snapshot but as a transaction that
-   silently never arrives.
-   The bot is what is left, and it is the awkward one: its handlers are driven by an update
-   payload rather than an HTTP route, and its output is a `fetch` to the Telegram API — so the
-   harness needs a mocked `fetch` and a snapshot of the OUTGOING calls, which is where the
-   keyboard those three queries build actually becomes observable.
-2. **`src/pages/Stats.tsx`** (1 379 lines) — the largest file in the project.
-3. **Re-run `/security-review`.** The perimeter moved with the code, and the 2026-07-26 audit closed
-   holes in exactly the places that have now been relocated.
-
-**Closed since this document was trimmed (2026-08-07):**
-
-- **The `GET /transactions` over-fetch.** `SELECT t.*` shipped all 31 columns where `TxRow` names
-  21. Now an explicit `FEED_COLUMNS` list — the response dropped **23% on the fixture** (52 562 →
-  40 102 bytes over 50 rows) and more in production, where `raw_json` is a real bank payload rather
-  than the fixture's empty one. The golden is the guard, because the type structurally cannot be.
-- **An ingest event for an un-synced account is no longer lost** (§STUB-ACC in `CLAUDE.md`).
-  `upsertMonoTx` mints a stub account instead of failing the foreign key, and `syncAccounts` fills
-  it in — including for jars, whose upsert deliberately never overwrites a title, so the fill-in
-  had to be `COALESCE` rather than a skip. Owner's decision, taken on the evidence of the
-  characterization golden that recorded the loss.
 
 ---
 
-## 6. Open-source checklist
+## 4. What is still open
 
-> ⚠️ **The repository is already public** — `github.com/ITalik-gr/money-track`. Data hygiene was
-> therefore done *first*, before the refactor, rather than last.
+The queue itself lives in `ROADMAP.md` («Архітектурне / потребує рішення»). Three items, with the
+reasoning that decided their order:
 
-- [x] **`LICENSE`** — MIT, © Vitalii Hrytsenko, since 2026-07-27.
-- [x] **`SECURITY.md`** (2026-08-03) — private reporting channel, scope, and the **deliberately
-      accepted limits** (session revocation ≤60 s, raw error causes, per-isolate rate limiting, no
-      backups) so they are not filed as findings.
-- [x] **`CONTRIBUTING.md`** (2026-08-03) — the green bar, what each linter actually catches, and
-      five non-negotiable rules with the price each one was bought at.
-- [x] **Real figures from the live account removed** from the docs and — found on a second pass —
-      from source too (`stats.ts`, `notify.ts`, `ai.ts`, `TxReimbursement.tsx`, migration 0030 and
-      its generated embed). A third party's first name, attached to a money transfer, went with
-      them. The lesson is preserved everywhere; only the number is gone.
-- [x] **`HISTORY.md` verified to be in `.gitignore`** — the internal history was never published.
-- [x] **`.dev.vars.example`** — checked 2026-08-07: no real values, and never was (`.dev.vars`
-      itself has never been committed). Two gaps fixed: the three Telegram variables were missing
-      entirely, and `APP_PASSWORD` still described itself as the login password although password
-      login was removed in July — a stranger following the file would have configured a broken bot
-      and set a variable that means something else now.
-- [x] **Perimeter re-audit after the refactor** — done 2026-08-07, findings in `CLAUDE.md §Безпека`.
-      The relocation itself introduced nothing: gates, headers, forwarding and the new `repo/`
-      layer all hold. C7 was added so the one property the split relies on is machine-checked.
-- [x] **Full git-history secret scan** — `gitleaks` over all branches, run by the owner
-      2026-08-07: clean. (A pattern sweep for the known key shapes had already found nothing, but
-      that was never equivalent — it only matches the shapes one thinks of.)
-- [x] **Per-user quota on receipt uploads** — `lib/platform/quota.ts`, 60/day, counted in the
-      user's own `app_state`. The last open item from the perimeter pass.
+1. **The last 3 inline queries in the route layer**, all in `telegram.ts` — down from 10. The rule
+   that governed every step of the migration is the reusable part: **no query moves before
+   something can catch a mistake**, because a mistake on these paths shows up not as a red snapshot
+   but as a transaction that silently never arrives. The bot is the awkward one: its handlers are
+   driven by an update payload rather than an HTTP route, and its output is a `fetch` to the
+   Telegram API, so the harness needs a mocked `fetch` and a snapshot of the OUTGOING calls.
+2. **`src/pages/Stats.tsx`** — the shell was extracted and the tabs live in `components/stats/`;
+   the size is what remains.
+3. **Re-run `/security-review`.** The perimeter moved with the code.
 
-**Closed as owner's decisions (2026-08-03):** git history is not rewritten — the removed figures
-stay in old commits, and a force-push on a public repo costs more than the partial gain, since
-GitHub caches old objects anyway. The D1 `database_id` stays in `wrangler.jsonc`: removing it would
-break the owner's own deploy, and it is not a secret on its own. Credit-card own funds stay
-negative when the card is in debt.
-
----
-
-## 7. Working language: English
-
-**Everything newly written into this repository is English** — code comments and every Markdown
-addition, *including a new section inside a document that is otherwise Ukrainian*. The rule is
-about what gets written, not about what a file already holds. The repository is public, so the
-audience is a stranger reading it cold.
-
-Existing Ukrainian prose is not rewritten wholesale — there are thousands of lines and they carry
-the "why it is like this" that a mass translation would flatten. It migrates when that text is
-edited for another reason, so several documents stay mixed for a while; that is the accepted
-transitional state. Unchanged either way: UI strings (they go through `t()`), model prompts, and
-matching keys (`.includes("фоп")`, `/переказ|зняття/i`) — those are data, not prose.
-
-**When the tail in §5 is empty, this file becomes a short section of `CLAUDE.md` and is deleted.**
+**Working language: English.** Everything newly written into this repository — code comments and
+every Markdown addition, including inside a document that is otherwise Ukrainian. Existing
+Ukrainian prose is not rewritten wholesale; it migrates when that text is edited for another
+reason. UI strings, model prompts and matching keys are data, not prose, and are exempt.

@@ -1,10 +1,14 @@
 import { useGetReceiptItemsQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
+import { baseSign } from "../../lib/currency.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { useT } from "../../i18n/index.ts";
 
 // Аналітика позицій чека: топ товарів за сумою (з OCR-чеків) за період. Ховається, якщо чеків нема.
-export function ReceiptItems({ from, to, sign }: { from: number; to: number; sign: string }) {
+export function ReceiptItems({ from, to }: { from: number; to: number }) {
+  // §SIGN-FOLLOWS-DATA: receipt lines are rolled up into the reader's base and the endpoint takes
+  // no `currency`, so the page's currency filter must not sign them.
+  const sign = baseSign();
   const t = useT();
   const { data } = useGetReceiptItemsQuery({ from, to, limit: 12 });
   if (!data || data.receipts === 0 || data.items.length === 0) return null;

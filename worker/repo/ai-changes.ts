@@ -3,8 +3,15 @@
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import type { AiChange } from "../../shared/api/ai.ts";
 
-/** Columns the model is allowed to rewrite, and therefore the only ones a revert may touch. */
-export const AUDITED_FIELDS = ["category_id", "is_transfer", "ai_note"] as const;
+/**
+ * Columns the model is allowed to rewrite, and therefore the only ones a revert may touch.
+ *
+ * ⚠️ `real_category_id` joined the list on 2026-09-02 (§AI-CATCHUP). It was always written by the
+ * model — §F2 step 2 has guessed it since July — and it was the ONE such field with no journal and
+ * no undo, which is the state §AI-AUDIT exists to end. A field the model may write and the person
+ * may not take back is worse than one it cannot write at all.
+ */
+export const AUDITED_FIELDS = ["category_id", "real_category_id", "is_transfer", "ai_note"] as const;
 export type AuditedField = (typeof AUDITED_FIELDS)[number];
 export const isAuditedField = (v: unknown): v is AuditedField =>
   AUDITED_FIELDS.includes(v as AuditedField);
@@ -78,8 +85,10 @@ export async function byId(db: AppDb, id: number): Promise<AiChange | null> {
 export async function revert(
   db: AppDb, change: AiChange, at: number,
 ): Promise<{ ok: true } | { ok: false; reason: "superseded" }> {
+  // A whitelist, not interpolation of whatever arrived: this string goes straight into SQL.
   const column = change.field === "category_id" ? "category_id"
-    : change.field === "is_transfer" ? "is_transfer" : "ai_note";
+    : change.field === "real_category_id" ? "real_category_id"
+      : change.field === "is_transfer" ? "is_transfer" : "ai_note";
 
   /**
    * ⚠️ **Refuse when the field has MOVED ON since the model touched it.**

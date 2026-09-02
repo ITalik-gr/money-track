@@ -13,13 +13,24 @@
 import { useT } from "../../i18n/index.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { currencyCode, currencySign } from "../../../shared/currency.ts";
+import { baseSign } from "../../lib/currency.ts";
 import { useGetFxCostQuery } from "../../store/api.ts";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { dateFmt } from "../../i18n/locale.ts";
 
-export function FxCostCard({ sign }: { sign: string }) {
+export function FxCostCard() {
   const t = useT();
+  /**
+   * §SIGN-FOLLOWS-DATA — the sign comes from the BASE, never from the page.
+   *
+   * Statistics has a currency filter («зведення») that switches the whole page into ONE currency,
+   * and it threads its sign down into every block. This endpoint takes no `currency` parameter:
+   * conversion cost is a cross-currency figure by construction, and it is always answered in the
+   * reader's base. So selecting «$» there used to relabel hryvnia figures as dollars — reported by
+   * the owner, and invisible in review because the number is plausible under either sign.
+   */
+  const sign = baseSign();
   const { data, error, refetch } = useGetFxCostQuery();
 
   // Nothing was ever paid in another currency — there is genuinely nothing to show, which is the

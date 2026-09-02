@@ -48,7 +48,22 @@ const MAX_LINES = 700;
 // 2026-08-27: 1000 → 948. §SUB-PAGE pushed it one line over, and the ratchet held again — the
 // whole subscriptions block (its largest) became `subscriptions.css`, the sixteenth part, and the
 // cap follows the file down rather than being nudged up by one.
-const EXCEPTIONS = { "domains-a.css": 949 };
+// 2026-09-02: 949 → 863. The Cashflow calendar became `calendar.css`, the eighteenth part — and
+// the ratchet below is now ENFORCED rather than described. It had been a convention maintained by
+// hand at every split, and it had already slipped: the file was 86 lines under its allowance, i.e.
+// 86 lines of growth nobody granted, which is precisely enough to undo a split for free with the
+// lint green the whole way. §Правила: «перевірка > інструкція» — this file said the rule out loud
+// four lines above and did not check it.
+const EXCEPTIONS = { "domains-a.css": 863 };
+/**
+ * How far under its exception a part may sit before the number counts as stale.
+ *
+ * Not zero, and for the reason `check-route-size.mjs` gives about its own budget: line counts move
+ * on every edit, and a check that fails because a file lost three lines trains people to edit the
+ * number without reading it — which is how a guard becomes decoration. It fails only when the
+ * slack is large enough to be real drift, i.e. a split that was not paid for.
+ */
+const SLACK = 40;
 
 const problems = [];
 
@@ -77,6 +92,12 @@ for (const f of present) {
     problems.push(
       `${DIR}/${f}: ${n} lines, ${EXCEPTIONS[f] ? `exception allows ${cap}` : `cap is ${MAX_LINES}`}.\n` +
       `    An exception may never rise. Split the part instead — see STYLES.md.`);
+  } else if (EXCEPTIONS[f] && n < cap - SLACK) {
+    // The other half of the ratchet, and the half that was only ever prose. A split BUYS the
+    // smaller cap; leaving the old one hands the next person room they did not earn.
+    problems.push(
+      `${DIR}/${f}: down to ${n} lines, but the exception still allows ${cap}.\n` +
+      `    Lower it to ${n} — an exception is a debt with a name on it, and this one is ${cap - n} lines stale.`);
   }
 }
 

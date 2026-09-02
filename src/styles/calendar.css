@@ -1,0 +1,138 @@
+/**
+ * Cashflow-календар — сітка очікуваних списань і проєкція подушки наперед.
+ *
+ * Власний файл із 2026-09-02 (шов C8: `domains-a.css` знову вперлась у стелю, а виняток рости
+ * не може). Блок і так був найбільшим суцільним шматком у тому файлі й ні з чим у ньому не
+ * перетинається: він володіє власним примітивом — календарною сіткою, — а не варіацією картки.
+ * Календар живе на ДВОХ сторінках (Порадник і Підписки), тож правило тут стосується обох.
+ */
+/* Cashflow-календар */
+.cf-card { padding: 18px 20px; }
+/* Навігація — ОДИН сегментований контрол, а не дві кнопки з підписом посередині: місяць і два
+   способи його змінити — це одна річ, і розсунуті вони читаються як три незалежні кнопки. */
+.cf-nav { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.cf-nav-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; cursor: pointer;
+  color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  transition: background var(--dur-1) ease, color var(--dur-1) ease, border-color var(--dur-1) ease;
+}
+.cf-nav-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
+.cf-nav-btn:disabled { opacity: 0.35; cursor: default; }
+/* Іконка `chevron` дивиться ВНИЗ, тож стрілки будуються поворотом. Без цього «назад» і «вперед»
+   виглядали однаково, і напрямок доводилось вгадувати. */
+.cf-nav-btn svg { transform: rotate(90deg); }
+.cf-nav-btn.next svg { transform: rotate(-90deg); }
+.cf-month {
+  font-size: var(--fs-md); font-weight: 600; min-width: 132px;
+  text-align: center; text-transform: capitalize; font-variant-numeric: tabular-nums;
+}
+.cf-today {
+  padding: 4px 10px; cursor: pointer; font: inherit; font-size: var(--fs-xs);
+  color: var(--ink-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius-pill);
+}
+.cf-today:hover { color: var(--ink); border-color: var(--line-strong); }
+.cf-warn { margin: 4px 0 12px; padding: 9px 12px; border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.4;
+  background: color-mix(in srgb, var(--neg) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--neg) 28%, transparent); color: var(--ink); }
+.cf-wd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; padding: 0 2px; }
+.cf-wd span {
+  text-align: center; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+}
+/* Сітка — суцільне полотно з внутрішніми лініями, а не сім рядів окремих коробок: рамка на
+   кожній клітинці читається як таблиця, а не як календар. */
+.cf-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 1px;
+  background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;
+}
+.cf-day {
+  position: relative; min-height: 78px; padding: 6px 7px; border: none; border-radius: 0;
+  display: flex; flex-direction: column; gap: 4px; text-align: left; background: var(--surface);
+}
+/* Дні сусідніх місяців — приглушені, але НА МІСЦІ: перший тиждень, що починається в повітрі,
+   читається як зламана сітка, і число «1» без опори не каже, який це день тижня. */
+.cf-day.out { background: var(--surface-2); opacity: 0.5; }
+.cf-day.wknd { background: color-mix(in srgb, var(--surface-2) 55%, var(--surface)); }
+/* Сьогодні — позначене ЧИСЛО, а не рамка клітинки: рамка конкурує з рамкою «провалу
+   ліквідності», і два різні сигнали ставали одним. */
+.cf-day.today .cf-dnum {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 19px; height: 19px; padding: 0 4px; margin: -2px 0;
+  color: var(--surface); background: var(--accent); border-radius: var(--radius-pill); font-weight: 600;
+}
+.cf-day.danger { box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--neg) 55%, transparent); }
+/* День зі списаннями — інтерактивний (button): відкриває поповер із повним списком. */
+.cf-day.has { cursor: pointer; font: inherit; color: inherit; }
+.cf-day.has:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) {
+  .cf-day.has:hover { border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
+}
+.cf-day.open { z-index: 3; } /* поповер має лягати поверх сусідніх днів */
+.cf-dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.cf-dnum { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Сума дня — пігулка: вона мусить читатись як ЗНАЧЕННЯ дня, а не як другий підпис поруч із
+   числом. Надходження (відʼємний `amount`, §INCOME-PLAN) — зелена, інакше зарплата виглядає
+   як найдорожчий день місяця. */
+.cf-damt {
+  padding: 1px 6px; border-radius: var(--radius-pill);
+  font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right;
+  color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent);
+}
+.cf-damt.in { color: var(--pos); background: color-mix(in srgb, var(--pos) 14%, transparent); }
+.cf-item-amt.in, .cf-pop-amt.in { color: var(--pos); }
+
+/* Списання прямо в клітинці — щоб «що це за платіж» читалось без наведення. */
+.cf-items { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cf-item { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; font-size: 10.5px; line-height: 1.3; }
+.cf-item-name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.cf-item-amt { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cf-item.more { color: var(--muted); }
+
+/* Поповер дня — повний список списань + проєкція подушки на кінець дня. */
+.cf-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 210px; max-width: 280px;
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; cursor: default;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card); font-size: var(--fs-xs); text-align: left; }
+.cf-pop.left { left: auto; right: 0; } /* біля правого краю тижня — розкриваємо вліво */
+.cf-pop-head { font-weight: 600; color: var(--ink); text-transform: capitalize; }
+.cf-pop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.cf-pop-name { color: var(--ink-2); overflow-wrap: anywhere; }
+.cf-pop-amt { color: var(--neg); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.cf-pop-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.cf-pop-orig { color: var(--muted); }
+.cf-pop-bal { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cf-pop-bal.neg { color: var(--neg); }
+
+.cf-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 12px; font-size: var(--fs-sm); }
+/* Вузькі екрани: назви не влазять — лишаємо число дня + суму, деталі в поповері. */
+@media (max-width: 720px) {
+  .cf-day { min-height: 58px; padding: 5px; }
+  .cf-items { display: none; }
+  .cf-damt { font-size: 10px; }
+  .cf-pop { min-width: 180px; }
+}
+/* Шапка календаря на телефоні — У ДВА РЯДКИ.
+   Було: `.ai-head` — один flex-рядок, де `.cf-nav` забирає ~190px (дві кнопки + назва місяця з
+   `min-width: 116px`), а текстовий блок стискається до того, що лишилось. На 390px екрані це
+   ~120px: заголовок ламався на «Cashflow-» / «календар», підзаголовок — на чотири рядки, і
+   шапка ставала вищою за перший тиждень сітки. Тому: заголовок бере весь рядок, навігація
+   спускається під нього окремою смугою (там їй місця вистачає з запасом).
+   ⚠️ Скоуп саме `.cf-card`: `.ai-head` — спільний патерн AI-карток, і в них шапка не має нав-групи. */
+@media (max-width: 620px) {
+  .cf-card { padding: 14px; }
+  .cf-card .ai-head { flex-wrap: wrap; row-gap: 10px; }
+  /* `:not(.cf-nav)` — саме текстовий блок: навігація теж `div`, і без винятку вона б теж
+     поїхала в другий рядок на всю ширину. */
+  .cf-card .ai-head > div:not(.cf-nav) { flex: 1 1 100%; order: 2; }
+  .cf-card .ai-badge { order: 1; }
+  .cf-card .cf-nav { order: 1; }
+  /* Число дня й сума в один рядок не влазять на вузьких клітинках (390px ÷ 7 ≈ 47px): сума
+     переносилась під число й розпирала клітинку. Стовпчик — свідомо, а не як побічний ефект. */
+  .cf-dhead { flex-direction: column; align-items: flex-start; gap: 1px; }
+  .cf-damt { text-align: left; }
+  .cf-wd { gap: 2px; }
+  .cf-day { padding: 4px; min-height: 56px; }
+  /* Підсумок теж у стовпчик: два числа поруч на 390px тиснуться до нечитабельного. */
+  .cf-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
+}

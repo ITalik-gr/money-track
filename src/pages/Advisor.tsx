@@ -9,6 +9,7 @@ import {
   useGetAdviceQuery,
   useGetAdviceHistoryQuery,
   useClearAdviceHistoryMutation,
+  useDeleteAdviceHistoryEntryMutation,
   useSetBudgetMutation,
   useCreateJobMutation,
   useGetJobsQuery,
@@ -23,6 +24,7 @@ import { FactsCard } from "../components/advisor/FactsCard.tsx";
 import { HealthIndexCard } from "../components/stats/HealthIndexCard.tsx";
 import { KnowledgeCorpusCard } from "../components/advisor/KnowledgeCorpusCard.tsx";
 import { CashflowCalendar } from "../components/stats/CashflowCalendar.tsx";
+import { SpendFloorCard } from "../components/advisor/SpendFloor.tsx";
 import { NetworthCard } from "../components/stats/NetworthCard.tsx";
 import { UsageCost } from "../components/settings/UsageCost.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
@@ -120,6 +122,7 @@ export function Advisor() {
         <div className="advisor-state">
           <HealthIndexCard />
           <NetworthCard />
+          <SpendFloorCard />
           <CashflowCalendar />
           <FactsCard />
           <KnowledgeCorpusCard />
@@ -278,8 +281,15 @@ function AdviceHistory() {
   const t = useT();
   const { data: hist } = useGetAdviceHistoryQuery();
   const [clear, { isLoading: clearing }] = useClearAdviceHistoryMutation();
+  const [dropOne] = useDeleteAdviceHistoryEntryMutation();
+  // The list is a log that grows to 24 entries, and the four that matter are always the newest.
+  // The CHART keeps the whole series regardless — trimming a list must not trim a trend.
+  const [showAll, setShowAll] = useState(false);
   if (!hist || hist.length < 2) return null;
   const dfmt = dateFmt({ day: "2-digit", month: "short" });
+  const VISIBLE = 5;
+  const rows = showAll ? hist : hist.slice(0, VISIBLE);
+  const hidden = hist.length - rows.length;
 
   // Хронологічний ряд для тренду runway (від старих до нових; лише зі значенням).
   const chrono = [...hist].reverse();
@@ -324,7 +334,7 @@ function AdviceHistory() {
       )}
 
       <div className="card" style={{ padding: 8 }}>
-        {hist.map((h, i) => {
+        {rows.map((h, i) => {
           const prev: AdviceHistoryItem | undefined = hist[i + 1]; // наступний = старіший
           return (
             <div key={h.generated_at} className="adv-hist-row">
@@ -336,9 +346,20 @@ function AdviceHistory() {
                 )}
                 burn <b><Money minor={h.monthly_burn} decimals={false} /></b>{t("adv.burnUnit")} {prev && <DeltaPill cur={h.monthly_burn} prev={prev.monthly_burn} goodUp={false} money />}
               </span>
+              {/* Per-entry delete: «Очистити» is all-or-nothing, and one useless snapshot is not
+                  a reason to burn the whole trend. */}
+              <button
+                className="adv-hist-del" aria-label={t("common.delete")} title={t("common.delete")}
+                onClick={() => { void dropOne(h.generated_at); }}
+              >×</button>
             </div>
           );
         })}
+        {(hidden > 0 || showAll) && (
+          <button className="adv-hist-more" onClick={() => setShowAll((v) => !v)}>
+            {showAll ? t("adv.histShowLess") : t("adv.histShowMore", { n: hidden })}
+          </button>
+        )}
       </div>
     </section>
   );

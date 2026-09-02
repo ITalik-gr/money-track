@@ -15,35 +15,43 @@ import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { useGetWeekdayQuery, useGetDayOfMonthQuery } from "../../store/api.ts";
-import type { Overview } from "../../store/api.ts";
+import type { Overview, CashProjection } from "../../store/api.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { FactLabel, SliceDrillPanel, labelFor, weekdayLong, weekdayShort, type Cur } from "./shared.tsx";
 
-// §1: накопичена чиста різниця (надходження − витрати) по бакетах — для running-balance лінії.
-// opts (лише календарний, незавершений період, денні бакети) додає прогноз-хвіст (proj):
-// пунктир на решту днів періоду за середнім денним темпом.
+/**
+ * §1: the running net (income − spend) per bucket, plus §CASH-PROJ — the projected tail.
+ *
+ * ⚠️ **The forecast is no longer computed here.** It used to be a MEDIAN daily net repeated for
+ * every remaining day, which is why the dashed line was always perfectly straight — the owner's
+ * report: «предікт просто поступово кожен день знімає скільки в середньому витрачаю, завжди лінія
+ * рівно плавно вниз». A median cannot know that rent leaves on the 20th or that the salary lands
+ * on the 5th; it is built to discard exactly those, because in a flat model a lump would smear
+ * across every day.
+ *
+ * The server now answers with per-day DELTAS (`/analytics/cash-projection`), built out of the
+ * schedule (§SUB-MONTH, §INCOME-PLAN) and the calendar shape of ordinary spending (§WEEKDAY). This
+ * function only accumulates them — a second running sum in the client is how a chart's two halves
+ * end up disagreeing about the day they meet.
+ */
 export type CumPoint = { label: string; cum: number | null; proj?: number | null };
-export function toCumulative(series: Overview["series"], opts?: { mode: string; to: number; days: number; periodLen: number }): CumPoint[] {
+export function toCumulative(series: Overview["series"], projection?: CashProjection | null): CumPoint[] {
   let acc = 0;
   const rows: CumPoint[] = series.map((s) => { acc += (s.income - s.spend) / 100; return { label: labelFor(s.bucket), cum: Math.round(acc) }; });
   const daily = series.every((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket));
-  if (!opts || opts.mode !== "calendar" || !daily || rows.length < 2) return rows;
-  const remaining = opts.periodLen - opts.days;
-  if (remaining <= 0) return rows;
+  if (!projection?.days.length || !daily || rows.length < 2) return rows;
+
   const lastCum = rows[rows.length - 1].cum ?? 0;
-  // Нахил — МЕДІАНА денного нетто, не середнє. Середнє (= lastCum/days) розмазує разовий
-  // лумп (напр. зайшла +31k зарплата одного дня) як щоденний приплив і тягне пунктир угору,
-  // ніби дохід капає щодня. Медіана відкидає такий одноденний викид → нахил відображає
-  // звичайний темп (переважно витрати), тож після разового поповнення лінія йде вниз.
-  const nets = series.map((s) => (s.income - s.spend) / 100).sort((a, b) => a - b);
-  const mid = Math.floor(nets.length / 2);
-  const slope = nets.length % 2 ? nets[mid] : (nets[mid - 1] + nets[mid]) / 2;
-  rows[rows.length - 1].proj = lastCum; // місток від фактичної точки до пунктиру
-  const d = new Date(opts.to * 1000);
+  rows[rows.length - 1].proj = lastCum;   // the bridge from the actual line to the dashed one
   const dm = dateFmt({ day: "numeric", month: "numeric" });
-  for (let i = 1; i <= remaining; i++) {
-    d.setDate(d.getDate() + 1);
-    rows.push({ label: dm.format(d).replace(/\s/g, ""), cum: null, proj: Math.round(lastCum + slope * i) });
+  let proj = lastCum;
+  for (const d of projection.days) {
+    proj += (d.income - d.scheduled - d.ordinary) / 100;
+    rows.push({
+      label: dm.format(new Date(d.at * 1000)).replace(/\s/g, ""),
+      cum: null,
+      proj: Math.round(proj),
+    });
   }
   return rows;
 }

@@ -403,87 +403,6 @@
 .err-note-msg { color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; overflow-wrap: anywhere; }
 .err-note > .btn { flex-shrink: 0; align-self: center; }
 
-/* Cashflow-календар */
-.cf-card { padding: 18px 20px; }
-.cf-nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.cf-month { font-size: var(--fs-md); font-weight: 500; min-width: 116px; text-align: center; text-transform: capitalize; }
-.cf-warn { margin: 4px 0 12px; padding: 9px 12px; border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.4;
-  background: color-mix(in srgb, var(--neg) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--neg) 28%, transparent); color: var(--ink); }
-.cf-wd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
-.cf-wd span { text-align: center; font-size: var(--fs-xs); color: var(--muted); }
-.cf-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.cf-day { position: relative; min-height: 72px; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 5px 6px;
-  display: flex; flex-direction: column; gap: 4px; text-align: left; }
-.cf-day.empty { border: none; background: none; }
-.cf-day.today { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.cf-day.danger { border-color: color-mix(in srgb, var(--neg) 55%, transparent); }
-/* День зі списаннями — інтерактивний (button): відкриває поповер із повним списком. */
-.cf-day.has { cursor: pointer; font: inherit; color: inherit; }
-.cf-day.has:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-@media (hover: hover) and (pointer: fine) {
-  .cf-day.has:hover { border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
-}
-.cf-day.open { z-index: 3; } /* поповер має лягати поверх сусідніх днів */
-.cf-dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
-.cf-dnum { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
-.cf-damt { font-size: var(--fs-xs); font-weight: 600; color: var(--neg); font-variant-numeric: tabular-nums; text-align: right; }
-
-/* Списання прямо в клітинці — щоб «що це за платіж» читалось без наведення. */
-.cf-items { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.cf-item { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; font-size: 10.5px; line-height: 1.3; }
-.cf-item-name { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.cf-item-amt { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.cf-item.more { color: var(--muted); }
-
-/* Поповер дня — повний список списань + проєкція подушки на кінець дня. */
-.cf-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 210px; max-width: 280px;
-  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; cursor: default;
-  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card); font-size: var(--fs-xs); text-align: left; }
-.cf-pop.left { left: auto; right: 0; } /* біля правого краю тижня — розкриваємо вліво */
-.cf-pop-head { font-weight: 600; color: var(--ink); text-transform: capitalize; }
-.cf-pop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.cf-pop-name { color: var(--ink-2); overflow-wrap: anywhere; }
-.cf-pop-amt { color: var(--neg); font-variant-numeric: tabular-nums; flex-shrink: 0; }
-.cf-pop-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-  margin-top: 2px; padding-top: 6px; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
-.cf-pop-orig { color: var(--muted); }
-.cf-pop-bal { color: var(--muted); font-variant-numeric: tabular-nums; }
-.cf-pop-bal.neg { color: var(--neg); }
-
-.cf-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 12px; font-size: var(--fs-sm); }
-/* Вузькі екрани: назви не влазять — лишаємо число дня + суму, деталі в поповері. */
-@media (max-width: 720px) {
-  .cf-day { min-height: 50px; padding: 4px; }
-  .cf-items { display: none; }
-  .cf-damt { font-size: 10px; }
-  .cf-pop { min-width: 180px; }
-}
-/* Шапка календаря на телефоні — У ДВА РЯДКИ.
-   Було: `.ai-head` — один flex-рядок, де `.cf-nav` забирає ~190px (дві кнопки + назва місяця з
-   `min-width: 116px`), а текстовий блок стискається до того, що лишилось. На 390px екрані це
-   ~120px: заголовок ламався на «Cashflow-» / «календар», підзаголовок — на чотири рядки, і
-   шапка ставала вищою за перший тиждень сітки. Тому: заголовок бере весь рядок, навігація
-   спускається під нього окремою смугою (там їй місця вистачає з запасом).
-   ⚠️ Скоуп саме `.cf-card`: `.ai-head` — спільний патерн AI-карток, і в них шапка не має нав-групи. */
-@media (max-width: 620px) {
-  .cf-card { padding: 14px; }
-  .cf-card .ai-head { flex-wrap: wrap; row-gap: 10px; }
-  /* `:not(.cf-nav)` — саме текстовий блок: навігація теж `div`, і без винятку вона б теж
-     поїхала в другий рядок на всю ширину. */
-  .cf-card .ai-head > div:not(.cf-nav) { flex: 1 1 100%; order: 2; }
-  .cf-card .ai-badge { order: 1; }
-  .cf-card .cf-nav { order: 1; }
-  /* Число дня й сума в один рядок не влазять на вузьких клітинках (390px ÷ 7 ≈ 47px): сума
-     переносилась під число й розпирала клітинку. Стовпчик — свідомо, а не як побічний ефект. */
-  .cf-dhead { flex-direction: column; align-items: flex-start; gap: 1px; }
-  .cf-damt { text-align: left; }
-  .cf-wd, .cf-grid { gap: 4px; }
-  .cf-day { padding: 3px 4px; }
-  /* Підсумок теж у стовпчик: два числа поруч на 390px тиснуться до нечитабельного. */
-  .cf-foot { flex-direction: column; align-items: flex-start; gap: 4px; }
-}
-
 /* §P4: What-if симулятор */
 .whatif-body { display: grid; grid-template-columns: minmax(0, 1fr) 264px; gap: 22px; align-items: start; margin-top: 6px; }
 /* Одна колонка — і РЕЗУЛЬТАТ НАГОРІ. Інакше повзунки штовхають його під вісім рядків: рухаєш
@@ -553,12 +472,34 @@
 .bp-item-main { display: flex; align-items: center; gap: 10px; }
 .bp-name { display: flex; align-items: center; gap: 8px; font-size: 14px; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bp-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+/* The name is a link to the category page. It must not LOOK like prose-link — the row is a
+   figure row, and an underlined blue name in it would read as an error state. */
+a.bp-name, a.bc-name { color: inherit; text-decoration: none; }
+a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-offset: 2px; }
 .bp-figs { display: inline-flex; align-items: center; gap: 7px; flex-shrink: 0; }
 .bp-avg { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 .bp-arrow { color: var(--muted); font-size: 13px; }
 .bp-sug { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 650; color: var(--ink); white-space: nowrap; }
 .bp-accept { padding: 5px 12px; font-size: 13px; flex-shrink: 0; }
 .bp-reason { font-size: 12.5px; color: var(--muted); line-height: 1.45; margin-top: 5px; padding-left: 17px; }
+/* The suggested limit is EDITABLE in place: a proposal you can only take whole is one you argue
+   with by never clicking it. Styled as a figure, not as a form field — it sits in a row of
+   numbers, and a boxed input there would read as the row being broken. */
+.bp-edit { display: inline-flex; align-items: baseline; gap: 2px; }
+.bp-edit input {
+  width: 6ch; padding: 2px 4px; text-align: right;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 600;
+  color: var(--ink); background: none; border: none; border-bottom: 1px dashed var(--line-strong);
+  border-radius: 0;
+}
+.bp-edit input:focus { outline: none; border-bottom-style: solid; border-bottom-color: var(--accent); }
+.bp-edit input:disabled { border-bottom-color: transparent; color: var(--muted); }
+.bp-edit input::-webkit-outer-spin-button, .bp-edit input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.bp-edit-sign { font-size: 12px; color: var(--muted); }
+.bp-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3);
+  flex-wrap: wrap; margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line);
+}
 @media (max-width: 520px) {
   .bp-item-main { flex-wrap: wrap; }
   .bp-name { flex-basis: 100%; }
@@ -678,7 +619,7 @@
 .sts-imp .lg b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
 
 /* §2 Історія порад — компактні знімки runway/burn */
-.adv-hist-row { display: grid; grid-template-columns: 62px 1fr auto; gap: 10px; align-items: baseline; padding: 9px 8px; border-bottom: 1px solid var(--line); }
+.adv-hist-row { display: grid; grid-template-columns: 62px 1fr auto auto; gap: 10px; align-items: baseline; padding: 9px 8px; border-bottom: 1px solid var(--line); }
 .adv-hist-row:last-child { border-bottom: none; }
 .adv-hist-date { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
 .adv-hist-sum { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -688,13 +629,27 @@
    Порадника на телефоні перетворювалась на стіну старого тексту, у якій свіжу пораду не
    знайти. Історія — це орієнтир, а не читання: три рядки + повний текст у `title`. */
 @media (max-width: 560px) {
-  .adv-hist-row { grid-template-columns: 1fr; gap: 2px; }
+  .adv-hist-row { grid-template-columns: 1fr auto; gap: 2px 8px; }
+  .adv-hist-del { grid-row: 1; grid-column: 2; }
   .adv-hist-sum {
     white-space: normal;
     display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
   }
 }
 .adv-hist-nums .cmp-delta { margin-left: 2px; }
+/* Per-row delete. Faint until the row is touched: it removes a record, so it should be reachable
+   without inviting itself — the row is a log entry, not a to-do. */
+.adv-hist-del {
+  background: none; border: none; cursor: pointer; padding: 0 2px; line-height: 1;
+  font-size: 16px; color: var(--muted); opacity: 0.45; transition: opacity var(--dur-1) ease, color var(--dur-1) ease;
+}
+.adv-hist-row:hover .adv-hist-del, .adv-hist-del:focus-visible { opacity: 1; color: var(--neg); }
+.adv-hist-more {
+  display: block; width: 100%; margin-top: 4px; padding: 8px; background: none;
+  border: none; border-top: 1px solid var(--line); cursor: pointer;
+  font: inherit; font-size: var(--fs-xs); color: var(--muted);
+}
+.adv-hist-more:hover { color: var(--ink); }
 /* §+1: смуга «зміни від минулого разу» над порадами */
 .since-last { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 16px; }
 .since-metric { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }

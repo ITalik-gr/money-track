@@ -6,12 +6,13 @@ them" — most of them were bought with a production bug.
 
 ## Before you start
 
-Read **`CLAUDE.md`** first. It is the durable reference: stack, invariants, how statistics are
+Read **`CLAUDE.md`** first — it is the entry point: stack, code map, the hard invariants and an
+index of every § rule pointing at the `docs/` file that explains it. It covers how statistics are
 canonically defined, the security model, and ops. For anything touching UI, read **`DESIGN.md`**
 first instead — it owns the design tokens and carries a decision log.
 
-`ROADMAP.md` is the live queue of what still needs doing. `ARCHITECTURE.md`, when present, tracks
-an in-flight structural refactor and takes precedence over the older layout described elsewhere.
+`ROADMAP.md` is the live queue of what still needs doing. `ARCHITECTURE.md` states the target
+layering (`routes → services → lib → repo`) and what each check C1–C10 buys.
 
 ## Local setup
 

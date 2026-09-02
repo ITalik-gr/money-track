@@ -27,6 +27,7 @@ export * from "./analytics.ts";
 export * from "./backups.ts";
 export * from "./chats.ts";
 export * from "./feedback.ts";
+export * from "./insights.ts";
 export * from "./planning.ts";
 export * from "./platform.ts";
 export * from "./rules.ts";

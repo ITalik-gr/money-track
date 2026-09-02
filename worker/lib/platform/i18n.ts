@@ -231,6 +231,7 @@ const S = {
     en: "AI features need your own Anthropic key — add it in Settings → “Keys & data”.",
   },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
+  errBadId: { uk: "Некоректний ідентифікатор", en: "Malformed identifier" },
   // §HABITS → plan. Only reachable when the charges disappeared between the list being rendered
   // and the click (a re-import, a renamed merchant). Says WHY it failed, not "an error occurred".
   errHabitNoCharges: {

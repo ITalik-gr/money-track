@@ -39,11 +39,24 @@ export async function proposeBudgetLimits(
       type: "text",
       text:
         "You are a financial planner. From the user's situation (situation), their figures (own funds, monthly " +
-        "burn, runway in months) and their 3-month average spending per category " +
-        "(categories: [{id, name, avg_month_uah, current_limit_uah}]), propose sensible MONTHLY envelope limits for " +
-        "EVERY category supplied (same id). If runway is short or the goal is saving, propose a realistic reduction " +
-        "in discretionary spending (entertainment, cafés, subscriptions, clothes), but do not over-cut the basics " +
-        "(groceries, utilities, health). Limits are WHOLE numbers of the display currency — neither inflated nor zero. Answer " +
+        "burn, how much of that burn RECURRS, runway in months, months_of_history) and their spending per category " +
+        "(categories: [{id, name, avg_month_uah, current_limit_uah, active_months, lumpy, fixed}]), propose " +
+        "sensible MONTHLY envelope limits for EVERY category supplied (same id). If runway is short or the goal is " +
+        "saving, propose a realistic reduction in discretionary spending (entertainment, cafés, subscriptions, " +
+        "clothes), but do not over-cut the basics (groceries, utilities, health). " +
+        // Без цих трьох речень план відкривав місячний конверт на квартальний податок і на
+        // курс, оплачений два місяці тому: `avg_month_uah` — це рівень, розмазаний по вікну,
+        // і в ньому оренда й податок раз на квартал виглядають однаково. Розмір без ФОРМИ.
+        "READ THE SHAPE, not only the size. `avg_month_uah` is a level smeared across " +
+        "months_of_history, so a quarterly bill and rent look identical in it. `active_months` says " +
+        "in how many of those months the category was charged AT ALL, `lumpy` marks a cost that does " +
+        "not repeat monthly, `fixed` marks a stable recurring bill whose level IS the next charge. " +
+        "For a lumpy category, or one active in half the months or fewer, do NOT budget the smeared " +
+        "average as if it were charged every month: either set the limit to what a month it is " +
+        "actually charged in costs and SAY in `reason` that it is not a monthly cost, or set it near " +
+        "zero for the months in between — and say which you did. Never argue with a `fixed` level: " +
+        "it is what the bill actually is. " +
+        "Limits are WHOLE numbers of the display currency — neither inflated nor zero. Answer " +
         "with VALID JSON ONLY: {proposals:[{category_id, limit_uah, reason}], overall} — reason is one short " +
         "phrase, overall is 1-2 sentences about the logic of the plan. No markdown." +
         // Без цієї директиви план бюджетів приходив українською навіть на англійському екрані:

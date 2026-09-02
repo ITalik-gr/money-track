@@ -1,0 +1,37 @@
+/* ---------------------------------------------------------------------------
+   Connections: the surfaces that give something OUTSIDE the app a way in, and
+   the surfaces that bring an outside file in.
+
+   Split out of `settings.css` on 2026-09-02 under C8 — the exception mechanism
+   is a ratchet, so an overflow gets a seam and never a bigger number. The seam
+   is real and not merely convenient: a settings card is where these happen to
+   be shown, but an MCP token, an OAuth grant and a bank statement are their own
+   domain, with their own documents (`docs/PERIMETER.md`, `docs/INGEST.md`).
+   --------------------------------------------------------------------------- */
+
+/* ---- MCP access (§MCP) --------------------------------------------------- */
+/* A token and a shell command both have to survive being READ: no ellipsis, no horizontal
+   scroll inside a narrow settings column, and a break anywhere rather than at word boundaries —
+   a base-16 signature has no words, and a line clipped mid-signature is silently wrong when
+   pasted. `white-space: pre-wrap` keeps the newlines the command was written with. */
+.mcp-code {
+  display: block; margin: 8px 0; padding: 10px 12px; border-radius: var(--radius);
+  background: var(--surface-2); font-size: 11.5px; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere; user-select: all;
+}
+/* Marks off the one moment the secret is on screen, so it does not read as a permanent field. */
+.mcp-secret { margin-top: 12px; padding: 12px; border: 1px solid var(--accent); border-radius: var(--radius); }
+.mcp-once { font-size: 12.5px; line-height: 1.45; color: var(--accent); }
+.mcp-when { margin: 10px 0 0; }
+/* "Is anything reading my finances right now" — the answer, before any click. Muted when nothing
+   is connected, so the lit state is the one that draws the eye. */
+.mcp-state { font-size: 12.5px; font-weight: 550; color: var(--muted); margin: 0 0 8px; }
+.mcp-state.on { color: var(--accent); }
+
+/* §CSV-AI — the line that admits the column mapping came from a model. Warm border, not red: it
+   is a caution to read, not an error to fix. */
+.csv-ai-note {
+  font-size: 13px; line-height: 1.45; padding: 8px 11px; border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--c-ochre) 40%, transparent);
+  background: color-mix(in srgb, var(--c-ochre) 8%, var(--surface));
+}

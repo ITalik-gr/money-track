@@ -72,6 +72,23 @@ const LUMPY_MONTH_SHARE = 0.55;
  */
 const FIRST_MONTH_GRACE_DAYS = 7;
 
+/** How many complete months a level is measured over, by default. */
+export const LEVEL_WINDOW_MONTHS = 6;
+
+/**
+ * The COMPLETE months a level window covers, oldest first, as `YYYY-MM` in `APP_TZ`.
+ *
+ * Exported because a caller that wants to say "this category was charged in 2 of the 6 months we
+ * can see" needs the same denominator the level itself divided by. Building a second list of
+ * month keys elsewhere is how §APP_TZ bugs come back: a key built in UTC misses and reads as a
+ * zero month. The current month is never in it — it is partial by definition.
+ */
+export function levelWindowKeys(now: number, months = LEVEL_WINDOW_MONTHS): string[] {
+  const keys: string[] = [];
+  for (let i = months; i >= 1; i--) keys.push(localYm(localMonthStart(now, -i)));
+  return keys;
+}
+
 export async function coveredMonths(env: Env, keys: string[]): Promise<string[]> {
   const firstRow = await env.DB.prepare("SELECT MIN(time) AS t FROM transactions").first<{ t: number | null }>();
   const firstFullYm = firstRow?.t == null
@@ -93,8 +110,7 @@ export async function categoryMonthlyLevels(
   const monthStart = localMonthStart(now);
   // Ключі й групування МУСЯТЬ бути в одній зоні, інакше `months.get(k)` промахується і місяць
   // мовчки читається як нульовий — тобто рівень категорії просто занижується.
-  const keys: string[] = [];
-  for (let i = K; i >= 1; i--) keys.push(localYm(localMonthStart(now, -i)));
+  const keys = levelWindowKeys(now, K);
 
   /**
    * §LEVEL-WINDOW (2026-08-27) — the denominator is the months the LEDGER covers, not the window.

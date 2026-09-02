@@ -19,6 +19,7 @@ import { AutoBudget } from "../components/planning/AutoBudget.tsx";
 import { BudgetRecord } from "../components/planning/BudgetRecord.tsx";
 import { startOfMonthUnix } from "../lib/format.ts";
 import { highlightAmounts } from "../lib/highlight.tsx";
+import { baseSign } from "../lib/currency.ts";
 import { toast } from "../lib/toast.ts";
 import type { BudgetProposalRow, BudgetPlanResult } from "../store/api.ts";
 
@@ -162,14 +163,29 @@ function BudgetPlanner() {
   const propose = () => createJob({ kind: "budget" });
   const [setBudget] = useSetBudgetMutation();
   const [accepted, setAccepted] = useState<Set<number>>(new Set());
+  // What the reader would actually accept, in MINOR units, keyed by category. A proposal that
+  // can only be taken whole is a proposal you argue with by not clicking; the edited figure is
+  // what gets saved, so "accept" stays a decision rather than a surrender.
+  const [edited, setEdited] = useState<Map<number, number>>(new Map());
+  // The block is long and, once read, it is in the way of the envelopes below it. Collapsed
+  // state is a per-browser convenience, so `localStorage` is the right place for it (it is not
+  // account data, and it must not travel to another reader).
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem("mt-bp-collapsed") === "1"; } catch { return false; }
+  });
+  const toggleCollapsed = () => setCollapsed((v) => {
+    try { localStorage.setItem("mt-bp-collapsed", v ? "0" : "1"); } catch { /* private mode */ }
+    return !v;
+  });
+  const amountOf = (r: BudgetProposalRow) => edited.get(r.category_id) ?? r.suggested;
 
   async function acceptOne(r: BudgetProposalRow) {
-    await setBudget({ category_id: r.category_id, period: "month", amount: r.suggested }).unwrap();
+    await setBudget({ category_id: r.category_id, period: "month", amount: amountOf(r) }).unwrap();
     setAccepted((s) => new Set(s).add(r.category_id));
   }
   async function acceptAll() {
     if (!data) return;
-    for (const r of data.rows) await setBudget({ category_id: r.category_id, period: "month", amount: r.suggested }).unwrap();
+    for (const r of data.rows) await setBudget({ category_id: r.category_id, period: "month", amount: amountOf(r) }).unwrap();
     setAccepted(new Set(data.rows.map((r) => r.category_id)));
   }
 
@@ -177,6 +193,11 @@ function BudgetPlanner() {
     <section>
       <div className="section-head">
         <h2>{t("plan.aiPlanTitle")}</h2>
+        {data && (
+          <button className="btn ghost sm" onClick={toggleCollapsed} aria-expanded={!collapsed}>
+            {collapsed ? t("plan.planExpand") : t("plan.planCollapse")}
+          </button>
+        )}
         <button className="btn primary sm" onClick={() => propose()} disabled={isLoading}>
           {isLoading ? t("plan.analyzing") : data ? t("plan.refresh") : <><Icon name="spark" size={15} />{t("plan.proposeLimits")}</>}
         </button>
@@ -188,21 +209,35 @@ function BudgetPlanner() {
         <div className="card empty">{t("plan.planEmpty")}</div>
       )}
 
-      {data && (
+      {data && !collapsed && (
         <div className="card" style={{ padding: 16 }}>
           {data.overall && <p className="ai-text" style={{ margin: "0 0 12px" }}>{highlightAmounts(data.overall)}</p>}
           <div className="bp-list">
             {data.rows.map((r) => {
-              const delta = r.avg_month > 0 ? Math.round(((r.suggested - r.avg_month) / r.avg_month) * 100) : null;
+              const amount = amountOf(r);
+              // The delta is recomputed from the EDITED figure: it is the whole point of the
+              // percentage — «наскільки я урізаю» — and freezing it on the model's number would
+              // print a claim about a limit nobody is about to save.
+              const delta = r.avg_month > 0 ? Math.round(((amount - r.avg_month) / r.avg_month) * 100) : null;
               const on = accepted.has(r.category_id);
               return (
                 <div className={`bp-item ${on ? "done" : ""}`} key={r.category_id}>
                   <div className="bp-item-main">
-                    <span className="bp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</span>
+                    <Link to={`/categories/${r.category_id}`} className="bp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</Link>
                     <span className="bp-figs">
                       <span className="bp-avg">{t("stats.avgShort")} <Money minor={r.avg_month} decimals={false} /></span>
                       <span className="bp-arrow">→</span>
-                      <span className="bp-sug"><Money minor={r.suggested} decimals={false} /></span>
+                      <span className="bp-edit">
+                        <input
+                          type="number" inputMode="decimal" min={0} value={Math.round(amount / 100)}
+                          aria-label={t("plan.limitPlaceholder")} disabled={on}
+                          onChange={(e) => {
+                            const v = Math.round(Number(e.target.value) * 100);
+                            setEdited((m) => new Map(m).set(r.category_id, Number.isFinite(v) && v >= 0 ? v : 0));
+                          }}
+                        />
+                        <span className="bp-edit-sign">{baseSign()}</span>
+                      </span>
                       {delta != null && delta !== 0 && (
                         <span className={`cmp-delta ${delta < 0 ? "down" : "up"}`}>{delta > 0 ? "+" : ""}{delta}%</span>
                       )}
@@ -216,7 +251,12 @@ function BudgetPlanner() {
               );
             })}
           </div>
-          <button className="btn primary" style={{ marginTop: 12 }} onClick={acceptAll}>{t("plan.acceptAllLimits")}</button>
+          <div className="bp-foot">
+            <span className="ab-total">
+              {t("ab.totalPerMonth")} <b><Money minor={data.rows.reduce((sum, r) => sum + amountOf(r), 0)} decimals={false} /></b>
+            </span>
+            <button className="btn primary" onClick={acceptAll}>{t("plan.acceptAllLimits")}</button>
+          </div>
         </div>
       )}
     </section>
@@ -291,6 +331,7 @@ function Budgets() {
         return (
           <BudgetCard
             key={c.id}
+            id={c.id}
             name={c.name}
             color={c.color}
             limit={limit}
@@ -312,9 +353,9 @@ function Budgets() {
 }
 
 function BudgetCard({
-  name, color, limit, hasBudget, spent, rollover, carried, onSave, onRemove,
+  id, name, color, limit, hasBudget, spent, rollover, carried, onSave, onRemove,
 }: {
-  name: string; color: string | null; limit: number;
+  id: number; name: string; color: string | null; limit: number;
   /**
    * §BUDGET-ZERO — whether an envelope EXISTS, which `limit` alone cannot say any more.
    * `limit === 0` used to mean "not budgeted"; it now means "budgeted at zero", and the two are
@@ -359,7 +400,9 @@ function BudgetCard({
   return (
     <div className={`budget-card ${state}`}>
       <div className="bc-head">
-        <span className="bc-name"><span className="d" style={{ background: dot }} />{name}</span>
+        {/* The envelope names a category the app has a whole page about (§CATEGORY-PAGE); the
+            reader who wants to know WHY it is at 90% has to be able to get there from here. */}
+        <Link to={`/categories/${id}`} className="bc-name"><span className="d" style={{ background: dot }} />{name}</Link>
         {/* Перенесений залишок — видимий бейдж, а не рядок у лейблі чекбокса:
             він змінює ліміт цього місяця, тож має читатись відразу. */}
         {carry !== 0 && (

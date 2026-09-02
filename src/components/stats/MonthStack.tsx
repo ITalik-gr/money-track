@@ -7,6 +7,7 @@ import { useT } from "../../i18n/index.ts";
 
 import { useGetMonthlyHistoryQuery } from "../../store/api.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
+import { baseSign } from "../../lib/currency.ts";
 import { EmptyCard } from "../ui/EmptyCard.tsx";
 import { FALLBACK } from "./shared.tsx";
 
@@ -55,7 +56,10 @@ function StackTip({ active, payload, label, slices }: {
   );
 }
 
-export function MonthStack({ sign }: { sign: string }) {
+export function MonthStack() {
+  // §SIGN-FOLLOWS-DATA: `/analytics/monthly-history` takes no `currency`, so the page's currency
+  // filter must not sign these bars. See `FxCostCard` for the report this came from.
+  const sign = baseSign();
   const t = useT();
   const nav = useNavigate();
   const [months, setMonths] = useState(12);

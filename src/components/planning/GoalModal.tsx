@@ -4,7 +4,8 @@ import { useT } from "../../i18n/index.ts";
 import type { TranslationKey } from "../../i18n/index.ts";
 import { Select } from "../ui/Select.tsx";
 import type { SavingsGoal, GoalKind, AutofillKind, GoalBody } from "../../store/api.ts";
-import { baseSign } from "../../lib/currency.ts";
+import { getBaseCurrency } from "../../lib/currency.ts";
+import { currencySign } from "../../../shared/currency.ts";
 
 const PALETTE = ["#2e6be6", "#127c86", "#1f6e4c", "#7a3e9d", "#c2417a", "#b23a2e", "#c9871a", "#0e7490"];
 
@@ -56,10 +57,22 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
     return () => document.removeEventListener("keydown", onEsc);
   }, [onClose]);
 
+  /**
+   * §GOAL-CUR — the unit this form is typing in.
+   *
+   * A jar-backed goal is denominated in its JAR: the progress will literally be that account's
+   * balance, so a target typed against anything else guarantees a comparison across currencies —
+   * which is exactly how a $2 000 goal came to be stored as 2 000 ₴ and reported complete at 5%.
+   * An existing goal keeps whatever it already declares; a new manual goal takes the reader's base.
+   */
+  const jarCurrency = accounts.find((a) => a.id === accountId)?.currency_code ?? null;
+  const cur = jarCurrency ?? goal?.currency_code ?? getBaseCurrency();
+  const sign = currencySign(cur);
+
   // Джерело прогресу — банки (накопичення).
   const jarOptions = accounts
     .filter((a) => a.type === "jar")
-    .map((a) => ({ value: a.id, label: a.title ?? t("goal.jarFallback"), color: "#127c86", hint: `${Math.round((a.balance ?? 0) / 100)} ${baseSign()}` }));
+    .map((a) => ({ value: a.id, label: a.title ?? t("goal.jarFallback"), color: "#127c86", hint: `${Math.round((a.balance ?? 0) / 100)} ${currencySign(a.currency_code ?? 980)}` }));
 
   const busy = creating || updating;
 
@@ -105,7 +118,7 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
 
           <div className="row" style={{ gap: 10 }}>
             <label className="stack" style={{ gap: 5, flex: 1 }}>
-              <span className="label">{t("goalModal.targetLabel")}</span>
+              <span className="label">{t("goalModal.targetLabel")}, {sign}</span>
               <input type="number" inputMode="decimal" placeholder="0" value={target} onChange={(e) => setTarget(e.target.value)} />
             </label>
             <label className="stack" style={{ gap: 5, flex: 1 }}>
@@ -127,7 +140,7 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
 
           {!accountId && (
             <label className="stack" style={{ gap: 5 }}>
-              <span className="label">{t("goalModal.alreadySavedLabel")}</span>
+              <span className="label">{t("goalModal.alreadySavedLabel")}, {sign}</span>
               <input type="number" inputMode="decimal" placeholder="0" value={current} onChange={(e) => setCurrent(e.target.value)} />
             </label>
           )}

@@ -222,9 +222,10 @@ quietly.** The rule throughout: *a check beats an instruction.*
 - **Typed i18n keys.** A translation key missing from the source dictionary fails `tsc`, not the
   user's screen.
 
-- **Working documents, not artifacts.** `CLAUDE.md` (durable reference + invariants), `DESIGN.md`
-  (design system + decision log), `ARCHITECTURE.md` (the layers and what each check buys),
-  `STYLES.md`, `BANKS.md` and `ROADMAP.md` (the live queue) are how the work is actually planned and
+- **Working documents, not artifacts.** `CLAUDE.md` (entry point + an index of every rule),
+  `docs/` (the reasoning behind each one), `DESIGN.md` (design system + decision log),
+  `ARCHITECTURE.md` (the layers and what each check buys), `STYLES.md`, `BANKS.md` and
+  `ROADMAP.md` (the live queue) are how the work is actually planned and
   kept coherent — each rule in them is written next to the failure that bought it.
 
 ---
@@ -278,7 +279,7 @@ target for the display currency · migration-embed freshness · the test suite (
 analytics responses, **C6** golden database state after every write).
 
 **Deploy:** `npm run deploy` (needs `wrangler login`, secrets set as Worker secrets, and migrations
-applied to remote D1). See `CLAUDE.md` §Ops for the exact checklist.
+applied to remote D1). See `docs/OPS.md` for the exact checklist.
 
 ---
 

@@ -176,6 +176,21 @@ export class UserDO extends DurableObject<Env> {
       });
     }
 
+    // §BUDGET-MEMORY: close the month that just ended, so its leftover (or its overspend) can
+    // reach the envelope now open. BEFORE anything that reads a budget — the feed's budget events
+    // and the monthly report both go through `budgetStatus`, and on the 1st they would otherwise
+    // speak about envelopes that have not yet received their carry.
+    //
+    // ⚠️ Runs for EVERY kind, not just `daily`. It used to sit inside the daily block, which was
+    // safe only while the report crons fired at 09:00 — three hours AFTER the daily pass. They now
+    // fire at 04:00, ahead of it, so the ordering that made this correct no longer exists. It is
+    // idempotent (INSERT OR IGNORE) and costs one indexed lookup, so running it three times a week
+    // more is not worth reasoning about a second time.
+    await step("close_budget_month", async () => {
+      const { closeBudgetMonths } = await import("../lib/finance/budgets.ts");
+      await closeBudgetMonths(env);
+    });
+
     if (kind === "daily") {
       // §P2.1 — авто-внески в цілі. У ДОБОВОМУ проході, хоч правило й місячне: місячний крон
       // ходить лише 1-го числа, і правило «% від доходу» при нульовому минулому місяці
@@ -185,14 +200,19 @@ export class UserDO extends DurableObject<Env> {
         const { runGoalAutofill } = await import("../lib/finance/goals.ts");
         await runGoalAutofill(env);
       });
-      // §BUDGET-MEMORY: close the month that just ended, so its leftover (or its overspend) can
-      // reach the envelope now open. BEFORE the notification pass on purpose — the feed's budget
-      // events read `budgetStatus`, and on the 1st of the month they would otherwise announce the
-      // new envelopes against a limit that has not yet received its carry. Idempotent, so the
-      // other 30 days of the month this costs one indexed lookup.
-      await step("close_budget_month", async () => {
-        const { closeBudgetMonths } = await import("../lib/finance/budgets.ts");
-        await closeBudgetMonths(env);
+      /**
+       * §AI-CATCHUP — one batched second look at operations the app failed to file.
+       *
+       * BEFORE `notifications` deliberately: the feed's «N операцій без категорії» asks the person
+       * to finish work only they can finish, and asking them to do what the app was about to do
+       * itself, minutes earlier, is the app wasting their attention on its own backlog.
+       *
+       * Skipped entirely when there is nothing waiting — the check is one indexed count, and an
+       * account with no gaps must not pay for a model call to be told so.
+       */
+      await step("catchup", async () => {
+        const { runCatchup, catchupPending } = await import("../lib/ai/catchup.ts");
+        if (await catchupPending(env)) await runCatchup(env);
       });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
@@ -252,6 +272,20 @@ export class UserDO extends DurableObject<Env> {
     }
 
     if (reported) {
+      /**
+       * §AI-CATCHUP — one batched second look at operations the app failed to file.
+       *
+       * BEFORE `notifications` deliberately: the feed's «N операцій без категорії» asks the person
+       * to finish work only they can finish, and asking them to do what the app was about to do
+       * itself, minutes earlier, is the app wasting their attention on its own backlog.
+       *
+       * Skipped entirely when there is nothing waiting — the check is one indexed count, and an
+       * account with no gaps must not pay for a model call to be told so.
+       */
+      await step("catchup", async () => {
+        const { runCatchup, catchupPending } = await import("../lib/ai/catchup.ts");
+        if (await catchupPending(env)) await runCatchup(env);
+      });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
         await generateNotifications(env);

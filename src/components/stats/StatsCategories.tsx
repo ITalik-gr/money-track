@@ -232,11 +232,26 @@ export function calPeriods(range: RangeKey, mode: "calendar" | "rolling"): { cur
   return { curFrom, curTo, prevFrom, prevTo: prevFrom + elapsed, unitKey };
 }
 
-export function PeriodCompare({ range, mode, currency, sign }: {
-  range: RangeKey; mode: "calendar" | "rolling"; currency: Cur; sign: string;
+export function PeriodCompare({ range, mode, ym, currency, sign }: {
+  range: RangeKey; mode: "calendar" | "rolling"; ym?: string | null; currency: Cur; sign: string;
 }) {
   const t = useT();
-  const { curFrom, curTo, prevFrom, prevTo, unitKey } = useMemo(() => calPeriods(range, mode), [range, mode]);
+  /**
+   * §MONTH-VIEW: a named month compares itself against the month BEFORE it, not against whatever
+   * the (hidden) range picker still says. This block used to answer for the trailing preset while
+   * the heading named a month — and in a month with no data it was one of the few blocks still
+   * showing figures, which reads as numbers arriving from nowhere rather than as a stale window.
+   */
+  const { curFrom, curTo, prevFrom, prevTo, unitKey } = useMemo(() => {
+    if (!ym) return calPeriods(range, mode);
+    const [y, m] = ym.split("-").map(Number);
+    const edge = (yy: number, mm: number) => Math.floor(+new Date(yy, mm, 1) / 1000);
+    return {
+      curFrom: edge(y, m - 1), curTo: edge(y, m),
+      prevFrom: edge(y, m - 2), prevTo: edge(y, m - 1),
+      unitKey: "stats.unit.month" as UnitKey,
+    };
+  }, [range, mode, ym]);
   const { data, isFetching } = useGetCompareQuery({ from: curFrom, to: curTo, currency, bfrom: prevFrom, bto: prevTo });
   const dr = (a: number, b: number) => `${formatDate(a)}–${formatDate(b)}`;
   const noCat = t("common.uncategorized");

@@ -1,0 +1,128 @@
+/**
+ * `/insights/*` blocks — §SPEND-PROFILE, §INCOME-SPLIT, §MOMENTUM, §FLOOR.
+ *
+ * Its own part rather than an addition to `analytics.css`: that file was at its C8 ceiling and an
+ * exception may never rise. The four blocks also share nothing with the charts around them — they
+ * are figures and one bar, not axes — so a separate part is the honest grouping rather than an
+ * administrative one.
+ *
+ * Imported LAST among the domain parts, so nothing here can change which rule wins for anything
+ * that already existed (STYLES.md §6.1).
+ */
+
+/* ---- §SPEND-PROFILE: three figures, no chart ------------------------------ */
+/* A figure with a sentence under it IS the fact; a chart around it would be decoration. */
+.sp-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-4); padding: var(--sp-4) var(--sp-5);
+}
+.sp-item { min-width: 0; }
+.sp-val {
+  margin-top: 2px;
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: 26px; font-weight: 600; line-height: 1.15; color: var(--ink);
+}
+/* The denominator rides at the size of a caption: «5 / 13» is one fact, not two numbers. */
+.sp-of { font-size: 15px; font-weight: 500; color: var(--muted); }
+.sp-note { margin-top: 3px; font-size: var(--fs-xs); color: var(--muted); line-height: 1.45; }
+@media (max-width: 720px) {
+  /* Two columns, not one: these are three short facts, and a single column turns a glanceable
+     row into a scroll. The third wraps under and keeps its full width. */
+  .sp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3) var(--sp-4); }
+  .sp-val { font-size: 22px; }
+}
+
+/* ---- §INCOME-SPLIT: one track, filled by what the income went on ---------- */
+.is-card { padding: var(--sp-4) var(--sp-5); }
+.is-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-3); flex-wrap: wrap; margin-bottom: var(--sp-3);
+  font-size: var(--fs-sm); color: var(--muted);
+}
+.is-head b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+.is-left.pos b { color: var(--pos); }
+.is-left.neg b { color: var(--neg); }
+/* The remainder is EMPTY track, never a fourth colour: what is left is the absence of spending,
+   and a fill would make it look like another destination. */
+.is-bar {
+  display: flex; height: 12px; border-radius: var(--radius-pill); overflow: hidden;
+  background: var(--surface-2); border: 1px solid var(--line);
+}
+.is-seg { height: 100%; }
+/* Overspent: the track itself turns, because the bar is full and cannot show "more than full".
+   Clamping alone would draw the worst month as a completed one. */
+.is-bar.over { border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
+.is-legend {
+  display: flex; flex-wrap: wrap; gap: 4px var(--sp-4);
+  margin-top: var(--sp-3); font-size: var(--fs-xs); color: var(--muted);
+}
+.is-leg { display: inline-flex; align-items: center; gap: 6px; }
+.is-leg .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.is-leg b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* ---- §MOMENTUM: a run, with the shape that justifies the claim ------------ */
+.mo-list { padding: var(--sp-2) var(--sp-3); }
+.mo-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 74px auto auto;
+  align-items: center; gap: var(--sp-3);
+  padding: 9px 8px; border-bottom: 1px solid var(--line);
+  color: inherit; text-decoration: none;
+}
+.mo-row:last-child { border-bottom: none; }
+.mo-row:hover { background: var(--surface-2); border-radius: var(--radius-sm); }
+.mo-name {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mo-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.mo-spark { width: 74px; height: 22px; display: block; }
+.mo-run { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
+.mo-delta {
+  font-family: var(--font-num); font-variant-numeric: tabular-nums;
+  font-size: var(--fs-sm); white-space: nowrap;
+}
+/* Rising spending is bad news and falling is good — the opposite of a stock chart. */
+.mo-delta.up { color: var(--neg); }
+.mo-delta.down { color: var(--pos); }
+.mo-pct { color: var(--muted); }
+@media (max-width: 620px) {
+  /* The sparkline is the CLAIM, so it stays; the run label folds under the name instead. */
+  .mo-row { grid-template-columns: minmax(0, 1fr) 74px auto; row-gap: 2px; }
+  .mo-run { grid-column: 1; grid-row: 2; }
+  .mo-delta { grid-column: 3; grid-row: 2; text-align: right; }
+}
+
+/* ---- §FLOOR: the cost of changing nothing --------------------------------- */
+.floor-card { padding: 18px 20px; }
+.floor-nums {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-4); margin-top: var(--sp-3);
+}
+.floor-main { min-width: 0; }
+/* The lumpy half is real money and must not read as an error or as a discount — muted, not red. */
+.floor-main .muted-num { color: var(--ink-2); }
+.floor-of { margin-top: 2px; font-size: var(--fs-xs); color: var(--muted); line-height: 1.45; }
+.floor-runways {
+  display: flex; flex-wrap: wrap; gap: 4px var(--sp-4);
+  margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line);
+  font-size: var(--fs-sm); color: var(--muted);
+}
+.floor-rw b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+/* The full-burn runway keeps the emphasis: it is the number every other screen shows, and letting
+   the friendlier one look like the answer would be the app choosing the optimistic reading. */
+.floor-rw.strong { color: var(--ink); }
+.floor-rw.strong b { color: var(--ink); font-weight: 600; }
+.floor-parts { margin-top: var(--sp-3); }
+.floor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
+.floor-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: var(--radius-pill);
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-size: var(--fs-xs); color: var(--ink-2);
+}
+.floor-chip .d { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.floor-chip b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+@media (max-width: 620px) {
+  .floor-card { padding: 14px; }
+  .floor-nums { grid-template-columns: 1fr; gap: var(--sp-3); }
+}

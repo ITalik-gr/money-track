@@ -54,6 +54,41 @@ function fileCurrencyMismatch(
   return null;
 }
 
+/**
+ * §CSV-AI — the column mapping, from the cheapest source that works.
+ *
+ * Order: what the USER said, then the hint table, then — only if the three mandatory columns are
+ * still missing — one model call for the whole FILE (`lib/ai/statement-map.ts`).
+ *
+ * ⚠️ Preview and commit call THIS, never their own version. They used to each build `{...found
+ * .mapping, ...body.mapping}` inline, which was the same expression twice and therefore fine; the
+ * moment a fallback exists it stops being fine, because a file mapped by AI in the preview and by
+ * hints at commit would import different columns than the ones the person approved.
+ */
+async function resolveMapping(
+  env: Env,
+  table: string[][],
+  fromHints: Partial<ColumnMapping>,
+  fromUser: Partial<ColumnMapping> | undefined,
+): Promise<{ mapping: Partial<ColumnMapping>; source: "hints" | "user" | "ai" }> {
+  const merged = { ...fromHints, ...(fromUser ?? {}) };
+  const complete = (m: Partial<ColumnMapping>) =>
+    m.date != null && m.amount != null && m.description != null;
+  if (complete(merged)) return { mapping: merged, source: fromUser && Object.keys(fromUser).length ? "user" : "hints" };
+
+  const { mapStatementColumns } = await import("../lib/ai/statement-map.ts");
+  const guessed = await mapStatementColumns(env, table);
+  if (!guessed) return { mapping: merged, source: "hints" };
+  // The user's own choices still win over the model's: they are looking at the file.
+  const ai: Partial<ColumnMapping> = {
+    date: guessed.mapping.date ?? undefined, amount: guessed.mapping.amount ?? undefined,
+    description: guessed.mapping.description ?? undefined,
+    currency: guessed.mapping.currency, comment: guessed.mapping.comment, mcc: guessed.mapping.mcc,
+  };
+  const out = { ...merged, ...Object.fromEntries(Object.entries(ai).filter(([, v]) => v != null)), ...(fromUser ?? {}) };
+  return { mapping: out, source: complete(out) ? "ai" : "hints" };
+}
+
 interface PreviewBody {
   text?: string;
   delimiter?: string;
@@ -78,7 +113,7 @@ importRoutes.post("/csv/preview", async (c) => {
   const found = hasHeader ? findHeaderRow(rows) : { index: 0, mapping: guessMapping(rows[0] ?? []) };
   const table = rows.slice(found.index);
   const headers = table[0]!;
-  const guessed = { ...found.mapping, ...(body.mapping ?? {}) };
+  const { mapping: guessed, source: mappingSource } = await resolveMapping(c.env, table, found.mapping, body.mapping);
 
   // Without a full mapping there is nothing to convert yet — return the headers so the UI can
   // ask, instead of inventing columns.
@@ -91,6 +126,7 @@ importRoutes.post("/csv/preview", async (c) => {
       mapping: guessed,
       complete: false,
       preamble_rows: found.index,
+      mapping_source: mappingSource,
     });
   }
 
@@ -119,6 +155,9 @@ importRoutes.post("/csv/preview", async (c) => {
     mapping: guessed,
     complete: true,
     preamble_rows: found.index,
+    // Said out loud so the UI can label it: a mapping the model proposed is still a GUESS, and a
+    // guess that does not admit to being one is the kind that gets approved without a look.
+    mapping_source: mappingSource,
     parsed: txs.length,
     duplicates,
     currency_mismatch: fileCurrencyMismatch(table, guessed as ColumnMapping, account?.currency_code ?? null, hasHeader),
@@ -142,7 +181,7 @@ importRoutes.post("/csv/commit", async (c) => {
   const hasHeader = body.has_header ?? true;
   const found = hasHeader ? findHeaderRow(rows) : { index: 0, mapping: guessMapping(rows[0] ?? []) };
   const table = rows.slice(found.index);
-  const mapping = { ...found.mapping, ...(body.mapping ?? {}) };
+  const { mapping } = await resolveMapping(c.env, table, found.mapping, body.mapping);
   if (mapping.date == null || mapping.amount == null || mapping.description == null) {
     return c.json({ error: "incomplete_mapping" }, 400);
   }

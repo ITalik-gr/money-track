@@ -54,7 +54,7 @@
       }
     ],
     "stability": {
-      "cv_pct": 2,
+      "cv_pct": 0,
       "label": "стабільний"
     }
   }

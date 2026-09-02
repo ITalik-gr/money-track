@@ -13,7 +13,7 @@ import type {
   Advice, AdviceHistoryItem, AiJob, AiModelToken, AiTask, AutoBudget, BudgetChatReply,
   BudgetHistory, BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
   CredentialStatus, CurrenciesList, DomAnalytics, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
-  BankConnections, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
+  BankConnections, CashProjection, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, AiDetectResult, SubscriptionOverview, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
@@ -21,6 +21,7 @@ import type {
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
   BackupList, RestoreResult, PushStatus, PushSendResult, RatesSnapshot,
+  SpendProfile, Momentum, IncomeAllocation, SpendFloor,
 } from "../../shared/api/index.ts";
 
 export const api = createApi({
@@ -357,8 +358,11 @@ export const api = createApi({
     }),
     getCurrencies: b.query<CurrenciesList, void>({ query: () => "/analytics/currencies" }),
     getForecast: b.query<Forecast, void>({ query: () => "/analytics/forecast", providesTags: ["Tx"] }),
-    getIncomeAnalytics: b.query<IncomeAnalytics, { preset?: string; currency?: number | null }>({
-      query: ({ preset, currency }) => `/analytics/income?preset=${preset ?? "month"}${currency ? `&currency=${currency}` : ""}`,
+    getIncomeAnalytics: b.query<IncomeAnalytics, { preset?: string; from?: number; to?: number; currency?: number | null }>({
+      // §MONTH-VIEW: explicit bounds win over the preset, the same shape `getWeekday` uses.
+      query: ({ preset, from, to, currency }) =>
+        `/analytics/income?${from != null && to != null ? `from=${from}&to=${to}` : `preset=${preset ?? "month"}`}`
+        + `${currency ? `&currency=${currency}` : ""}`,
       providesTags: ["Tx"],
     }),
     getUpcomingSubs: b.query<UpcomingSubs, number | void>({ query: (days) => `/planned/upcoming?days=${days ?? 30}`, providesTags: ["Tx", "Planned"] }),
@@ -371,6 +375,40 @@ export const api = createApi({
     // §FX-COST — the conversion markup. Its own window (180 d) rather than the page period: a
     // markup is a property of a card, and a month of it is too little to read.
     getFxCost: b.query<FxCost, void>({ query: () => "/analytics/fx-cost", providesTags: ["Tx"] }),
+    // §CASH-PROJ. Tagged `Planned` as well as `Tx`: the schedule is half of what it answers, so
+    // adding a subscription must redraw the forecast — otherwise the chart keeps a projection
+    // that predates the plan the user just created, which is exactly when they go and look.
+    getCashProjection: b.query<CashProjection, { to: number; until: number; currency?: number | null }>({
+      query: ({ to, until, currency }) =>
+        `/analytics/cash-projection?to=${to}&until=${until}${currency ? `&currency=${currency}` : ""}`,
+      providesTags: ["Tx", "Planned"],
+    }),
+    /**
+     * `/insights/*` — derived readings of a period (§SPEND-PROFILE, §MOMENTUM, §INCOME-SPLIT,
+     * §FLOOR). A separate prefix from `/analytics/*` because a separate file owns it on the server
+     * (C7/C3); the numbers all come from the same canon.
+     */
+    getSpendProfile: b.query<SpendProfile, { from: number; to: number }>({
+      query: ({ from, to }) => `/insights/spend-profile?from=${from}&to=${to}`,
+      providesTags: ["Tx"],
+    }),
+    // No window: the question is about a run of complete MONTHS, so a caller-chosen range could
+    // not contain one.
+    getMomentum: b.query<Momentum, void>({
+      query: () => "/insights/momentum",
+      providesTags: ["Tx"],
+    }),
+    getIncomeSplit: b.query<IncomeAllocation, { from: number; to: number }>({
+      query: ({ from, to }) => `/insights/income-split?from=${from}&to=${to}`,
+      providesTags: ["Tx"],
+    }),
+    // Tagged with what it READS, not with "Advice": the floor stands on account balances and on
+    // the canonical levels, so a new transaction or a balance sync must invalidate it. §HEALTH was
+    // stale for exactly this reason — tagged with something that was not its input.
+    getSpendFloor: b.query<SpendFloor, void>({
+      query: () => "/insights/floor",
+      providesTags: ["Tx", "Account"],
+    }),
     getCompare: b.query<Compare, { from: number; to: number; currency?: number | null; bfrom?: number; bto?: number }>({
       query: ({ from, to, currency, bfrom, bto }) =>
         `/analytics/compare?from=${from}&to=${to}${currency ? `&currency=${currency}` : ""}` +
@@ -628,6 +666,12 @@ export const api = createApi({
     }),
     clearAdviceHistory: b.mutation<{ ok: boolean }, void>({
       query: () => ({ url: "/advisor/history", method: "DELETE" }),
+      invalidatesTags: ["Advice"],
+    }),
+    // One snapshot, addressed by its `generated_at` — the only identity these entries have
+    // (they are a JSON array in `app_state`, so an index would shift under a concurrent delete).
+    deleteAdviceHistoryEntry: b.mutation<{ ok: boolean; left: number }, number>({
+      query: (at) => ({ url: `/advisor/history/${at}`, method: "DELETE" }),
       invalidatesTags: ["Advice"],
     }),
     chatAdvice: b.mutation<{ reply: string }, { messages: { role: "user" | "assistant"; content: string }[]; attachedTxIds?: string[] }>({
@@ -1012,6 +1056,11 @@ export const {
   useGetPatternsQuery,
   useGetPriceDriftQuery,
   useGetFxCostQuery,
+  useGetCashProjectionQuery,
+  useGetSpendProfileQuery,
+  useGetMomentumQuery,
+  useGetIncomeSplitQuery,
+  useGetSpendFloorQuery,
   useGetCompareQuery,
   useGetCategoryDrillQuery,
   useGetSliceDrillQuery,
@@ -1073,6 +1122,7 @@ export const {
   useGetAdviceHistoryQuery,
   useGenerateAdviceMutation,
   useClearAdviceHistoryMutation,
+  useDeleteAdviceHistoryEntryMutation,
   useChatAdviceMutation,
   useEvaluateGroupMutation,
   useChatGroupMutation,

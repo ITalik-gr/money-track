@@ -19,8 +19,9 @@ import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import { getRates } from "../finance/money.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE,
-  valueMode, amountSum, categoryMonthlyLevels, sumLevels,
+  valueMode, amountSum, categoryMonthlyLevels, sumLevels, burnShape,
 } from "../finance/stats.ts";
+import { coveredMonths, levelWindowKeys } from "../finance/levels.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import { ownFundsUAH, getProfile } from "./advisor.ts";
@@ -45,7 +46,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
     env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND ${SPEND_WHERE}
+       WHERE t.time >= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} IS NOT NULL
        GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC`,
     ).bind(from90).all<{ category_id: number; name: string; color: string | null; spent: number }>(),
     env.DB.prepare("SELECT category_id, amount FROM budgets WHERE period = 'month'").all<{ category_id: number; amount: number }>(),
@@ -63,17 +64,40 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
   const monthlyBurn = sumLevels(levels);
   const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
 
+  /**
+   * The SHAPE of each category, not only its size.
+   *
+   * The payload used to be one number per category — the canonical level — and a quarterly tax
+   * looked exactly like rent in it. So the plan opened envelopes for «Податки» and «Освіта» at a
+   * monthly figure in a month neither will be charged in, and the owner read that, correctly, as
+   * the planner not understanding his year. The app already computes the distinction for itself
+   * (§BURN-SHAPE decides which half of burn repeats), so the fix is to HAND OVER what it knows
+   * rather than to ask the model to infer it from an average that hides it by construction.
+   */
+  const covered = (await coveredMonths(env, levelWindowKeys(now))).length;
   const payload = {
     situation: (await getProfile(env)) || "(not specified)",
     own_funds_uah: Math.round(ownFunds / 100),
     monthly_burn_uah: Math.round(monthlyBurn / 100),
+    monthly_burn_recurring_uah: Math.round(burnShape(levels).recurring / 100),
     runway_months: runwayMonths,
-    categories: cats.map((c) => ({
-      id: c.category_id,
-      name: c.name,
-      avg_month_uah: Math.round(catLevel(c.category_id, c.spent) / 100),
-      current_limit_uah: Math.round((currentLimit.get(c.category_id) ?? 0) / 100),
-    })),
+    months_of_history: covered,
+    categories: cats.map((c) => {
+      const lv = levels.get(c.category_id);
+      return {
+        id: c.category_id,
+        name: c.name,
+        avg_month_uah: Math.round(catLevel(c.category_id, c.spent) / 100),
+        current_limit_uah: Math.round((currentLimit.get(c.category_id) ?? 0) / 100),
+        // How many of the covered months this category was charged in at all. Two out of six is
+        // a quarterly bill wearing a monthly average; six out of six is a monthly cost.
+        active_months: lv?.active_months ?? null,
+        // §BURN-SHAPE's own verdict, so the plan and the burn breakdown cannot disagree.
+        lumpy: lv?.lumpy ?? null,
+        // A stable, repeating cost (rent, a subscription): the level IS the next bill.
+        fixed: lv?.fixed ?? null,
+      };
+    }),
   };
 
   const { result, usage } = await proposeBudgetLimits(env, payload);
@@ -109,7 +133,7 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
     env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${amountSum(mult)} AS spent, ${EFF_IMPORTANCE} AS importance
        FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND ${SPEND_WHERE}
+       WHERE t.time >= ? AND ${SPEND_WHERE} AND ${EFF_CAT_ID} IS NOT NULL
        GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 14`,
     ).bind(from90).all<{ id: number; name: string; spent: number; importance: string }>(),
     env.DB.prepare("SELECT category_id, amount FROM budgets WHERE period = 'month'").all<{ category_id: number; amount: number }>(),

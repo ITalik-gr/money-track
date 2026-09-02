@@ -331,6 +331,26 @@ export function seedRareTables(db: MemDb, at = Math.floor(Date.parse(FROZEN_NOW_
   run(`INSERT INTO account_balance_history (account_id, balance, recorded_at, created_at)
        VALUES ('acc-uah', 4200000, ?, ?)`, at - 13 * 86400, at - 13 * 86400);
 
+  // §FX-COST needs a purchase whose two halves are in DIFFERENT currencies — and until 2026-09-02
+  // the fixture had none, so `/analytics/fx-cost` answered `n: 0` and every assertion about it
+  // (the currency sweep included) held vacuously. The account is in hryvnia, the shop charged
+  // dollars, and the bank's implied rate (42) is worse than the published one (40): a real markup,
+  // so the numbers are non-zero in both directions.
+  run(`INSERT INTO transactions (id, account_id, source, time, amount, currency_code,
+         original_amount, original_currency, merchant, category_id)
+       VALUES ('tx-fx-1', 'acc-uah', 'mono', ?, -420000, 980, -10000, 840, 'Steam', 3)`,
+      at - 20 * 86400);
+  // The published rate is read back from `app_state.rates` rather than written as a literal: the
+  // currency sweep rewrites those to a round factor AFTER `seed`, and a hard-coded 40 here would
+  // price one day of history at a rate the rest of the fixture does not use.
+  const storedUsd = (() => {
+    const row = db.raw.prepare("SELECT value FROM app_state WHERE key = 'rates'").get() as { value?: string } | undefined;
+    const parsed = row?.value ? (JSON.parse(row.value) as Record<string, number>) : {};
+    return parsed["840"] ?? 40;
+  })();
+  run(`INSERT INTO rate_history (day, code, rate, ts) VALUES (?, 840, ?, ?)`,
+      new Date((at - 20 * 86400) * 1000).toISOString().slice(0, 10), storedUsd, at - 20 * 86400);
+
   // §PRICE-DRIFT reads unit prices off receipt lines. Three sightings of one item over a span
   // wider than three weeks, which is exactly the minimum the analysis requires — below it the
   // endpoint returns an empty list and every assertion about it holds vacuously.

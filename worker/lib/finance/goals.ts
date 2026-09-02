@@ -113,6 +113,20 @@ export const goalNeedsAttention = (p: GoalPace) =>
   p.status === "overdue" || p.status === "at_risk" || p.status === "behind";
 
 /** `current_amount` = the sum of contributions. THE ONLY writer of this column. */
+/**
+ * §GOAL-CUR — which currency THIS goal's money is in. The single answer, used by the route, the
+ * notification drafter and the event close-out.
+ *
+ * A jar-backed goal is denominated in its JAR: its progress is literally that account's balance,
+ * so any other answer would compare a converted number against a typed one. That is exactly what
+ * happened before migration 0048 — a dollar jar was converted into ₴ and measured against a
+ * target the owner had typed as dollars, and the app reported a 5%-complete goal as achieved.
+ * `currency_code` NULL means the row predates the column, and those amounts are hryvnia.
+ */
+export function goalCurrency(g: { account_currency?: number | null; currency_code?: number | null }): number {
+  return g.account_currency ?? g.currency_code ?? 980;
+}
+
 export async function recalcGoal(db: AppDb, goalId: number): Promise<number> {
   const r = await db.prepare("SELECT COALESCE(SUM(amount), 0) AS s FROM goal_contributions WHERE goal_id = ?")
     .bind(goalId).first<{ s: number }>();

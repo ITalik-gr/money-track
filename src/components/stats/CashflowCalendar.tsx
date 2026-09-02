@@ -15,6 +15,7 @@ const weekdayShort = (idx: number) => dateFmt({ weekday: "short" }).format(new D
 const monthFmt = dateFmt({ month: "long", year: "numeric" });
 const dayFmt = dateFmt({ day: "numeric", month: "short" });
 const pad = (n: number) => String(n).padStart(2, "0");
+const MAX_OFFSET = 2; // сервер віддає поточний + два наступні
 
 interface DayItem { title: string; amount: number; amountOrig: number; currency: number; kind: string }
 interface DayCell { total: number; items: DayItem[] }
@@ -23,7 +24,10 @@ export function CashflowCalendar() {
   const t = useT();
   const WD = Array.from({ length: 7 }, (_, i) => weekdayShort(i));
   const { data } = useGetCashflowCalendarQuery();
-  const [offset, setOffset] = useState(0); // 0 = поточний місяць, 1 = наступний (вікно = 2 міс)
+  // 0 = поточний місяць. Вікно задає СЕРВЕР (`/analytics/cashflow-calendar` віддає 3 місяці
+  // вперед одним шматком, бо проєкція подушки — це наскрізне віднімання). Клієнт не вдає, що
+  // вміє гортати далі, ніж є дані: порожній місяць читався б як «списань більше не буде».
+  const [offset, setOffset] = useState(0);
   const [open, setOpen] = useState<string | null>(null); // дата розкритого поповера
 
   // Списання по днях. Кілька входжень одного плану в один день склеюємо в рядок з ×N.
@@ -64,7 +68,16 @@ export function CashflowCalendar() {
   const monthTotal = Array.from({ length: daysIn }, (_, i) => byDate.get(`${y}-${pad(mo + 1)}-${pad(i + 1)}`)?.total ?? 0).reduce((a, b) => a + b, 0);
   const maxDay = Math.max(1, ...Array.from(byDate.values()).map((v) => v.total));
 
-  const cells: (number | null)[] = [...Array(lead).fill(null), ...Array.from({ length: daysIn }, (_, i) => i + 1)];
+  // Leading and trailing days of the NEIGHBOURING months are drawn muted rather than left as
+  // holes: a calendar whose first row starts in mid-air reads as a broken grid, and the reader
+  // needs to see that the 1st is a Tuesday relative to something.
+  const prevDays = new Date(y, mo, 0).getDate();
+  const trail = (7 - ((lead + daysIn) % 7)) % 7;
+  const cells: { d: number; out: boolean }[] = [
+    ...Array.from({ length: lead }, (_, i) => ({ d: prevDays - lead + 1 + i, out: true })),
+    ...Array.from({ length: daysIn }, (_, i) => ({ d: i + 1, out: false })),
+    ...Array.from({ length: trail }, (_, i) => ({ d: i + 1, out: true })),
+  ];
 
   return (
     <div className="card cf-card">
@@ -77,10 +90,19 @@ export function CashflowCalendar() {
           </div>
           <div className="label">{t("cfcal.subtitle")}</div>
         </div>
+        {/* One control, not two chevrons with a label wedged between them: the month and the two
+            ways to move it belong together, and split apart they read as three unrelated buttons.
+            «Сьогодні» appears only when it would do something — a control that is always there and
+            usually a no-op is the `budgets.rollover` mistake in miniature. */}
         <div className="cf-nav">
-          <button className="btn sm icon ghost" disabled={offset <= 0} onClick={() => setOffset((o) => o - 1)} aria-label={t("cfcal.prevMonthAria")}><Icon name="chevron" /></button>
+          <button className="cf-nav-btn" disabled={offset <= 0} onClick={() => setOffset((o) => o - 1)} aria-label={t("cfcal.prevMonthAria")}>
+            <Icon name="chevron" size={16} />
+          </button>
           <span className="cf-month">{monthFmt.format(shown)}</span>
-          <button className="btn sm icon ghost" disabled={offset >= 1} onClick={() => setOffset((o) => o + 1)} aria-label={t("cfcal.nextMonthAria")}><Icon name="chevron" /></button>
+          <button className="cf-nav-btn next" disabled={offset >= MAX_OFFSET} onClick={() => setOffset((o) => o + 1)} aria-label={t("cfcal.nextMonthAria")}>
+            <Icon name="chevron" size={16} />
+          </button>
+          {offset !== 0 && <button className="cf-today" onClick={() => setOffset(0)}>{t("cfcal.today")}</button>}
         </div>
       </div>
 
@@ -90,16 +112,17 @@ export function CashflowCalendar() {
 
       <div className="cf-wd">{WD.map((d) => <span key={d}>{d}</span>)}</div>
       <div className="cf-grid">
-        {cells.map((d, i) => {
-          if (d == null) return <span key={`e${i}`} className="cf-day empty" />;
+        {cells.map(({ d, out }, i) => {
+          if (out) return <span key={`o${i}`} className="cf-day out"><span className="cf-dnum">{d}</span></span>;
           const dateStr = `${y}-${pad(mo + 1)}-${pad(d)}`;
+          const weekend = i % 7 >= 5;
           const cell = byDate.get(dateStr);
           const bal = balances.get(dateStr) ?? null;
           const isToday = dateStr === todayStr;
 
           if (!cell) {
             return (
-              <span key={dateStr} className={`cf-day ${isToday ? "today" : ""}`}>
+              <span key={dateStr} className={`cf-day ${isToday ? "today" : ""} ${weekend ? "wknd" : ""}`}>
                 <span className="cf-dnum">{d}</span>
               </span>
             );
@@ -117,7 +140,7 @@ export function CashflowCalendar() {
             <button
               key={dateStr}
               type="button"
-              className={`cf-day has ${isToday ? "today" : ""} ${bal != null && bal < 0 ? "danger" : ""} ${open === dateStr ? "open" : ""}`}
+              className={`cf-day has ${isToday ? "today" : ""} ${weekend ? "wknd" : ""} ${bal != null && bal < 0 ? "danger" : ""} ${open === dateStr ? "open" : ""}`}
               style={{ background: `color-mix(in srgb, var(--neg) ${Math.round(intensity * 100)}%, var(--surface))` }}
               aria-label={t("cfcal.dayAria", { date: dayFmt.format(new Date(`${dateStr}T00:00:00`)), count: cell.items.length, amount: `${formatMinor(cell.total, { decimals: false })} ${baseSign()}` })}
               onMouseEnter={() => setOpen(dateStr)}

@@ -493,29 +493,58 @@ export async function spendByImportance(
  * window there is. The bug would not look like a bug; it would look like Saturday being expensive.
  */
 export async function spendByWeekday(
-  db: AppDb, v: ValueScope, r: Range, now: number,
+  db: AppDb, v: ValueScope, r: Range, now: number, unplannedOnly = false,
 ): Promise<WeekdayRow[]> {
   const res = await db.prepare(
     `SELECT ${localDowSql(now)} AS dow, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n,
             CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${v.mult}), 0)) AS INTEGER) AS biggest
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
+       ${unplannedOnly ? "AND t.planned_id IS NULL" : ""}
      GROUP BY dow ORDER BY dow`,
   ).bind(r.from, r.to).all<WeekdayRow>();
   return res.results ?? [];
 }
 
-/** §WEEKDAY along the other axis — spend per day of the month, in APP_TZ. */
+/**
+ * §WEEKDAY along the other axis — spend per day of the month, in APP_TZ.
+ *
+ * `unplannedOnly` drops everything already attached to a plan (§CASH-PROJ). The projection adds
+ * scheduled charges back by DATE, so counting them here too would bill every subscription twice —
+ * once on the day it is actually due and once smeared across the month as "ordinary" spending.
+ */
 export async function spendByDom(
-  db: AppDb, v: ValueScope, r: Range, now: number,
+  db: AppDb, v: ValueScope, r: Range, now: number, unplannedOnly = false,
 ): Promise<DomRow[]> {
   const res = await db.prepare(
     `SELECT ${localDomSql(now)} AS dom, ${amountSum(v.mult)} AS spent, COUNT(DISTINCT t.id) AS n,
             CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${v.mult}), 0)) AS INTEGER) AS biggest
      FROM transactions t ${STATS_JOINS}
      WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE}${v.curFilter}
+       ${unplannedOnly ? "AND t.planned_id IS NULL" : ""}
      GROUP BY dom ORDER BY dom`,
   ).bind(r.from, r.to).all<DomRow>();
+  return res.results ?? [];
+}
+
+/**
+ * §CASH-PROJ — income per (calendar month, day-of-month), for finding the days money ARRIVES on.
+ *
+ * The projection needs the other half of the owner's request: «якщо ну прямо дуже часто на щось
+ * юзер витрачає в дні, чи навпаки заробляє». Grouped by month as well as by day so the rhythm can
+ * be judged — one salary on the 5th is an event, six of them is a payday. Income already covered
+ * by a plan is excluded: those arrive dated, through `cashflowMoves`.
+ */
+export async function incomeByDomMonth(
+  db: AppDb, v: ValueScope, r: Range, now: number,
+): Promise<{ ym: string; dom: number; income: number }[]> {
+  const res = await db.prepare(
+    `SELECT ${localYmSql(now)} AS ym, ${localDomSql(now)} AS dom, ${incomeSum(v.mult)} AS income
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${INCOME_WHERE}${v.curFilter}
+       AND t.planned_id IS NULL
+     GROUP BY ym, dom ORDER BY ym, dom`,
+  ).bind(r.from, r.to).all<{ ym: string; dom: number; income: number }>();
   return res.results ?? [];
 }
 

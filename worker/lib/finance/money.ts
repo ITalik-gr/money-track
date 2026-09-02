@@ -246,6 +246,31 @@ export function uahToBaseMinor(minorInUah: number, rates: Rates): number {
   return Math.round(minorInUah * uahToBase(rates));
 }
 
+/** One arbitrary currency → another. Used when a goal is re-pointed at a jar in another unit. */
+/**
+ * Hryvnia → an ARBITRARY currency, not the reader's base (§GOAL-CUR).
+ *
+ * Needed where a stored amount and the thing it is compared against are denominated by the DATA
+ * rather than by who is looking: a savings goal backed by a dollar jar is dollars for a Ukrainian
+ * reader too. Goes through the base because that is the only unit the rate map is expressed in;
+ * an unknown code returns the amount unchanged rather than zero, since silently blanking a
+ * target reads as a goal with nothing to reach.
+ */
+export function convertMinorBetween(minor: number, from: number, to: number, rates: Rates): number {
+  if (from === to) return minor;
+  const base = toBaseMinor(minor, from, rates);
+  const rate = rates[String(to)] ?? (to === 980 ? 1 : 0);
+  if (!Number.isFinite(rate) || rate <= 0) return minor;
+  return Math.round(base / rate);
+}
+
+export function uahToMinorIn(minorInUah: number, code: number, rates: Rates): number {
+  if (code === 980) return minorInUah;
+  const rate = rates[String(code)];
+  if (!Number.isFinite(rate) || rate <= 0) return minorInUah;
+  return Math.round((minorInUah * uahToBase(rates)) / rate);
+}
+
 /**
  * SQL multiplier pinned to the HRYVNIA, for sums that are being STORED rather than shown
  * (`budget_months.spent_minor`). A stored number must not depend on which currency the reader

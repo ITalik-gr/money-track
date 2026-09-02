@@ -480,3 +480,33 @@ export interface SpendingShape {
   unbudgeted: { spent: number; n: number; share_pct: number | null };
   uncategorised: { spent: number; n: number; share_pct: number | null };
 }
+
+/**
+ * `GET /analytics/cash-projection` — §CASH-PROJ, the dashed half of the cumulative-flow chart.
+ *
+ * Per-day DELTAS, not a running total: the client already holds the actual cumulative line and
+ * adds these to its last point. Returning an absolute series would mean the same running sum
+ * existed twice, and the two would eventually disagree about the day they meet.
+ */
+export interface CashProjectionDay {
+  at: number;
+  date: string;
+  /** Plan charges due that day (§SUB-MONTH schedule), minor units, positive as it leaves. */
+  scheduled: number;
+  /** Expected unplanned spending, shaped by the day-of-month and weekday profiles. */
+  ordinary: number;
+  /** Expected inflow: a dated income plan, else a detected payday. NEVER canonical income. */
+  income: number;
+}
+
+export interface CashProjection {
+  from: number;
+  to: number;
+  days: CashProjectionDay[];
+  /** Ordinary spend per average day, before shaping — what the old flat line used for every day. */
+  ordinary_daily: number;
+  /** Days of the month a salary reliably lands on, as detected. Empty is a legitimate answer. */
+  paydays: number[];
+  /** True when at least one plan or payday landed in the window — i.e. the shape is not just noise. */
+  has_events: boolean;
+}

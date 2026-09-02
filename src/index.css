@@ -27,13 +27,21 @@
 /* Subscriptions: the list, the AI search and §SUB-PAGE. Split out of domains-a.css (C8 ratchet);
    imported straight after it so nothing about the cascade order changed. */
 @import "./styles/subscriptions.css";
+/* Cashflow calendar. Split out of domains-a.css (C8 ratchet, 2026-09-02) and imported at the
+   point its rules already occupied — a part moved elsewhere in the order silently changes which
+   rule wins for anything it overlaps. */
+@import "./styles/calendar.css";
 @import "./styles/chat.css";
 @import "./styles/settings.css";
+@import "./styles/connect.css";
 @import "./styles/settings-shell.css";
 @import "./styles/domains-b.css";
 /* Added after the split (STYLES.md §6.1). Last on purpose: a new part appended here cannot change
    which rule wins for anything that already existed. */
 @import "./styles/transactions.css";
+/* `/insights/*` blocks (§SPEND-PROFILE, §INCOME-SPLIT, §MOMENTUM, §FLOOR). Appended, so nothing
+   here can change which rule wins for anything that already existed. */
+@import "./styles/insights.css";
 @import "./styles/budgets.css";
 @import "./styles/analytics.css";
 @import "./styles/landing.css";

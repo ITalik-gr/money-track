@@ -24,6 +24,7 @@ export async function listActive(db: AppDb): Promise<GoalRow[]> {
 
 export interface NewGoal {
   name: string;
+  currency_code: number;
   target_amount: number;
   current_amount: number;
   account_id: string | null;
@@ -38,9 +39,9 @@ export interface NewGoal {
 
 export async function create(db: AppDb, g: NewGoal): Promise<number> {
   const r = await db.prepare(
-    `INSERT INTO savings_goals (name, target_amount, current_amount, account_id, deadline, color, note, kind, autofill_kind, autofill_value, is_active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-  ).bind(g.name, g.target_amount, g.current_amount, g.account_id, g.deadline,
+    `INSERT INTO savings_goals (name, currency_code, target_amount, current_amount, account_id, deadline, color, note, kind, autofill_kind, autofill_value, is_active, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+  ).bind(g.name, g.currency_code, g.target_amount, g.current_amount, g.account_id, g.deadline,
     g.color, g.note, g.kind, g.autofill_kind, g.autofill_value, g.created_at).run();
   return r.meta.last_row_id;
 }
@@ -54,6 +55,8 @@ export async function create(db: AppDb, g: NewGoal): Promise<number> {
  */
 export interface GoalPatch {
   name?: string;
+  /** §GOAL-CUR — only written when the goal is re-pointed at a jar in another currency. */
+  currency_code?: number;
   target_amount?: number;
   current_amount?: number;
   account_id?: string | null;
@@ -65,7 +68,7 @@ export interface GoalPatch {
   autofill?: { kind: string | null; value: number | null };
 }
 
-const SIMPLE_COLUMNS = ["name", "target_amount", "current_amount", "account_id",
+const SIMPLE_COLUMNS = ["name", "currency_code", "target_amount", "current_amount", "account_id",
   "deadline", "color", "note", "kind"] as const;
 
 /** @returns false when the patch was empty, so the caller can skip the write. */
@@ -133,6 +136,24 @@ export async function balanceHistory(
 export async function findActive(db: AppDb, id: number): Promise<{ id: number; account_id: string | null } | null> {
   return await db.prepare("SELECT id, account_id FROM savings_goals WHERE id = ? AND is_active = 1")
     .bind(id).first<{ id: number; account_id: string | null }>();
+}
+
+/**
+ * §GOAL-CUR — the goal's own denomination, with the linked jar's currency joined in.
+ *
+ * A PATCH has to know it before it can store a typed amount: the reader typed in whatever unit
+ * `/goals` handed them, and re-pointing a goal at a jar in another currency has to convert what
+ * is already stored rather than silently re-label it.
+ */
+export async function currencyOf(db: AppDb, id: number): Promise<
+  { currency_code: number | null; account_currency: number | null; target_amount: number; current_amount: number; autofill_kind: string | null; autofill_value: number | null } | null
+> {
+  return await db.prepare(
+    `SELECT g.currency_code, g.target_amount, g.current_amount, g.autofill_kind, g.autofill_value,
+            a.currency_code AS account_currency
+     FROM savings_goals g LEFT JOIN accounts a ON a.id = g.account_id
+     WHERE g.id = ? AND g.is_active = 1`,
+  ).bind(id).first();
 }
 
 export async function addContribution(

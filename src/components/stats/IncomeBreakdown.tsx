@@ -11,9 +11,13 @@ const stabTone: Record<string, string> = { стабільний: "pos", помі
 // на ключ перекладу для показу, порівняння в описі нижче лишаються по сирому значенню.
 const stabLabelKey: Record<string, TranslationKey> = { стабільний: "inc.stabStable", помірний: "inc.stabModerate", нестабільний: "inc.stabUnstable" };
 
-export function IncomeBreakdown({ preset, currency, sign }: { preset: string; currency: number | null; sign: string }) {
+export function IncomeBreakdown({ preset, from, to, currency, sign }: {
+  preset: string; from?: number; to?: number; currency: number | null; sign: string;
+}) {
   const t = useT();
-  const { data } = useGetIncomeAnalyticsQuery({ preset, currency });
+  // §MONTH-VIEW: when the page is showing a named month, so is this block. It used to ask for the
+  // trailing preset regardless — the one block still reporting on «now» under a July heading.
+  const { data } = useGetIncomeAnalyticsQuery({ preset, from, to, currency });
   if (!data) return null;
   // ⚠️ НЕ `data.total === 0` (як було). Стабільність рахується за 6 ПОВНИХ місяців і лишається
   // осмисленою, навіть коли в поточному періоді надходжень ще не було — а блок зникав цілком:

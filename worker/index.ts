@@ -619,7 +619,7 @@ export default {
    */
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
     const kind: "daily" | "weekly" | "monthly" =
-      event.cron === "0 6 * * *" ? "daily" : event.cron === "0 9 1 * *" ? "monthly" : "weekly";
+      event.cron === "0 6 * * *" ? "daily" : event.cron === "0 4 1 * *" ? "monthly" : "weekly";
 
     ctx.waitUntil(
       (async () => {

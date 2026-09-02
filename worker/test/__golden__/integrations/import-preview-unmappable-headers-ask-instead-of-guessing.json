@@ -17,7 +17,8 @@
     "total_rows": 1,
     "mapping": {},
     "complete": false,
-    "preamble_rows": 0
+    "preamble_rows": 0,
+    "mapping_source": "hints"
   },
   "db": {
     "imported": []

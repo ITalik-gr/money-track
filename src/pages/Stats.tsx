@@ -3,7 +3,7 @@ import { useT } from "../i18n/index.ts";
 import { dateFmt } from "../i18n/locale.ts";
 import { useSearchParams } from "react-router-dom";
 import {
-  useGetCurrenciesQuery, useGetOverviewQuery, useGetPeriodModeQuery, useSetPeriodModeMutation,
+  useGetCashProjectionQuery, useGetCurrenciesQuery, useGetOverviewQuery, useGetPeriodModeQuery, useSetPeriodModeMutation,
 } from "../store/api.ts";
 import { currencySign, formatMinor } from "../lib/format.ts";
 import { signFor } from "../lib/currency.ts";
@@ -32,6 +32,9 @@ import { DeeperAnalytics, TopSpendDays, toCumulative } from "../components/stats
 import { SpendingShape } from "../components/stats/StatsShape.tsx";
 import { AccountsBlock, EventsBlock, MerchantsBlock } from "../components/stats/StatsMerchants.tsx";
 import { MonthCompare } from "../components/stats/StatsCompare.tsx";
+import { SpendProfileBlock } from "../components/stats/SpendProfile.tsx";
+import { IncomeSplit } from "../components/stats/IncomeSplit.tsx";
+import { Momentum } from "../components/stats/Momentum.tsx";
 
 /**
  * The Statistics page — the SHELL, since 2026-08-08.
@@ -154,6 +157,22 @@ export function Stats() {
   // §1b: середній чек + прогноз витрат на кінець періоду (лише календарний, поки період не завершено).
   const avgCheck = data && data.summary.n ? Math.round(data.summary.spend / data.summary.n) : 0;
   const periodLen = periodLength(range, mode, from);
+  /**
+   * §CASH-PROJ — the forecast tail of the cumulative chart, computed on the SERVER.
+   *
+   * Asked for only when there is something to project: a rolling window has no end to reach, a
+   * finished month has no future, and a named past month (`ym`) least of all. `skip` rather than a
+   * conditional hook — the request costs four queries, and a chart that is not drawing a forecast
+   * has no business paying for one.
+   */
+  const projectsAhead = mode === "calendar" && !ym && days < periodLen;
+  const untilTs = useMemo(() => {
+    const d = new Date(from * 1000);
+    return Math.floor(+new Date(d.getFullYear(), d.getMonth(), d.getDate() + periodLen) / 1000) - 1;
+  }, [from, periodLen]);
+  const { data: projection } = useGetCashProjectionQuery(
+    { to, until: untilTs, currency }, { skip: !projectsAhead },
+  );
   // Прогноз показуємо лише коли минуло ≥40% періоду — інакше лінійна екстраполяція темпу
   // рано в періоді роздуває цифру в рази (детальний, історично-якірний прогноз — на Головній/у Патернах).
   const projected = data && mode === "calendar" && days < periodLen && days >= periodLen * 0.4
@@ -177,12 +196,20 @@ export function Stats() {
               that does nothing — the same defect as `budgets.rollover` before §BUDGET-MEMORY. */}
           {ym ? (
             <div className="month-nav">
-              <button className="seg-btn" aria-label={t("stats.month.prev")} title={t("stats.month.prev")}
-                onClick={() => setParam("ym", shiftYm(ym, -1))}>‹</button>
+              {/* Chevrons, not the literal «‹ ›» glyphs. Those are text: they inherit the body
+                  font, sit off the optical centre of a square button and change weight with the
+                  typeface — which is why the stepper read as unfinished next to every other
+                  control on the page, all of which are icon-drawn. */}
+              <button className="seg-btn month-nav-arrow" aria-label={t("stats.month.prev")} title={t("stats.month.prev")}
+                onClick={() => setParam("ym", shiftYm(ym, -1))}>
+                <Icon name="chevron" size={16} />
+              </button>
               <span className="month-nav-lbl">{ymLabel}</span>
-              <button className="seg-btn" aria-label={t("stats.month.next")} title={t("stats.month.next")}
+              <button className="seg-btn month-nav-arrow next" aria-label={t("stats.month.next")} title={t("stats.month.next")}
                 disabled={shiftYm(ym, 1) >= curYm()}
-                onClick={() => setParam("ym", shiftYm(ym, 1))}>›</button>
+                onClick={() => setParam("ym", shiftYm(ym, 1))}>
+                <Icon name="chevron" size={16} />
+              </button>
               <button className="pill-toggle" onClick={() => setParams((prev) => {
                 const p = new URLSearchParams(prev); p.delete("ym"); return p;
               }, { replace: true })}>
@@ -207,9 +234,14 @@ export function Stats() {
                   address bar or by finding a bar to click on another tab — i.e. a feature that
                   exists and cannot be found is a feature that does not exist. Opens the last
                   COMPLETE month; the ‹ › stepper takes over from there. */}
-              <button className="pill-toggle" title={t("stats.month.browseTip")}
+              {/* ⚠️ NOT another calendar pill. It sat next to the period-mode toggle wearing the
+                  same shape AND the same calendar icon, and the owner could not tell them apart —
+                  fairly, since they do unrelated things: one flips a SETTING, this one leaves for
+                  another VIEW. It now carries the same chevron as the stepper it becomes, and the
+                  accent outline says "this navigates" the way the toggle's plain one does not. */}
+              <button className="pill-toggle month-open" title={t("stats.month.browseTip")}
                 onClick={() => setParam("ym", shiftYm(curYm(), -1))}>
-                <Icon name="calendar" size={14} />{t("stats.month.browse")}
+                <Icon name="chevron" size={14} />{t("stats.month.browse")}
               </button>
             </>
           )}
@@ -281,8 +313,15 @@ export function Stats() {
                   )}
                 </div>
                 <ImportanceBreakdown data={data} sign={sign} from={from} to={to} currency={currency} />
-                <SpendingPatterns />
-                {!ym && <FxCostCard sign={sign} />}
+                {/* §INCOME-SPLIT — the SAME three bands, against income instead of against
+                    spending. Directly under the breakdown on purpose: it is the question that
+                    one raises and cannot answer. */}
+                <IncomeSplit from={from} to={to} sign={sign} />
+                {/* §MONTH-VIEW: «Радар темпу» projects the month IN PROGRESS — there is no pace
+                    left to project in a month that has ended, and printing this month's radar
+                    under July's heading is the §CAT-PAGE rule broken outright. */}
+                {!ym && <SpendingPatterns />}
+                {!ym && <FxCostCard />}
                 <section>
                   <div className="section-head"><h2>{t("stats.cashflow.title")}</h2><span className="label">{t("stats.cashflow.sub")}</span></div>
                   <div className="card cashflow">
@@ -308,9 +347,13 @@ export function Stats() {
                   ) : <div className="card empty">{t("stats.byCategory.empty")}</div>}
                 </section>
                 <AvgCheckByCategory rows={data.byCategory} sign={sign} />
-                <ReceiptItems from={from} to={to} sign={sign} />
+                <ReceiptItems from={from} to={to} />
                 {!ym && <PriceDrift />}
-                <PeriodCompare range={range} mode={mode} currency={currency} sign={sign} />
+                {/* §MOMENTUM: a run of complete months, so it is hidden in month mode for the
+                    same reason as every other "about now" block — its answer is about the last
+                    months, not about the month being read (§MONTH-VIEW). */}
+                {!ym && <Momentum sign={sign} />}
+                <PeriodCompare range={range} mode={mode} ym={ym} currency={currency} sign={sign} />
               </>
             )}
 
@@ -319,7 +362,7 @@ export function Stats() {
                 {!ym && <MonthlyHistory />}
                 {/* §MONTH-STACK — how much each month cost AND what it was made of, joined. Also
                     the way IN to a past month: clicking a bar sets `?ym=`. */}
-                {!ym && <MonthStack sign={sign} />}
+                {!ym && <MonthStack />}
                 <section>
                   <div className="section-head"><h2>{t("stats.trends.title")}</h2><span className="label">{t("stats.trends.sub")}</span></div>
                   <div className="card cashflow"><CashflowChart rows={rows} height={240} /></div>
@@ -332,15 +375,27 @@ export function Stats() {
                       <span className="label">{t("common.whatIsThis")}</span>
                     </HoverTip>
                   </div>
-                  <div className="card cashflow"><CumulativeChart rows={toCumulative(data.series, { mode, to, days, periodLen })} sign={sign} height={220} /></div>
+                  <div className="card cashflow"><CumulativeChart rows={toCumulative(data.series, projection)} sign={sign} height={220} /></div>
+                  {/* §CASH-PROJ: what the dashed line is built from, said in one line. A forecast
+                      that will not say what it knows is a forecast nobody can argue with — and the
+                      previous one was wrong precisely because it knew nothing. */}
+                  {projection && (
+                    <p className="muted proj-note">
+                      {projection.has_events ? t("stats.cumulative.projWith") : t("stats.cumulative.projFlat")}
+                    </p>
+                  )}
                 </section>
-                <WeekdaySpend preset={range} currency={currency} />
+                <WeekdaySpend preset={range} from={ymBounds?.from} to={ymBounds?.to} currency={currency} />
                 {!ym && <Habits />}
                 <DeeperAnalytics series={data.series} sign={sign} from={from} to={to} currency={currency} />
                 {/* §SHAPE: what the period is MADE of — cheque sizes, what falls outside every
                     envelope, and what has no category at all. */}
                 <SpendingShape from={from} to={to} currency={currency} sign={sign} />
-                <IncomeBreakdown preset={range} currency={currency} sign={sign} />
+                {/* §SPEND-PROFILE — quiet days, how few merchants are half the spending, and how
+                    much went somewhere new. Beside §SHAPE because both describe the period rather
+                    than its size. */}
+                <SpendProfileBlock from={from} to={to} sign={sign} />
+                <IncomeBreakdown preset={range} from={ymBounds?.from} to={ymBounds?.to} currency={currency} sign={sign} />
               </>
             )}
 

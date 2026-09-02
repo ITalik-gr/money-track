@@ -66,7 +66,7 @@ named here are the seed ones and may differ — always match by meaning against 
 - "кава 45 аромакава" -> a drink at a coffee shop -> the cafés & restaurants category (2)
 - "АТБ 247.30" -> a grocery shop -> the groceries category (1)
 - "uber 120" -> a ride -> the transport category (3)
-- "netflix 199" -> a service subscription -> the subscriptions category (12)
+- "netflix 199" -> a streaming service -> the streaming category (42)
 - "аптека 89" -> medicine -> the health category (4)
 - "нова пошта 70" -> a delivery -> the catch-all other category (14)
 - "wog 900" -> refuelling -> the transport category (3)
@@ -96,7 +96,9 @@ EXPENSES — the main categories and when to choose them:
 - Electronics (9): gadgets and appliances — Rozetka, Comfy, Foxtrot, Allo, Apple, phones, laptops, headphones, chargers, tech accessories.
 - Beauty & care (10): beauty — hairdresser, barber, manicure, cosmetics, EVA, Watsons, Prostor, perfume, spa, beautician.
 - Travel (11): trips — flights, hotels, Booking, Airbnb, hostels, Укрзалізниця intercity trains, tours, accommodation in another city.
-- Subscriptions (12): recurring digital payments. Subcategories: Streaming (42) — Netflix, Spotify, YouTube Premium, MEGOGO, Apple Music, Disney+; Software & cloud (43) — Anthropic, OpenAI/ChatGPT, Claude, Cloudflare, GitHub, Google One, iCloud, Adobe, Notion, hosting, domains, VPN. A recurring identical payment to a service → Subscriptions (12).
+- Streaming (42, under Entertainment): Netflix, Spotify, YouTube Premium, MEGOGO, Apple Music, Disney+.
+- Software & cloud (43): Anthropic, OpenAI/ChatGPT, Claude, Cloudflare, GitHub, Google One, iCloud, Adobe, Notion, hosting, domains, VPN.
+  ⚠️ There is NO "subscriptions" category (§SUBS-CAT, removed 2026-09-02): file by WHAT the money bought, never by the fact that it repeats. Whether a charge is recurring is a property of the operation (planned_id), and the app tracks it separately — a category of that name competed with these two for the same rows and nothing decided between them.
 - Education (19): learning — courses, Prometheus, Coursera, Udemy, tutors, textbooks, university, language schools, workshops.
 - Children (20): children's spending — toys, children's clothes, nursery, clubs, nappies, baby food, Antoshka.
 - Pets (21): pets — pet shops, food, vets, Masterzoo, pet supplies.

@@ -90,8 +90,8 @@ const DYNAMIC_KEYS = [
   // shows — the list must match what can reach `t()`, not what the type can hold.
   { prefix: "goal.pace.", values: ["on_track", "behind", "at_risk", "overdue"], since: "2026-08-12", why: "§GOAL-PACE verdicts that get a badge" },
   { prefix: "goal.kind.", values: ["save_up", "debt_payoff", "sinking_fund"], since: "2026-08-12", why: "`GOAL_KINDS` in lib/finance/goals.ts" },
-  { prefix: "audit.source.", values: ["chat", "enrich", "resweep"], since: "2026-08-12", why: "§AI-AUDIT — which path wrote the change" },
-  { prefix: "audit.field.", values: ["category_id", "is_transfer", "ai_note"], since: "2026-08-12", why: "§AI-AUDIT — the three fields a model may rewrite" },
+  { prefix: "audit.source.", values: ["chat", "enrich", "resweep", "catchup"], since: "2026-08-12", why: "§AI-AUDIT — which path wrote the change" },
+  { prefix: "audit.field.", values: ["category_id", "real_category_id", "is_transfer", "ai_note"], since: "2026-08-12", why: "§AI-AUDIT — the fields a model may rewrite (real_category_id joined 2026-09-02, §AI-CATCHUP)" },
   { prefix: "feedback.kind", values: ["Bug", "Idea", "Other"], since: "2026-08-01", why: "feedback inbox badges" },
   { prefix: "imp.", values: ["essential", "discretionary"], since: "2026-07-14", why: "SafeToSpend's two-level legend — NOT the three-level set, which is `IMPORTANCE_META`" },
 ];

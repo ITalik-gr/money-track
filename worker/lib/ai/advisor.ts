@@ -6,7 +6,7 @@ import { chatAdvice } from "./tasks.ts";
 import { type AdviceResult, type AiFact, evaluateGroup, generateAdvice } from "./generate.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
-import type { AdviceHistoryItem } from "../../../shared/api/ai.ts";
+import { pushAdviceHistory } from "./advice-history.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } from "../finance/money.ts";
 import { currencySign } from "../../../shared/currency.ts";
@@ -444,21 +444,17 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
   };
   await setState(env.DB, "advisor", JSON.stringify(stored));
 
-  // §2: історія порад — компактні знімки (останні 12), щоб бачити траєкторію рекомендацій.
-  try {
-    const rawHist = await getState(env.DB, "advisor_history");
-    const hist: AdviceHistoryItem[] = rawHist ? JSON.parse(rawHist) : [];
-    hist.unshift({
-      generated_at: now,
-      summary: result.summary || result.runway_comment || "",
-      runway_months: runwayMonths,
-      monthly_burn: monthlyBurn,
-      own_funds: ownFunds,
-      cushion: funds.cushion, // §+1: ліквідна подушка окремо (для тренду/дельт)
-      cur: stored.cur,        // §BASE-CUR: a delta against a snapshot in another unit is not a delta
-    });
-    await setState(env.DB, "advisor_history", JSON.stringify(hist.slice(0, 24)));
-  } catch { /* історія не критична */ }
+  // §2: історія порад — компактні знімки, щоб бачити траєкторію рекомендацій. Саме сховище
+  // (ключ, стеля, видалення) живе в `advice-history.ts` під C3; тут лише те, ЩО сталось.
+  await pushAdviceHistory(env, {
+    generated_at: now,
+    summary: result.summary || result.runway_comment || "",
+    runway_months: runwayMonths,
+    monthly_burn: monthlyBurn,
+    own_funds: ownFunds,
+    cushion: funds.cushion, // §+1: ліквідна подушка окремо (для тренду/дельт)
+    cur: stored.cur,        // §BASE-CUR: a delta against a snapshot in another unit is not a delta
+  });
 
   return stored;
 }
@@ -582,14 +578,12 @@ export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredA
   };
 }
 
-export type { AdviceHistoryItem };
-export async function getAdviceHistory(env: Env): Promise<AdviceHistoryItem[]> {
-  const raw = await getState(env.DB, "advisor_history");
-  return raw ? (JSON.parse(raw) as AdviceHistoryItem[]) : [];
-}
-export async function clearAdviceHistory(env: Env): Promise<void> {
-  await setState(env.DB, "advisor_history", JSON.stringify([]));
-}
+// The advice HISTORY lives in `advice-history.ts` (C3, 2026-09-02) and is re-exported here so no
+// caller had to change. Plain CRUD over one `app_state` key — the same argument that took the §A1
+// facts out of this file, and the same one that will take the next thing out.
+export {
+  getAdviceHistory, clearAdviceHistory, deleteAdviceHistoryEntry, type AdviceHistoryItem,
+} from "./advice-history.ts";
 
 export async function getStoredAdvice(env: Env): Promise<StoredAdvice | null> {
   const raw = await getState(env.DB, "advisor");
@@ -669,11 +663,15 @@ async function groupPayload(env: Env, eventId: number) {
    * the close-out cannot quote a figure the goal card contradicts.
    */
   const goal = ev.goal_id == null ? null : await env.DB.prepare(
-    `SELECT g.name, g.target_amount,
+    // §GOAL-CUR: both figures come back in the GOAL's currency (`currency_code`, or its jar's),
+    // never in hryvnia — the caller converts once. A goal funded in a dollar jar was previously
+    // read as if the balance were hryvnia, so the close-out could report a trip funded when it
+    // was not, in a sentence that looked entirely plausible.
+    `SELECT g.name, g.target_amount, COALESCE(a.currency_code, g.currency_code, 980) AS cur,
             COALESCE(a.balance, g.current_amount) AS current
      FROM savings_goals g LEFT JOIN accounts a ON a.id = g.account_id
      WHERE g.id = ?`,
-  ).bind(ev.goal_id).first<{ name: string; target_amount: number; current: number }>();
+  ).bind(ev.goal_id).first<{ name: string; target_amount: number; current: number; cur: number }>();
   const loc = await resolveLocale(env);
   const rates = await getRates(env);
   /**
@@ -698,6 +696,8 @@ async function groupPayload(env: Env, eventId: number) {
   // unit. Handing the model both un-reconciled is how a trip gets compared against a burn rate
   // 41× its own size — and the sentence it writes about that reads perfectly.
   const inBase = (minorUah: number) => Math.round(minorUah * uahToBase(rates));
+  // §GOAL-CUR: the goal's own unit, which is not the event's (that one is hryvnia-stored).
+  const goalInBase = (minor: number) => (goal ? toBaseMinor(minor, goal.cur, rates) : minor);
   const conv = (t: TxLabelRow) => toBaseMinor(t.amount, t.currency_code, rates);
   const spent = list.filter((t) => t.amount < 0).reduce((s, t) => s - conv(t), 0);
   const income = list.filter((t) => t.amount > 0).reduce((s, t) => s + conv(t), 0);
@@ -728,12 +728,12 @@ async function groupPayload(env: Env, eventId: number) {
         ? {
           goal: {
             name: goal.name,
-            saved_uah: Math.round(inBase(goal.current) / 100),
-            target_uah: Math.round(inBase(goal.target_amount) / 100),
+            saved_uah: Math.round(goalInBase(goal.current) / 100),
+            target_uah: Math.round(goalInBase(goal.target_amount) / 100),
             // Stated rather than left to arithmetic: this is the whole question the link exists
             // to answer, and a model asked to subtract two numbers will sometimes not.
-            covered: spent <= inBase(goal.current),
-            over_saved_uah: Math.max(0, Math.round((spent - inBase(goal.current)) / 100)),
+            covered: spent <= goalInBase(goal.current),
+            over_saved_uah: Math.max(0, Math.round((spent - goalInBase(goal.current)) / 100)),
           },
         }
         : {}),

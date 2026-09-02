@@ -26,7 +26,7 @@ import type {
   Overview, MonthlyHistory, SafeToSpend, CapitalTrend, Networth, Compare, Forecast,
   IncomeAnalytics, CashflowCalendar, ReceiptItemsAnalytics, PriceDrift, SpendPatterns,
   CategoryDrill, SliceDrill, MerchantAnalytics, SparkData, FinanceHealth, CategorySpend,
-  CurrenciesList, WeekdayAnalytics, DomAnalytics, Habits, FxCost, SpendingShape,
+  CurrenciesList, WeekdayAnalytics, DomAnalytics, Habits, FxCost, SpendingShape, CashProjection,
 } from "../../../shared/api/index.ts";
 
 export const analytics = apiRoutes();
@@ -253,50 +253,27 @@ analytics.get("/analytics/income", async (c) => {
   const mode = await getPeriodMode(c.env.DB);
   const presetParam = (url.searchParams.get("preset") as Preset | null) ?? "month";
   const preset: Preset = ["week", "month", "quarter", "year"].includes(presetParam) ? presetParam : "month";
-  const { from, to, prevFrom, prevTo } = periodBounds(mode, preset);
+  /**
+   * §MONTH-VIEW: explicit bounds win, exactly as they do on `/analytics/overview` and
+   * `/analytics/compare`. Without them this endpoint answered for the trailing preset no matter
+   * what window the page was showing — so browsing to an empty month left the income block
+   * printing last month's figures under that month's heading. In a month with nothing in it, that
+   * is the ONLY block on the page showing numbers, which reads as data appearing from nowhere.
+   *
+   * The comparison period is the equally long stretch immediately before, the same rule
+   * `/analytics/compare` uses for its own default.
+   */
+  const explicitTo = url.searchParams.get("to") ? numParam(url, "to", 0) : null;
+  const explicitFrom = url.searchParams.get("from") ? numParam(url, "from", 0) : null;
+  const bounds = explicitFrom != null && explicitTo != null && explicitTo > explicitFrom
+    ? { from: explicitFrom, to: explicitTo, prevFrom: explicitFrom - (explicitTo - explicitFrom), prevTo: explicitFrom }
+    : periodBounds(mode, preset);
   const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
-  const { mult, curFilter } = valueMode(rates, cur);
 
-  const db = c.env.DB, v = { mult, curFilter };
-  const nowS = Math.floor(Date.now() / 1000);
-
-  const [sources, curTot, prevTot, monthly] = await Promise.all([
-    analyticsRepo.incomeBySource(db, c.get("locale"), v, { from, to }),
-    analyticsRepo.incomeTotal(db, v, { from, to }),
-    analyticsRepo.incomeTotal(db, v, { from: prevFrom, to: prevTo }),
-    // 6 календарних місяців для оцінки стабільності (по місяцях).
-    analyticsRepo.monthlyIncome(db, v, nowS, { from: localMonthStart(nowS, -5), to: nowS }),
-  ]);
-
-  const total = curTot?.income ?? 0;
-  const prevTotal = prevTot?.income ?? 0;
-  const deltaPct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : (total > 0 ? null : 0);
-
-  const srcRows = sources.map((s) => ({
-    category_id: s.category_id, name: s.name ?? st(c.get("locale"), "other"), color: s.color,
-    amount: s.amount, n: s.n, pct: total > 0 ? Math.round((s.amount / total) * 100) : 0,
-  }));
-
-  // Стабільність: коеф. варіації (stddev/mean) по ПОВНИХ місяцях (без поточного часткового).
-  const nowMonth = new Date().toISOString().slice(0, 7);
-  const complete = monthly.filter((r) => r.m !== nowMonth).map((r) => r.income);
-  let cvPct: number | null = null, label = st(c.get("locale"), "stabilityUnknown");
-  if (complete.length >= 2) {
-    const mean = complete.reduce((a, b) => a + b, 0) / complete.length;
-    if (mean > 0) {
-      const variance = complete.reduce((a, b) => a + (b - mean) ** 2, 0) / complete.length;
-      cvPct = Math.round((Math.sqrt(variance) / mean) * 100);
-      label = st(c.get("locale"), cvPct <= 15 ? "stabilityStable" : cvPct <= 40 ? "stabilityModerate" : "stabilityVolatile");
-    }
-  }
-
-  return c.json({
-    period: { from, to, preset },
-    total, prev_total: prevTotal, delta_pct: deltaPct,
-    sources: srcRows,
-    monthly: monthly.map((r) => ({ month: r.m, income: r.income })),
-    stability: { cv_pct: cvPct, label },
-  } satisfies IncomeAnalytics);
+  const { buildIncomeAnalytics } = await import("../../lib/finance/income.ts");
+  return c.json(await buildIncomeAnalytics(
+    c.env.DB, c.get("locale"), valueMode(rates, cur), bounds, preset,
+  ) satisfies IncomeAnalytics);
 });
 
 // Cashflow-календар: ВСІ очікувані рухи по днях у вікні [from,to] (на відміну від
@@ -311,7 +288,11 @@ analytics.get("/analytics/cashflow-calendar", async (c) => {
   const url = new URL(c.req.url);
   const now = Math.floor(Date.now() / 1000);
   const from = Number(url.searchParams.get("from") ?? localMonthStart(now));
-  const to = Number(url.searchParams.get("to") ?? localMonthStart(now, 2) - 1);
+  // Three months forward by default, not two. The calendar draws ONE month at a time but the
+  // cushion projection is a running subtraction over the whole payload, so the window has to be
+  // fetched whole — asking per month would restart the balance at each month's first day and
+  // quietly report a cushion that never dipped.
+  const to = Number(url.searchParams.get("to") ?? localMonthStart(now, 3) - 1);
 
   const { cashflowMoves } = await import("../../lib/finance/cashflow.ts");
   const { fundsBreakdown } = await import("../../lib/ai/advisor.ts");
@@ -375,6 +356,27 @@ analytics.get("/analytics/fx-cost", async (c) => {
     window: { from, to },
     ...computeFxCost(rows, byDay, dayKey, uahToBase(rates)),
   } satisfies FxCost);
+});
+
+/**
+ * §CASH-PROJ — where the money is heading, day by day, for the rest of the period.
+ *
+ * The whole projection is `lib/finance/cash-projection.ts`; the handler reads a window and nothing
+ * else. `until` is the period end the CLIENT is drawing — it knows the calendar length of the
+ * period it asked for, and answering that question a second time here is how a chart ends up with
+ * an axis and a forecast that disagree about where the month stops.
+ */
+analytics.get("/analytics/cash-projection", async (c) => {
+  const url = new URL(c.req.url);
+  const now = Math.floor(Date.now() / 1000);
+  const to = numParam(url, "to", now);
+  const until = numParam(url, "until", localMonthStart(now, 1) - 1);
+  const cur = url.searchParams.get("currency") ? Number(url.searchParams.get("currency")) : null;
+  const rates = await getRates(c.env);
+  const { buildCashProjection } = await import("../../lib/finance/cash-projection.ts");
+  return c.json(await buildCashProjection(
+    c.env.DB, rates, valueMode(rates, cur), { to, until }, now,
+  ) satisfies CashProjection);
 });
 
 analytics.get("/analytics/price-drift", async (c) => {

@@ -112,16 +112,6 @@
       "importance": "optional"
     },
     {
-      "id": 12,
-      "name": "Підписки",
-      "icon": "repeat",
-      "color": "#D99414",
-      "parent_id": null,
-      "is_income": 0,
-      "is_custom": 0,
-      "importance": null
-    },
-    {
       "id": 13,
       "name": "Перекази і зняття",
       "icon": "swap",
@@ -366,7 +356,7 @@
       "name": "Стрімінги",
       "icon": "repeat",
       "color": "#D99414",
-      "parent_id": 12,
+      "parent_id": 6,
       "is_income": 0,
       "is_custom": 0,
       "importance": null
@@ -376,7 +366,7 @@
       "name": "Софт і хмара",
       "icon": "laptop",
       "color": "#D99414",
-      "parent_id": 12,
+      "parent_id": null,
       "is_income": 0,
       "is_custom": 0,
       "importance": null

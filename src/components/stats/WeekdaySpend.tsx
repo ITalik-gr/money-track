@@ -10,9 +10,12 @@ import type { Preset } from "../../store/api.ts";
 // Показуємо ТИПОВИЙ день (`typical` = сума ÷ кількість таких днів у вікні), а не суму: у місяці
 // пʼятниць 5, а субот 4, тож стовпчики сум порівнювати не можна. Ділення робить сервер — інакше
 // екран і AI-контекст рахували б одну цифру двічі й розійшлись.
-export function WeekdaySpend({ preset, currency }: { preset: Preset; currency: number | null }) {
+export function WeekdaySpend({ preset, from, to, currency }: {
+  preset: Preset; from?: number; to?: number; currency: number | null;
+}) {
   const t = useT();
-  const { data } = useGetWeekdayQuery({ preset, currency });
+  // §MONTH-VIEW: explicit bounds win, so browsing a past month re-cuts this chart too.
+  const { data } = useGetWeekdayQuery(from != null && to != null ? { from, to, currency } : { preset, currency });
   if (!data) return null;
 
   const spentTotal = data.days.reduce((s, d) => s + d.spent, 0);

@@ -34,14 +34,24 @@ advisor.get("/advisor", async (c) => {
 });
 
 advisor.get("/advisor/history", async (c) => {
-  const { getAdviceHistory } = await import("../../lib/ai/advisor.ts");
+  const { getAdviceHistory } = await import("../../lib/ai/advice-history.ts");
   return c.json(await getAdviceHistory(c.env) satisfies AdviceHistoryItem[]);
 });
 
 advisor.delete("/advisor/history", async (c) => {
-  const { clearAdviceHistory } = await import("../../lib/ai/advisor.ts");
+  const { clearAdviceHistory } = await import("../../lib/ai/advice-history.ts");
   await clearAdviceHistory(c.env);
   return c.json({ ok: true });
+});
+
+// One entry, by its `generated_at`. Declared BELOW the literal above and above nothing
+// parameterised (C7), and the id is a plain number so `numParam` is not involved: a bad value
+// simply matches no entry.
+advisor.delete("/advisor/history/:at", async (c) => {
+  const at = Number(c.req.param("at"));
+  if (!Number.isFinite(at)) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  const { deleteAdviceHistoryEntry } = await import("../../lib/ai/advice-history.ts");
+  return c.json({ ok: true, left: await deleteAdviceHistoryEntry(c.env, at) });
 });
 
 // Порада. Якщо AI недоступний (нема ключа / ліміт / збій моделі) — НЕ віддаємо порожнечу

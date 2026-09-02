@@ -26,6 +26,35 @@ import { currencySign } from "../../shared/currency.ts";
  * the page and the Advisor must not be able to disagree about the same subscription.
  */
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
+
+/**
+ * The «за планом» marker on the charge history, drawn as an opaque CHIP rather than bare text.
+ *
+ * Reported twice by the owner: still unreadable. Recharts' own `label` renders plain text at the
+ * line, so it lands ON the bars — ochre-on-accent at 11px, over a surface that changes colour bar
+ * by bar. No colour survives that, which is why re-tinting it did not help the first time: the
+ * problem is the BACKGROUND, not the ink. A filled chip gives the text a surface of its own, and
+ * the border keeps it tied to the dashed line it names.
+ *
+ * It sits ABOVE the line where there is room and below it otherwise — a chip clipped by the top of
+ * the plot area is exactly as unreadable as the text it replaced.
+ */
+function PlanLabel({ viewBox, text }: { viewBox?: { x: number; y: number; width: number; height: number }; text: string }) {
+  if (!viewBox) return null;
+  const padX = 7, h = 17;
+  // Measured by character count on purpose: an SVG chip has no layout pass, and the alternative
+  // (a foreignObject) does not print or export. 6.4px is the 11px system font's rough advance.
+  const w = Math.round(text.length * 6.4) + padX * 2;
+  const above = viewBox.y - h - 4 >= 0;
+  const y = above ? viewBox.y - h - 4 : viewBox.y + 4;
+  return (
+    <g pointerEvents="none">
+      <rect x={viewBox.x + 2} y={y} width={w} height={h} rx={8}
+            fill="var(--surface)" stroke="var(--c-ochre)" strokeWidth={1} />
+      <text x={viewBox.x + 2 + padX} y={y + h - 5} fontSize={11} fontWeight={600} fill="var(--c-ochre)">{text}</text>
+    </g>
+  );
+}
 const fmtDay = dateFmt({ day: "numeric", month: "short", year: "numeric" });
 const fmtShort = dateFmt({ day: "numeric", month: "short" });
 
@@ -235,7 +264,7 @@ export function Subscription() {
                   // Labelled and in the warning colour: an unlabelled dashed line near the bar
                   // tops is indistinguishable from grid work, which is how this one went unnoticed.
                   <ReferenceLine y={declaredLine} stroke="var(--c-ochre)" strokeDasharray="5 4" strokeWidth={1.5}
-                    label={{ value: `${t("sub.declaredLine")} ${fmt0.format(declaredLine)}`, position: "insideTopLeft", fill: "var(--c-ochre)", fontSize: 11, offset: 6 }} />
+                    label={<PlanLabel text={`${t("sub.declaredLine")} ${fmt0.format(declaredLine)}`} />} />
                 )}
                 <Bar dataKey="amount" fill="var(--accent)" radius={[4, 4, 0, 0]} {...CHART_ANIM} />
               </BarChart>

@@ -10,6 +10,7 @@ import {
 } from "../store/api.ts";
 import { GoalGridSkeleton } from "../components/ui/Skeleton.tsx";
 import { Money } from "../components/ui/Money.tsx";
+import { currencySign } from "../../shared/currency.ts";
 import { Icon } from "../components/ui/Icon.tsx";
 import { GoalModal } from "../components/planning/GoalModal.tsx";
 import { GoalProgress } from "../components/planning/GoalProgress.tsx";
@@ -183,7 +184,7 @@ function GoalContribs({ g }: { g: SavingsGoal }) {
             {items.map((c) => (
               <li key={c.id}>
                 <span className={c.amount < 0 ? "neg" : "pos"}>
-                  {c.amount > 0 ? "+" : ""}<Money minor={c.amount} decimals={false} />
+                  {c.amount > 0 ? "+" : ""}<Money minor={c.amount} currency={c.currency_code} decimals={false} />
                 </span>
                 <span className="gc-date">{fmtDate.format(c.at * 1000)}</span>
                 <button className="gc-del" aria-label={t("common.delete")} onClick={() => del({ id: goalId, cid: c.id })}>×</button>
@@ -207,6 +208,7 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
   const left = p.left;
   const dl = p.days_left ?? daysLeft(g.deadline);
   const color = g.color ?? "var(--accent)";
+  const cur = g.currency_code;
   const done = p.status === "done";
 
   // The pace badge exists only for goals with a deadline. `done` and `no_deadline` are not a pace
@@ -227,9 +229,12 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
           <button className="icon-mini" onClick={onDelete} aria-label={t("common.delete")}><Icon name="trash" size={15} /></button>
         </div>
       </div>
+      {/* §GOAL-CUR — every figure on the card is in the GOAL's currency, which for a jar-backed
+          goal is the jar's. A dollar jar printed under a hryvnia sign beside a target typed as
+          dollars is how «На ланос» came to read «4 480 ₴ з 2 000 ₴ · Ціль досягнута». */}
       <div className="goal-amounts">
-        <span className="goal-cur"><Money minor={g.current} decimals={false} /></span>
-        <span className="goal-target">{t("goal.ofTarget")} <Money minor={g.target_amount} decimals={false} /></span>
+        <span className="goal-cur"><Money minor={g.current} currency={cur} decimals={false} /></span>
+        <span className="goal-target">{t("goal.ofTarget")} <Money minor={g.target_amount} currency={cur} decimals={false} /></span>
       </div>
       <div className="goal-bar"><div className="goal-fill" style={{ width: `${pct}%` }} /></div>
       <div className="goal-foot">
@@ -250,13 +255,13 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
         )}
         {done
           ? <span className="goal-meta pos">{t("goal.achieved")}</span>
-          : <span className="goal-meta">{t("goal.leftPrefix")} <Money minor={left} decimals={false} /></span>}
+          : <span className="goal-meta">{t("goal.leftPrefix")} <Money minor={left} currency={cur} decimals={false} /></span>}
       </div>
       {perMonth != null && (
-        <div className="goal-need">{t("goal.needSaveMonthly")} <b><Money minor={perMonth} decimals={false} />{t("goal.perMonthSuffix")}</b></div>
+        <div className="goal-need">{t("goal.needSaveMonthly")} <b><Money minor={perMonth} currency={cur} decimals={false} />{t("goal.perMonthSuffix")}</b></div>
       )}
       {sprint && (
-        <div className="goal-need urgent">{t("goal.leftDaysPrefix", { days: dl })} <b><Money minor={left} decimals={false} /></b></div>
+        <div className="goal-need urgent">{t("goal.leftDaysPrefix", { days: dl })} <b><Money minor={left} currency={cur} decimals={false} /></b></div>
       )}
       <div className="goal-sub">
         {g.account_title ? <span className="goal-tag">🏦 {g.account_title}</span> : <span className="goal-tag">{t("goal.manualTag")}</span>}
@@ -268,7 +273,9 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
         {g.autofill_kind && (
           <span className="goal-tag auto">↻ {g.autofill_kind === "income_pct"
             ? t("goal.autofillPctTag", { pct: g.autofill_value ?? 0 })
-            : t("goal.autofillFixedTag", { amount: Math.round((g.autofill_value ?? 0) / 100) })}</span>
+            // §GOAL-CUR: the rule is an amount typed against THIS goal, so its sign is the goal's,
+            // not the reader's base — `{cur}` is filled in automatically and has to be overridden.
+            : t("goal.autofillFixedTag", { amount: Math.round((g.autofill_value ?? 0) / 100), cur: currencySign(cur) })}</span>
         )}
         {g.deadline && (
           <span className={`goal-tag ${dl != null && dl < 0 ? "neg" : ""}`}>

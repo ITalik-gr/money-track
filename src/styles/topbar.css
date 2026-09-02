@@ -157,7 +157,11 @@
    той самий вигляд). Знятий рядок гасне, але лишається читабельним: він не зник, а виключений. */
 .ab-item { display: flex; align-items: flex-start; gap: var(--sp-3); cursor: pointer; }
 .ab-item > input { margin-top: 3px; flex: none; }
-.ab-item > .bp-item-main { flex: 1; min-width: 0; }
+/* The body is the row's ONLY other flex child, and it stacks. Before it existed, `.bp-reason`
+   was a sibling of `.bp-item-main`, so a long sentence became a second COLUMN: it ran through
+   the figures and compressed `.bp-name` (overflow: hidden) to zero width, which on screen read
+   as a proposal for a category with no name. Reason lines can never share a line with figures. */
+.ab-body { flex: 1; min-width: 0; }
 .ab-item.off { opacity: 0.45; }
 .ab-tag {
   margin-left: 6px; padding: 1px 6px; border-radius: var(--radius-pill);

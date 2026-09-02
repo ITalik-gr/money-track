@@ -45,6 +45,11 @@ const NOT_MONEY = new Set([
   "statement_day", "payment_day", "period_count", "months", "days", "days_left", "in_days",
   "week", "year", "month_index", "dow", "dom", "daysInMonth", "daysElapsed", "daysRemaining",
   "busiest",          // a weekday or day-of-MONTH index (§WEEKDAY), not an amount
+  // §SPEND-PROFILE / §MOMENTUM / §FLOOR — COUNTS and RATIOS living beside real money. A count of
+  // merchants must not follow the base, and a runway in months must not either: both would then
+  // change when the reader switches currency, which is the opposite of what this sweep protects.
+  "quiet", "longest_streak", "merchants", "merchants_for_half", "run", "runway_months", "floor_months",
+  "paydays",          // §CASH-PROJ: days of the month a salary lands on — dates, not sums
   "first_five_share_pct",
   // counts
   "n", "prev_n", "qty", "receipts", "total_items", "count", "tx_count", "income_n", "charges_n", "prev_charges_n", "accounts", "active_months",
@@ -72,7 +77,13 @@ const MAJOR_UNITS = /_uah$/;
  * tolerance is one rounding step, not a free pass.
  */
 const ROUNDED = new Set(["suggested", "total_suggested"]);
-const ROUND_STEP = 100;
+/**
+ * One rounding STEP, expressed in the base. The hryvnia step is ₴50 (`ROUND_TO` in
+ * `routes/api/budgets.ts`) and the foreign one is a whole unit, so the two proposals can legally
+ * differ by whichever is coarser — and at this fixture's rate ₴50 is $25, far more than a dollar.
+ * A tolerance pinned to 100 minor units silently assumed a realistic rate.
+ */
+const ROUND_STEP = Math.max(100, 5000 / RATE);
 
 interface Leak { path: string; uah: number; usd: number }
 
@@ -91,11 +102,15 @@ interface Leak { path: string; uah: number; usd: number }
 // ⚠️ `reimbursed`/`reimburses_total` are NOT here: they live on a transaction row and are
 // denormalised in that row's own currency (§COMPENSATION), which is why `EFF_AMOUNT` adds them
 // BEFORE multiplying. Converting them here would double-convert the compensation.
-const ROLLED_UP_INSIDE_A_ROW = /_uah$|_base$|^spent$|^income$/;
+const ROLLED_UP_INSIDE_A_ROW = /_uah$|_base$|^spent$|^income$|^charged$|^market$|^cost$/;
 
 function ownCurrency(node: unknown): boolean {
-  return !!node && typeof node === "object" && !Array.isArray(node)
-    && "currency_code" in (node as Record<string, unknown>);
+  if (!node || typeof node !== "object" || Array.isArray(node)) return false;
+  const row = node as Record<string, unknown>;
+  // `original_currency` marks a row the same way `currency_code` does: §FX-COST items carry the
+  // amount the SHOP charged, in the shop's currency, beside `charged`/`market`/`cost`, which are
+  // rolled up. Without this the sweep demanded that a $100 purchase become $50 on a dollar screen.
+  return "currency_code" in row || "original_currency" in row;
 }
 
 function compare(uah: unknown, usd: unknown, path: string, out: Leak[], inRow = false): void {
@@ -141,12 +156,20 @@ const ENDPOINTS: string[] = [
   "/categories/1/overview", "/categories/13/overview",
   "/planned", "/planned/upcoming", "/planned/actuals", "/planned/detect",
   "/goals", "/goals/1/progress", "/goals/1/contributions", "/events",
+  // The `/insights/*` readings carry real money (the period total, new-face spend, the three
+  // income bands, the floor and the cushion) beside counts and ratios that must NOT move.
+  "/insights/spend-profile", "/insights/income-split", "/insights/floor",
+  // ⚠️ `/insights/momentum` is listed and covers NOTHING on this fixture: no category moves the
+  // same way for three complete months, so it answers `rows: []` and every assertion about it
+  // holds vacuously — the same trap §FX-COST fell into when the fixture had no foreign purchase.
+  // Its money is exercised by `insights.test.ts`, which builds a ledger that CONTAINS a run.
+  "/insights/momentum",
   "/notifications", "/facts",
   "/analytics/overview", "/analytics/overview?preset=week", "/analytics/overview?preset=quarter",
   "/analytics/overview?preset=year",
   "/analytics/monthly-history", "/analytics/safe-to-spend", "/analytics/capital-trend",
   "/analytics/networth", "/analytics/compare", "/analytics/forecast", "/analytics/income",
-  "/analytics/cashflow-calendar", "/analytics/receipt-items", "/analytics/price-drift", "/analytics/fx-cost",
+  "/analytics/cashflow-calendar", "/analytics/cash-projection", "/analytics/receipt-items", "/analytics/price-drift", "/analytics/fx-cost",
   "/analytics/patterns", "/analytics/by-category", "/analytics/habits", "/analytics/weekday",
   "/analytics/weekday?preset=month", "/analytics/day-of-month", "/analytics/spark", "/analytics/health",
   "/analytics/category?id=1", "/analytics/merchant?name=Сільпо",

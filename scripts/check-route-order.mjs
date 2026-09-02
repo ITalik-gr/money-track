@@ -26,7 +26,7 @@ const DIRS = ["worker/routes", "worker/routes/api"];
 
 // The app object a route is hung on. Matching a NAME rather than any `.get(` keeps `c.get("locale")`
 // — a context read, not a route — from being parsed as `GET /locale`.
-const APP_NAMES = /^(api|app|setup|ingest|credentials|importRoutes|webhook|telegram|admin|account|auth|analytics|accounts|advisor|budgets|categories|events|exportRoutes|goals|jobs|knowledge|notifications|planned|reports|settings|transactions|transfers)$/;
+const APP_NAMES = /^(api|app|setup|ingest|credentials|importRoutes|webhook|telegram|admin|account|auth|analytics|accounts|advisor|budgets|categories|events|exportRoutes|goals|insights|jobs|knowledge|notifications|planned|reports|settings|transactions|transfers)$/;
 const ROUTE = /^\s*(\w+)\.(get|post|put|patch|delete|all)\(\s*["'`]([^"'`]+)["'`]/;
 
 function tsFiles(dir) {

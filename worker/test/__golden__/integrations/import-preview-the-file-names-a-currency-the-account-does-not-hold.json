@@ -25,6 +25,7 @@
     },
     "complete": true,
     "preamble_rows": 0,
+    "mapping_source": "hints",
     "parsed": 1,
     "duplicates": 0,
     "currency_mismatch": "USD",

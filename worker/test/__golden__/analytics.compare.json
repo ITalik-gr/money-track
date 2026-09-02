@@ -39,8 +39,8 @@
         "delta_meaningful": true
       },
       {
-        "category_id": 12,
-        "category_name": "Підписки",
+        "category_id": 43,
+        "category_name": "Софт і хмара",
         "color": "#D99414",
         "a": 200000,
         "b": 0,
@@ -97,8 +97,8 @@
     "movers": {
       "up": [
         {
-          "category_id": 12,
-          "category_name": "Підписки",
+          "category_id": 43,
+          "category_name": "Софт і хмара",
           "color": "#D99414",
           "a": 200000,
           "b": 0,

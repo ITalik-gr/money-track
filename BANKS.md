@@ -3,8 +3,8 @@
 > **Read this before writing any bank integration.** It records what PrivatBank actually offers
 > (measured 2026-08-13, not remembered), what its data shape breaks in this project's canon, and
 > which parts of our own provider abstraction are still declarations rather than working code.
-> How money is *counted* is `CLAUDE.md`; layers and lints are `ARCHITECTURE.md`; the queue is
-> `ROADMAP.md`. This file is the "why it is like this" for the bank edge.
+> How money is *counted* is `docs/CANON.md`; how a row is WRITTEN is `docs/INGEST.md`; layers and
+> lints are `ARCHITECTURE.md`; the queue is `ROADMAP.md`. This file is the "why it is like this" for the bank edge.
 
 ---
 
@@ -181,20 +181,14 @@ is missing is that **half of it has never been executed**:
 
 ---
 
-## 5. The preparation, in the order that pays off
+## 5. The preparation — CLOSED 2026-08-13
 
-Every step below is worth doing on its own merits and leaves the app better even if PrivatBank never
-happens. That is the test each step had to pass to be on this list.
-
-| # | Step | Why it is first |
-|---|---|---|
-| ~~1~~ | ✅ **DONE 2026-08-13 — `repo/ingest.ts` `upsertCanonicalTx` is the only writer.** `upsertMonoTx` kept its signature and its normalisation and lost its SQL; `importTransactions` is now a loop around the same call. The two real differences became arguments (`onConflict`, whether an account may be minted) — see §INGEST-WRITE in `CLAUDE.md`. **The mono goldens did not move at all**, which is the proof the refactor asked for. | Three writers is how money starts disagreeing with itself. |
-| ~~2~~ | ✅ **DONE 2026-08-13 — `lib/bank/normalize.ts`.** `parseAmountMinor` moved out of `csv.ts`, `parseStatementDate` fixed to read a zone-less wall clock as Kyiv (§3.2 — imported rows moved back 3 h, the only golden change), `currencyNumeric` added with a real consumer: the import preview now warns when the FILE names a currency the ACCOUNT does not hold. `localMidnight` generalised into `localWallTime`. 15 assertions in `normalize.test.ts`. | Fixes a live bug and stops each provider from inventing its own money parsing. |
-| ~~3~~ | ✅ **DONE 2026-08-13 — `BankProvider.statement` owns window, gap and rate-limit recognition.** The cursor carries the provider per job; both pacers (DO alarm, client interval) read `nextStepGapMs`; mono's normalisation moved to `monoToCanonical` in `lib/bank/mono.ts`, shared by the webhook and the fetch. 8 scenarios against a FAKE bank in `backfill.test.ts` — the path had NO tests before. See §BANK-FETCH in `CLAUDE.md`. | Turns `backfill.ts` from "mono's backfill" into the thing its name claims. |
-| ~~4~~ | ✅ **DONE 2026-08-13 — `repo/connections.ts`**, written on every sync attempt (account sync, backfill step, poll pass), `connection_id` set on success, `BankConnectionsCard` in Settings. §BANK-CONN in `CLAUDE.md`. | Without it there is no answer to "which token feeds this account" and no place to show a failing bank. |
-| ~~5~~ | ✅ **DONE 2026-08-13 (partly) — `bankCredential(env, id)` is the one answer**, fed by `env.BANK_CREDENTIALS` built in `UserDO.appEnv`, where the owner gate already lives. §BANK-CRED in `CLAUDE.md`. ⚠️ **What is deliberately NOT done:** the multi-VALUE shape (Privat needs id + token) and the `SecretName` whitelist entry. Both are one line each and neither can be designed honestly without the provider that uses them — a credential form for a bank nobody has linked would be a guess. They land with step 7. | See §4.6. Security invariant, not ergonomics. |
-| ~~6~~ | ✅ **DONE 2026-08-13 — `lib/bank/poll.ts`**, the fourth claimant on the object's single alarm. One account per pass, an overlapping window, its own request timestamp. 7 scenarios. §BANK-POLL in `CLAUDE.md`. | §A6's rule, applied to the fourth claimant. |
-| ~~7~~ | ✅ **DONE 2026-08-13 — `lib/bank/privat.ts` + `providers/privat.ts`**, ~250 lines including comments, which is the evidence that 1–6 were the actual work. Credential is JSON (`{id, token}`) in `privat_credentials`, verified against `/api/statements/settings` before it is stored; 17 mapping scenarios. ⚠️ **Never run against the live service** — see §7. | Small, once 1–6 exist. If it is big, one of 1–6 was skipped. |
+All seven steps landed: one canonical writer (`repo/ingest.ts` §INGEST-WRITE), shared string
+normalisation (`lib/bank/normalize.ts` §BANK-PARSE), window/gap/rate-limit owned by the provider
+(§BANK-FETCH), `bank_connections` with a reader (§BANK-CONN), one credential resolver
+(§BANK-CRED), polling in the alarm (§BANK-POLL), and then `providers/privat.ts` itself — ~250
+lines including comments, **which is the evidence that steps 1–6 were the actual work.**
+The narrative is in `HISTORY.md`; the rules are in `docs/INGEST.md`.
 
 **Done when** (for the integration itself): a ФОП account syncs its balance and 90 days of history,
 a rejected/reversed row never counts as spending, the numbers agree with a statement exported by

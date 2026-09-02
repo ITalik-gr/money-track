@@ -85,6 +85,18 @@
 }
 .month-nav .seg-btn { min-width: 32px; }
 .month-nav .seg-btn:disabled { opacity: 0.4; cursor: default; }
+/* The chevron points DOWN as drawn, so each arrow is one quarter turn. Rotating an icon rather
+   than shipping two mirrored paths keeps the two buttons optically identical, which is the whole
+   point of a stepper. */
+.month-nav-arrow { display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.month-nav-arrow svg { transform: rotate(90deg); }
+.month-nav-arrow.next svg { transform: rotate(-90deg); }
+
+/* The way IN to month browsing. Outlined in the accent because it NAVIGATES — the period-mode
+   pill beside it only flips a setting, and until 2026-09-02 the two were indistinguishable:
+   same pill, same calendar icon, different worlds. */
+.month-open { border-color: var(--accent); color: var(--accent); }
+.month-open svg { transform: rotate(90deg); }
 /* Why the "now" blocks are missing — said in the flow, not tucked into a tooltip nobody opens. */
 .month-note {
   padding: 10px 14px; border: 1px dashed var(--line); border-radius: var(--r-md);
@@ -98,3 +110,7 @@
 /* The stack legend can run to nine entries, so it wraps rather than squeezing the chart. */
 .ms-legend { flex-wrap: wrap; gap: 6px 14px; padding: 10px 2px 0; }
 .ms-unit { color: var(--muted); margin-left: auto; }
+
+/* §CASH-PROJ — the one line that says what the dashed forecast is made of. Under the card, not
+   inside it: it explains the chart, it is not part of the chart's own reading. */
+.proj-note { margin: 8px 2px 0; font-size: 12px; line-height: 1.45; }

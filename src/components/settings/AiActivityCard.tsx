@@ -26,7 +26,7 @@ export function AiActivityCard() {
   const [revert, { isLoading }] = useRevertAiChangeMutation();
 
   const show = (ch: AiChange, v: string | null) => {
-    if (ch.field === "category_id") {
+    if (ch.field === "category_id" || ch.field === "real_category_id") {
       return v == null ? t("audit.noCategory") : cats.find((c) => c.id === Number(v))?.name ?? `#${v}`;
     }
     if (ch.field === "is_transfer") return v === "1" ? t("audit.isTransfer") : t("audit.notTransfer");

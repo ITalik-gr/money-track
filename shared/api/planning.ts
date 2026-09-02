@@ -146,6 +146,8 @@ export interface GoalProgressSeries {
   points: { at: number; amount: number }[];
   /** True when the series came from an account balance rather than from contributions. */
   is_jar: boolean;
+  /** §GOAL-CUR — the unit of every `amount` above: the goal's own, never the display base. */
+  currency_code: number;
 }
 
 /**
@@ -177,7 +179,12 @@ export interface GoalBody {
   kind?: GoalKind; autofill_kind?: AutofillKind | null; autofill_value?: number | null;
 }
 
-export interface GoalContribution { id: number; amount: number; at: number; note: string | null; source: string }
+/**
+ * §GOAL-CUR — `amount` is in the GOAL's currency, and the row says which so nobody has to guess.
+ * `goal_contributions` has no currency column because it does not need one: these rows are summed
+ * into the goal's `current_amount`, so they are that goal's unit by construction.
+ */
+export interface GoalContribution { id: number; amount: number; at: number; note: string | null; source: string; currency_code: number }
 
 /**
  * §GOAL-PACE — is the goal going to make it. Computed on the SERVER (`lib/finance/goals.ts`,
@@ -217,6 +224,13 @@ export interface SavingsGoal {
   created_at?: number | null;
   current: number; // ефективний прогрес (баланс банки або ручний)
   pace: GoalPace;  // §GOAL-PACE — server-computed, so the card and the feed cannot diverge
+  /**
+   * §GOAL-CUR (migration 0048) — the currency THIS goal's money is in, and the one every figure
+   * on it is already expressed in. Not the display base: a jar funded in dollars is dollars, and
+   * converting it into ₴ to sit beside a target typed as «2 000» is how the app came to
+   * congratulate the owner on a goal that was 5% complete.
+   */
+  currency_code: number;
 }
 
 /**

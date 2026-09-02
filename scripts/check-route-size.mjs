@@ -63,7 +63,9 @@ const EXCEPTIONS = {
   // repetition) pushed the file over, and the answer was a seam rather than a bigger number — the
   // AI branch moved to `drafts-ai.ts`, beside `drafts-budget`/`drafts-import`. Third time C3 has
   // forced that call and third time it named the right seam.
-  "worker/lib/messaging/notify.ts": 861,
+  // 2026-09-02: 861 → 817, §GOAL-PACE's drafter moved to `drafts-goals.ts` — fourth seam, and the
+  // fourth time the file named it correctly.
+  "worker/lib/messaging/notify.ts": 817,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
   // "one number, one home", and cutting it up would give that number two homes again.
   // 2026-08-27: 500 → 398, and the exception is kept only because the file is still over the cap.

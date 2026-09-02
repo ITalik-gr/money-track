@@ -2,14 +2,16 @@
 
 > **Для Claude:** читай цей файл ПЕРШИМ перед будь-якою роботою над UI/UX.
 > Тут — джерело правди для візуалу: токени, патерни, рішення та референси.
-> Код-реалізація токенів живе в `src/index.css`. Якщо цей файл і CSS розходяться —
+> Код-реалізація токенів живе в `src/styles/tokens.css`. Якщо цей файл і CSS розходяться —
 > цей файл описує НАМІР, CSS треба підтягнути до нього (або оновити цей файл, якщо
 > намір змінився свідомо). Кожну зміну дизайну фіксуй у розділі «Журнал рішень».
 
-> **Дата останнього оновлення:** 2026-08-12. Чинна черга дизайну живе в `ROADMAP.md`
-> («🎨 Дизайн — майбутнє»), НЕ тут: §10.1–10.5 винесено в `HISTORY.md` 2026-07-27 саме тому, що
-> виконане ТЗ у шапці читалось наступною сесією як робота, якої ще нема. Тут — стан і правила;
-> що робити далі — у ROADMAP.
+> **Оновлено 2026-09-02.** Чинна черга дизайну живе в `ROADMAP.md` («🎨 Дизайн — майбутнє»),
+> НЕ тут. Правило, куплене двічі: **виконане ТЗ у шапці читається наступною сесією як робота,
+> якої ще немає** — тому §10.1–10.5 (2026-07-27) і §7 «Заплановані фічі» F1–F6 (2026-09-02, усі
+> реалізовані) звідси прибрані. Тут — стан і правила; що робити далі — у ROADMAP.
+> Архітектура стилів (розділення файлів, лінти C8/C9) — `STYLES.md`; інженерні правила
+> клієнта — `docs/UI.md`.
 
 ---
 
@@ -21,7 +23,7 @@
 3. Узгоджене рішення записується в:
    - **розділ 5 «Референси»** — що саме надихнуло і що беремо/не беремо;
    - відповідний розділ токенів/патернів, якщо змінюємо систему;
-   - **розділ 8 «Журнал рішень»** — короткий запис «що і чому».
+   - **розділ 7 «Журнал рішень»** — короткий запис «що і чому».
 4. Лише після цього — правки в коді (`src/index.css` + компоненти).
 
 Принцип: **референс — це інгредієнт, не рецепт.** Ми не копіюємо чужий дашборд
@@ -58,7 +60,7 @@ DeliFin, кобальт-акцент, **гібридна типографіка*
 
 ---
 
-## 2. Токени (джерело правди — `src/index.css`)
+## 2. Токени (джерело правди — `src/styles/tokens.css`)
 
 ### Кольори — світла тема
 | Токен | Значення | Роль |
@@ -274,37 +276,7 @@ TxDetail, Setup, Login.
 
 ---
 
-## 7. Заплановані фічі (візуальний бекап-лог)
-
-> Сюди — фічі, які користувач описує разом зі скрінами, до їх реалізації.
-
-### F1 — Cashflow-графік у Статистиці (дохід + витрата на одному) ⭐
-Дві лінії на одному графіку: витрати й надходження, як у DeliFin (R1) / Finexa (R3).
-Згладжені лінії, area-заливка, tooltip зі значенням, перемикач періоду.
-
-### F2 — Бренд-лого / фото для транзакцій
-Замість літери-аватара показувати лого популярних мерчантів (за назвою/MCC).
-Fallback: іконка категорії → літера. Джерело лого — на узгодженні (§9 Q3).
-
-### F3 — Підписки (розгорнута фіча) ⭐
-Окремий розділ/картка: список рекурентних платежів (Netflix/Spotify/Anthropic…), бренд-лого,
-сума, періодичність, дата наступного списання, сума/міс. Натхнення — Cazura (R7).
-Авто-детект рекурентних із транзакцій — кандидат для AI-порадника ([[ai-advisor-vision]]).
-
-### F4 — Budget/Envelope-картки зі станом
-Прогрес-бар + бейдж стану («в межах» / «майже вичерпано» / «перевищено») + «X% використано».
-Форма з Finexa (R3), лягає на існуючі Конверти.
-
-### F5 — Spending-by-category бари + Expense Breakdown
-Горизонтальні бари (назва в барі + %) — Finexa. Опційно bubble/donut — Cazura.
-
-### F6 — AI-Insight картка (апгрейд) + Financial-health gauge
-Insight у стилі Lefstyle (R2): спаркл-іконка, alert/advice під-картки. Gauge-кільце для
-здоров'я фінансів / runway у Пораднику.
-
----
-
-## 8. Журнал рішень
+## 7. Журнал рішень
 
 > **Записи 2026-07-04 → 2026-07-12 винесено в `HISTORY.md` (2026-08-07).** Це епоха першого
 > редизайну (світла тема, ребілд токенів, уніфікація типографіки, де-слоп графіків, ТЗ §10.1–10.5):
@@ -313,6 +285,8 @@ Insight у стилі Lefstyle (R2): спаркл-іконка, alert/advice п�
 
 | Дата | Рішення | Причина |
 |---|---|---|
+| 2026-09-02 | **Чотири нові блоки `/insights/*`: три ФАКТИ без графіка, одна смуга, що вміє переповнюватись, і спарклайн, який і є твердженням** | (1) §SPEND-PROFILE — три числа з реченням під кожним. Графік навколо факту, який уже завбільшки з факт, — це оздоблення; на телефоні вони йдуть у ДВА стовпці, бо один перетворив би рядок, який читається поглядом, на скрол. (2) §INCOME-SPLIT — одна доріжка, заповнена трьома рівнями вагомості; залишок лишається ПОРОЖНЬОЮ доріжкою, а не четвертим кольором, бо «лишилось» — це відсутність витрати, і заливка зробила б із неї ще один напрямок. Смуга свідомо ПЕРЕПОВНЮЄТЬСЯ, коли витрачено понад дохід: затиснута на 100% намалювала б найгірший місяць як завершений — а це єдиний місяць, заради якого блок існує. Кольори з `IMPORTANCE_META`, не локальні: одне поняття на одній сторінці не може мати двох палітр, і §I18N-DYNKEY просить мапу, а не ключ, зібраний конкатенацією. (3) §MOMENTUM — спарклайн обовʼязковий, бо твердження блоку («третій місяць поспіль») стосується ФОРМИ, а бейдж без картинки просить повірити на слово; дно осі — 0, інакше коливання 2% виглядало б обривом. Зростання витрат червоне, спадання зелене — протилежно до біржового графіка, бо тон береться зі ЗНАЧЕННЯ, а не з нахилу. (4) §FLOOR — два runway поруч, і повний лишається жирним: тихо підняти дружніший до заголовка означало б, що застосунок обрав оптимістичне прочитання за читача |
+| 2026-09-02 | **Три правки з живого прода: підпис опорної лінії став ЧІПОМ, стрілки місяців — іконками, а кнопка «Місяці» перестала бути двійником «Календарний»** | (1) Recharts малює `label` у `ReferenceLine` звичайним текстом, тож він лежить НА стовпцях — і жоден колір чорнила цього не переживе, бо тло змінюється від стовпця до стовпця. Саме тому перша спроба (перефарбувати) не допомогла, і власник поскаржився вдруге тими самими словами. Тепер це непрозорий чіп: заливка поверхні, вохряна рамка й текст, над лінією де є місце й під нею де немає. **Проблема була у ТЛІ, а не в чорнилі.** (2) `‹` і `›` — це текст: вони успадковують шрифт тіла, сидять поза оптичним центром квадратної кнопки й міняють вагу разом із гарнітурою, тоді як кожен інший контрол на сторінці намальований іконкою. Один `chevron`, повернутий на чверть оберту в кожен бік, — дві кнопки лишаються оптично однаковими, що і є весь сенс степера. (3) Кнопка «Місяці» мала ту саму пігулку Й ту саму іконку календаря, що перемикач режиму періоду, роблячи при цьому непов'язану річ: один перемикає НАЛАШТУВАННЯ, друга веде в інший ВИГЛЯД. Тепер вона носить той самий шеврон, що й степер, у який перетворюється, і акцентну рамку — «це навігація», чого проста рамка перемикача не каже |
 | 2026-08-27 | **The mark follows the display currency again — but as ARTWORK, not as a text glyph, and with the dollar as the default.** Three drawn variants (`favicon.svg` = dollar, `icons/mark-uah.svg`, `icons/mark-eur.svg`), the in-app chip re-renders through `useBrandMark()`, and `<link rel="icon">` is swapped with it | The owner liked the version that changed with the currency, and it is right here rather than sloppy: the app rolls a multi-currency ledger into ONE unit (§BASE-CUR) and the mark is that unit's own sign — it says the same thing the numbers under it say, and it changes exactly when they do. What was missing the first time was a DEFAULT: it resolved through `baseSign()`, so a base with no artwork had no answer at all. Now anything unknown resolves to the dollar. ⚠️ The glyphs are PATHS (the owner drew two of them), which is what finally removed the whole class of bugs from the last round: no font to be missing, no `text-anchor` centring an advance instead of ink, no `dominant-baseline` that Chrome honours and `sips` ignores. The euro is still text, because there is no drawn euro — but it is placed by measurement to land its ink box where the two drawn ones land theirs, and no PNG is generated from it. ⚠️ The INSTALLED icon cannot follow: the manifest is static and read once at install time, so `icons/*.png` carry the default. Said out loud in `lib/brand.ts` rather than left as a silent inconsistency |
 | 2026-08-27 | **The icon files are rendered from `favicon.svg` with `sips`, and the glyph is placed by MEASURED numbers** (`x="32.13" y="41.06"`, no `dominant-baseline`) | Three things had to be found the hard way, and each produced a mark that looked wrong in one place and fine in another. (1) `text-anchor: middle` centres the glyph's ADVANCE, not its ink — and in the monospace face the file used, the dollar sits visibly right of its own cell. The family is a sans stack now and the offset is measured: rendered at 512px the ink box lands at (256, 248). (2) `dominant-baseline` is honoured by Chrome and IGNORED by `sips` — the same file gave a centred glyph in the browser tab and one floating in the top third of the app icon. A plain alphabetic baseline is the only thing every renderer agrees on. (3) `qlmanage` composites onto WHITE, so the first batch of PNGs had white triangles where the rounded corners should be transparent; `sips` keeps the alpha. ⚠️ And twice now an SVG comment has been silently rejected for containing a double hyphen (CSS variable names the first time, a `sips` output flag the second) — browsers forgive it, strict renderers refuse the whole document, so both files carry a note |
 | 2026-08-27 | **The mark is a constant `$`, not the reader's currency sign** — in the app chip, the landing header, `favicon.svg` and all three PNG icons. Plus: the lightbox centres on the VIEWPORT with the arrows pinned to its edges, and a segmented control inside a settings card is as wide as its options | The logo was `baseSign()`, so it changed with the display-currency setting: hryvnia for one visitor, a dollar for the next. A mark that depends on a preference is not a mark — it is a data field wearing the logo's clothes — and the home-screen PNG could not follow it anyway, so the app icon and the header already disagreed for anyone not in hryvnia. One constant (`src/lib/brand.ts`) plus four regenerated image files. ⚠️ The lightbox arrows were flex siblings of the picture, so they sat around a frame whose width came from its widest child: a longer caption or a 2.5:1 chat shot moved them, and the image sat off-centre inside its own slot. **Where a control sits may not depend on the content it pages through.** ⚠️ `.seg` is `inline-flex` (correct everywhere), but `.set-card` is a flex COLUMN and a flex item stretches by default — four tabs spread across the whole card with the last floating in the middle of nowhere |
@@ -458,18 +432,17 @@ Insight у стилі Lefstyle (R2): спаркл-іконка, alert/advice п�
 
 ---
 
-## 9. Відкриті питання
+## 8. Відкриті питання
 
-Немає. **Батч #1 (2026-07-04) — ВИРІШЕНО** (див. §8): Q1 світла тема · Q2 гібрид шрифтів
-(потім уніфіковано на Geist Sans, 2026-07-11) · Q3 гібрид лого (потім локальні бренди без
-clearbit, 2026-07-05) · Q4 старт з Огляду. Питання про світлу палітру закрито мовчазно —
-spruce-off-white (`--bg #f2f5f3`) лишився й пройшов усі наступні раунди редизайну.
+**Немає.** Нове відкрите питання пиши сюди, рішення по ньому — рядком у §7.
 
-Нове відкрите питання пиши сюди, рішення по ньому — рядком у §8.
+> Батч #1 (2026-07-04) вирішено: світла тема · гібрид шрифтів (потім уніфіковано на Geist Sans)
+> · гібрид лого (потім локальні бренди без clearbit) · старт з Огляду. Світла палітра —
+> spruce-off-white (`--bg #f2f5f3`) — пройшла всі наступні раунди редизайну.
 
 ---
 
-## 10. Як працювати над дизайном (skills — обовʼязково)
+## 9. Як працювати над дизайном (skills — обовʼязково)
 1. **Старт кожної дизайн-сесії:** `node .claude/skills/impeccable/scripts/context.mjs`,
    тоді прочитати `impeccable/reference/product.md` (наш register — **product**, НЕ brand)
    і цей `DESIGN.md`. Register-довідник обовʼязковий, інакше вивід generic.

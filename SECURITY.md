@@ -55,6 +55,6 @@ These are deliberate trade-offs, documented so you don't spend time reporting th
 
 ## If you self-host
 
-Read `CLAUDE.md` §Ops before deploying. In particular: set a **separate** AI API key for the demo
+Read `docs/OPS.md` before deploying. In particular: set a **separate** AI API key for the demo
 sandbox with its own provider-side spend limit, never reuse the owner key, and never rotate
 `SECRETS_MASTER_KEY` — doing so makes every stored user credential permanently unreadable.

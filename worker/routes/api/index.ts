@@ -27,6 +27,7 @@ import { dataExport } from "./export.ts";
 import { events } from "./events.ts";
 import { feedback } from "./feedback.ts";
 import { goals } from "./goals.ts";
+import { insights } from "./insights.ts";
 import { jobs } from "./jobs.ts";
 import { knowledge } from "./knowledge.ts";
 import { notifications } from "./notifications.ts";
@@ -57,6 +58,7 @@ api.use("*", async (c, next) => {
 // ---- domain modules ---------------------------------------------------------
 
 api.route("/", accounts);
+api.route("/", insights);
 api.route("/", advisor);
 api.route("/", rules);
 api.route("/", aiChanges);

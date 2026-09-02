@@ -23,7 +23,10 @@ import type { Env } from "../../env.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { getRates } from "./money.ts";
 import { chargesBetween } from "./subscriptions.ts";
-import { localMonthStart, valueMode, STATS_JOINS, INCOME_WHERE, incomeSum } from "./stats.ts";
+import { localMonthStart, localYm, valueMode, STATS_JOINS, INCOME_WHERE, incomeSum } from "./stats.ts";
+import type { AppDb } from "../platform/db-shim.ts";
+import { st, type ServerLocale } from "../platform/i18n.ts";
+import type { IncomeAnalytics } from "../../../shared/api/analytics.ts";
 
 export interface IncomeOutlook {
   /** Actually arrived since the 1st, ₴ minor — the canon, unchanged. */
@@ -92,5 +95,63 @@ export async function incomeOutlook(
       amount: ch.amount,
       varies: !!ch.plan.amount_varies,
     })),
+  };
+}
+
+/**
+ * The `/analytics/income` payload, assembled out of the canon.
+ *
+ * Moved out of the route on 2026-09-02 under C3: the handler's own job is to read a window out of
+ * a query string, and everything below — which rows count as a source, how a period compares to
+ * the one before, what "stable income" means — is a domain judgement. Same seam, same argument as
+ * `cashflowMoves`.
+ */
+export async function buildIncomeAnalytics(
+  db: AppDb,
+  locale: ServerLocale,
+  v: { mult: string; curFilter: string },
+  bounds: { from: number; to: number; prevFrom: number; prevTo: number },
+  preset: string,
+  now = Math.floor(Date.now() / 1000),
+): Promise<IncomeAnalytics> {
+  const { from, to, prevFrom, prevTo } = bounds;
+  const analyticsRepo = await import("../../repo/analytics.ts");
+
+  const [sources, curTot, prevTot, monthly] = await Promise.all([
+    analyticsRepo.incomeBySource(db, locale, v, { from, to }),
+    analyticsRepo.incomeTotal(db, v, { from, to }),
+    analyticsRepo.incomeTotal(db, v, { from: prevFrom, to: prevTo }),
+    // 6 календарних місяців для оцінки стабільності (по місяцях).
+    analyticsRepo.monthlyIncome(db, v, now, { from: localMonthStart(now, -5), to: now }),
+  ]);
+
+  const total = curTot?.income ?? 0;
+  const prevTotal = prevTot?.income ?? 0;
+  const deltaPct = prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 100) : (total > 0 ? null : 0);
+
+  const srcRows = sources.map((s) => ({
+    category_id: s.category_id, name: s.name ?? st(locale, "other"), color: s.color,
+    amount: s.amount, n: s.n, pct: total > 0 ? Math.round((s.amount / total) * 100) : 0,
+  }));
+
+  // Стабільність: коеф. варіації (stddev/mean) по ПОВНИХ місяцях (без поточного часткового).
+  const nowMonth = localYm(now);
+  const complete = monthly.filter((r) => r.m !== nowMonth).map((r) => r.income);
+  let cvPct: number | null = null, label = st(locale, "stabilityUnknown");
+  if (complete.length >= 2) {
+    const mean = complete.reduce((a, b) => a + b, 0) / complete.length;
+    if (mean > 0) {
+      const variance = complete.reduce((a, b) => a + (b - mean) ** 2, 0) / complete.length;
+      cvPct = Math.round((Math.sqrt(variance) / mean) * 100);
+      label = st(locale, cvPct <= 15 ? "stabilityStable" : cvPct <= 40 ? "stabilityModerate" : "stabilityVolatile");
+    }
+  }
+
+  return {
+    period: { from, to, preset: preset as IncomeAnalytics["period"]["preset"] },
+    total, prev_total: prevTotal, delta_pct: deltaPct,
+    sources: srcRows,
+    monthly: monthly.map((r) => ({ month: r.m, income: r.income })),
+    stability: { cv_pct: cvPct, label },
   };
 }

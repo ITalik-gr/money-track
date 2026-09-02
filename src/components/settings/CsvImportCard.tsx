@@ -30,6 +30,12 @@ interface Preview {
   currency_mismatch?: string | null;
   /** Rows above the table (bank details, the holder's identity, period totals) that were skipped. */
   preamble_rows?: number;
+  /**
+   * §CSV-AI — where the column mapping came from. `ai` means the hint table did not recognise
+   * this bank's headers and a model proposed the columns instead. Shown, never hidden: the
+   * mapping is a guess either way, and the one a model made is the one worth a second look.
+   */
+  mapping_source?: "hints" | "user" | "ai";
 }
 
 const FIELDS: { key: keyof Mapping; labelKey: TranslationKey; required: boolean }[] = [
@@ -189,6 +195,9 @@ export function CsvImportCard() {
           <>
             {/* Мапінг показуємо ЗАВЖДИ, навіть коли вгадався: підтвердити колонку дешево,
                 виявити помилку постфактум — ні. */}
+            {result.mapping_source === "ai" && (
+              <div className="muted csv-ai-note">{t("csv.mappedByAi")}</div>
+            )}
             <div className="stack" style={{ gap: 8 }}>
               {FIELDS.map((f) => (
                 <div key={f.key} className="row" style={{ gap: 8, alignItems: "center" }}>

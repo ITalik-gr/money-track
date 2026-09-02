@@ -35,7 +35,7 @@ export function AiChangeLog({ txId }: { txId: string }) {
   // turned back into something readable HERE rather than at write time — the log has to stay
   // truthful about the raw value even if a category is later renamed.
   const show = (ch: AiChange, v: string | null) => {
-    if (ch.field === "category_id") return catName(v);
+    if (ch.field === "category_id" || ch.field === "real_category_id") return catName(v);
     if (ch.field === "is_transfer") return v === "1" ? t("audit.isTransfer") : t("audit.notTransfer");
     return v && v.trim() ? v : t("audit.empty");
   };

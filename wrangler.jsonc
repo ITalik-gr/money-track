@@ -89,17 +89,32 @@
 			"bucket_name": "finance-receipts"
 		}
 	],
-	// Weekly insight + weekly AI report (Mon 09:00), monthly AI report (1st 09:00),
-	// daily notification feed + rates (06:00 UTC ≈ 08:00 Kyiv). Each fires a fan-out to every
-	// user's Durable Object (worker/lib/platform/cron.ts).
+	// Weekly insight + weekly AI report (Mon 04:00 UTC ≈ 06:00-07:00 Kyiv), monthly AI report
+	// (1st, same hour), daily notification feed + rates (06:00 UTC ≈ 08:00-09:00 Kyiv). Each fires
+	// a fan-out to every user's Durable Object (worker/lib/platform/cron.ts).
+	//
+	// ⚠️ The reports used to run at 09:00 UTC — NOON in Kyiv. Reported by the owner: a summary of
+	// the week or the month that lands at lunchtime arrives after most of the day's decisions have
+	// already been made. It is now waiting when the day starts.
+	//
+	// Evening was asked about and rejected: a period is not COMPLETE until it ends, and
+	// `lastCompletePeriod` would then report the week BEFORE the one just lived. A report that
+	// silently skips a period is worse than one that arrives a few hours late.
+	//
+	// ⚠️ Cloudflare cron is UTC-only, so the Kyiv hour drifts by one across DST. That is accepted:
+	// anywhere between 06:00 and 07:00 is "before the day starts", which is the whole requirement.
+	//
+	// ⚠️ The report crons now fire BEFORE the daily pass, where `close_budget_month` lives — so
+	// `runCron` closes the month for every kind, not just `daily` (§BUDGET-MEMORY). Without that,
+	// the 1st-of-month run would announce envelopes that had not yet received their carry.
 	//
 	// The former minute-cron is GONE: it existed to pace the backfill (mono allows 1 req/60s),
 	// and that now lives in `UserDO.alarm()`. As a global cron it would have woken every user's
 	// object 1440 times a day just to find nothing to do.
 	"triggers": {
 		"crons": [
-			"0 9 * * 1",
-			"0 9 1 * *",
+			"0 4 * * 1",
+			"0 4 1 * *",
 			"0 6 * * *"
 		]
 	},
