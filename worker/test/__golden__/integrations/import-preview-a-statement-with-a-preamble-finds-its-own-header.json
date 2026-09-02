@@ -73,7 +73,9 @@
         "amount": -25000,
         "description": "SILPO KYIV"
       }
-    ]
+    ],
+    "first_time": 1781289600,
+    "last_time": 1786600323
   },
   "db": {
     "imported": []

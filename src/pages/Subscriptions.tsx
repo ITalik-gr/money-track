@@ -14,7 +14,7 @@ import {
   useGetPlannedActualsQuery,
   useGetRatesQuery,
 } from "../store/api.ts";
-import type { AiDetectResult } from "../../shared/api/index.ts";
+import type { AiDetectResult, RecurringCandidate } from "../../shared/api/index.ts";
 import { Money } from "../components/ui/Money.tsx";
 import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
@@ -434,55 +434,97 @@ function SubNote({ id, note, onSave }: { id: number; note: string; onSave: (note
   );
 }
 
-function Detected() {
+/**
+ * §SUB-DETECT / §SUB-REVIEW — recurring charges the user never declared.
+ *
+ * Two lists, and the second one is the point. A row the model judged NOT a bill is not deleted —
+ * it moves under a collapsed «AI відхилив» with the reason it gave. A silent filter is a filter
+ * nobody can correct: a false positive it removes shows up as a row that stopped appearing, but a
+ * real subscription it removes is invisible in every surface the app has, which is the exact
+ * failure this block exists to fix.
+ */
+function DetectedRow({ c, catName, muted }: {
+  c: RecurringCandidate; catName: Map<number, string>; muted?: boolean;
+}) {
   const t = useT();
-  const { data: candidates } = useDetectPlannedQuery();
-  const { data: cats } = useGetCategoriesQuery();
   const [addPlanned, { isLoading }] = useAddPlannedMutation();
   const [dismiss] = useDismissPlannedCandidateMutation();
+  const cad = cadenceFromDays(c.avg_interval_days);
+  return (
+    <div className={`sub-row card${muted ? " sub-row-rejected" : ""}`}>
+      <MerchantLogo merchant={c.merchant} color="var(--c-teal)" fallbackLabel={c.merchant} />
+      <div className="s-body">
+        <div className="s-name">
+          {c.merchant}
+          {/* §AI-RECURRING: a guess from ONE charge is labelled as one. A rhythm measured
+              in the ledger and a model's opinion are different kinds of claim, and a row
+              that hides which it is teaches the user to distrust both. */}
+          {c.ai && <span className="s-ai" title={t("sub.aiGuessTitle")}>{t("sub.aiGuess")}</span>}
+          {/* §SUB-REVIEW: same rule one level up. This row is on screen only because the model
+              overruled a threshold, and the badge says so rather than letting it pass as measured. */}
+          {c.near_miss && !c.ai && <span className="s-ai" title={t("sub.aiFoundTitle")}>{t("sub.aiFound")}</span>}
+        </div>
+        <div className="s-meta">
+          {c.n}× · {cad.period_count === 1
+            ? t(cad.period === "week" ? "sub.weekly" : "sub.monthly")
+            : t("sub.everyN", { n: cad.period_count, unit: t(cad.period === "week" ? "sub.unitWeek" : "sub.unitMonth") })}
+          {c.category_id != null && catName.get(c.category_id) ? ` · ${catName.get(c.category_id)}` : ""}
+          {c.ai_reason ? ` · ${c.ai_reason}` : ""}
+        </div>
+      </div>
+      <div className="s-amt"><Money minor={c.amount} currency={c.currency_code ?? 980} decimals={false} /></div>
+      <button className="btn primary sm" disabled={isLoading}
+        onClick={async () => {
+          try {
+            const r = await addPlanned(plannedFromCandidate({
+              title: c.merchant, period_amount: c.amount, currency_code: c.currency_code,
+              avg_interval_days: c.avg_interval_days, last_time: c.last_time, category_id: c.category_id,
+            })).unwrap();
+            toast.success(r.linked > 0 ? t("sub.addedLinked", { n: r.linked }) : t("sub.added"));
+          } catch (e) { toast.error(errText(e)); }
+        }}>{t("sub.add")}</button>
+      <button className="btn ghost s-dismiss" title={t("sub.dismissTitle")}
+        onClick={() => dismiss(c.merchant)} aria-label={t("sub.dismissAria")}>✕</button>
+    </div>
+  );
+}
+
+function Detected() {
+  const t = useT();
+  const { data: candidates, error, refetch } = useDetectPlannedQuery();
+  const { data: cats } = useGetCategoriesQuery();
+  const [showRejected, setShowRejected] = useState(false);
   const catName = useMemo(() => new Map((cats ?? []).map((c) => [c.id, c.name])), [cats]);
-  if (!candidates?.length) return null;
+  const { shown, rejected } = useMemo(() => ({
+    shown: (candidates ?? []).filter((c) => c.ai_verdict !== "not"),
+    rejected: (candidates ?? []).filter((c) => c.ai_verdict === "not"),
+  }), [candidates]);
+
+  // A block that just disappears says "nothing here" for both an empty ledger and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("sub.detectedTitle")} onRetry={refetch} />;
+  if (!shown.length && !rejected.length) return null;
+
   return (
     <section>
       <div className="section-head"><h2>{t("sub.detectedTitle")}</h2><span className="label">{t("sub.detectedSub")}</span></div>
       <div className="sub-detected">
-        {candidates.map((c) => {
-          const cad = cadenceFromDays(c.avg_interval_days);
-          return (
-            <div key={`${c.merchant}-${c.amount}`} className="sub-row card">
-              <MerchantLogo merchant={c.merchant} color="var(--c-teal)" fallbackLabel={c.merchant} />
-              <div className="s-body">
-                <div className="s-name">
-                  {c.merchant}
-                  {/* §AI-RECURRING: a guess from ONE charge is labelled as one. A rhythm measured
-                      in the ledger and a model's opinion are different kinds of claim, and a row
-                      that hides which it is teaches the user to distrust both. */}
-                  {c.ai && <span className="s-ai" title={t("sub.aiGuessTitle")}>{t("sub.aiGuess")}</span>}
-                </div>
-                <div className="s-meta">
-                  {c.n}× · {cad.period_count === 1
-                    ? t(cad.period === "week" ? "sub.weekly" : "sub.monthly")
-                    : t("sub.everyN", { n: cad.period_count, unit: t(cad.period === "week" ? "sub.unitWeek" : "sub.unitMonth") })}
-                  {c.category_id != null && catName.get(c.category_id) ? ` · ${catName.get(c.category_id)}` : ""}
-                </div>
-              </div>
-              <div className="s-amt"><Money minor={c.amount} currency={c.currency_code ?? 980} decimals={false} /></div>
-              <button className="btn primary sm" disabled={isLoading}
-                onClick={async () => {
-                  try {
-                    const r = await addPlanned(plannedFromCandidate({
-                      title: c.merchant, period_amount: c.amount, currency_code: c.currency_code,
-                      avg_interval_days: c.avg_interval_days, last_time: c.last_time, category_id: c.category_id,
-                    })).unwrap();
-                    toast.success(r.linked > 0 ? t("sub.addedLinked", { n: r.linked }) : t("sub.added"));
-                  } catch (e) { toast.error(errText(e)); }
-                }}>{t("sub.add")}</button>
-              <button className="btn ghost s-dismiss" title={t("sub.dismissTitle")}
-                onClick={() => dismiss(c.merchant)} aria-label={t("sub.dismissAria")}>✕</button>
-            </div>
-          );
-        })}
+        {shown.map((c) => <DetectedRow key={`${c.merchant}-${c.amount}`} c={c} catName={catName} />)}
       </div>
+      {rejected.length > 0 && (
+        <>
+          <button type="button" className="btn ghost sm sub-rejected-toggle"
+            aria-expanded={showRejected} onClick={() => setShowRejected((v) => !v)}>
+            {t("sub.rejectedToggle", { n: rejected.length })}
+          </button>
+          {showRejected && (
+            <div className="sub-detected">
+              <div className="label sub-rejected-note">{t("sub.rejectedNote")}</div>
+              {rejected.map((c) => <DetectedRow key={`${c.merchant}-${c.amount}`} c={c} catName={catName} muted />)}
+            </div>
+          )}
+        </>
+      )}
     </section>
   );
 }

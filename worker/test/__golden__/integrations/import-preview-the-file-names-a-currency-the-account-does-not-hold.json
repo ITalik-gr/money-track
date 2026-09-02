@@ -37,7 +37,9 @@
         "amount": -1000,
         "description": "Steam"
       }
-    ]
+    ],
+    "first_time": 1777582800,
+    "last_time": 1777582800
   },
   "db": {
     "imported": []

@@ -429,3 +429,39 @@ export async function planTotals(db: AppDb, id: number, mult: string): Promise<P
   ).bind(id).first<PlanTotals>();
   return r ?? { n: 0, first_time: null, last_time: null, total_base: 0 };
 }
+
+// ---- §SUB-REVIEW: the model's verdict per merchant --------------------------
+
+export interface SubReviewRow {
+  merchant_key: string;
+  merchant: string;
+  verdict: "subscription" | "not" | "unsure";
+  reason: string | null;
+  decided_at: number;
+}
+
+/** Every stored verdict, keyed by `coreToken`. Tens of rows — the detector reads the lot. */
+export async function subReviewAll(db: AppDb): Promise<Map<string, SubReviewRow>> {
+  const r = await db.prepare(
+    "SELECT merchant_key, merchant, verdict, reason, decided_at FROM sub_review",
+  ).all<SubReviewRow>();
+  return new Map((r.results ?? []).map((x) => [x.merchant_key, x]));
+}
+
+/**
+ * Store one verdict.
+ *
+ * REPLACE, not IGNORE: a re-ask happens only when the previous answer was `unsure` or has aged
+ * out, and in both cases the new answer is the one that was asked for. Keeping the old row would
+ * make the pass pay for an answer it then discards, every night, forever.
+ */
+export async function saveSubReview(
+  db: AppDb,
+  row: { merchant_key: string; merchant: string; verdict: string; reason: string | null; amount: number | null; currency_code: number | null; decided_at: number },
+): Promise<void> {
+  await db.prepare(
+    `INSERT OR REPLACE INTO sub_review
+       (merchant_key, merchant, verdict, reason, amount, currency_code, decided_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(row.merchant_key, row.merchant, row.verdict, row.reason, row.amount, row.currency_code, row.decided_at).run();
+}

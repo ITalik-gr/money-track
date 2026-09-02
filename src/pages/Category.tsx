@@ -5,6 +5,7 @@ import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
 import { dateFmt, numFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { useGetCategoryOverviewQuery, useGetCategoryDrillQuery, useGetTransactionsQuery } from "../store/api.ts";
+import { CategoryShapeBlocks } from "../components/stats/CategoryShape.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
@@ -442,6 +443,16 @@ export function Category() {
         here, and a sub-category you cannot reach because it was quiet this month is the §CAT-PAGE
         bug in a smaller form.
       */}
+      {/*
+        §CAT-SHAPE — the SHAPE of the category, under the figures that give its size.
+
+        Placed after the trend and before §CAT-SUBS: the trend answers «скільки й куди йде», these
+        three answer «яке воно» — how much of it is obligatory, when it is charged, where the month
+        lands. Each renders nothing when the evidence cannot carry it, so on a thin category the
+        page simply stays as it was.
+      */}
+      <CategoryShapeBlocks id={id} from={from} to={to} hasBudget={data.budget != null} />
+
       {/*
         §CAT-SUBS — «з них підписки». A subscription is not the category «Підписки»: internet sits
         under utilities, cloud under software. So the total above answers "how much" and hides "how

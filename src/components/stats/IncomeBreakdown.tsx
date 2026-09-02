@@ -1,6 +1,7 @@
 import { useGetIncomeAnalyticsQuery } from "../../store/api.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT, type TranslationKey } from "../../i18n/index.ts";
 
 // §1 Аналітика доходу: джерела (по категоріях), стабільність (варіативність 6 міс) і
@@ -17,7 +18,10 @@ export function IncomeBreakdown({ preset, from, to, currency, sign }: {
   const t = useT();
   // §MONTH-VIEW: when the page is showing a named month, so is this block. It used to ask for the
   // trailing preset regardless — the one block still reporting on «now» under a July heading.
-  const { data } = useGetIncomeAnalyticsQuery({ preset, from, to, currency });
+  const { data, error, refetch } = useGetIncomeAnalyticsQuery({ preset, from, to, currency });
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("inc.title")} onRetry={refetch} />;
   if (!data) return null;
   // ⚠️ НЕ `data.total === 0` (як було). Стабільність рахується за 6 ПОВНИХ місяців і лишається
   // осмисленою, навіть коли в поточному періоді надходжень ще не було — а блок зникав цілком:

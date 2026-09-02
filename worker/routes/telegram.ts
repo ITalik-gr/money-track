@@ -8,7 +8,7 @@
 import { Hono } from "hono";
 import type { Env } from "../env.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
-import { computeSummary, createCashTx, recentTransactions, type Summary } from "../lib/finance/finance.ts";
+import { computeSummary, createCashTx, recentTransactions } from "../lib/finance/finance.ts";
 import { parseText } from "../lib/ai/parse-text.ts";
 import {
   answerCallbackQuery, editMessageText, sendChatAction, sendMessage, type TgUpdate,
@@ -20,7 +20,9 @@ import {
 } from "../lib/messaging/tg-commands.ts";
 import { resolveBaseCurrency } from "../lib/finance/money.ts";
 import { st, resolveLocale, type ServerLocale } from "../lib/platform/i18n.ts";
-import { escapeHtml, tgMoney, replyKeyboard, buttonCommand } from "../lib/messaging/tg-format.ts";
+import {
+  escapeHtml, tgMoney, replyKeyboard, buttonCommand, balanceText, lastTxText,
+} from "../lib/messaging/tg-format.ts";
 import {
   type Pending, pendingKey, currencyCode, confirmText, confirmKeyboard, categoryKeyboard,
   categoryName,
@@ -44,17 +46,6 @@ async function tgCtx(env: Env): Promise<{ locale: ServerLocale; base: number }> 
   return { locale, base };
 }
 
-
-function balanceText(s: Summary, locale: ServerLocale, base: number): string {
-  // `totalUAH` is the roll-up, so it wears the reader's BASE sign; the per-currency lines below
-  // are each in their own currency and wear theirs. Two different questions, two signs.
-  const lines = [st(locale, "tgOwnFunds", { amount: tgMoney(s.totalUAH, base, locale) })];
-  if (s.byCurrency.length > 1) {
-    for (const b of s.byCurrency) lines.push(`  • ${tgMoney(b.own, b.currency_code, locale)}`);
-  }
-  if (s.credit) lines.push(st(locale, "tgCreditLimit", { amount: tgMoney(s.credit.limit, base, locale) }));
-  return lines.join("\n");
-}
 
 async function handleText(env: Env, chatId: number, text: string, origin?: string): Promise<void> {
   const token = env.TG_BOT_TOKEN;
@@ -86,13 +77,7 @@ async function handleText(env: Env, chatId: number, text: string, origin?: strin
   if (cmd === "/last") {
     const rows = await recentTransactions(env.DB, 10);
     if (!rows.length) { await sendMessage(token, chatId, st(locale, "tgNoTx")); return; }
-    const body = rows.map((r) => {
-      const emoji = r.is_transfer ? "🔁" : r.amount < 0 ? "🔴" : "🟢";
-      const name = r.merchant || r.comment || r.category_name || "—";
-      const date = new Date(r.time * 1000).toLocaleDateString(locale === "en" ? "en-US" : "uk-UA", { day: "2-digit", month: "short" });
-      return `${emoji} <b>${tgMoney(r.amount, r.currency_code, locale)}</b> — ${escapeHtml(name)} <i>${date}</i>`;
-    }).join("\n");
-    await sendMessage(token, chatId, st(locale, "tgLastHeader") + "\n" + body);
+    await sendMessage(token, chatId, st(locale, "tgLastHeader") + "\n" + lastTxText(rows, locale));
     return;
   }
   if (cmd === "/stats" || cmd.startsWith("/stats ")) { await handleStats(env, chatId, cmd.slice(6), origin); return; }
@@ -174,6 +159,12 @@ async function handleText(env: Env, chatId: number, text: string, origin?: strin
 async function handleCallback(env: Env, chatId: number, messageId: number, cbId: string, data: string): Promise<void> {
   // Алерт-кнопки обробляємо першими — у них власний потік без pending-запису.
   if (data.startsWith("al_") && await handleAlertCallback(env, chatId, messageId, cbId, data)) return;
+  // §TG-CSV: statement import has its own pending record (`tg_import:`), separate from the quick
+  // entry below — a half-answered import must not be cancelled by typing an expense.
+  if (data.startsWith("imp_")) {
+    const { handleImportCallback } = await import("../lib/messaging/tg-import.ts");
+    if (await handleImportCallback(env, chatId, messageId, cbId, data)) return;
+  }
 
   const token = env.TG_BOT_TOKEN;
   const { locale } = await tgCtx(env);
@@ -299,6 +290,10 @@ telegram.post("/:secret", async (c) => {
       } else if (update.message?.photo?.length) {
         const largest = update.message.photo[update.message.photo.length - 1];
         await handlePhoto(c.env, chatId, largest.file_id);
+      } else if (update.message?.document) {
+        // §TG-CSV — a bank statement, dropped into the chat.
+        const { handleDocument } = await import("../lib/messaging/tg-import.ts");
+        await handleDocument(c.env, chatId, update.message.document, new URL(c.req.url).origin);
       } else if (update.message?.text) {
         // The app origin IS this request's origin: the bot and the app are one Worker, so a
         // link built from it can never point at a different deployment than the reader's own.

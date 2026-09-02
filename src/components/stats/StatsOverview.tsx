@@ -18,6 +18,7 @@ import { useGetPatternsQuery } from "../../store/api.ts";
 import type { Overview } from "../../store/api.ts";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../../lib/importance.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { SliceDrillPanel, StatKpiInner, type Cur } from "./shared.tsx";
 import { baseSign } from "../../lib/currency.ts";
 
@@ -116,7 +117,10 @@ export function ImportanceBreakdown({ data, sign, from, to, currency }: { data: 
 // §E1/E2/E3: детерміновані патерни витрат цього місяця (без AI).
 export function SpendingPatterns() {
   const t = useT();
-  const { data } = useGetPatternsQuery();
+  const { data, error, refetch } = useGetPatternsQuery();
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("stats.patterns.title")} onRetry={refetch} />;
   if (!data) return null;
   const { recurring, anomalies, pace } = data;
   const reg = recurring.recurring.spent;

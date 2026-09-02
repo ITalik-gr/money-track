@@ -234,4 +234,55 @@ export const TG = {
   },
 
   tgTruncated: { uk: "(показано не все — решта у застосунку)", en: "(trimmed — the rest is in the app)" },
+
+  // §TG-CSV — a statement dropped into the chat.
+  tgImportNotCsv: {
+    uk: "Я вмію читати виписки у CSV (.csv/.tsv/.txt). XLS і PDF поки не читаю — вивантаж CSV.",
+    en: "I can read statements as CSV (.csv/.tsv/.txt). XLS and PDF are not supported yet — export CSV instead.",
+  },
+  tgImportTooBig: {
+    uk: "Файл завеликий, щоб забрати його з Telegram. Заванаж його в застосунку.",
+    en: "The file is too large to fetch from Telegram. Upload it in the app instead.",
+  },
+  tgImportDownloadFailed: {
+    uk: "Не вдалося завантажити файл із Telegram. Спробуй надіслати ще раз.",
+    en: "Could not download the file from Telegram. Try sending it again.",
+  },
+  tgImportUnreadable: {
+    uk: "Не вдалося прочитати цей файл як таблицю — схоже, це не виписка.",
+    en: "Could not read this file as a table — it does not look like a statement.",
+  },
+  tgImportColDate: { uk: "дата", en: "date" },
+  tgImportColAmount: { uk: "сума", en: "amount" },
+  tgImportColDesc: { uk: "опис", en: "description" },
+  // The refusal NAMES the columns and points at the screen that can fix it: a chat cannot show a
+  // column picker, and guessing here writes a month of wrong numbers nobody re-reads to catch.
+  tgImportIncomplete: {
+    uk: "Не впізнав колонки: {missing}. У чаті їх не вибереш — відкрий імпорт у застосунку: {url}",
+    en: "Could not recognise these columns: {missing}. A chat cannot pick them — open the import in the app: {url}",
+  },
+  tgImportNoAccounts: {
+    uk: "Немає жодного активного рахунку, куди це імпортувати.",
+    en: "There is no active account to import this into.",
+  },
+  tgImportHead: { uk: "📄 <b>{name}</b> — розпізнав {n} операцій", en: "📄 <b>{name}</b> — read {n} operations" },
+  tgImportWindow: { uk: "Період: {from} – {to}", en: "Period: {from} – {to}" },
+  tgImportSkipped: { uk: "Пропущу {n} рядків (не дата або нульова сума)", en: "Will skip {n} rows (no date, or a zero amount)" },
+  tgImportAiMapping: {
+    uk: "⚠️ Колонки зіставив AI — перевір результат після імпорту.",
+    en: "⚠️ The columns were matched by AI — check the result after importing.",
+  },
+  // Choosing the account IS the confirmation: there is nothing else worth deciding from a phone,
+  // and an import into the wrong account is wrong by a factor of forty and looks ordinary after.
+  tgImportPickAccount: { uk: "На який рахунок імпортувати?", en: "Which account should this go into?" },
+  tgImportWorking: { uk: "⏳ Імпортую <b>{name}</b>…", en: "⏳ Importing <b>{name}</b>…" },
+  tgImportDone: {
+    uk: "✅ <b>{name}</b>: додано {inserted}, вже було {duplicates}, пропущено {skipped}.",
+    en: "✅ <b>{name}</b>: added {inserted}, already present {duplicates}, skipped {skipped}.",
+  },
+  tgImportFailed: { uk: "Не вдалося імпортувати цей файл.", en: "Could not import this file." },
+  tgImportStale: {
+    uk: "Цей файл уже опрацьовано або застарів — надішли його ще раз.",
+    en: "This file was already handled or has expired — send it again.",
+  },
 } as const;

@@ -6,9 +6,9 @@ import * as planningRepo from "../../repo/planning.ts";
 import { monthlyPlannedUAH } from "../../lib/finance/subscriptions.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes } from "./_shared.ts";
+import { apiRoutes, numParam } from "./_shared.ts";
 import type { Category } from "../../../shared/types.ts";
-import type { CategoryOverview } from "../../../shared/api/analytics.ts";
+import type { CategoryOverview, CategoryShape } from "../../../shared/api/analytics.ts";
 import { normImportance } from "../../lib/finance/importance.ts";
 import { deleteCategory } from "../../services/categories.ts";
 
@@ -92,6 +92,42 @@ categories.delete("/categories/:id", async (c) => {
  * from `budgetStatus`, the trend and the split from `STATS_JOINS` + `SPEND_WHERE`. A page that
  * recomputed any of them would be the §CUR-PLAN mechanism starting over on a new screen.
  */
+/**
+ * §CAT-SHAPE — the SHAPE of one category, as a SECOND call.
+ *
+ * Not folded into `/overview`, and not for size reasons alone: the two answer different questions
+ * and fail independently. The overview is what the page IS — a failure there means there is no
+ * page. The shape is three findings ON TOP of it, each of which legitimately refuses to exist
+ * (too few charges for a weekly rhythm, a window too short for a billing date, a sub-category with
+ * no canonical level). Folding a block that is usually null into the response the page cannot
+ * render without would make one slow query out of two, for a payload half of which is `null`.
+ *
+ * ⚠️ The scope and the window are resolved the SAME way as in `/overview`, deliberately by the
+ * same expressions: a shape computed over a different window than the total it sits under would
+ * be two periods in one answer — the §CATEGORY-PAGE bug, once already fixed.
+ *
+ * The whole assembly lives in `lib/finance/category-shape.ts`; this is transport and the scope.
+ */
+categories.get("/categories/:id/shape", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
+  const now = Math.floor(Date.now() / 1000);
+  const url = new URL(c.req.url);
+  const to = numParam(url, "to", now);
+
+  const row = await categoriesRepo.byId(c.env.DB, id);
+  if (!row) return c.json({ error: "not_found" }, 404);
+
+  const { getRates } = await import("../../lib/finance/money.ts");
+  const stats = await import("../../lib/finance/stats.ts");
+  const { categoryShape } = await import("../../lib/finance/category-shape.ts");
+  const { mult } = stats.valueMode(await getRates(c.env), null);
+  const from = numParam(url, "from", stats.localMonthStart(to));
+
+  const scope = { id, isParent: row.parent_id == null, isIncome: !!row.is_income };
+  return c.json(await categoryShape(c.env, mult, scope, from, to, now) satisfies CategoryShape);
+});
+
 categories.get("/categories/:id/overview", async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);

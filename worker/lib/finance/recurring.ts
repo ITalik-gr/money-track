@@ -189,60 +189,115 @@ function group(rows: ChargeRow[]): Group[] {
   return out;
 }
 
+/**
+ * Why one group is not a proposal — or `null` when it IS one.
+ *
+ * Split out of `recurringCandidates` (2026-09-02, §SUB-REVIEW) so the near-miss pass can ask the
+ * SAME question and get the reason back, instead of restating the thresholds. Two copies of
+ * `BUCKET_DOMINANCE` would be §CUR-PLAN one more time: the list on screen and the list sent to the
+ * model would disagree about what a candidate is, and only one of them would be visible.
+ */
+export type RejectReason = "too_few" | "shop" | "one_month" | "cadence" | "ragged";
+
+function judge(g: Group): { reason: RejectReason | null; typical: number; months: number; dominance: number } {
+  const times = g.charges.map((c) => c.time).sort((a, b) => a - b);
+  // ⚠️ §APP_TZ: months are Kyiv months. In UTC a charge made just after midnight falls into the
+  // previous month and could supply the second month all by itself — the gate that turns a
+  // repeated charge into a proposal.
+  const months = new Set(times.map((t) => localYm(t))).size;
+  const dominance = g.charges.length / g.merchantTotal;
+
+  const gaps: number[] = [];
+  for (let i = 1; i < times.length; i++) gaps.push(Math.round((times[i] - times[i - 1]) / 86400));
+  const typical = gaps.length ? median(gaps) : 0;
+  const spread = typical > 0
+    ? gaps.reduce((s, d) => s + Math.abs(d - typical), 0) / gaps.length / typical
+    : 1;
+
+  const out = (reason: RejectReason | null) => ({ reason, typical, months, dominance });
+  if (g.charges.length < MIN_CHARGES) return out("too_few");
+  if (months < 2) return out("one_month");
+  if (typical < MIN_INTERVAL_DAYS || typical > MAX_INTERVAL_DAYS) return out("cadence");
+  // One price, or many? See BUCKET_DOMINANCE — this is what keeps a grocery shop out.
+  if (dominance < BUCKET_DOMINANCE) return out("shop");
+  // Rhythm. Measured against the MEDIAN gap, not the mean: one late payment should not be able
+  // to move the yardstick it is then judged against.
+  if (spread > GAP_SPREAD_MAX) return out("ragged");
+  return out(null);
+}
+
+/** The proposal a passing group becomes. Shared by the accepted and the near-miss paths. */
+function toCandidate(g: Group, typical: number, months: number): RecurringCandidate {
+  const times = g.charges.map((c) => c.time).sort((a, b) => a - b);
+  // The amount PROPOSED is the median charge, not the mean and not the latest: a plan's declared
+  // price should survive one FX spike, and the latest charge is the one most likely to be it.
+  const amount = median(g.charges.map((c) => c.amount));
+  // The category is the commonest among the charges themselves — the app's own past decisions
+  // about this merchant, which is a better guess than anything derivable here.
+  const catCount = new Map<number, number>();
+  for (const c of g.charges) if (c.category_id != null) catCount.set(c.category_id, (catCount.get(c.category_id) ?? 0) + 1);
+  const category_id = [...catCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  return {
+    merchant: g.merchant,
+    amount,
+    n: g.charges.length,
+    first_time: times[0],
+    last_time: times[times.length - 1],
+    months,
+    avg_interval_days: typical,
+    currency_code: g.currency_code,
+    category_id,
+  };
+}
+
+/** Most recent and most frequent first — a proposal about a charge from five months ago is
+ *  history, one about last week is a decision. */
+function byUsefulness(now: number) {
+  const recent = (c: RecurringCandidate) => (now - c.last_time) / 86400;
+  return (a: RecurringCandidate, b: RecurringCandidate) =>
+    (recent(a) < 45 ? 0 : 1) - (recent(b) < 45 ? 0 : 1) || b.n - a.n || b.last_time - a.last_time;
+}
+
 /** Turn grouped charges into proposals, keeping only what actually looks scheduled. */
 export function recurringCandidates(rows: ChargeRow[], now = Math.floor(Date.now() / 1000)): RecurringCandidate[] {
   const out: RecurringCandidate[] = [];
-
   for (const g of group(rows)) {
-    if (g.charges.length < MIN_CHARGES) continue;
-    // One price, or many? See BUCKET_DOMINANCE — this is what keeps a grocery shop out.
-    if (g.charges.length / g.merchantTotal < BUCKET_DOMINANCE) continue;
-    const times = g.charges.map((c) => c.time).sort((a, b) => a - b);
-
-    // ⚠️ §APP_TZ: months are Kyiv months. In UTC a charge made just after midnight falls into the
-    // previous month and could supply the second month all by itself — the gate that turns a
-    // repeated charge into a proposal.
-    const months = new Set(times.map((t) => localYm(t))).size;
-    if (months < 2) continue;
-
-    const gaps: number[] = [];
-    for (let i = 1; i < times.length; i++) gaps.push(Math.round((times[i] - times[i - 1]) / 86400));
-    const typical = median(gaps);
-    if (typical < MIN_INTERVAL_DAYS || typical > MAX_INTERVAL_DAYS) continue;
-
-    // Rhythm. Measured against the MEDIAN gap, not the mean: one late payment should not be able
-    // to move the yardstick it is then judged against.
-    const spread = typical > 0
-      ? gaps.reduce((s, d) => s + Math.abs(d - typical), 0) / gaps.length / typical
-      : 1;
-    if (spread > GAP_SPREAD_MAX) continue;
-
-    // The amount PROPOSED is the median charge, not the mean and not the latest: a plan's declared
-    // price should survive one FX spike, and the latest charge is the one most likely to be it.
-    const amount = median(g.charges.map((c) => c.amount));
-    // The category is the commonest among the charges themselves — the app's own past decisions
-    // about this merchant, which is a better guess than anything derivable here.
-    const catCount = new Map<number, number>();
-    for (const c of g.charges) if (c.category_id != null) catCount.set(c.category_id, (catCount.get(c.category_id) ?? 0) + 1);
-    const category_id = [...catCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-
-    out.push({
-      merchant: g.merchant,
-      amount,
-      n: g.charges.length,
-      first_time: times[0],
-      last_time: times[times.length - 1],
-      months,
-      avg_interval_days: typical,
-      currency_code: g.currency_code,
-      category_id,
-    });
+    const { reason, typical, months } = judge(g);
+    if (reason) continue;
+    out.push(toCandidate(g, typical, months));
   }
+  return out.sort(byUsefulness(now)).slice(0, 20);
+}
 
-  // Most recent and most frequent first — a proposal about a charge from five months ago is
-  // history, one about last week is a decision.
-  const recent = (c: RecurringCandidate) => (now - c.last_time) / 86400;
-  return out
-    .sort((a, b) => (recent(a) < 45 ? 0 : 1) - (recent(b) < 45 ? 0 : 1) || b.n - a.n || b.last_time - a.last_time)
-    .slice(0, 20);
+/**
+ * §SUB-REVIEW — groups that failed ONE soft gate, for the model to look at.
+ *
+ * The two gates here are the ones this file's own comments already name as costing real
+ * subscriptions:
+ *
+ *  • `shop` (BUCKET_DOMINANCE) — the named cost written above: a subscription whose PRICE ROSE
+ *    mid-window splits roughly in half and drops under the threshold. It is also, unchanged, the
+ *    rule that keeps «Сільпо» out — which is exactly why a judgement call belongs here and a
+ *    looser constant does not. Moving the constant would let every grocery shop back in for every
+ *    price rise recovered.
+ *  • `ragged` (GAP_SPREAD_MAX) — a biller whose charges retried, or whose earlier months are
+ *    linked to a plan and so missing from this list, produces gaps the spread test rejects.
+ *
+ * `too_few`, `one_month` and `cadence` are NOT near-misses. The first two have no rhythm to judge
+ * at all (that is §AI-RECURRING's half of the question, answered from the charge itself on the day
+ * it lands), and `cadence` means the interval is a day or a year — neither is a thing this
+ * proposal can be turned into.
+ *
+ * Nothing here is shown to anyone until a verdict exists. That is the whole point: a near-miss is
+ * a question, and the deterministic list stays evidence.
+ */
+export function nearMissCandidates(rows: ChargeRow[], now = Math.floor(Date.now() / 1000), limit = 12): RecurringCandidate[] {
+  const out: RecurringCandidate[] = [];
+  for (const g of group(rows)) {
+    const { reason, typical, months } = judge(g);
+    if (reason !== "shop" && reason !== "ragged") continue;
+    out.push({ ...toCandidate(g, typical, months), near_miss: reason });
+  }
+  return out.sort(byUsefulness(now)).slice(0, limit);
 }

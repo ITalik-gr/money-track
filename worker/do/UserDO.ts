@@ -214,6 +214,26 @@ export class UserDO extends DurableObject<Env> {
         const { runCatchup, catchupPending } = await import("../lib/ai/catchup.ts");
         if (await catchupPending(env)) await runCatchup(env);
       });
+      /**
+       * §SUB-REVIEW — one batched verdict pass over the subscription candidates.
+       *
+       * DAILY rather than per-transaction, and that is a decision, not a default. The candidate
+       * list is computed over 400 days behind a "≥2 charges in ≥2 months" gate, so a single new
+       * operation almost never changes it; the one case where it does — the very first charge of
+       * something the person just signed up for — is already answered at enrich time by
+       * §AI-RECURRING, on the day they still remember signing up. A pass debounced behind each
+       * transaction would therefore re-ask an unchanged question, at cost, several times a day.
+       *
+       * BEFORE `notifications` for the same reason `catchup` is: the feed talks about the
+       * subscriptions the app has found, and it should talk about today's list, not yesterday's.
+       *
+       * Skipped entirely when every candidate already has a verdict, which is the steady state of
+       * any account: the check is three indexed reads and no model call.
+       */
+      await step("subs_review", async () => {
+        const { runSubsReview, subsReviewPending } = await import("../lib/ai/subs-review.ts");
+        if (await subsReviewPending(env)) await runSubsReview(env);
+      });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
         await generateNotifications(env);

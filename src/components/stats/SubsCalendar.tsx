@@ -1,6 +1,7 @@
 import { useGetUpcomingSubsQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
 import { baseSign } from "../../lib/currency.ts";
@@ -19,7 +20,10 @@ function dayKey(unix: number): string {
 export function SubsCalendar() {
   const t = useT();
   const WD = Array.from({ length: 7 }, (_, i) => weekdayShort(i));
-  const { data } = useGetUpcomingSubsQuery(34);
+  const { data, error, refetch } = useGetUpcomingSubsQuery(34);
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("sc.title")} onRetry={refetch} />;
   if (!data || data.items.length === 0) return null;
 
   // Групуємо суми/назви за днем.

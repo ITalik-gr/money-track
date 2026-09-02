@@ -1,6 +1,7 @@
 import { useGetWeekdayQuery } from "../../store/api.ts";
 import { formatMinor, weekdayShort } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 import type { Preset } from "../../store/api.ts";
 
@@ -15,7 +16,10 @@ export function WeekdaySpend({ preset, from, to, currency }: {
 }) {
   const t = useT();
   // §MONTH-VIEW: explicit bounds win, so browsing a past month re-cuts this chart too.
-  const { data } = useGetWeekdayQuery(from != null && to != null ? { from, to, currency } : { preset, currency });
+  const { data, error, refetch } = useGetWeekdayQuery(from != null && to != null ? { from, to, currency } : { preset, currency });
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("wd.title")} onRetry={refetch} />;
   if (!data) return null;
 
   const spentTotal = data.days.reduce((s, d) => s + d.spent, 0);

@@ -17,6 +17,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { useGetSpendingShapeQuery } from "../../store/api.ts";
 import { FactLabel } from "./shared.tsx";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import type { Cur } from "./shared.tsx";
 
 /** One colour per bucket, small → large. Deliberately a single hue's ramp: these are one quantity
@@ -27,7 +28,10 @@ export function SpendingShape({ from, to, currency, sign }: {
   from: number; to: number; currency: Cur; sign: string;
 }) {
   const t = useT();
-  const { data } = useGetSpendingShapeQuery({ from, to, currency });
+  const { data, error, refetch } = useGetSpendingShapeQuery({ from, to, currency });
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("stats.shape.title")} onRetry={refetch} />;
   if (!data || data.spend <= 0) return null;
 
   const money = (m: number) => `${formatMinor(m, { decimals: false })} ${sign}`;

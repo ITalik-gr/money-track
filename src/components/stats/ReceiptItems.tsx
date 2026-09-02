@@ -2,6 +2,7 @@ import { useGetReceiptItemsQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { baseSign } from "../../lib/currency.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 
 // Аналітика позицій чека: топ товарів за сумою (з OCR-чеків) за період. Ховається, якщо чеків нема.
@@ -10,7 +11,10 @@ export function ReceiptItems({ from, to }: { from: number; to: number }) {
   // no `currency`, so the page's currency filter must not sign them.
   const sign = baseSign();
   const t = useT();
-  const { data } = useGetReceiptItemsQuery({ from, to, limit: 12 });
+  const { data, error, refetch } = useGetReceiptItemsQuery({ from, to, limit: 12 });
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("ri.title")} onRetry={refetch} />;
   if (!data || data.receipts === 0 || data.items.length === 0) return null;
 
   const max = Math.max(...data.items.map((i) => i.total), 1);

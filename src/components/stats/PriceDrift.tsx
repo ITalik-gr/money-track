@@ -1,6 +1,7 @@
 import { useGetPriceDriftQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 import { baseSign } from "../../lib/currency.ts";
 
@@ -8,7 +9,10 @@ import { baseSign } from "../../lib/currency.ts";
 // Ховається, якщо ще нема достатньо історії чеків. Індекс кошика — медіана змін.
 export function PriceDrift() {
   const t = useT();
-  const { data } = useGetPriceDriftQuery();
+  const { data, error, refetch } = useGetPriceDriftQuery();
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("pd.title")} onRetry={refetch} />;
   if (!data || data.tracked === 0) return null;
   const basket = data.basket_change_pct;
 

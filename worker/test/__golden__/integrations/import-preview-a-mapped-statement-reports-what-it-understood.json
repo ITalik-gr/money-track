@@ -69,7 +69,9 @@
         "amount": 1000000,
         "description": "Зарплата"
       }
-    ]
+    ],
+    "first_time": 1777582800,
+    "last_time": 1777669200
   },
   "db": {
     "imported": []

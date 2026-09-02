@@ -3,6 +3,7 @@ import {
 } from "../../store/api.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
@@ -78,7 +79,10 @@ function Row({ h, kind }: { h: HabitChange; kind: "started" | "stopped" }) {
 
 export function Habits() {
   const t = useT();
-  const { data } = useGetHabitsQuery();
+  const { data, error, refetch } = useGetHabitsQuery();
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("hb.title")} onRetry={refetch} />;
   if (!data || (!data.started.length && !data.stopped.length)) return null;
 
   return (

@@ -36,6 +36,16 @@
 .sub-detected .sub-row .s-name { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.3; }
 .sub-detected .sub-row .s-meta { line-height: 1.35; }
 .sub-detected .sub-row:last-child { border-bottom: none; }
+
+/* §SUB-REVIEW — the rows the model rejected.
+   Kept on the page and merely RECESSED, never removed: the toggle is the only way a person can
+   see a verdict they disagree with, and «Додати» still works from here. Opacity alone would take
+   the reason text under contrast; the muted foreground is applied to the row's own text instead. */
+.sub-rejected-toggle { margin-top: 10px; }
+.sub-detected .sub-row-rejected { border-style: dashed; background: transparent; }
+.sub-detected .sub-row-rejected .s-name,
+.sub-detected .sub-row-rejected .s-amt { color: var(--muted); }
+.sub-rejected-note { grid-column: 1 / -1; margin-bottom: 2px; }
 /* AI-кандидати всередині блоку пошуку — теж сітка */
 .sub-cands { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin-top: 12px; }
 .sub-cands .sub-row { border: 1px solid var(--line); border-radius: var(--radius); }

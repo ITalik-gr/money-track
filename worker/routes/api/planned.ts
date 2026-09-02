@@ -281,10 +281,11 @@ planned.post("/planned/apply-categories", async (c) => {
 planned.get("/planned/detect", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const since = now - 400 * 86400; // ширше вікно — щоб зловити квартальні/рідші підписки
-  const { recurringCandidates } = await import("../../lib/finance/recurring.ts");
+  const { recurringCandidates, nearMissCandidates } = await import("../../lib/finance/recurring.ts");
   const { planNeedles, planMatches } = await import("../../lib/finance/subscriptions.ts");
+  const { reviewKey } = await import("../../lib/ai/subs-review.ts");
 
-  const [charges, aiFlagged, declared, dismissedSet] = await Promise.all([
+  const [charges, aiFlagged, declared, dismissedSet, reviewed] = await Promise.all([
     planningRepo.detectCharges(c.env.DB, since),
     // §AI-RECURRING: the model's guess from a SINGLE charge — 120 days, because a subscription
     // nobody has confirmed in four months is one they have decided not to.
@@ -292,6 +293,9 @@ planned.get("/planned/detect", async (c) => {
     planningRepo.declaredPlans(c.env.DB),
     // §R5: виключаємо закриті користувачем кандидати («це не підписка»).
     planningRepo.dismissedMerchants(c.env.DB),
+    // §SUB-REVIEW: verdicts decided by yesterday's pass. READ here, never computed — this is a GET
+    // the page issues on every open, and the answer does not change between two page loads.
+    planningRepo.subReviewAll(c.env.DB),
   ]);
 
   const deterministic = recurringCandidates(charges, now);
@@ -312,13 +316,31 @@ planned.get("/planned/detect", async (c) => {
       currency_code: r.currency_code, category_id: r.category_id, ai: true,
     }));
 
-  const candidates = [...deterministic, ...aiRows]
+  /**
+   * §SUB-REVIEW — near-misses ride in ONLY behind a verdict.
+   *
+   * A near-miss is a group the rhythm test threw out for one reason (a split price bucket, ragged
+   * gaps). Unreviewed it is not evidence of anything and must not be on screen; reviewed and
+   * called a bill, it is the recall the thresholds knowingly gave up. `nearMissCandidates` never
+   * returns a group the deterministic pass accepted, so nothing is proposed twice.
+   */
+  const admitted = nearMissCandidates(charges, now)
+    .filter((r) => reviewed.get(reviewKey(r.merchant))?.verdict === "subscription");
+
+  const candidates = [...deterministic, ...admitted, ...aiRows]
     // ⚠️ §SUB-ALIAS: a declared plan is known by EVERY one of its names, not by its title alone.
     // Comparing titles byte-for-byte left «X Corp.» proposed as new while the plan «Twitter» that
     // covers it sat two rows above — the app offering to create what it already has.
     .filter((r) => !declared.some((p) => planMatches(p, r.merchant)
       || planNeedles(p).some((n) => n.toLowerCase() === r.merchant.toLowerCase())))
-    .filter((r) => !dismissedSet.has(r.merchant.toLowerCase()));
+    .filter((r) => !dismissedSet.has(r.merchant.toLowerCase()))
+    // The verdict TRAVELS; it does not filter. A `not` row reaches the screen with its reason and
+    // is filed under a collapsed «AI відхилив» — a filter nobody can see is a filter nobody can
+    // correct, and the subscription it wrongly removes would be invisible in every surface we have.
+    .map((r) => {
+      const v = reviewed.get(reviewKey(r.merchant));
+      return v ? { ...r, ai_verdict: v.verdict, ai_reason: v.reason } : r;
+    });
 
   return c.json(candidates satisfies RecurringCandidate[]);
 });

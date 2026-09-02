@@ -4,9 +4,10 @@ import type { Category } from "../../shared/types.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 import {
-  STATS_JOINS, SPEND_WHERE, INCOME_WHERE, EFF_CAT_ID, EFF_CAT_LEAF_ID,
+  STATS_JOINS, SPEND_WHERE, INCOME_WHERE, EFF_CAT_ID, EFF_CAT_LEAF_ID, EFF_AMOUNT, EFF_IMPORTANCE,
   amountSum, incomeSum, localYmSql,
 } from "../lib/finance/stats.ts";
+import { localDowSql, localDomSql, type WeekdayRow, type DomRow } from "../lib/finance/weekday.ts";
 
 /**
  * §CAT-PAGE — how a category page finds ITS rows, and which side of the ledger it reads.
@@ -431,4 +432,71 @@ export async function nameOf(db: AppDb, locale: NotifLocale, id: number): Promis
     .bind(id)
     .first<{ name: string }>();
   return row?.name ?? null;
+}
+
+
+// ---- §CAT-SHAPE: WHEN money leaves this category, and how much of it is obligatory -----------
+//
+// Three queries, all scoped through `catWhere`/`catSum` like every other figure on the page, so a
+// sub-category page cannot quietly answer for its parent (§CAT-PAGE bug 1) and an income bucket
+// cannot answer with spending it does not have.
+//
+// ⚠️ `biggest` travels with each bucket because the CANON needs it: `buildWeekdayAnalytics` and
+// `buildDomAnalytics` both call a bucket «lumpy» when one payment is ≥55% of it — rent landing on
+// a Sunday does not make Sundays expensive, it makes Sunday the day rent is due. Without the
+// column the builders cannot make that distinction and a category page would report a billing
+// date as a habit, which is the §WEEKDAY bug reintroduced one level down.
+
+/** §WEEKDAY, for ONE category. Same `localDowSql` — a category page in UTC would file every
+ *  evening purchase a day late exactly like the global chart used to. */
+export async function weekdayFor(
+  db: AppDb, mult: string, scope: CatScope, from: number, to: number, now: number,
+): Promise<WeekdayRow[]> {
+  const r = await db.prepare(
+    `SELECT ${localDowSql(now)} AS dow, ${catSum(scope, mult)} AS spent, COUNT(DISTINCT t.id) AS n,
+            CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER) AS biggest
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${catWhere(scope)}
+     GROUP BY dow ORDER BY dow`,
+  ).bind(from, to, scope.id).all<WeekdayRow>();
+  return r.results ?? [];
+}
+
+/** The same question along the other axis — which DATE of the month this category is charged on. */
+export async function domFor(
+  db: AppDb, mult: string, scope: CatScope, from: number, to: number, now: number,
+): Promise<DomRow[]> {
+  const r = await db.prepare(
+    `SELECT ${localDomSql(now)} AS dom, ${catSum(scope, mult)} AS spent, COUNT(DISTINCT t.id) AS n,
+            CAST(ROUND(COALESCE(MAX((-${EFF_AMOUNT}) * ${mult}), 0)) AS INTEGER) AS biggest
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${catWhere(scope)}
+     GROUP BY dom ORDER BY dom`,
+  ).bind(from, to, scope.id).all<DomRow>();
+  return r.results ?? [];
+}
+
+export interface CatImportanceRow { importance: string; spent: number; n: number }
+
+/**
+ * How much of this category is obligatory — §6 importance, INSIDE one category.
+ *
+ * The Stats page answers this for the whole ledger, where the reply is "45% of everything is
+ * essential" — true and unactionable, because the categories it is made of are the level a person
+ * can actually change. Asked of one category it becomes a decision: «дві третини Транспорту —
+ * обовʼязкові, решта таксі» names what would have to go.
+ *
+ * `EFF_IMPORTANCE` is a COALESCE chain ending in `'discretionary'`, so every row lands in exactly
+ * one bucket and the parts always sum to the category total — the same guarantee §CAT-PARTS makes.
+ */
+export async function importanceFor(
+  db: AppDb, mult: string, scope: CatScope, from: number, to: number,
+): Promise<CatImportanceRow[]> {
+  const r = await db.prepare(
+    `SELECT ${EFF_IMPORTANCE} AS importance, ${catSum(scope, mult)} AS spent, COUNT(DISTINCT t.id) AS n
+     FROM transactions t ${STATS_JOINS}
+     WHERE t.time >= ? AND t.time <= ? AND ${catWhere(scope)}
+     GROUP BY ${EFF_IMPORTANCE}`,
+  ).bind(from, to, scope.id).all<CatImportanceRow>();
+  return r.results ?? [];
 }

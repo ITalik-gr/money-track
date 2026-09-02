@@ -317,6 +317,15 @@ export function seedPlanning(db: MemDb): void {
  * five of them carry money. Every endpoint reading them was passing this test vacuously.
  */
 export function seedRareTables(db: MemDb, at = Math.floor(Date.parse(FROZEN_NOW_ISO) / 1000)): void {
+  // §SUB-REVIEW: one stored verdict of each kind. Both are needed: the endpoint's rejection
+  // branch and its near-miss admission branch are different code paths, and a fixture with only
+  // one of them leaves the other passing vacuously — which is the exact failure this file exists
+  // to prevent.
+  exec(db, `INSERT INTO sub_review (merchant_key, merchant, verdict, reason, amount, currency_code, decided_at)
+            VALUES ('silpo', 'Сільпо', 'not', 'Продуктовий супермаркет', 42400, 980, ?)`, [at - 2 * DAY]);
+  exec(db, `INSERT INTO sub_review (merchant_key, merchant, verdict, reason, amount, currency_code, decided_at)
+            VALUES ('netflix', 'Netflix', 'subscription', 'Стрімінговий сервіс', 41900, 980, ?)`, [at - 2 * DAY]);
+
   const run = (sql: string, ...args: unknown[]) => db.raw.prepare(sql).run(...(args as never[]));
   // A manual goal with a FIXED monthly autofill — that value is a hryvnia amount, and whether it
   // converts is the question. Plus one contribution, so the progress series is not empty either.

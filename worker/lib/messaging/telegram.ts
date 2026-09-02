@@ -133,6 +133,8 @@ export interface TgMessage {
   chat: { id: number; type?: string };
   text?: string;
   photo?: { file_id: string; file_size?: number }[];
+  /** §TG-CSV — a file attachment. A statement arrives here, not in `photo`. */
+  document?: { file_id: string; file_name?: string; mime_type?: string; file_size?: number };
 }
 export interface TgCallbackQuery {
   id: string;

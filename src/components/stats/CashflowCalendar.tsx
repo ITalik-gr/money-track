@@ -5,6 +5,7 @@ import { useGetCashflowCalendarQuery } from "../../store/api.ts";
 import { formatMinor, currencySign } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { baseSign, getBaseCurrency } from "../../lib/currency.ts";
 
 // Cashflow-календар: місячна сітка очікуваних списань (підписки/розстрочки) по днях +
@@ -23,7 +24,7 @@ interface DayCell { total: number; items: DayItem[] }
 export function CashflowCalendar() {
   const t = useT();
   const WD = Array.from({ length: 7 }, (_, i) => weekdayShort(i));
-  const { data } = useGetCashflowCalendarQuery();
+  const { data, error, refetch } = useGetCashflowCalendarQuery();
   // 0 = поточний місяць. Вікно задає СЕРВЕР (`/analytics/cashflow-calendar` віддає 3 місяці
   // вперед одним шматком, бо проєкція подушки — це наскрізне віднімання). Клієнт не вдає, що
   // вміє гортати далі, ніж є дані: порожній місяць читався б як «списань більше не буде».
@@ -57,6 +58,9 @@ export function CashflowCalendar() {
     return { balances: bal, low: { min, minDate } };
   }, [data]);
 
+  // Worse than vanishing: with no answer this block used to sit on «Рахуємо…» forever, claiming
+  // work is still in progress when the request is already dead (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("cfcal.title")} onRetry={refetch} />;
   if (!data) return <div className="card empty">{t("cfcal.calculating")}</div>;
 
   const base = new Date(data.now * 1000);

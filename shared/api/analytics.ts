@@ -466,6 +466,51 @@ export interface CategoryOverview {
 }
 
 /**
+ * §CAT-SHAPE — the SHAPE of one category: how much of it is obligatory, when it is charged, and
+ * where the month ends up. `GET /categories/:id/shape`, a separate call from the overview.
+ *
+ * ⚠️ **Every field is nullable, and a null is a REFUSAL rather than a zero.** A category with nine
+ * charges has no weekly rhythm; a window of one month cannot say which date of the month money
+ * leaves on; a sub-category has no canonical level and therefore no projection. Returning zeros
+ * there would draw a flat chart that reads as a finding — the reader cannot tell "the shape is
+ * even" from "there is no shape", because both look identical.
+ */
+export interface CategoryShape {
+  from: number;
+  to: number;
+  /** Spend operations in the window (`COUNT(DISTINCT t.id)`, so a split counts once). */
+  n: number;
+  /** §WEEKDAY for this category — `null` under two charges per weekday bucket. */
+  weekday: WeekdayAnalytics | null;
+  /**
+   * The day-of-month CONCENTRATION, not a 31-cell map: the Trends tab owns the map and earns it
+   * over the whole ledger, while inside a category the useful fact is one sentence.
+   * `busiest` excludes lumps — rent on the 1st is a billing date, not a habit.
+   */
+  dom: {
+    busiest: number | null;
+    busiest_typical: number;
+    busiest_n: number;
+    first_five_share_pct: number | null;
+  } | null;
+  /** §6 importance INSIDE the category; shares are of their own sum, so they add to 100. */
+  importance: { level: string; spent: number; n: number; share_pct: number }[] | null;
+  /**
+   * Where this month ends up. Only for a top-level EXPENSE category in the CURRENT month — the
+   * §CAT-PAGE rule: `categoryMonthlyLevels` rolls up, so anywhere else it would be a number about
+   * a different category or a different period.
+   */
+  projection: {
+    spent: number;
+    projected: number;
+    usual: number;
+    /** The lump rule said no extrapolation — the figure is what already happened, not a pace. */
+    lumpy: boolean;
+    elapsed_pct: number;
+  } | null;
+}
+
+/**
  * §SHAPE — the shape of a period, not its size. Three blocks that survive being compared between
  * two months with identical totals.
  *

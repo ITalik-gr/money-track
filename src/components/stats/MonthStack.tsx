@@ -9,6 +9,7 @@ import { useGetMonthlyHistoryQuery } from "../../store/api.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
 import { baseSign } from "../../lib/currency.ts";
 import { EmptyCard } from "../ui/EmptyCard.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { FALLBACK } from "./shared.tsx";
 
 /**
@@ -63,7 +64,10 @@ export function MonthStack() {
   const t = useT();
   const nav = useNavigate();
   const [months, setMonths] = useState(12);
-  const { data } = useGetMonthlyHistoryQuery({ months });
+  const { data, error, refetch } = useGetMonthlyHistoryQuery({ months });
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("mh.stackTitle")} onRetry={refetch} />;
   if (!data) return null;
 
   // The CURRENT month is excluded: a partial bar beside complete ones reads as a collapse in

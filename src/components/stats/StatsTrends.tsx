@@ -17,6 +17,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { useGetWeekdayQuery, useGetDayOfMonthQuery } from "../../store/api.ts";
 import type { Overview, CashProjection } from "../../store/api.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { FactLabel, SliceDrillPanel, labelFor, weekdayLong, weekdayShort, type Cur } from "./shared.tsx";
 
 /**
@@ -100,9 +101,13 @@ export function DeeperAnalytics({ series, sign, from, to, currency }: {
   const [openWd, setOpenWd] = useState<number | null>(null);
   const [openPriciest, setOpenPriciest] = useState(false);
   const [openDom, setOpenDom] = useState<number | null>(null);
-  const { data: wdData } = useGetWeekdayQuery({ from, to, currency });
-  const { data: domData } = useGetDayOfMonthQuery({ from, to, currency });
+  const { data: wdData, error: wdErr, refetch: wdRefetch } = useGetWeekdayQuery({ from, to, currency });
+  const { data: domData, error: domErr, refetch: domRefetch } = useGetDayOfMonthQuery({ from, to, currency });
   const daily = series.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket));
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  const err = wdErr ?? domErr;
+  if (err) return <ErrorNote error={err} what={t("stats.patterns.title")} onRetry={wdErr ? wdRefetch : domRefetch} />;
   if (daily.length < 4) return null;
 
   /**

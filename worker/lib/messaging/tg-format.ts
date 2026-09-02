@@ -12,6 +12,8 @@
  */
 import { currencySign } from "../../../shared/currency.ts";
 import { num, st, type ServerLocale } from "../platform/i18n.ts";
+import type { Summary } from "../finance/finance.ts";
+import type { RecentTx } from "../finance/finance.ts";
 
 /** Telegram parses `parse_mode: HTML`, so anything user-supplied has to stop being markup. */
 export function escapeHtml(s: string): string {
@@ -122,4 +124,30 @@ export function botCommands(locale: ServerLocale): { command: string; descriptio
     { command: "unlink", description: uk ? "відвʼязати цей чат" : "detach this chat" },
     { command: "help", description: uk ? "довідка" : "help" },
   ];
+}
+
+
+/**
+ * `/balance` — own funds, with the per-currency lines under them.
+ *
+ * `totalUAH` is the ROLL-UP, so it wears the reader's base sign; each line below is in its own
+ * currency and wears that one. Two different questions, two signs (§BASE-CUR).
+ */
+export function balanceText(s: Summary, locale: ServerLocale, base: number): string {
+  const lines = [st(locale, "tgOwnFunds", { amount: tgMoney(s.totalUAH, base, locale) })];
+  if (s.byCurrency.length > 1) {
+    for (const b of s.byCurrency) lines.push(`  • ${tgMoney(b.own, b.currency_code, locale)}`);
+  }
+  if (s.credit) lines.push(st(locale, "tgCreditLimit", { amount: tgMoney(s.credit.limit, base, locale) }));
+  return lines.join("\n");
+}
+
+/** `/last` — the recent operations, one line each. Each amount in the currency it was charged in. */
+export function lastTxText(rows: RecentTx[], locale: ServerLocale): string {
+  return rows.map((r) => {
+    const emoji = r.is_transfer ? "🔁" : r.amount < 0 ? "🔴" : "🟢";
+    const name = r.merchant || r.comment || r.category_name || "—";
+    const date = new Date(r.time * 1000).toLocaleDateString(locale === "en" ? "en-US" : "uk-UA", { day: "2-digit", month: "short" });
+    return `${emoji} <b>${tgMoney(r.amount, r.currency_code, locale)}</b> — ${escapeHtml(name)} <i>${date}</i>`;
+  }).join("\n");
 }

@@ -23,6 +23,7 @@ import { SkeletonRows } from "../ui/Skeleton.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { Icon } from "../ui/Icon.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import {
   DeltaChip, DrillTxList, FALLBACK, RANGES, isSecondaryCat, type Cur, type MoverRow, type Movers, type RangeKey,
 } from "./shared.tsx";
@@ -80,9 +81,13 @@ export function CategoryBreakdown({ rows, from, to, currency, sign }: {
 // Заголовок вторинного блоку: кнопка AI-розмітки реальної категорії переказів/знять (§F2 крок 2).
 export function SecondaryHeader() {
   const t = useT();
-  const { data: status } = useGetTransfersStatusQuery();
+  const { data: status, error, refetch } = useGetTransfersStatusQuery();
   const [showReview, setShowReview] = useState(false);
   const pending = status?.pending ?? 0;
+
+  // Not a vanishing block but the same defect inverted: with no answer the callout used to
+  // state «все розібрано» — a claim about the data it never received (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("stats.secondary.title")} onRetry={refetch} />;
 
   return (
     <>
@@ -107,8 +112,10 @@ export function SecondaryHeader() {
 
 export function CatDrill({ category, from, to, currency, sign }: { category: number; from: number; to: number; currency: Cur; sign: string }) {
   const t = useT();
-  const { data, isFetching } = useGetCategoryDrillQuery({ category, from, to, currency });
+  const { data, isFetching, error, refetch } = useGetCategoryDrillQuery({ category, from, to, currency });
   if (isFetching) return <div className="cat-drill"><SkeletonRows n={4} /></div>;
+  // Опущений дрил, який просто не відкрився, читається як «клік не спрацював» (§Обробка помилок).
+  if (error) return <div className="cat-drill"><ErrorNote error={error} onRetry={refetch} /></div>;
   if (!data) return null;
   // Коли в категорії немає власних підкатегорій, сервер повертає один "підкатегорійний"
   // рядок = сама категорія — дублює заголовок бару один-в-один. Ховаємо цей шум.
@@ -252,7 +259,7 @@ export function PeriodCompare({ range, mode, ym, currency, sign }: {
       unitKey: "stats.unit.month" as UnitKey,
     };
   }, [range, mode, ym]);
-  const { data, isFetching } = useGetCompareQuery({ from: curFrom, to: curTo, currency, bfrom: prevFrom, bto: prevTo });
+  const { data, isFetching, error, refetch } = useGetCompareQuery({ from: curFrom, to: curTo, currency, bfrom: prevFrom, bto: prevTo });
   const dr = (a: number, b: number) => `${formatDate(a)}–${formatDate(b)}`;
   const noCat = t("common.uncategorized");
   // §CADENCE: rows, ordering and the movers come from `/analytics/compare` already merged. The
@@ -270,6 +277,9 @@ export function PeriodCompare({ range, mode, ym, currency, sign }: {
   }, [data]);
   const movers: Movers = data?.movers ?? { up: [], down: [] };
 
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("stats.compare.title")} onRetry={refetch} />;
   if (isFetching || !data) return null;
   if (!data.a.spend && !data.b.spend) return null;
 

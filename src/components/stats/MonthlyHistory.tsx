@@ -6,6 +6,7 @@ import { CHART_ANIM } from "../../lib/motion.ts";
 import { useGetMonthlyHistoryQuery } from "../../store/api.ts";
 import { HoverTip } from "../ui/HoverTip.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { monthShort } from "../../lib/format.ts";
 import { IMPORTANCE_META } from "../../lib/importance.ts";
 import { baseSign } from "../../lib/currency.ts";
@@ -43,7 +44,10 @@ function MhTooltip(props: any) {
 // заощаджень по місяцях. Довгий горизонт, якого не давали періодні вкладки.
 export function MonthlyHistory() {
   const t = useT();
-  const { data } = useGetMonthlyHistoryQuery({ months: 6 });
+  const { data, error, refetch } = useGetMonthlyHistoryQuery({ months: 6 });
+  // A block that just disappears says "nothing here" for both an empty period and a failed
+  // request; only the empty half is an answer (§Обробка помилок).
+  if (error) return <ErrorNote error={error} what={t("mh.historyTitle")} onRetry={refetch} />;
   if (!data || data.months.length === 0) return null;
   const rows: Row[] = data.months.map((m, i) => {
     const spend = m.spend / 100, income = m.income / 100;

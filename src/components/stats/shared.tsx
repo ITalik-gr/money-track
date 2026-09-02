@@ -19,6 +19,7 @@ import { useGetSliceDrillQuery } from "../../store/api.ts";
 import type { CompareRow, DrillTx } from "../../store/api.ts";
 import { TxItem } from "../transactions/TxItem.tsx";
 import { SkeletonRows } from "../ui/Skeleton.tsx";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 
 /**
@@ -98,8 +99,10 @@ export function SliceDrillPanel({ dim, value, type, from, to, currency, sign, em
   from: number; to: number; currency: Cur; sign: string; embedded?: boolean;
 }) {
   const t = useT();
-  const { data, isFetching } = useGetSliceDrillQuery({ dim, value, type, from, to, currency, limit: dim === "all" ? 300 : 60 });
+  const { data, isFetching, error, refetch } = useGetSliceDrillQuery({ dim, value, type, from, to, currency, limit: dim === "all" ? 300 : 60 });
   if (isFetching) return <div className={embedded ? "" : "cat-drill"}><SkeletonRows n={5} /></div>;
+  // Опущений дрил, який просто не відкрився, читається як «клік не спрацював» (§Обробка помилок).
+  if (error) return <div className={embedded ? "" : "cat-drill"}><ErrorNote error={error} onRetry={refetch} /></div>;
   if (!data) return null;
   if (!data.transactions.length) return <div className="cat-drill"><span className="muted" style={{ fontSize: 12.5 }}>{t("stats.drill.noTx")}</span></div>;
   const cap = dim === "all" ? 300 : 60;

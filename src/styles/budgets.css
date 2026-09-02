@@ -222,3 +222,23 @@
   margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--line);
   font-size: var(--fs-xs); line-height: 1.4; color: var(--c-ochre);
 }
+
+/* §CAT-SHAPE — how much of a category is unavoidable, and where its month lands.
+   Lives beside `.cat-life` because it is the same page and the same card rhythm; a third
+   stylesheet for one page would put its rules on two sides of the cascade for no reason. */
+.cat-imp { display: grid; gap: 12px; }
+/* One bar, segments in place — not three bars. The question is "what share", and three bars make
+   the reader compare lengths across rows to answer it. */
+.cat-imp-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--line); }
+.cat-imp-seg { height: 100%; }
+.cat-imp-legend { display: grid; gap: 6px; }
+.cat-imp-row { display: grid; grid-template-columns: 10px 1fr auto auto; align-items: center; gap: 8px; font-size: 13px; }
+.cat-imp-row .d { width: 10px; height: 10px; border-radius: 3px; }
+.cat-imp-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-imp-pct { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cat-imp-amt { font-variant-numeric: tabular-nums; }
+
+.cat-proj { display: grid; gap: 4px; }
+.cat-proj-main { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 26px; font-weight: 600; }
+.cat-proj-note { font-size: 13px; color: var(--muted); }
+.cat-proj-sofar { margin-top: 2px; }

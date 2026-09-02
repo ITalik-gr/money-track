@@ -27,6 +27,21 @@ export interface RecurringCandidate {
    * person has forgotten signing up.
    */
   ai?: boolean;
+  /**
+   * §SUB-REVIEW — this row failed ONE soft gate of the rhythm test and is only on screen because
+   * the model looked at it and said it is a bill anyway. Carries WHICH gate, because "the price
+   * moved mid-window" and "the charges are ragged" are different things to be wrong about.
+   */
+  near_miss?: "shop" | "ragged";
+  /**
+   * §SUB-REVIEW — the model's verdict about this merchant, when one has been decided.
+   *
+   * `not` rows are NOT removed from the response. They travel with the reason and the screen files
+   * them under a collapsed «AI відхилив» — because a silent filter is a filter nobody can correct,
+   * and the miss it causes is invisible in a way the false positive it prevents never was.
+   */
+  ai_verdict?: "subscription" | "not" | "unsure";
+  ai_reason?: string | null;
 }
 
 /**

@@ -16,7 +16,7 @@ import type {
   BankConnections, CashProjection, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
-  AiChange, AiDetectResult, SubscriptionOverview, BudgetStatusList, CategoryOverview, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
+  AiChange, AiDetectResult, SubscriptionOverview, BudgetStatusList, CategoryOverview, CategoryShape, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SpendingShape, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
@@ -157,6 +157,13 @@ export const api = createApi({
     getCategoryOverview: b.query<CategoryOverview, { id: number; from: number; to: number }>({
       query: ({ id, from, to }) => `/categories/${id}/overview?from=${from}&to=${to}`,
       providesTags: ["Category", "Tx", "Budget"],
+    }),
+    // §CAT-SHAPE: the three SHAPE findings, as a second call. Separate from the overview because
+    // they fail independently — the overview IS the page, while each of these legitimately
+    // refuses to exist on a category with too few charges, and a page must still render.
+    getCategoryShape: b.query<CategoryShape, { id: number; from: number; to: number }>({
+      query: ({ id, from, to }) => `/categories/${id}/shape?from=${from}&to=${to}`,
+      providesTags: ["Category", "Tx"],
     }),
     // §SUB-PAGE: one subscription with its analytics. Tagged `Planned` + `Tx` — a charge arriving
     // or a plan being edited both change every figure on that page.
@@ -999,6 +1006,7 @@ export const {
   useGetCategoriesQuery,
   useGetTxChatQuery,
   useGetCategoryOverviewQuery,
+  useGetCategoryShapeQuery,
   useGetAiChangesQuery,
   useGetTxAiChangesQuery,
   useRevertAiChangeMutation,
