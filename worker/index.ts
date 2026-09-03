@@ -553,6 +553,16 @@ const mcpGuard = createMiddleware<{ Bindings: Env; Variables: { userId: string; 
     "www-authenticate": `Bearer realm="money-track", ` +
       `resource_metadata="${new URL(c.req.url).origin}/.well-known/oauth-protected-resource", ` +
       `scope="${MCP_SCOPE}"`,
+    /**
+     * ⚠️ A browser-based client cannot READ `www-authenticate` unless it is exposed (2026-09-02).
+     *
+     * The header is the whole pointer to where authentication lives, so a client that cannot see
+     * it falls back to probing `/.well-known/*` — and one that does not probe simply reports an
+     * unreachable server. The response is already a refusal carrying no data, so exposing the
+     * header and allowing the origin gives nothing away that the 401 did not.
+     */
+    "access-control-allow-origin": "*",
+    "access-control-expose-headers": "WWW-Authenticate",
   });
   if (!claim) return deny();
   const access = await userAccess(c.env, claim.userId);
@@ -574,6 +584,22 @@ const mcpGuard = createMiddleware<{ Bindings: Env; Variables: { userId: string; 
   c.set("isOwner", access.isOwner);
   await next();
 });
+/**
+ * The preflight, BEFORE the guard (2026-09-02).
+ *
+ * An MCP client sends `Authorization` and `MCP-Protocol-Version`, both of which make the request
+ * non-simple, so a browser asks permission first — with NO credentials attached. Sending that
+ * OPTIONS through `mcpGuard` answers it with the 401 the guard exists to produce, the browser
+ * reads a failed preflight, and the real request is never made. The symptom is a client that
+ * cannot reach the server while the server never sees a single MCP call.
+ */
+app.options("/mcp", (c) => c.body(null, 204, {
+  "access-control-allow-origin": "*",
+  "access-control-allow-methods": "POST, GET, OPTIONS",
+  "access-control-allow-headers": "authorization, content-type, mcp-protocol-version, mcp-session-id",
+  "access-control-expose-headers": "WWW-Authenticate, MCP-Session-Id",
+  "access-control-max-age": "86400",
+}));
 app.use("/mcp", mcpGuard);
 app.all("/mcp", toUserDo);
 

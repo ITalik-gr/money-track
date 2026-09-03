@@ -149,6 +149,30 @@ test("tools/list offers the snapshot and the read tools, and NOT the write tool"
   for (const t of body.result.tools as { inputSchema?: unknown }[]) assert.ok(t.inputSchema);
 });
 
+test("every advertised schema is STRICT enough for a client that validates before showing it", async () => {
+  /**
+   * The quietest failure this server has. A client that validates JSON Schema harder than
+   * Anthropic and finds a schema wanting does not report an error — the tool simply does not
+   * exist for it, and the assistant answers as though it cannot see the ledger at all. Nothing
+   * appears in any log on either side.
+   *
+   * So both properties are asserted for EVERY tool, including the snapshot, which is declared in
+   * `routes/mcp.ts` rather than in `chat-tools.ts` and is exactly the one a helper applied in the
+   * other file would miss.
+   */
+  const { body } = await rpc(env(), "tools/list");
+  for (const t of body.result.tools as { name: string; inputSchema: Record<string, unknown> }[]) {
+    const s = t.inputSchema;
+    assert.equal(s.type, "object", t.name);
+    assert.ok(Array.isArray(s.required), `${t.name}: \`required\` must be PRESENT, even when empty`);
+    assert.equal(s.additionalProperties, false, `${t.name}: the object must be closed`);
+    // A `required` naming a field the schema does not declare is rejected outright by strict
+    // validators, and it is the way this drifts: a property gets renamed, the list does not.
+    const props = Object.keys((s.properties ?? {}) as Record<string, unknown>);
+    for (const r of s.required as string[]) assert.ok(props.includes(r), `${t.name}: required "${r}" is not a property`);
+  }
+});
+
 test("tools/call refuses the write tool BY NAME, not merely by omitting it from the list", async () => {
   const { body } = await rpc(env(), "tools/call", {
     name: "remember_fact",

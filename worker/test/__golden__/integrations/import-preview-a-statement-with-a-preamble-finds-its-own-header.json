@@ -49,10 +49,10 @@
     "total_rows": 2,
     "mapping": {
       "date": 0,
-      "amount": 5,
       "description": 3,
       "currency": 7,
-      "mcc": 4
+      "mcc": 4,
+      "amount": 5
     },
     "complete": true,
     "preamble_rows": 5,

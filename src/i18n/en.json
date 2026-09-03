@@ -1128,6 +1128,8 @@
   "cat.addSubcategory": "subcategory",
   "csv.fieldDate": "Date",
   "csv.fieldAmount": "Amount",
+  "csv.fieldCredit": "Money in",
+  "csv.creditHint": "Only for statements with separate Debit and Credit columns. Then «Amount» is the debit column, and the sign comes from the column rather than from the cell.",
   "csv.fieldDescription": "Description",
   "csv.fieldMcc": "MCC",
   "csv.fieldComment": "Comment",

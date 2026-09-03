@@ -198,7 +198,11 @@ function BudgetPlanner() {
             {collapsed ? t("plan.planExpand") : t("plan.planCollapse")}
           </button>
         )}
-        <button className="btn primary sm" onClick={() => propose()} disabled={isLoading}>
+        {/* Primary only while there is no plan yet — THEN it is the call to action. Once a plan
+            is on screen the same button means «перерахувати», which is a repeat of something
+            already done, and a filled black button next to a heading claims an urgency the word
+            «Оновити» does not have. The action does not change; its weight follows its meaning. */}
+        <button className={`btn sm ${data ? "ghost" : "primary"}`} onClick={() => propose()} disabled={isLoading}>
           {isLoading ? t("plan.analyzing") : data ? t("plan.refresh") : <><Icon name="spark" size={15} />{t("plan.proposeLimits")}</>}
         </button>
       </div>

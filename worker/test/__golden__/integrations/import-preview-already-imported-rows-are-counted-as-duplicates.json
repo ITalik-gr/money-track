@@ -37,9 +37,9 @@
     "total_rows": 4,
     "mapping": {
       "date": 0,
-      "amount": 2,
       "description": 1,
-      "mcc": 3
+      "mcc": 3,
+      "amount": 2
     },
     "complete": true,
     "preamble_rows": 0,

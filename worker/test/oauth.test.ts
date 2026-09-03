@@ -182,6 +182,35 @@ test("authorization server metadata advertises S256 and offline_access", async (
   assert.ok(m.registration_endpoint);
 });
 
+test("discovery answers on the OIDC path too, and to a preflight", async () => {
+  // `openid-configuration` predates RFC 8414 by years, so a client written against OIDC habits
+  // probes it FIRST and reports an unreachable server on a 404 — the same silent symptom
+  // §MCP-OAUTH already documents for a missing /.well-known route.
+  const dir = migratedDirectoryDb();
+  const oidc = await wellKnown.request("http://money.example/.well-known/openid-configuration", {}, env(dir));
+  const rfc = await wellKnown.request("http://money.example/.well-known/oauth-authorization-server", {}, env(dir));
+  assert.equal(oidc.status, 200);
+  assert.deepEqual(await oidc.json(), await rfc.json(), "one document, several names — never a second truth");
+
+  // A browser-based client sends `MCP-Protocol-Version`, which makes the request non-simple; a
+  // 404 to the preflight kills the fetch before the GET is ever attempted, and nothing reaches a
+  // server log.
+  const pre = await wellKnown.request("http://money.example/.well-known/oauth-authorization-server",
+    { method: "OPTIONS" }, env(dir));
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get("access-control-allow-origin"), "*");
+  assert.match(pre.headers.get("access-control-allow-headers") ?? "", /mcp-protocol-version/);
+});
+
+test("metadata advertises RFC 9207 and RFC 8707 — and both claims are TRUE", async () => {
+  const res = await wellKnown.request("http://money.example/.well-known/oauth-authorization-server", {}, env(migratedDirectoryDb()));
+  const m = await res.json() as Record<string, unknown>;
+  // Advertising `iss` without sending it makes a strict client refuse EVERY response — worse than
+  // never advertising. The flow test below is the other half of this assertion.
+  assert.equal(m.authorization_response_iss_parameter_supported, true);
+  assert.equal(m.resource_indicators_supported, true);
+});
+
 // ---- the flow -------------------------------------------------------------------------------
 
 async function seedUser(dir: MemDb) {
@@ -288,6 +317,65 @@ async function upToCode(dir: MemDb) {
   assert.equal(back.searchParams.get("state"), "st1");
   return { dir, clientId, verifier, code: back.searchParams.get("code")!, user };
 }
+
+/**
+ * §MCP-OAUTH — the SECOND client, pinned beside Claude.
+ *
+ * Everything here is registered through DCR, so in principle no callback needs to be known in
+ * advance — but «in principle» is exactly what this project does not accept as evidence, and only
+ * one client has ever actually connected. So the shapes another assistant registers are asserted:
+ * a plain HTTPS callback with a path, one carrying a query string, and one on a different host.
+ * If a future change tightens `redirectAllowed` in a way that happens to suit claude.ai, this is
+ * where it fails rather than in someone's connector dialog.
+ */
+const OPENAI_CB = "https://chatgpt.com/connector_platform_oauth_redirect";
+
+test("a second assistant's callback registers and completes the flow, exactly like Claude's", async () => {
+  const dir = migratedDirectoryDb();
+  const user = await seedUser(dir);
+  // Registered TOGETHER: one client may legitimately carry several callbacks, and the point is
+  // that neither is special-cased.
+  const clientId = await register(dir, [CLAUDE_CB, OPENAI_CB, `${OPENAI_CB}?v=2`]);
+  const cookie = `__Host-mt_session=${await createSession({ SESSION_SECRET: KEY } as never, user.id, user.token_version ?? 0)}`;
+
+  const page = await oauth.request(
+    `http://money.example/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(OPENAI_CB)}&code_challenge=${"z".repeat(43)}&code_challenge_method=S256&state=st2`,
+    { headers: { cookie } }, env(dir));
+  assert.equal(page.status, 200, "an unfamiliar but registered callback reaches the consent page");
+
+  const html = await page.text();
+  // §MCP-OAUTH: the consent page carries its OWN CSP, derived from the verified redirect_uri —
+  // `form-action 'self'` once blocked the Allow button in production and the symptom was silence.
+  // The derivation must include THIS client's origin, not a hardcoded claude.ai.
+  const csp = page.headers.get("content-security-policy") ?? "";
+  assert.match(csp, /form-action/);
+  assert.ok(csp.includes("https://chatgpt.com"), `the consent CSP must name the client's origin: ${csp}`);
+
+  const request = /name="request" value="([^"]+)"/.exec(html)?.[1] ?? "";
+  assert.ok(request);
+  const decided = await oauth.request("http://money.example/oauth/authorize",
+    { ...form({ request, decision: "allow" }), headers: { "content-type": "application/x-www-form-urlencoded", cookie } },
+    env(dir));
+  assert.equal(decided.status, 302);
+  const back = new URL(decided.headers.get("location")!);
+  assert.equal(back.origin + back.pathname, OPENAI_CB);
+  assert.ok(back.searchParams.get("code"));
+  assert.equal(back.searchParams.get("state"), "st2");
+  // RFC 9207: the metadata says we send `iss`, so we must actually send it — a strict client that
+  // read the flag and got no `iss` rejects the response and the flow dies at the last step.
+  assert.equal(back.searchParams.get("iss"), "http://money.example");
+});
+
+test("an error response carries `iss` too, or a strict client discards the explanation", async () => {
+  const dir = migratedDirectoryDb();
+  const clientId = await register(dir, [OPENAI_CB]);
+  const res = await oauth.request(
+    `http://money.example/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(OPENAI_CB)}&code_challenge_method=plain&code_challenge=abc&state=s9`,
+    {}, env(dir));
+  const loc = new URL(res.headers.get("location")!);
+  assert.equal(loc.searchParams.get("error"), "invalid_request");
+  assert.equal(loc.searchParams.get("iss"), "http://money.example");
+});
 
 test("the consent screen names the account and the destination", async () => {
   const dir = migratedDirectoryDb();

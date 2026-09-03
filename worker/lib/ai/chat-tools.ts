@@ -45,9 +45,35 @@ export function isReadOnlyTool(name: string): boolean {
   return READ_ONLY.has(name);
 }
 
+/**
+ * Make one tool schema STRICT — explicitly, and for every client (2026-09-02).
+ *
+ * These schemas were written against Anthropic, which is forgiving: an absent `required` means
+ * "nothing is required" and an absent `additionalProperties` means "anything goes". Other clients
+ * validate JSON Schema harder before they will show a tool at all, and the failure mode is the
+ * quietest one there is — a schema a client rejects means, to that client, that the tool DOES NOT
+ * EXIST. No error surfaces anywhere; the assistant simply answers as though it has no access to
+ * the ledger.
+ *
+ * Two additions, both safe for every client:
+ *   · `required` is always present, even as `[]` — the difference between "no required fields" and
+ *     "the field is missing from the schema" is exactly what a strict validator objects to;
+ *   · `additionalProperties: false` — the executor ignores unknown keys anyway, so this states a
+ *     rule that already held, and it makes a model that invents a parameter fail loudly at the
+ *     schema instead of quietly having it dropped.
+ *
+ * ⚠️ It does NOT list every property in `required` (OpenAI's *strict* function-calling mode wants
+ * that). Doing so would make genuinely optional filters mandatory for EVERY client, including the
+ * in-app chat — a much bigger behavioural change than the compatibility it buys, and the wrong
+ * trade to make blind.
+ */
+function strict(schema: Record<string, unknown>): Record<string, unknown> {
+  return { ...schema, required: schema.required ?? [], additionalProperties: false };
+}
+
 export function financeChatTools(): ChatTool[] {
   const dateProp = { type: "string", description: "A date in YYYY-MM-DD format" };
-  return [
+  const tools: ChatTool[] = [
     {
       name: "query_spend",
       description: "Compute the user's total spending or income over a period (in WHOLE units of the display currency, converted at the stored rate), optionally filtered by category or merchant and grouped. For questions like \"how much did I spend or earn on X during Y\".",
@@ -109,6 +135,7 @@ export function financeChatTools(): ChatTool[] {
       },
     },
   ];
+  return tools.map((t) => ({ ...t, input_schema: strict(t.input_schema) }));
 }
 
 function parseToolDate(s: unknown, endOfDay = false): number | null {

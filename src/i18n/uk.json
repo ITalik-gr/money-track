@@ -1128,6 +1128,8 @@
   "cat.addSubcategory": "підкатегорія",
   "csv.fieldDate": "Дата",
   "csv.fieldAmount": "Сума",
+  "csv.fieldCredit": "Надходження",
+  "csv.creditHint": "Заповнюй лише для виписок із двома колонками «Дебет» і «Кредит». Тоді «Сума» — це колонка списань, а знак береться з колонки, а не з клітинки.",
   "csv.fieldDescription": "Опис",
   "csv.fieldMcc": "MCC",
   "csv.fieldComment": "Коментар",

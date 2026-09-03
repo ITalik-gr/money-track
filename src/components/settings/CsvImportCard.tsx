@@ -12,7 +12,14 @@ import { takeSharedStatement } from "../../lib/push.ts";
 // Імпорт виписки з файлу (P1.2). Свідомо у ДВА кроки: спершу «ось що я зрозумів», і лише потім
 // запис. Одноетапний імпорт означав би, що неправильно вгадану колонку суми видно вже після
 // того, як місяць кривих чисел потрапив у канон — а вдруге ту саму виписку ніхто не перечитує.
-type Mapping = { date?: number; amount?: number; description?: number; comment?: number | null; mcc?: number | null };
+/**
+ * §CSV-DEBIT — `credit` is the money-IN column of a two-column ledger («Дебет»/«Кредит»).
+ *
+ * It has to be pickable here, not only guessable on the server: when it is set, `amount` stops
+ * meaning "the signed amount" and starts meaning "the debit column". A person looking at a file
+ * the guesser read as one shape when it is the other has no other way to say so.
+ */
+type Mapping = { date?: number; amount?: number; description?: number; comment?: number | null; mcc?: number | null; credit?: number | null };
 
 interface Preview {
   delimiter: string;
@@ -42,6 +49,9 @@ const FIELDS: { key: keyof Mapping; labelKey: TranslationKey; required: boolean 
   { key: "date", labelKey: "csv.fieldDate", required: true },
   { key: "amount", labelKey: "csv.fieldAmount", required: true },
   { key: "description", labelKey: "csv.fieldDescription", required: true },
+  // Optional and LAST of the money columns: filling it changes what `amount` means, so it reads
+  // as a modifier of the row above rather than as a field of its own.
+  { key: "credit", labelKey: "csv.fieldCredit", required: false },
   // MCC не обовʼязковий, але саме він вмикає детерміновану категоризацію (правила по MCC).
   { key: "mcc", labelKey: "csv.fieldMcc", required: false },
   { key: "comment", labelKey: "csv.fieldComment", required: false },
@@ -214,6 +224,12 @@ export function CsvImportCard() {
                   />
                 </div>
               ))}
+              {/* §CSV-DEBIT: shown only once the pair is actually in play. A permanent note about a
+                  column most files do not have would be noise on every import; a note that appears
+                  when the meaning of «Сума» CHANGES is the moment it is worth reading. */}
+              {mapping.credit != null && (
+                <div className="muted" style={{ fontSize: 12.5 }}>{t("csv.creditHint")}</div>
+              )}
             </div>
 
             <div className="muted" style={{ fontSize: 13 }}>

@@ -65,7 +65,10 @@ const SNAPSHOT_TOOL = {
     "This is the same snapshot the in-app adviser is given, so its figures match the app's screens. " +
     "Call it for any question about how they are doing overall, what they can afford, or whether " +
     "something is affordable.",
-  inputSchema: { type: "object", properties: {} },
+  // Same strictness as every other tool: an explicit `required` and a closed object. A schema a
+  // client rejects means, to that client, that the tool does not exist — no error, just an
+  // assistant that answers as though it cannot see the ledger (`chat-tools.ts` → `strict`).
+  inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
 };
 
 /**

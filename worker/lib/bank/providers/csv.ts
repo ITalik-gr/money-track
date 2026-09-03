@@ -105,25 +105,60 @@ export interface ColumnMapping {
    * a pile of uncategorised rows even though the bank told us what each purchase was.
    */
   mcc?: number | null;
+  /**
+   * The MONEY-IN column of a two-column ledger (2026-09-02).
+   *
+   * A large family of statements — Ukrainian bank exports, and almost every accounting-style CSV —
+   * does not carry a signed amount at all. It carries «Дебет» and «Кредит» (or Debit/Credit) as
+   * two columns of POSITIVE numbers, and the sign lives in WHICH column is filled.
+   *
+   * Before this, `amount`'s hint list simply contained "debit" and "credit", so such a file mapped
+   * to whichever came first and imported half its rows — every one of them with the wrong sign,
+   * because a debit printed as `250,00` in a column called «Дебет» is money LEAVING. It did not
+   * fail: it produced a month of plausible, wrong numbers, which is the exact failure the preview
+   * exists to prevent and could not see.
+   *
+   * When this is set, `amount` means the DEBIT column and the sign comes from the column rather
+   * than from the cell (§CSV-DEBIT). When it is null nothing changes: a single signed column is
+   * still read exactly as before.
+   */
+  credit?: number | null;
 }
 
-const HINTS: Record<keyof ColumnMapping, string[]> = {
+/** `debit` is not a mapping field — it is how the AMOUNT column is found in a two-column
+ *  ledger, and it lives here so both halves of the pair are described in one place. */
+const HINTS: Record<keyof ColumnMapping | "debit", string[]> = {
   // ⚠️ Order matters twice over: an EXACT match is tried against this whole list before any
   // partial one, so the most specific spelling has to be present, not merely matchable. Real
   // exports write phrases ("Amount in card currency"), and a bank that offers an English export
   // is the common case for anyone who ever switched their banking app to English.
   date: ["дата", "date", "час", "time", "дата i час", "дата і час", "дата та час", "дата операції",
-    "date and time of transaction"],
+    "date and time of transaction",
+    // Added 2026-09-02 without a sample file in hand: these are the standard column names of
+    // Ukrainian and European exports, and an unrecognised header costs a model call (§CSV-AI)
+    // where a hint costs nothing and is reproducible.
+    "дата транзакції", "дата проводки", "дата валютування", "дата і час операції",
+    "transaction date", "booking date", "value date", "posting date", "operation date"],
   // "Amount in card currency" must win over "Amount in transaction currency": our invariant is
   // that `amount` is in the ACCOUNT's currency (§R2-CUR1). Partial matching happens to pick the
   // first of the two, which is the right one by luck — the exact hint makes it right by rule.
-  amount: ["сума", "amount", "сума в валюті картки", "сума у валюті картки", "сума операції", "debit", "credit",
-    "amount in card currency", "сума у валюті рахунку"],
+  // ⚠️ "debit"/"credit" LEFT this list on 2026-09-02 — see `credit` above. They were matching a
+  // two-column ledger as if it were one signed column, which imported half the rows with the sign
+  // inverted. They now have their own lists and are only used as a PAIR.
+  amount: ["сума", "amount", "сума в валюті картки", "сума у валюті картки", "сума операції",
+    "amount in card currency", "сума у валюті рахунку", "сума у валюті операції",
+    "amount in account currency", "сума, грн", "сума, uah", "сума операції у валюті рахунку"],
+  // The two halves of a two-column ledger. Matched only when BOTH are present and distinct.
+  debit: ["дебет", "debit", "витрата", "видаток", "списання", "withdrawal", "paid out", "money out"],
+  credit: ["кредит", "credit", "надходження", "прихід", "зарахування", "deposit", "paid in", "money in"],
   description: ["опис", "description", "деталі", "призначення", "контрагент", "merchant", "деталі операції",
-    "details of the operation", "details", "purpose", "призначення платежу"],
-  currency: ["валюта", "currency"],
+    "details of the operation", "details", "purpose", "призначення платежу",
+    // ⚠️ Nothing as generic as "name" here: it partial-matches "Account name" and would point the
+    // description at the account column on every export that carries one.
+    "найменування", "отримувач", "платник", "payee", "counterparty", "narrative", "опис операції"],
+  currency: ["валюта", "currency", "валюта операції", "валюта рахунку", "currency code", "ccy"],
   comment: ["коментар", "comment", "примітка", "note"],
-  mcc: ["mcc", "мсс", "код мсс", "mcc-код"],
+  mcc: ["mcc", "мсс", "код мсс", "mcc-код", "mcc code", "код категорії"],
 };
 
 /**
@@ -135,7 +170,7 @@ const HINTS: Record<keyof ColumnMapping, string[]> = {
  */
 export function guessMapping(headers: string[]): Partial<ColumnMapping> {
   const normalised = headers.map((h) => h.trim().toLocaleLowerCase("uk"));
-  const find = (key: keyof ColumnMapping): number | undefined => {
+  const find = (key: keyof typeof HINTS): number | undefined => {
     const hints = HINTS[key];
     // Exact match first — "сума" must not lose to "сума комісії" just because it comes later.
     for (const hint of hints) {
@@ -148,11 +183,47 @@ export function guessMapping(headers: string[]): Partial<ColumnMapping> {
     }
     return undefined;
   };
+
   const out: Partial<ColumnMapping> = {};
-  for (const key of Object.keys(HINTS) as (keyof ColumnMapping)[]) {
+  for (const key of ["date", "description", "currency", "comment", "mcc"] as const) {
     const idx = find(key);
     if (idx !== undefined) out[key] = idx;
   }
+
+  /**
+   * The amount, from whichever of the two shapes this file is (§CSV-DEBIT).
+   *
+   * A single SIGNED column wins whenever there is one — that is the commoner export and the one
+   * every existing file uses, so nothing about it may change. Only when there is no such column do
+   * the two halves of a ledger get considered, and only as a PAIR: a lone "Credit card number"
+   * partial-matching «credit» must never become the amount, which is exactly what would happen if
+   * either half counted on its own.
+   */
+  const signed = find("amount");
+  if (signed !== undefined) {
+    out.amount = signed;
+    return out;
+  }
+  const debit = find("debit");
+  const credit = find("credit");
+  if (debit !== undefined && credit !== undefined && debit !== credit) {
+    out.amount = debit;
+    out.credit = credit;
+  } else if (debit !== undefined) {
+    // A lone DEBIT column is read as an ordinary signed column. «Витрата» / «Debit» / «Списання»
+    // do not collide with anything a statement commonly carries, so this is safe.
+    out.amount = debit;
+  }
+  /**
+   * ⚠️ A lone CREDIT column is deliberately NOT used — found by the test that now pins it.
+   *
+   * «credit» partial-matches «Credit card number» and «Credit limit», both of which appear in real
+   * exports and both of which PARSE AS NUMBERS. Guessing there would map the amount to a card
+   * number and import a statement of nonsense, confidently. Leaving `amount` unmapped is the
+   * better failure by a wide margin: it is visible — §CSV-AI gets a turn, and failing that the
+   * person is shown the column picker. A file that genuinely has only an incoming column and no
+   * outgoing one is rare enough not to be worth that trade.
+   */
   return out;
 }
 
@@ -232,9 +303,28 @@ export async function toCanonical(
       skipped.push({ line, reason: st(locale, "csvBadDate", { value: (row[mapping.date] ?? "").slice(0, 32) }) });
       continue;
     }
-    const amount = parseAmountMinor(row[mapping.amount] ?? "");
+    /**
+     * §CSV-DEBIT — the amount, from whichever shape this file is.
+     *
+     * One signed column: read it as it stands. Two columns: the SIGN COMES FROM THE COLUMN, not
+     * from the cell — a `250,00` under «Дебет» is money leaving, however it is punctuated, and a
+     * bank that prints it as `-250,00` under the same header means the same thing. Hence
+     * `-Math.abs` rather than a negation: both spellings exist in the wild and they agree.
+     *
+     * An empty cell on one side is normal and is NOT a parse failure — that is how a two-column
+     * ledger says "this row is the other kind". Only a row empty on BOTH sides has no amount.
+     */
+    const rawDebit = row[mapping.amount] ?? "";
+    let amount: number | null;
+    if (mapping.credit != null) {
+      const debit = parseAmountMinor(rawDebit);
+      const credit = parseAmountMinor(row[mapping.credit] ?? "");
+      amount = debit ? -Math.abs(debit) : credit ? Math.abs(credit) : (debit === null && credit === null ? null : 0);
+    } else {
+      amount = parseAmountMinor(rawDebit);
+    }
     if (amount === null) {
-      skipped.push({ line, reason: st(locale, "csvBadAmount", { value: (row[mapping.amount] ?? "").slice(0, 32) }) });
+      skipped.push({ line, reason: st(locale, "csvBadAmount", { value: rawDebit.slice(0, 32) }) });
       continue;
     }
     if (amount === 0) {

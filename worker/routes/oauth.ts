@@ -22,7 +22,7 @@ import type { ServerLocale } from "../lib/platform/i18n.ts";
 import { st } from "../lib/platform/i18n.ts";
 import {
   MCP_SCOPE, OFFLINE_SCOPE, ACCESS_TTL_SEC, canonicalResource, resourceMatches,
-  redirectAllowed, redirectUriUsable, pkceVerifies, createAccessToken,
+  redirectAllowed, redirectUriUsable, pkceVerifies, createAccessToken, issuerFor,
 } from "../lib/platform/oauth.ts";
 import {
   registerClient, findClient, touchClient, issueCode, redeemCode, createGrant, rotateGrant,
@@ -47,10 +47,26 @@ function badRequest(c: Ctx, error: string, desc: string) {
   return c.json({ error, error_description: desc }, 400);
 }
 
-/** …and errors after it MUST go back to the client, or the flow hangs with no explanation. */
-function backToClient(redirectUri: string, params: Record<string, string>): string {
+/**
+ * …and errors after it MUST go back to the client, or the flow hangs with no explanation.
+ *
+ * ⚠️ **Every response back to the client carries `iss` (RFC 9207, 2026-09-02).** A client that
+ * talks to more than one authorization server cannot otherwise tell WHICH one answered, and the
+ * mix-up attack that defends against is real enough that stricter clients — the ones this project
+ * does not test against, because only Claude has ever connected — refuse a response without it.
+ *
+ * It is added HERE rather than at each call site so an error redirect cannot forget it: a client
+ * validating `iss` treats a missing one as a rejected response, and an error that gets rejected as
+ * malformed is an error the person never gets to read.
+ *
+ * ⚠️ Paired with `authorization_response_iss_parameter_supported` in the AS metadata, and the pair
+ * is not optional in either direction: advertising it without sending it makes a strict client
+ * refuse EVERY response, which is worse than never advertising it at all.
+ */
+function backToClient(redirectUri: string, params: Record<string, string>, issuer?: string): string {
   const u = new URL(redirectUri);
   for (const [k, v] of Object.entries(params)) if (v) u.searchParams.set(k, v);
+  if (issuer) u.searchParams.set("iss", issuer);
   return u.toString();
 }
 
@@ -127,7 +143,8 @@ oauth.get("/oauth/authorize", async (c) => {
   }
 
   const state = q.state ?? "";
-  const err = (e: string, d: string) => c.redirect(backToClient(q.redirect_uri!, { error: e, error_description: d, state }), 302);
+  const err = (e: string, d: string) =>
+    c.redirect(backToClient(q.redirect_uri!, { error: e, error_description: d, state }, issuerFor(c.req.url)), 302);
   if (q.response_type !== "code") return err("unsupported_response_type", "only response_type=code is supported");
   if (q.code_challenge_method !== "S256" || !q.code_challenge) {
     // PKCE is mandatory and `plain` is not offered — see `pkceVerifies` for why.
@@ -183,16 +200,16 @@ oauth.post("/oauth/authorize", async (c) => {
   // granting a client access to a ledger its owner never saw named.
   const sess = await verifySession(c.env, getCookie(c, SESSION_COOKIE));
   if (!sess || sess.userId !== p.u) {
-    return c.redirect(backToClient(p.r, { error: "access_denied", error_description: "session changed", state: p.s }), 302);
+    return c.redirect(backToClient(p.r, { error: "access_denied", error_description: "session changed", state: p.s }, issuerFor(c.req.url)), 302);
   }
   if (form.decision !== "allow") {
-    return c.redirect(backToClient(p.r, { error: "access_denied", state: p.s }), 302);
+    return c.redirect(backToClient(p.r, { error: "access_denied", state: p.s }, issuerFor(c.req.url)), 302);
   }
 
   const code = await issueCode(c.env.DIRECTORY, {
     user_id: p.u, client_id: p.c, redirect_uri: p.r, code_challenge: p.h, resource: p.res, scope: p.sc,
   });
-  return c.redirect(backToClient(p.r, { code, state: p.s }), 302);
+  return c.redirect(backToClient(p.r, { code, state: p.s }, issuerFor(c.req.url)), 302);
 });
 
 // ---- the token endpoint ---------------------------------------------------------------------
