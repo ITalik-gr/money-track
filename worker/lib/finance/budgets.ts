@@ -16,6 +16,11 @@
  */
 import type { Env } from "../../env.ts";
 import type { BudgetStatusRow } from "../../../shared/api/planning.ts";
+// §ENV-PARTS lives in its own file (C3, 2026-09-04) and the import runs ONE way: this file asks
+// what a month is made of, that one answers, and it calls nothing back. The seam is real, not a
+// line count — everything here is about a LIMIT (carry, ratio, forecast, history), while that file
+// is the only place in the envelope path that talks to the subscription detectors.
+import { envelopeParts } from "./envelope-parts.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "./categories-i18n.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
@@ -140,7 +145,7 @@ export async function budgetStatus(
   const nextMonthStart = localMonthStart(now, 1);
   const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
 
-  const [budgets, spend, shape, levels, prevMonth] = await Promise.all([
+  const [budgets, spend, shape, levels, prevMonth, parts] = await Promise.all([
     env.DB.prepare(
       `SELECT b.category_id AS id, b.amount AS amount, COALESCE(b.rollover, 0) AS rollover,
               ${catNameSql(locale, "c.name")} AS name
@@ -165,6 +170,8 @@ export async function budgetStatus(
     categoryMonthlyLevels(env, mult, { now }),
     // The month that just closed — the only place a carry may come from (`carryFrom`).
     budgetsRepo.closedMonth(env.DB, localYm(localMonthStart(now, -1))),
+    // §ENV-PARTS — what the spend above is made OF. Same window, same canonical filters.
+    envelopeParts(env, mult, monthStart, now, now),
   ]);
 
   const spentByCat = new Map<number, number>();
@@ -175,6 +182,7 @@ export async function budgetStatus(
   return (budgets.results ?? []).map((b) => {
     const spent = spentByCat.get(b.id) ?? 0;
     const sh = shapeByCat.get(b.id) ?? { n: 0, biggest: spent };
+    const part = parts.get(b.id) ?? { committed: 0, rhythmic: 0, discretionary: 0 };
     const lv = levels.get(b.id);
     const rollover = !!b.rollover;
     const baseAmount = inBase(b.amount);
@@ -211,6 +219,8 @@ export async function budgetStatus(
     // already reported by `ratio`, and `draftBudgetForecast` skips anything already at ratio ≥ 0.9,
     // so this keeps the two from describing the same hryvnia twice.
     const ratio = zero ? (spent > 0 ? 1 : 0) : spent / denom;
+    // §ENV-PARTS — what recurs whatever the user decides for the rest of the month.
+    const floor = part.committed + part.rhythmic;
     return {
       id: b.id, name: b.name,
       amount, base_amount: baseAmount, carried, rollover,
@@ -239,6 +249,24 @@ export async function budgetStatus(
        */
       unreachable: !zero && lv != null && lv.active_months >= 2
         && lv.level > baseAmount * (1 + REACH_MARGIN),
+      parts: part,
+      floor,
+      /**
+       * §ENV-PARTS — §BUDGET-REACH answered from THIS month rather than from history.
+       *
+       * `unreachable` above compares the limit with the category's LEVEL, which is a six-month
+       * measurement: it can only say «this target has never been met», and it says it about a
+       * category, not about the month in hand. This says something narrower and much harder to
+       * argue with — the charges that have ALREADY landed and are not discretionary have passed
+       * the limit, so no amount of restraint for the rest of the month brings it back. That is
+       * knowable on the 3rd, where the closing report is knowable on the 1st of the next month.
+       *
+       * ⚠️ Against the EFFECTIVE limit (`amount`), not the base one: a carry-in is real money the
+       * envelope may spend this month (§BUDGET-MEMORY), and ignoring it would report a breach the
+       * user does not have.
+       * ⚠️ Never on a zero envelope, the same exception §BUDGET-REACH carries (§BUDGET-ZERO).
+       */
+      floor_over_limit: !zero && floor > amount,
     };
   });
 }

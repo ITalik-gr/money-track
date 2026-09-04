@@ -202,8 +202,24 @@ export async function generateAdvice(
         "{runway_comment, summary, " +
         "facts:[{label, amount (UAH number or null), category (name or null), delta_pct (number or null), tone ('pos'|'neg'|'neutral')}] (2-5 key facts), " +
         "suggestions:[{title, detail, action}]} — 3-5 pieces of advice, each actionable (what exactly to cut or do, " +
-        "and the effect as an amount). action is either null or {type:'create_budget', label, category_id (from " +
-        "top_categories), category_name, amount_uah} when proposing an envelope limit for a category makes sense. " +
+        "and the effect as an amount). " +
+        // §ADVICE-LOOP — the app can only carry out these five. A sixth type would render as a
+        // button that does nothing, so the list here and the executors on the client are one thing.
+        "action is either null or ONE of: " +
+        "{type:'create_budget', label, category_id (from top_categories), category_name, amount_uah} — open an " +
+        "envelope; {type:'set_budget', …same fields} — change an existing envelope's limit; " +
+        "{type:'create_goal', label, goal_title, amount_uah} — start a savings goal; " +
+        "{type:'cancel_subscription', label, planned_id (from subscriptions in the payload), planned_title} — end a " +
+        "plan the user no longer wants; {type:'create_rule', label, match_pattern, category_id, category_name} — file " +
+        "a merchant into a category automatically. Use no other type, and never invent an id. " +
+        // §NOVELTY, the adviser's half. The feed learned this in August: repetition is cured by an
+        // explicit list of what was already said, never by asking for interesting writing.
+        "🔁 already_suggested lists advice you have GIVEN BEFORE, with what the user did with it " +
+        "(state: open | taken | done | dismissed) and, where measured, outcome_delta_pct — the real change in that " +
+        "category since (negative = it worked). Do NOT repeat a 'dismissed' one: they refused it, and offering it " +
+        "again unchanged argues with their decision. Do NOT re-propose a 'done' one as if it were new. You MAY " +
+        "reference a 'taken' or 'done' one when its outcome_delta_pct shows what happened — that is the most useful " +
+        "thing you can say, and the number is already computed; quote it, never recompute it. " +
         "Amounts are WHOLE units of the display currency named below." +
         (await replyLangDirective(env)) + (await moneyUnitDirective(env)),
     },

@@ -181,34 +181,7 @@
 /* Стовпчик росте scaleY від низу — height анімує layout. */
 .wd-bar { width: 100%; height: 100%; border-radius: 6px 6px 0 0;
   transform-origin: bottom center; transition: transform var(--dur-3, .3s) var(--ease-out, ease); }
-/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
-   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
-   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
-.wd-bar {
-  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
-  background: var(--accent); opacity: .85; transition: opacity .15s;
-}
-/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
 
-@media (max-width: 480px) {
-  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
-     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
-  .wd-val { display: none; }
-  .wd-bar-wrap { height: 72px; }
-}
-
-/* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
-   `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
-   як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
-/* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-
-@media (max-width: 720px) {
-  .hb-grid { grid-template-columns: minmax(0, 1fr); }
-}
-
-@media (prefers-reduced-motion: reduce) { .wd-bar { transition: none; } }
 .wd-lbl { font-size: 11px; color: var(--muted); }
 .deep-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 14px 0 0; }
 .deep-desc b { color: var(--ink); }
@@ -551,32 +524,6 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 /* Заливка через transform:scaleX, НЕ width — width анімує layout (thrash), scaleX іде на GPU. */
 .bc-bar span { display: block; width: 100%; height: 100%; border-radius: 999px;
   transform-origin: left center; transition: transform var(--dur-2, 0.25s) var(--ease-out, ease); }
-/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
-   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
-   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
-.wd-bar {
-  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
-  background: var(--accent); opacity: .85; transition: opacity .15s;
-}
-/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
-
-@media (max-width: 480px) {
-  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
-     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
-  .wd-val { display: none; }
-  .wd-bar-wrap { height: 72px; }
-}
-
-/* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
-   `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
-   як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
-/* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-
-@media (max-width: 720px) {
-  .hb-grid { grid-template-columns: minmax(0, 1fr); }
-}
 
 @media (prefers-reduced-motion: reduce) { .bc-bar span { transition: none; } }
 /* Засічка базового ліміту — межа «свій місяць ∣ перенесене». */

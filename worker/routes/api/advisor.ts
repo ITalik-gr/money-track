@@ -5,7 +5,7 @@
 // the same money. Confirmed facts adjust the canon inside `categoryMonthlyLevels`, never here.
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, normChatMessages } from "./_shared.ts";
-import type { Insight, AdviceHistoryItem, Fact } from "../../../shared/api/ai.ts";
+import type { Insight, AdviceHistoryItem, Fact, Advice } from "../../../shared/api/ai.ts";
 
 export const advisor = apiRoutes();
 
@@ -30,7 +30,38 @@ advisor.post("/insight/generate", async (c) => {
 
 advisor.get("/advisor", async (c) => {
   const { getStoredAdvice } = await import("../../lib/ai/advisor.ts");
-  return c.json(await getStoredAdvice(c.env));
+  const { getSuggestionRecords, normaliseSuggestions } = await import("../../lib/ai/advice-actions.ts");
+  const stored = await getStoredAdvice(c.env);
+  if (!stored) return c.json(null);
+  // §ADVICE-LOOP — states are merged on the way OUT, not written into the stored advice. So a mark
+  // set a second ago shows on advice generated an hour ago, and marking never rewrites the blob
+  // (which would make two devices marking at once lose one of the two decisions).
+  return c.json({ ...stored, suggestions: normaliseSuggestions(stored.suggestions, await getSuggestionRecords(c.env)) } satisfies Advice);
+});
+
+/**
+ * §ADVICE-LOOP — record what the user did with one suggestion.
+ *
+ * ⚠️ Literal before parameterised is not at issue here, but the KEY is: it is a normalised title
+ * and arrives in the path, so it is matched against the advice on record rather than trusted. A
+ * state written for a suggestion nobody made would be invisible for ever — nothing would ever show
+ * it, and it would still occupy a slot in the cap.
+ */
+advisor.post("/advisor/suggestions/:key/state", async (c) => {
+  const loc = c.get("locale");
+  const key = c.req.param("key");
+  const body = await c.req.json<{ state?: string }>().catch(() => ({}) as { state?: string });
+  const state = body.state;
+  if (state !== "taken" && state !== "done" && state !== "dismissed" && state !== "open") {
+    return c.json({ error: st(loc, "errAdviceStateInvalid") }, 400);
+  }
+  const { getStoredAdvice } = await import("../../lib/ai/advisor.ts");
+  const { setSuggestionState, suggestionKey } = await import("../../lib/ai/advice-actions.ts");
+  const stored = await getStoredAdvice(c.env);
+  const match = (stored?.suggestions ?? []).find((sg) => suggestionKey(sg.title) === key);
+  if (!match) return c.json({ error: st(loc, "errAdviceSuggestionUnknown") }, 404);
+  const rec = await setSuggestionState(c.env, key, state, { title: match.title });
+  return c.json({ ok: true, key: rec.key, state: rec.state });
 });
 
 advisor.get("/advisor/history", async (c) => {

@@ -51,3 +51,18 @@
    у півколонці підписи місяців зливались, а нетворт узагалі стояв на 50% (фідбек користувача). */
 .advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card { grid-column: 1 / -1; }
 @media (max-width: 760px) { .advisor-state { grid-template-columns: 1fr; } }
+
+/* §ADVICE-LOOP — the row under a suggestion: where it stands, and what came of it.
+   `margin-top` rather than a gap on the parent: the action button above is optional, so the two
+   must not both claim the space between them when only one is rendered. */
+.sg-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.sg-state { font-size: 12px; color: var(--muted); }
+/* The outcome is the only figure here, so it reads as one: tabular digits, and a tone that says
+   which direction is good WITHOUT the reader parsing the sign. Down is good — this sits under
+   advice about spending less, and `pos`/`neg` are assigned from that meaning, not from the sign. */
+.sg-outcome { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12px; }
+.sg-outcome.pos { color: var(--pos); }
+.sg-outcome.neg { color: var(--neg); }
+/* Refused advice stays on screen rather than disappearing: it is still part of what the adviser
+   said this month, and a card that vanishes on tap reads as a bug. Dimmed, not hidden. */
+.advice-card.sg-dismissed { opacity: 0.55; }

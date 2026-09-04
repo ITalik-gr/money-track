@@ -36,11 +36,15 @@
 @import "./styles/connect.css";
 @import "./styles/settings-shell.css";
 @import "./styles/domains-b.css";
-/* Added after the split (STYLES.md §6.1). Last on purpose: a new part appended here cannot change
-   which rule wins for anything that already existed. */
+/* Added after the split (STYLES.md §6.1). Appended on purpose — but ⚠️ NOT because appending is
+   free: that is what this comment used to claim, and it is false. Appending cannot change which
+   UNCONDITIONAL rule wins; every `@media`/`@container` rule above it is fair game, because a
+   condition adds no specificity. This very part proved it — its unconditional
+   `.acct-sec .acct-grid` killed a container query in `domains-b.css` and silently undid a widening
+   made after user feedback. §COND-ORDER in `docs/UI.md`; lint C11 now refuses the next one. */
 @import "./styles/transactions.css";
-/* `/insights/*` blocks (§SPEND-PROFILE, §INCOME-SPLIT, §MOMENTUM, §FLOOR). Appended, so nothing
-   here can change which rule wins for anything that already existed. */
+/* `/insights/*` blocks (§SPEND-PROFILE, §INCOME-SPLIT, §MOMENTUM, §FLOOR). Appended — see the
+   caveat above: that buys safety for unconditional rules only (§COND-ORDER). */
 @import "./styles/insights.css";
 @import "./styles/budgets.css";
 @import "./styles/analytics.css";

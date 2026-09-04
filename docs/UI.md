@@ -94,3 +94,37 @@
 фікстурі не було ЖОДНОЇ валютної покупки, тож ендпоінт повертав `n: 0` і кожне твердження про нього
 трималось порожньо. **Sweep сліпий скрізь, де фікстура порожня** — той самий урок, що з
 `budget_months`. Тепер у фікстурі є покупка з `original_currency` та рядок `rate_history`.
+
+## §COND-ORDER — a conditional rule must sit BELOW its unconditional twin (2026-09-04)
+
+`@media` and `@container` add **zero specificity**. A responsive rule therefore beats the plain
+rule it is meant to override only while it sits LATER in the cascade — and the cascade here is the
+`@import` order in `src/index.css`, across twenty parts. Move the layout into a part imported
+further down, or append a new part, and the conditional rule loses silently: it is still in the
+file, still reads as if it works, and never applies.
+
+**Rule: when a selector is declared both unconditionally and inside a condition, the conditional
+one goes below.** In practice that means the condition lives in the part that OWNS the selector,
+not in the part where the author happened to be typing.
+
+⚠️ **This falsifies a claim that `src/index.css` makes about itself.** Its header says a part
+appended at the end "cannot change which rule wins for anything that already existed". It can, and
+it did: `transactions.css` was appended with an unconditional `.acct-sec .acct-grid`, which killed
+the `@container` rule in `domains-b.css` and silently undid a widening made after user feedback on
+2026-08-01. Appending is safe for the UNCONDITIONAL cascade; every condition above it is fair game.
+
+⚠️ **It also falsifies `STYLES.md §1.1`** as originally written — see there.
+
+**Held by lint C11** (`scripts/check-styles-css.mjs`). Thirteen standing cases on the day it was
+written, four of which were breaking a screen:
+- `.cat-merch-list > li` — a stale three-column rule that hid the count while the grid kept four
+  columns, leaving an empty one between 480 and 560px.
+- `.acct-sec .acct-grid` — the `@container` widening above.
+- `.cashflow-head` — desktop spacing on a phone.
+- `.wd-bar` — `prefers-reduced-motion` had been doing nothing for §WEEKDAY, i.e. an accessibility
+  opt-out dead for weeks.
+
+The check compares selectors for EXACT equality and properties by exact name. It under-reports on
+purpose: `gap` killed by a later `row-gap` is real and not flagged, because expanding shorthands
+means encoding the whole shorthand table, and a wrong entry there deletes a rule someone needs.
+A lint that cries wolf gets an allowlist, and then it gets ignored.

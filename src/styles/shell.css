@@ -279,8 +279,6 @@ section > .section-head:first-child { margin-top: 26px; }
   .section-head { flex-wrap: wrap; }
   /* `margin-left: auto` притискав підпис праворуч; на новому рядку це виглядає як помилка. */
   .section-head .label, .section-head > .btn { margin-left: 0; }
-  .cashflow-head { flex-direction: column; align-items: flex-start; gap: 8px; }
-  .cashflow-head .legend { flex-wrap: wrap; gap: 6px 14px; }
 }
 
 /* ---- summary hero -------------------------------------------------------- */
@@ -401,32 +399,6 @@ section > .section-head:first-child { margin-top: 26px; }
 /* Reads as a footnote to the numbers above, because that is what it is. */
 .env-forecast { font-family: var(--font-num); font-variant-numeric: tabular-nums;
   font-size: 11px; color: var(--muted); }
-/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
-   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
-   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
-.wd-bar {
-  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
-  background: var(--accent); opacity: .85; transition: opacity .15s;
-}
-/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
-
-@media (max-width: 480px) {
-  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
-     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
-  .wd-val { display: none; }
-  .wd-bar-wrap { height: 72px; }
-}
-
-/* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
-   `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається
-   як зламана верстка. Правило вже коштувало трьох випадків (.dash-pair, .stats-2col, .cat-with-donut). */
-/* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-
-@media (max-width: 720px) {
-  .hb-grid { grid-template-columns: minmax(0, 1fr); }
-}
 
 @media (prefers-reduced-motion: reduce) { .env-bar span { transition: none; } }
 .env-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 11.5px; color: var(--ink-2); }

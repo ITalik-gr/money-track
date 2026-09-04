@@ -299,6 +299,10 @@ const S = {
   errDocNotFound: { uk: "Документ не знайдено", en: "Document not found" },
   errGroupNotFound: { uk: "Групу не знайдено", en: "Group not found" },
   errPlanNotFound: { uk: "Підписку не знайдено", en: "Subscription not found" },
+  // §ADVICE-LOOP — a mark is refused rather than stored for a suggestion the adviser never made:
+  // an orphan state would never render anywhere and would still occupy a slot in the cap.
+  errAdviceSuggestionUnknown: { uk: "Такої поради немає", en: "No such suggestion" },
+  errAdviceStateInvalid: { uk: "Невідомий стан поради", en: "Unknown suggestion state" },
   factTextRequired: { uk: "Потрібен текст факту", en: "The fact needs some text" },
   errDocTitleRequired: { uk: "Потрібна назва документа", en: "A document title is required" },
   errDocEmpty: { uk: "Документ порожній", en: "The document is empty" },

@@ -14,7 +14,14 @@
       "projected_ratio": 0.3539326666666667,
       "lumpy": false,
       "level": 254000,
-      "unreachable": false
+      "unreachable": false,
+      "parts": {
+        "committed": 0,
+        "rhythmic": 0,
+        "discretionary": 287600
+      },
+      "floor": 0,
+      "floor_over_limit": false
     },
     {
       "id": 2,
@@ -29,7 +36,14 @@
       "projected_ratio": 3,
       "lumpy": false,
       "level": null,
-      "unreachable": false
+      "unreachable": false,
+      "parts": {
+        "committed": 0,
+        "rhythmic": 0,
+        "discretionary": 185000
+      },
+      "floor": 0,
+      "floor_over_limit": false
     }
   ]
 }

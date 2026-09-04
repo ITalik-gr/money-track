@@ -160,11 +160,14 @@
    list rather than as five things. */
 .cat-page-stats ~ section > .section-head:first-child { margin-top: 34px; }
 
-@media (max-width: 560px) {
-  /* The operation count is the first thing to go — the name and the sum are what the row is for. */
-  .cat-merch-list > li { grid-template-columns: 1fr auto; }
-  .cat-merch-n { display: none; }
-}
+/* C11 (2026-09-04): a `@media (max-width: 560px)` block stood here, written when the merchant row
+   had THREE columns. §CAT-PAGE then added the share column in `analytics.css` — a part imported
+   later — which set the row to four columns unconditionally and re-did the narrow case itself at
+   480px. So the grid half of this block was dead, and the half that still worked was actively
+   wrong: between 480 and 560px it hid `.cat-merch-n` while the grid kept four columns, leaving an
+   empty one. Deleted rather than moved below its twin: moving it would drop the share on a phone,
+   and the later author decided the opposite in as many words («the share and the amount are the
+   answer»). The narrow layout for this row lives in `analytics.css` and nowhere else. */
 
 /* §INCOME-PLAN: expected inflows on the Subscriptions page. A row, not a card grid — there are
    usually one or two of them, and a grid of two tiles beside a grid of twenty subscription tiles

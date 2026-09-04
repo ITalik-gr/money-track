@@ -10,7 +10,7 @@ import { currencyHeader } from "../lib/currency.ts";
 // the same types, so `tsc` is what notices drift now, instead of a user noticing it in production.
 export type * from "../../shared/api/index.ts";
 import type {
-  Advice, AdviceHistoryItem, AiJob, AiModelToken, AiTask, AutoBudget, BudgetChatReply,
+  Advice, AdviceHistoryItem, SuggestionState, AiJob, AiModelToken, AiTask, AutoBudget, BudgetChatReply,
   BudgetHistory, BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
   CredentialStatus, CurrenciesList, DomAnalytics, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
   BankConnections, CashProjection, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
@@ -667,6 +667,16 @@ export const api = createApi({
     }),
     getAdvice: b.query<Advice | null, void>({ query: () => "/advisor", providesTags: ["Advice"] }),
     getAdviceHistory: b.query<AdviceHistoryItem[], void>({ query: () => "/advisor/history", providesTags: ["Advice"] }),
+    // §ADVICE-LOOP — record what was done with one suggestion. Invalidates "Advice" so the mark
+    // shows immediately: the state lives beside the advice on the server, not inside it, and a
+    // component holding stale advice would otherwise keep drawing the old badge.
+    setSuggestionState: b.mutation<{ ok: boolean; key: string; state: SuggestionState }, { key: string; state: SuggestionState }>({
+      query: ({ key, state }) => ({
+        url: `/advisor/suggestions/${encodeURIComponent(key)}/state`,
+        method: "POST", body: { state },
+      }),
+      invalidatesTags: ["Advice"],
+    }),
     generateAdvice: b.mutation<Advice, void>({
       query: () => ({ url: "/advisor/generate", method: "POST" }),
       invalidatesTags: ["Advice"],
@@ -1128,6 +1138,7 @@ export const {
   useSetProfileMutation,
   useGetAdviceQuery,
   useGetAdviceHistoryQuery,
+  useSetSuggestionStateMutation,
   useGenerateAdviceMutation,
   useClearAdviceHistoryMutation,
   useDeleteAdviceHistoryEntryMutation,

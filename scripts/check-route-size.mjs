@@ -32,7 +32,25 @@ import { join } from "node:path";
 
 const DIRS = ["worker/routes", "worker/services", "worker/lib"];
 const CAP = 400;
-const SLACK = 80; // tighten an exception once it is this far under its allowance
+/**
+ * How far under its exception a file may sit before the allowance counts as stale.
+ *
+ * **40, lowered from 80 on 2026-09-04, and the reason is a near-miss worth recording.** The night
+ * §ADVICE-LOOP landed, `advisor.ts` was split twice and fell to 695 lines while this table still
+ * allowed 769 — 74 lines of headroom nobody granted, which is more than enough to undo one of
+ * those splits for free with the lint green the whole way. It did not fire: 74 < 80, by six lines.
+ *
+ * ⚠️ **The number was not wrong so much as OLD.** C8 was written later (2026-09-02) for the same
+ * mechanism and chose 40 after thinking about it properly; nobody went back and asked whether C3's
+ * 80 still made sense. Two checks doing one job with two constants is a slow way to be wrong in
+ * exactly one of them — and the one that is wrong is always the one nobody re-read.
+ *
+ * Still not zero, for the reason the header gives: line counts move on every edit, and a check
+ * that goes red because a file lost three lines trains people to edit the number without reading
+ * it. 40 is small enough that a real extraction cannot hide under it and large enough that
+ * ordinary editing never trips it.
+ */
+const SLACK = 40;
 
 /**
  * Files allowed above CAP. ONLY EVER GOES DOWN — delete the line once a file is under the cap.
@@ -61,7 +79,17 @@ const EXCEPTIONS = {
   // 2026-08-08: 1080 → 909 after the chat's TOOLS moved to `lib/ai/chat-tools.ts`. The ratchet
   // did its job — English prompts are longer than the Ukrainian they replaced, the file hit the
   // ceiling, and the answer was a seam rather than a bigger number.
-  "worker/lib/ai/advisor.ts": 769,
+  // 2026-09-04: 769 → 694. §ADVICE-LOOP added the suggestion ledger and pushed the file over; the
+  // answer was two seams rather than a bigger number — the loop itself to `advice-actions.ts`, and
+  // the DETERMINISTIC fallback to `advice-fallback.ts`. The second is the one worth naming: this
+  // file is about the MODEL's answer, and the fallback is the answer given when there is no model.
+  // ⚠️ **CORRECTED 2026-09-04 (second pass).** The note written here hours earlier claimed this
+  // check «does not» enforce a downward ratchet and that the number had to be lowered by hand.
+  // That was false — the `SLACK` branch below has always done it. What actually happened is that
+  // the slack was 80 and the drift was 74, so it missed by six lines. The lesson is not the one
+  // the first note drew: it is that C8 re-derived the same constant as 40 three days earlier and
+  // nobody reconciled the two. `SLACK` is now 40 and this case would fire.
+  "worker/lib/ai/advisor.ts": 695,
   // The notification centre: one drafting function per event kind, plus the Telegram push.
   // 2026-08-27: 1000 → 861. The three guards added after «Rent due in 11 days» (calendar, language,
   // repetition) pushed the file over, and the answer was a seam rather than a bigger number — the

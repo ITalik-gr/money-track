@@ -3,7 +3,7 @@
 import type { Env } from "../../env.ts";
 import type { ChatMsg, OnText } from "./ai.ts";
 import { chatAdvice } from "./tasks.ts";
-import { type AdviceResult, type AiFact, evaluateGroup, generateAdvice } from "./generate.ts";
+import { type AdviceResult, evaluateGroup, generateAdvice } from "./generate.ts";
 import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import type { StructuredInsight } from "./insight.ts";
 import { pushAdviceHistory } from "./advice-history.ts";
@@ -18,7 +18,7 @@ import { ownFundsMinor } from "../finance/own-funds.ts";
 import { buildWeekdayAnalytics } from "../finance/weekday.ts";
 import { buildTimeContext, buildUpcomingCharges } from "./time-context.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
-import { st, stLit, num, resolveLocale } from "../platform/i18n.ts";
+import { st, stLit, resolveLocale } from "../platform/i18n.ts";
 
 // Короткий підпис транзакції для чипів/цитування AI: мерчант + сума (major) у ₴.
 interface TxLabelRow { id: string; merchant: string | null; comment: string | null; amount: number; currency_code: number }
@@ -39,7 +39,9 @@ async function notableTransactions(env: Env, days = 45, limit = 15): Promise<{ i
   return (rows.results ?? []).map(txLabel);
 }
 
-export interface StoredAdvice extends AdviceResult {
+export interface StoredAdvice extends Omit<AdviceResult, "suggestions"> {
+  /** §ADVICE-LOOP — identity and state, merged from `advice-actions.ts` on the way out. */
+  suggestions: AdviceSuggestion[];
   own_funds: number;      // копійки, UAH — нетто (подушка − борг)
   cushion: number;        // копійки, UAH — ліквідна подушка (позитивні власні)
   debt: number;           // копійки, UAH — борг по кредитці (від'ємні власні)
@@ -146,6 +148,14 @@ export interface FinanceSnapshot {
   subsMonthly: number;                     // грн/міс (major)
   citable: { id: string; label: string }[]; // операції з id для цитат [tx:ID]
   context: Record<string, unknown>;        // спільний JSON-контекст для AI (без tx-блоків)
+  /**
+   * §ADVICE-LOOP — the canonical monthly level per category, as computed for THIS snapshot.
+   *
+   * Handed out rather than recomputed by the scorer: an outcome printed beside a suggestion has to
+   * be measured against the same canon as the advice it sits under, and two `categoryMonthlyLevels`
+   * calls in one request can differ if a write lands between them.
+   */
+  levels: Map<number, MonthLevel>;
   /** §TIME-CTX: the day numbers and months this payload STATES — the calendar a model answer is checked against. */
   timeAnchors: { days: number[]; months: number[] };
 }
@@ -390,7 +400,9 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     context.facts_note = "facts holds facts about the world that the user told you (e.g. \"the metro fare rose from 8 to 30 UAH\", \"I left my job\"). Take them into account in your explanations and forecast. applied_to_numbers=true means the fact is ALREADY reflected in avg_month_uah, monthly_burn and runway — do not add its effect a second time. applied_to_numbers=false means the fact is explanatory only (unconfirmed, or carrying no amount adjustment): mention it in words, but do NOT change the figures yet.";
   }
 
-  return { now, funds, ownFunds, monthlyBurn, burn, runwayMonths, subsMonthly, citable, context, timeAnchors: timeCtx.anchors };
+  // §ADVICE-LOOP: `levels` travels OUT rather than being recomputed by the scorer — the outcome
+  // shown beside a suggestion must be measured against the same canon as the advice above it.
+  return { now, funds, ownFunds, monthlyBurn, burn, runwayMonths, subsMonthly, citable, context, levels, timeAnchors: timeCtx.anchors };
 }
 
 // §A1: активні факти на `now` (наратив для снапшота). Повертає []-безпечно, якщо таблиці ще нема.
@@ -420,16 +432,38 @@ async function activeFacts(env: Env, now: number): Promise<ActiveFact[]> {
   }
 }
 
+import {
+  getSuggestionRecords, recordAdviceRound, normaliseSuggestions, alreadySuggested,
+} from "./advice-actions.ts";
+import type { AdviceSuggestion } from "../../../shared/api/ai.ts";
+import type { MonthLevel } from "../finance/levels.ts";
+
 export async function buildAdvice(env: Env): Promise<StoredAdvice> {
   const snap = await collectFinanceSnapshot(env);
-  const { funds, ownFunds, monthlyBurn, burn, runwayMonths, citable, context } = snap;
+  const { funds, ownFunds, monthlyBurn, burn, runwayMonths, citable, context, levels } = snap;
   const now = snap.now;
-  const payload = { ...context, citable_operations: citable }; // [{id, label}] — для цитат [tx:ID]
+  // §ADVICE-LOOP / §NOVELTY — what the adviser has already said, and what came of it. Read BEFORE
+  // the call, because it goes INTO the call: repetition is cured by an explicit list of what was
+  // already said, never by asking the model to be interesting. A `dismissed` entry is the sharp
+  // case — the user refused it, and offering it again unchanged is the app arguing with a decision
+  // it recorded itself.
+  const records = await getSuggestionRecords(env);
+  const payload = {
+    ...context,
+    citable_operations: citable, // [{id, label}] — для цитат [tx:ID]
+    already_suggested: alreadySuggested(records),
+  };
 
   const { result, usage } = await generateAdvice(env, payload);
   logUsage("advice", usage);
+
+  // §ADVICE-LOOP — remember what was just said and score what was acted on. The whole round
+  // lives in `advice-actions.ts`: this file answers «how is the user doing», that one keeps the
+  // ledger of what the answer was and what came of it.
+  await recordAdviceRound(env, result.suggestions ?? [], levels, now);
   const stored: StoredAdvice = {
     ...result,
+    suggestions: normaliseSuggestions(result.suggestions, await getSuggestionRecords(env)),
     own_funds: ownFunds,
     cushion: funds.cushion,
     debt: funds.debt,
@@ -460,123 +494,15 @@ export async function buildAdvice(env: Env): Promise<StoredAdvice> {
 }
 
 /**
- * Детермінований fallback поради — коли AI недоступний (нема ключа, ліміт, збій моделі).
+ * §Обробка помилок — the deterministic fallback (no key, quota, model failure) lives in
+ * `advice-fallback.ts` (C3, 2026-09-04) and is re-exported here so no caller had to change.
  *
- * Правило §Обробка помилок: краще ДЕГРАДУВАТИ, ніж мовчати. Порожня сторінка не відрізняється
- * від «нема даних», тож користувач не знає, чи щось зламалось. Тут — ті самі канонічні числа
- * (`collectFinanceSnapshot`), просто складені без моделі: подушка, burn, runway, найбільша
- * категорія, необовʼязкові витрати, перевитрачені бюджети, найближчі списання.
- *
- * ⚠️ НЕ зберігаємо в `app_state.advisor` і НЕ пишемо в історію: інакше слабша детермінована
- * порада затерла б останню нормальну AI-пораду, і користувач мовчки втратив би кращий результат.
+ * The seam: everything left in this file is about the MODEL's answer — building its payload,
+ * recording what it said, keeping it honest. The fallback is the answer given when there is no
+ * model, assembled from the same canonical snapshot with no call at all. Two jobs that share a
+ * shape and nothing else. The import runs one way.
  */
-export async function fallbackAdvice(env: Env, reason?: string): Promise<StoredAdvice> {
-  const snap = await collectFinanceSnapshot(env);
-  const { funds, ownFunds, monthlyBurn, runwayMonths, subsMonthly, context } = snap;
-  // This whole block is rendered verbatim on the Advisor screen — including for a demo visitor
-  // whose AI budget ran out — so it is localized, digit grouping included (B3).
-  const loc = await resolveLocale(env);
-  const uah = (minor: number) => Math.round(minor / 100);
-  const n = (v: number) => num(loc, v);
-  // §BASE-CUR: one symbol, resolved once, threaded into every template below as `cur`.
-  const cur = currencySign(await resolveBaseCurrency(env));
-  const fmt = (minor: number) => (loc === "uk" ? `${n(uah(minor))} ${cur}` : `${cur}${n(uah(minor))}`);
-
-  type Cat = { id: number; name: string; avg_month_uah: number };
-  const cats = (context.top_categories as Cat[] | undefined) ?? [];
-  const budgets = (context.budgets as { category: string; used_pct: number | null }[] | undefined) ?? [];
-  const importance = (context.by_importance as { level: string; spent_90d_uah: number }[] | undefined) ?? [];
-  const upcoming = (context.upcoming_charges as { title: string; in_days: number; amount_uah: number }[] | undefined) ?? [];
-
-  const runwayText = runwayMonths == null
-    ? st(loc, "advRunwayTooLittle")
-    : st(loc, "advRunwayText", { cushion: fmt(funds.cushion), months: runwayMonths.toFixed(1), burn: fmt(monthlyBurn) });
-
-  const suggestions: AdviceResult["suggestions"] = [];
-
-  // 1. Найбільша категорія — найбільший важіль. Ефект рахуємо явно, щоб порада була дієвою.
-  const top = cats[0];
-  if (top && top.avg_month_uah > 0) {
-    const cut = Math.round(top.avg_month_uah * 0.15);
-    suggestions.push({
-      title: st(loc, "advTopCatTitle", { name: top.name }),
-      detail: st(loc, "advTopCatDetail", { cur, avg: n(top.avg_month_uah), cut: n(cut), year: n(cut * 12) }),
-      action: { type: "create_budget", label: st(loc, "advTopCatAction", { cur, amount: n(top.avg_month_uah - cut), name: top.name }), category_id: top.id, category_name: top.name, amount_uah: top.avg_month_uah - cut },
-    });
-  }
-
-  // 2. Необовʼязкові витрати — найбезпечніше, що можна різати (§6 вагомість).
-  const optional = importance.find((x) => x.level === "optional");
-  if (optional && optional.spent_90d_uah > 0) {
-    suggestions.push({
-      title: st(loc, "advOptionalTitle"),
-      detail: st(loc, "advOptionalDetail", { cur, sum: n(optional.spent_90d_uah), perMonth: n(Math.round(optional.spent_90d_uah / 3)) }),
-      action: null,
-    });
-  }
-
-  // 3. Перевитрачені бюджети — конкретний факт, а не абстракція.
-  const over = budgets.filter((b) => (b.used_pct ?? 0) > 100);
-  if (over.length) {
-    suggestions.push({
-      title: over.length === 1 ? st(loc, "advBudgetOverOne", { category: over[0].category }) : st(loc, "advBudgetOverMany", { n: over.length }),
-      detail: over.map((b) => `${b.category} — ${b.used_pct}%`).join(" · ") + st(loc, "advBudgetOverTail"),
-      action: null,
-    });
-  }
-
-  // 4. Підписки — фіксований відтік, який легко не помічати.
-  if (subsMonthly > 0) {
-    suggestions.push({
-      title: st(loc, "advSubsTitle"),
-      detail: st(loc, "advSubsDetail", { cur, month: n(subsMonthly), year: n(subsMonthly * 12) }),
-      action: null,
-    });
-  }
-
-  // 5. Найближчі списання — тайминг, а не тільки суми.
-  const soon = upcoming.filter((u) => u.in_days <= 7);
-  if (soon.length) {
-    const total = soon.reduce((s, u) => s + u.amount_uah, 0);
-    suggestions.push({
-      title: st(loc, "advUpcomingTitle", { cur, total: n(total) }),
-      detail: soon.slice(0, 4).map((u) => st(loc, "advUpcomingItem", { cur, title: u.title, amount: n(u.amount_uah), days: u.in_days })).join(" · "),
-      action: null,
-    });
-  }
-
-  if (!suggestions.length) {
-    suggestions.push({
-      title: st(loc, "advEmptyTitle"),
-      detail: st(loc, "advEmptyDetail"),
-      action: null,
-    });
-  }
-
-  const facts: AiFact[] = [
-    { label: st(loc, "advFactCushion"), amount: uah(funds.cushion), category: null, delta_pct: null, tone: funds.cushion > 0 ? "pos" : "neg" },
-    { label: st(loc, "advFactBurn"), amount: uah(monthlyBurn), category: null, delta_pct: null, tone: "neutral" },
-  ];
-  if (funds.debt > 0) facts.push({ label: st(loc, "advFactDebt"), amount: uah(funds.debt), category: null, delta_pct: null, tone: "neg" });
-  if (top) facts.push({ label: st(loc, "advFactTopCat"), amount: top.avg_month_uah, category: top.name, delta_pct: null, tone: "neutral" });
-
-  return {
-    runway_comment: runwayText,
-    summary: st(loc, "advSummary"),
-    facts,
-    suggestions: suggestions.slice(0, 5),
-    own_funds: ownFunds,
-    cushion: funds.cushion,
-    debt: funds.debt,
-    investment: funds.investment,
-    monthly_burn: monthlyBurn,
-    runway_months: runwayMonths,
-    generated_at: snap.now,
-    cur: await resolveBaseCurrency(env),
-    fallback: true,
-    fallback_reason: reason,
-  };
-}
+export { fallbackAdvice } from "./advice-fallback.ts";
 
 // The advice HISTORY lives in `advice-history.ts` (C3, 2026-09-02) and is re-exported here so no
 // caller had to change. Plain CRUD over one `app_state` key — the same argument that took the §A1

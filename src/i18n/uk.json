@@ -2039,5 +2039,16 @@
   "floor.ofBurn": "{pct}% від burn",
   "floor.runwayFull": "запас на все:",
   "floor.runwayFloor": "лише на постійне:",
-  "floor.made": "з чого складається"
+  "floor.made": "з чого складається",
+  "adv.sgTaken": "Взято",
+  "adv.sgMarkDone": "Зробив",
+  "adv.sgDismiss": "Не треба",
+  "adv.sgUndo": "Повернути",
+  "adv.sgState_taken": "Взято",
+  "adv.sgState_done": "Зроблено",
+  "adv.sgState_dismissed": "Відхилено",
+  "adv.sgDown": "менше",
+  "adv.sgUp": "більше",
+  "adv.sgOutcome": "Відтоді на {pct}% {dir}",
+  "adv.sgState_open": "Відкрита"
 }

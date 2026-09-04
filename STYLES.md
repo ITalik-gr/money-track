@@ -8,7 +8,8 @@
 >
 > **What is left needs the owner's EYE, not work:** phase 0.5 (eight quietly conflicting selectors)
 > and phase 4 (true domain grouping). Both change rendering, which is why neither was batched into
-> the split.
+> the split. Phase 0.5 got one selector cheaper on 2026-09-04: C11 removed the four byte-identical
+> §WEEKDAY copies around it, so what is left of `.wd-col` is the real conflict and nothing else.
 >
 > **This is NOT the design system.** Tokens, patterns and the decision journal are in `DESIGN.md`,
 > and that file stays the source of truth for how things should LOOK. This one is only about where
@@ -35,14 +36,27 @@ from the first plus everything from the second — a rule **nobody wrote and nob
 **Why this is the most expensive item on the list.** Edit `.hb-row` and nothing happens, because a
 copy further down wins. The edit is correct, the file is saved, the screen does not change.
 
-⚠️ **The identical ones were safe to remove; these are not.** Deleting a block with a byte-identical
-copy LATER cannot change rendering — the later one already won for every property it declares.
-A conflicting one DOES change rendering when collapsed, because today's appearance is the accidental
-merge. One decision per case, one visual check per case. **Do NOT batch.**
+⚠️ **The conflicting ones DO change rendering when collapsed,** because today's appearance is the
+accidental merge. One decision per case, one visual check per case. **Do NOT batch.**
 
-⚠️ **Duplicates INSIDE `@media` blocks were never touched.** The phase-0 pass matched only
-top-level single-line rules; `@media (max-width: 720px) { .hb-grid … }` still exists five times.
-Extending the same proof to nested rules is safe in principle but was not done, so it is not claimed.
+⚠️ **CORRECTED 2026-09-04 — the sentence that used to stand here was false, and dangerously so.**
+It read: *«Deleting a block with a byte-identical copy LATER cannot change rendering — the later one
+already won for every property it declares.»* That holds only while nothing CONDITIONAL sits between
+the two copies. Put a `@media` or `@container` override in the gap and the reasoning inverts: the
+condition is currently dead (the lower identical copy outranks it, §COND-ORDER), so deleting the
+UPPER copy revives it and the screen changes. §WEEKDAY was exactly this shape — five identical
+copies with a `prefers-reduced-motion` opt-out buried among them. The old sentence licensed a
+"provably safe" cleanup that would have re-armed a rule nobody was thinking about.
+
+**The corrected rule:** an identical later copy makes deletion safe **only when no conditional
+declaration of the same selector+property sits between them.** That is not a thing to check by eye
+across twenty files — it is what lint **C11** computes, so the honest procedure is to delete, run
+`npm run check`, and let C11 answer.
+
+⚠️ **Duplicates INSIDE `@media` blocks were never touched by the phase-0 pass**, which matched only
+top-level single-line rules. C11 covers them now: the `@media (max-width: 720px) { .hb-grid … }`
+family that «still exists five times» is down to one, and the four copies it removed are the reason
+`domains-a.css`'s C8 exception ratcheted 863 → 810.
 
 ### 1.2 Roughly 60 colour literals live outside the theme blocks
 
@@ -54,13 +68,26 @@ other, and the wrongness shows up on someone else's screen, not on the author's.
 The `DESIGN.md` review checklist asks reviewers to look for "local hardcoded colour". Asking a human
 to notice one line in four thousand is not a check, it is a hope.
 
-### 1.3 Orphaned media queries and duplicated blocks across files
+### 1.3 Orphaned media queries — CLOSED 2026-09-04, and it was worse than described
 
-Both are live bugs with cards in `ROADMAP.md` («Ідеї фіч → Стилі»): a `@media` rule that stayed
-behind when its layout moved to a later-imported file loses silently (`@media` adds zero
-specificity), and §WEEKDAY / §HABITS families are declared four to five times across `domains-a`,
-`shell`, `topbar` and `domains-b`. The rules are identical today, so nothing is visible; they will
-diverge silently, and the lower copy will win.
+This entry used to say the two problems were «live bugs with cards in `ROADMAP.md`» and that
+«nothing is visible». Probing said otherwise: **thirteen** conditional declarations were being
+overridden by a later unconditional one, and **four of them were breaking a screen at that moment**
+— a phantom empty column on the category page between 480 and 560px, an account-grid widening from
+user feedback silently undone, desktop spacing on the phone cashflow header, and a
+`prefers-reduced-motion` opt-out that had done nothing for weeks.
+
+Both halves are fixed and the class is now held by lint **C11** (`scripts/check-styles-css.mjs`),
+with an EMPTY allowlist. The rule and the four cases are written up as **§COND-ORDER** in
+`docs/UI.md`. Two things worth carrying forward:
+
+- **Counting by reading undercounts.** The first pass at this was a line-wise probe; it found eight,
+  missed `.cashflow-head` and the `@container` case entirely, and reported one (`.cf-day`) that was
+  never a bug — two different breakpoints doing exactly what their author intended. A real
+  tokenizer found thirteen and no false ones. A check written from a sketch inherits the sketch's
+  blind spots.
+- **`src/index.css` makes a false claim about itself** in its own header — that a part appended last
+  «cannot change which rule wins for anything that already existed». See §COND-ORDER.
 
 ---
 
@@ -73,6 +100,10 @@ is that C3 refuses to let it grow back.** The same applies here:
 - **C9** — every `className` has a rule, and every rule has a `className`. It ran in both directions
   on its first day: forward it found five class names shipped with no rules at all; backward it
   found 59 dead rules.
+- **C11** — no conditional rule is overridden by a later unconditional one (§COND-ORDER). Same
+  pattern as C9: it found thirteen standing cases on its first day, four of them breaking a screen.
+  Its allowlist shipped EMPTY and may only shrink — an allowlist that starts populated teaches the
+  next person that adding a line is how you make the lint quiet.
 - **An exception may never grow.** When a part overflows it gets a SEAM, not a raised cap:
   `settings.css` → `settings-shell.css` and later lost its exception entirely; `domains-a.css` →
   `analytics.css`, then `advisor.css`. The ratchet has held every time it fired.

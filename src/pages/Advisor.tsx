@@ -11,10 +11,14 @@ import {
   useClearAdviceHistoryMutation,
   useDeleteAdviceHistoryEntryMutation,
   useSetBudgetMutation,
+  useCreateGoalMutation,
+  useDeletePlannedMutation,
+  useCreateRuleMutation,
+  useSetSuggestionStateMutation,
   useCreateJobMutation,
   useGetJobsQuery,
 } from "../store/api.ts";
-import type { AdviceAction, Advice, AdviceHistoryItem } from "../store/api.ts";
+import type { AdviceAction, Advice, AdviceHistoryItem, AdviceSuggestion, SuggestionState } from "../store/api.ts";
 import { Money } from "../components/ui/Money.tsx";
 import { Gauge } from "../components/ui/Gauge.tsx";
 import { AiInsightCard } from "../components/advisor/AiInsightCard.tsx";
@@ -199,12 +203,13 @@ export function Advisor() {
                 <SinceLastTime advice={advice} />
                 {advice.summary && <p className="ai-text" style={{ margin: "0 2px 6px" }}>{renderRich(advice.summary)}</p>}
                 {advice.suggestions.map((s, i) => (
-                  <div key={i} className="card advice-card">
+                  <div key={s.key ?? i} className={`card advice-card${s.state === "dismissed" ? " sg-dismissed" : ""}`}>
                     <div className="advice-num">{i + 1}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="advice-title">{s.title}</div>
                       <div className="advice-detail">{renderRich(s.detail)}</div>
-                      {s.action && <AdviceActionButton action={s.action} />}
+                      {s.action && <AdviceActionButton action={s.action} suggestion={s} />}
+                      <SuggestionFooter s={s} />
                     </div>
                   </div>
                 ))}
@@ -365,23 +370,120 @@ function AdviceHistory() {
   );
 }
 
-// Дієва порада: створити конверт-ліміт прямо з поради (§дієві поради).
-function AdviceActionButton({ action }: { action: AdviceAction }) {
+/**
+ * §ADVICE-LOOP — the advice acts, and pressing it marks the suggestion as taken.
+ *
+ * ⚠️ Every branch below calls a mutation that ALREADY existed. A variant with no executor would be
+ * a button that lies, which is worse than a paragraph that is honest about being a paragraph —
+ * and it is why the action types are a closed union in `shared/api/ai.ts` rather than a free
+ * string the model fills in.
+ * ⚠️ The mark is set even when the mutation fails. Refusing to record it would mean a user who hit
+ * a transient error is offered the same advice next month as if nothing had happened; they DID
+ * decide, and the decision is the thing being remembered.
+ */
+function AdviceActionButton({ action, suggestion }: { action: AdviceAction; suggestion: AdviceSuggestion }) {
   const t = useT();
-  const [setBudget, { isLoading }] = useSetBudgetMutation();
+  const [setBudget] = useSetBudgetMutation();
+  const [createGoal] = useCreateGoalMutation();
+  const [deletePlanned] = useDeletePlannedMutation();
+  const [createRule] = useCreateRuleMutation();
+  const [mark] = useSetSuggestionStateMutation();
+  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  if (!action.category_id || !action.amount_uah) return null;
+
+  const minor = action.amount_uah != null ? Math.round(action.amount_uah * 100) : null;
+  // Whether this particular action has everything it needs. A half-specified action renders
+  // nothing rather than a button that fails on tap.
+  const ready = (() => {
+    switch (action.type) {
+      case "create_budget":
+      case "set_budget": return action.category_id != null && minor != null;
+      case "create_goal": return !!action.goal_title && minor != null;
+      case "cancel_subscription": return action.planned_id != null;
+      case "create_rule": return !!action.match_pattern && action.category_id != null;
+      default: return false;
+    }
+  })();
+  if (!ready) return null;
+
+  const run = async () => {
+    switch (action.type) {
+      case "create_budget":
+      case "set_budget":
+        await setBudget({ category_id: action.category_id!, period: "month", amount: minor! }).unwrap();
+        break;
+      case "create_goal":
+        await createGoal({ title: action.goal_title!, target: minor! } as never).unwrap();
+        break;
+      case "cancel_subscription":
+        await deletePlanned(action.planned_id!).unwrap();
+        break;
+      case "create_rule":
+        await createRule({ match_type: "contains", pattern: action.match_pattern!, category_id: action.category_id! }).unwrap();
+        break;
+    }
+  };
+
   return (
     <button
       className="btn primary sm" style={{ marginTop: 10 }}
-      disabled={isLoading || done}
+      disabled={busy || done || suggestion.state === "done"}
       onClick={async () => {
-        try { await setBudget({ category_id: action.category_id!, period: "month", amount: Math.round(action.amount_uah! * 100) }).unwrap(); } catch { /* ignore */ }
+        setBusy(true);
+        try { await run(); } catch { /* the mark below is about the DECISION, not the request */ }
+        try { await mark({ key: suggestion.key, state: "taken" }).unwrap(); } catch { /* ignore */ }
+        setBusy(false);
         setDone(true);
       }}
     >
-      {done ? t("adv.envelopeCreated") : (action.label || t("adv.createEnvelope"))}
+      {done ? t("adv.sgTaken") : (action.label || t("adv.createEnvelope"))}
     </button>
+  );
+}
+
+/**
+ * §I18N-DYNKEY — the state label is resolved through a MAP, never built as `adv.sgState_${state}`.
+ * A key assembled from a value is a key neither `tsc` nor the parity check can see, so the day a
+ * sixth state appears the screen shows the raw key and nothing fails first.
+ */
+const SG_STATE_KEY = {
+  open: "adv.sgState_open",
+  taken: "adv.sgState_taken",
+  done: "adv.sgState_done",
+  dismissed: "adv.sgState_dismissed",
+} as const;
+
+/**
+ * §ADVICE-LOOP — where a suggestion stands, and what came of it.
+ *
+ * The outcome line is the half that makes this a loop rather than a checklist: it is computed from
+ * the ledger by `scoreTakenSuggestions`, never written by the model, and it is the only place the
+ * app can say «you did this, and here is what happened».
+ */
+function SuggestionFooter({ s }: { s: AdviceSuggestion }) {
+  const t = useT();
+  const [mark, { isLoading }] = useSetSuggestionStateMutation();
+  const set = (state: SuggestionState) => mark({ key: s.key, state });
+  if (!s.key) return null;   // advice generated before the loop existed
+  return (
+    <div className="sg-foot">
+      {s.outcome && (
+        <span className={`sg-outcome ${s.outcome.delta_pct <= 0 ? "pos" : "neg"}`}>
+          {t("adv.sgOutcome", { pct: Math.abs(s.outcome.delta_pct), dir: t(s.outcome.delta_pct <= 0 ? "adv.sgDown" : "adv.sgUp") })}
+        </span>
+      )}
+      {s.state === "open" ? (
+        <>
+          <button className="btn ghost xs" disabled={isLoading} onClick={() => set("done")}>{t("adv.sgMarkDone")}</button>
+          <button className="btn ghost xs" disabled={isLoading} onClick={() => set("dismissed")}>{t("adv.sgDismiss")}</button>
+        </>
+      ) : (
+        <>
+          <span className="sg-state">{t(SG_STATE_KEY[s.state])}</span>
+          <button className="btn ghost xs" disabled={isLoading} onClick={() => set("open")}>{t("adv.sgUndo")}</button>
+        </>
+      )}
+    </div>
   );
 }
 

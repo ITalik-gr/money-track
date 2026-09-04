@@ -6,7 +6,7 @@
 > Куди йде результат: durable-правило → відповідний `docs/*.md` + рядок в індекс § у `CLAUDE.md` ·
 > наратив «що робив» → згори в `HISTORY.md` · дизайн-рішення → «Журнал рішень» `DESIGN.md`.
 >
-> Останнє оновлення: **2026-09-02**.
+> Останнє оновлення: **2026-09-04**.
 
 ## 🚦 Як працювати з цим файлом
 
@@ -32,6 +32,13 @@
 ---
 
 ## 🔥 Черга (роби згори вниз)
+
+> ⚠️ **Everything below this line is blocked on the OWNER** — a live file, a live screen, a live
+> connector. There is no card here an unattended run can finish, which is the honest state of the
+> queue rather than a gap in it.
+>
+> Closed 2026-09-04 (overnight): C11, §ENV-PARTS, §ADVICE-LOOP, and the C3 slack — the last one
+> written up as «C3 has no ratchet DOWN», **which turned out to be false**. See `HISTORY.md`.
 
 ### Розумний імпорт виписки — лишився ЖИВИЙ файл
 
@@ -257,14 +264,6 @@ write-only токен саме під «додай операцію».
 
 ### Стилі (див. `STYLES.md`)
 
-- **[баг] Осиротілі медіа-запити після розділення `index.css` (S).** `@media` додає нуль
-  специфічності, тож умовне правило програє БЕЗумовному з пізнішого файлу — і мовчить. Один такий
-  випадок був фатальним (`.settings-grid { columns: 1 }` лишилась у `settings.css`, коли розкладка
-  переїхала в `settings-shell.css`: Налаштування на телефоні були нечитабельні; виправлено
-  2026-08-22). Лишився щонайменше ще один — `.cashflow-head` (`shell.css` просить `gap: 8px`,
-  `dashboard.css` безумовно ставить 12px). Знаходиться скриптом: для кожного селектора в `@media`
-  шукати те саме безумовне оголошення у файлі, імпортованому пізніше. Варте окремого лінта C11.
-- **[баг] Дубльовані блоки в чотирьох файлах (S).** §WEEKDAY (`.wd-col`/`.wd-bar-wrap`/`.wd-bar`) і
-  §HABITS (`.hb-grid`) оголошені по 4-5 разів — двічі в самому `domains-a.css` плюс копії в
-  `shell.css`, `topbar.css`, `domains-b.css`, разом із коментарями. Правила зараз ідентичні, тож
-  нічого не видно; розійдуться вони мовчки, і виграє та копія, що нижча.
+> The two «orphaned media queries» / «duplicated blocks» entries that lived here were
+> promoted into the **C11** card in the queue above (2026-09-04): probing turned them from
+> ideas into eight named cases, three of which break a screen. Nothing is left here.

@@ -14,12 +14,88 @@ export interface AiFact {
   delta_pct?: number | null;
   tone?: "pos" | "neg" | "neutral" | null;
 }
+/**
+ * §ADVICE-LOOP — what a suggestion can DO, beyond being read.
+ *
+ * ⚠️ **Every variant here must have an executor that already exists behind an endpoint.** Until
+ * 2026-09-04 there was exactly one (`create_budget`), so four of the adviser's five steps were
+ * prose that led nowhere — and the fix is not to invent more buttons but to name the actions the
+ * app can already carry out. A variant with no executor is a button that lies, which is worse than
+ * a paragraph that is honest about being a paragraph.
+ */
+export type AdviceActionType =
+  | "create_budget"        // → POST /budgets            (setBudget)
+  | "set_budget"           // → POST /budgets            (setBudget, on a category that has one)
+  | "create_goal"          // → POST /goals              (createGoal)
+  | "cancel_subscription"  // → DELETE /planned/:id      (deletePlanned)
+  | "create_rule";         // → POST /rules              (createRule)
+
 export interface AdviceAction {
-  type: "create_budget";
+  type: AdviceActionType;
   label: string;
   category_id?: number | null;
   category_name?: string | null;
+  /** `create_budget` / `set_budget`: the limit. `create_goal`: the target. Whole hryvnia. */
   amount_uah?: number | null;
+  /** `create_goal` — what the goal is called. */
+  goal_title?: string | null;
+  /** `cancel_subscription` — the plan to end. Resolved server-side; the model never invents an id. */
+  planned_id?: number | null;
+  planned_title?: string | null;
+  /** `create_rule` — the substring to match against a merchant. */
+  match_pattern?: string | null;
+}
+
+/**
+ * §ADVICE-LOOP — where a suggestion stands. `open` is the absence of a decision, not a state the
+ * user sets: a suggestion nobody has touched has to be distinguishable from one they rejected,
+ * or the next generation cannot tell «not seen» from «not wanted».
+ */
+export type SuggestionState = "open" | "taken" | "done" | "dismissed";
+
+/**
+ * §ADVICE-LOOP — one suggestion, with an identity that survives re-generation.
+ *
+ * ⚠️ **`key` is derived from the TITLE, never from a position in the array.** `advice-history.ts`
+ * already learned this for snapshots («an index would shift under a concurrent delete from another
+ * device»), and here it is worse: advice is regenerated wholesale, so an index means the state the
+ * user set on suggestion #2 lands on whatever the model happens to put second next time.
+ * ⚠️ A rephrased title IS a new suggestion as far as this can tell. That is honest rather than
+ * clever — and it is also why the previous titles are handed to the model (§NOVELTY): the way to
+ * stop a rephrase is to show what was already said, not to guess at synonyms.
+ */
+export interface AdviceSuggestion {
+  key: string;
+  title: string;
+  detail: string;
+  action?: AdviceAction | null;
+  state: SuggestionState;
+  /** When the state was last set. Absent while `open`. */
+  state_at?: number | null;
+  /**
+   * §ADVICE-LOOP — the figure this suggestion was about, captured when it was made, so a taken one
+   * can be scored later against the SAME figure. Only set where the app can measure it.
+   */
+  metric?: SuggestionMetric | null;
+  /** Filled once there is a month to compare against. Computed from the ledger, never asserted. */
+  outcome?: SuggestionOutcome | null;
+}
+
+/** The one measurable shape so far: a category's canonical monthly level (§LEVEL-WINDOW). */
+export interface SuggestionMetric {
+  kind: "category_month";
+  category_id: number;
+  category_name: string;
+  /** The level at the moment the advice was written, ₴ minor in the base of that day. */
+  baseline: number;
+  at: number;
+}
+
+export interface SuggestionOutcome {
+  /** Negative = the category costs less than when the advice was written. */
+  delta_pct: number;
+  current: number;
+  measured_at: number;
 }
 /** Token counts of the call behind a user-facing answer (the cost meter is `AiUsageStats`). */
 export interface AiUsageBrief { in: number; out: number; cache_read: number }
@@ -28,7 +104,12 @@ export interface Advice {
   runway_comment: string;
   summary: string;
   facts?: AiFact[];
-  suggestions: { title: string; detail: string; action?: AdviceAction | null }[];
+  /**
+   * §ADVICE-LOOP — carries state and identity since 2026-09-04. Advice generated before that has
+   * plain `{title, detail, action}` objects; readers must tolerate a missing `state`/`key`, which
+   * `normaliseSuggestions` does on the way out so no component has to.
+   */
+  suggestions: AdviceSuggestion[];
   own_funds: number;
   cushion: number;
   debt: number;

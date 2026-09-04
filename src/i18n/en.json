@@ -2039,5 +2039,16 @@
   "floor.ofBurn": "{pct}% of the burn",
   "floor.runwayFull": "covers everything:",
   "floor.runwayFloor": "covers the fixed part:",
-  "floor.made": "what it is made of"
+  "floor.made": "what it is made of",
+  "adv.sgTaken": "Taken",
+  "adv.sgMarkDone": "Done",
+  "adv.sgDismiss": "Not for me",
+  "adv.sgUndo": "Undo",
+  "adv.sgState_taken": "Taken",
+  "adv.sgState_done": "Done",
+  "adv.sgState_dismissed": "Dismissed",
+  "adv.sgDown": "down",
+  "adv.sgUp": "up",
+  "adv.sgOutcome": "Since then {pct}% {dir}",
+  "adv.sgState_open": "Open"
 }

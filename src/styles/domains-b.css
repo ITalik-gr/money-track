@@ -154,12 +154,8 @@
    колонок: назва рахунку обрізалась до «madel…», а кнопка редагування тиснулась до неї
    впритул. Ширина картки має залежати від ширини СЕКЦІЇ, тож це container-query, а не
    media-query — інакше довелось би вибирати одне число на обидва випадки. */
-@container (min-width: 660px) {
-  /* 232 → 270 (фідбек 2026-08-01): у широкій секції картки все одно виходили тіснуватими —
-     форма редагування всередині картки (селект ролі + textarea) диктує більший мінімум, ніж
-     статичний вигляд. Ширину задає найширший СТАН картки, а не найвужчий. */
-  .acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
-}
+/* C11 (2026-09-04): the `@container` rule that used to sit here now lives in `transactions.css`,
+   under the unconditional `.acct-sec .acct-grid` that was silently outranking it. */
 .acct-tail { margin-top: 4px; }
 
 /* ===== Рахунки: огляд коштів + секції ==================================== */
@@ -237,6 +233,12 @@
   background: var(--accent); opacity: .85; transition: opacity .15s;
 }
 /* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
+/* C11 (2026-09-04): this opt-out lived in `domains-a.css`, directly under the `.wd-bar` block it
+   was written for — and four more copies of that block were declared after it, the last one right
+   above. `@media` adds no specificity, so every one of them re-armed the transition and the
+   accessibility opt-out had been doing nothing. It has to sit below the LAST `.wd-bar`, which is
+   why it is here rather than beside the rule it negates. */
+@media (prefers-reduced-motion: reduce) { .wd-bar { transition: none; } }
 .wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
 .wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
 .wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }

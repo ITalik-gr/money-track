@@ -126,6 +126,47 @@ export interface BudgetStatusRow {
    * is a decision, and `level` travels alongside so the screen can offer the number.
    */
   unreachable: boolean;
+  /**
+   * §ENV-PARTS — what this month's `spent` is MADE OF. The three add up to `spent` exactly; they
+   * are parts of it, never additions to it (the same discipline as §BURN-SHAPE's
+   * `recurring + lumpy === monthly_burn`, and for the same reason: a reader who can add them
+   * wrongly eventually will).
+   */
+  parts: EnvelopeParts;
+  /**
+   * §ENV-PARTS — `parts.committed + parts.rhythmic`: the money this envelope owes before any
+   * decision is made this month. A limit under this floor cannot be met by spending less, only by
+   * cancelling something.
+   */
+  floor: number;
+  /**
+   * §ENV-PARTS — the floor has ALREADY passed the effective limit. Unlike `unreachable` (a
+   * statement about the category's LEVEL, i.e. about history) this is a statement about the
+   * charges of THIS month, so it can be true on the 3rd. Never set on a zero envelope
+   * (§BUDGET-ZERO: «сюди я свідомо не витрачаю» is a plan, not a miscalculation).
+   */
+  floor_over_limit: boolean;
+}
+
+/**
+ * §ENV-PARTS — the decomposition of one envelope's month, ₴ minor in the reader's base.
+ *
+ * The two committed buckets come from detectors that already exist and are already tested; this
+ * shape adds no third definition of «recurring». That matters more than it looks: «what repeats»
+ * is answered in this codebase by §PLAN-LINK (declared) and §SUB-DETECT (measured), and a budget
+ * screen inventing a third answer would put two different numbers about the same money on two
+ * screens — the defect §CUR-PLAN and §SUB-MONTH both exist to close.
+ */
+export interface EnvelopeParts {
+  /** Charged this month and linked to a declared plan — §PLAN-LINK (`transactions.planned_id`). */
+  committed: number;
+  /**
+   * Not linked to any plan, but the merchant has a measured RHYTHM — §SUB-DETECT. This is the
+   * subscription nobody declared: it will be charged again next month whatever the limit says.
+   */
+  rhythmic: number;
+  /** Everything else: the part of the envelope a decision can still change. */
+  discretionary: number;
 }
 export type BudgetStatusList = BudgetStatusRow[];
 

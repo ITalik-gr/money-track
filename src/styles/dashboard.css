@@ -116,6 +116,15 @@
 .cashflow { padding: 18px 20px 10px; }
 .cashflow-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
 .cashflow-head .cf-total { font-size: 26px; line-height: 1.1; margin-top: 4px; }
+/* C11 (2026-09-04): this block lived in `shell.css`, next to the `.section-head` rules it was
+   written beside — and `shell.css` is imported BEFORE this file, so `gap: 8px` lost to the
+   unconditional `gap: 12px` two lines above and the header kept desktop spacing on a phone. It
+   belongs here because this file owns `.cashflow-head`; the position after the base rule is what
+   makes it apply at all. */
+@media (max-width: 620px) {
+  .cashflow-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .cashflow-head .legend { flex-wrap: wrap; gap: 6px 14px; }
+}
 /* §1: Календар списань — компактна сітка з датою в кутку (як справжній календар), а не
    квадратні великі плитки по центру; хто/скільки видно прямо в клітинці, без ховеру. */
 .subs-cal { padding: 14px 16px; }

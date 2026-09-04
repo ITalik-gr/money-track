@@ -80,10 +80,18 @@ Two things learned about the checks themselves:
   before something can catch a mistake.** Its handlers are driven by an update payload rather than
   an HTTP route and they answer over `fetch`, so nothing could observe them until
   `worker/test/telegram.test.ts` began recording the bot's outgoing calls.
-- C3 deliberately is NOT a ratchet. A query count moves in whole steps and rarely, so a drop means
-  someone forgot to tighten the budget. Line counts move on every edit, and a check that goes red
-  because a file got three lines shorter trains people to edit the budget without reading it. C3
-  fails only when the slack exceeds 80 lines.
+- C3 deliberately is NOT a STRICT ratchet. A query count moves in whole steps and rarely, so a drop
+  means someone forgot to tighten the budget. Line counts move on every edit, and a check that goes
+  red because a file got three lines shorter trains people to edit the budget without reading it.
+  So C3 fails only when the slack exceeds **40** lines.
+  **80 → 40 on 2026-09-04, and the way it was found is the point.** `advisor.ts` was split twice
+  that night and fell to 695 lines against an exception still saying 769 — 74 lines of allowance
+  nobody granted, enough to undo one of those splits for free with the lint green throughout. It
+  missed by six. The number was not badly chosen so much as OLD: C8 was written later for the same
+  mechanism, thought about the same trade-off, and landed on 40 — and nobody went back to ask
+  whether C3's 80 still held. **Two checks doing one job with two constants is a slow way to be
+  wrong in exactly one of them, and it will be the one nobody re-reads.** When a check is copied,
+  its constants are copied too; reconcile them or they drift apart in silence.
 - **A check earns its keep by forcing a DECISION, not by catching a bug.** C3 paid for itself the
   hour it landed: adding `/analytics/weekday` pushed `routes/api/analytics.ts` over its allowance,
   and instead of raising the number the net-worth reconstruction moved to `lib/finance/networth.ts`
