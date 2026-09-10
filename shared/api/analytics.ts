@@ -252,7 +252,19 @@ export interface CategoryDrill {
 export interface SliceDrill { spent: number; n: number; transactions: DrillTx[] }
 
 // §H: детермінований Індекс фінздоров'я (без AI) — 4 складові + зважений скор 0..100.
-export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
+export interface HealthComponent {
+  key: string; label: string; value: string; score: number; hint: string;
+  /**
+   * The component's share of the 100, 0..1 — the same constant the weighted sum uses.
+   *
+   * Reported rather than left in the worker because the card without it cannot answer the only
+   * question a low score raises: WHICH part is dragging it down. Four dots and four values look
+   * equally important, so a 59% stability reads like a bigger problem than a 0% savings rate,
+   * while it is worth half as much. `weight × score` is the points this component actually
+   * contributes, and the card shows that number.
+   */
+  weight: number;
+}
 export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[]; trend?: { day: string; score: number }[] }
 
 // Спарклайни: 6-міс місячні витрати (копійки) на категорію (ключ=id) і мерчанта (ключ=назва).

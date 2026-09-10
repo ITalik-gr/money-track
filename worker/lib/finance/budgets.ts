@@ -226,6 +226,10 @@ export async function budgetStatus(
       amount, base_amount: baseAmount, carried, rollover,
       spent, ratio,
       projected, projected_ratio: zero ? ratio : projected / denom, lumpy,
+      // §BUDGET-PACE — the same month with the history taken out: what has been spent, straight-
+      // lined to the end of the month. `elapsedFrac` is floored at 0.02 above, so this cannot
+      // divide by zero; when nothing has been spent it is exactly 0, which is the whole point.
+      pace_ratio: zero ? ratio : (spent / elapsedFrac) / denom,
       level: lv?.level ?? null,
       /**
        * §BUDGET-REACH (2026-08-27) — the app set a limit BELOW the level it itself computes.

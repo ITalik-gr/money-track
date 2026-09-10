@@ -13,6 +13,7 @@
       "projected": 530899,
       "projected_ratio": 0.3539326666666667,
       "lumpy": false,
+      "pace_ratio": 0.4402765432098766,
       "level": 254000,
       "unreachable": false,
       "parts": {
@@ -35,6 +36,7 @@
       "projected": 300000,
       "projected_ratio": 3,
       "lumpy": false,
+      "pace_ratio": 4.2481481481481485,
       "level": null,
       "unreachable": false,
       "parts": {

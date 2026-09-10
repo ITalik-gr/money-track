@@ -586,28 +586,8 @@
 .fact-date::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 .fact-form-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
 
-/* §Health/§A5: картки рейла Порадника — «Індекс здоров'я» (gauge-скор) + «Корпус знань»
-   (плейсхолдер завантаження PDF/MD). Той самий габарит голови, що інші картки рейла. */
-.health-card { padding: 18px 20px; }
-/* Gauge ліворуч (натуральні 130px, не стискати — інакше центр «зі 100» обрізає),
-   складові — KPI-плитки в auto-fit гріді (заповнюють ширину без величезних розривів). */
-.health-body { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
-.health-gauge { flex-shrink: 0; }
-.health-factors { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px 20px; flex: 1; min-width: 240px; }
-.health-factor { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.health-factor .hf-lbl { color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); min-width: 0; }
-.health-factor .hf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
-.health-factor .hf-dot.pos { background: var(--pos); }
-.health-factor .hf-dot.warn { background: var(--warn); }
-.health-factor .hf-dot.neg { background: var(--neg); }
-.health-factor .hf-val { font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--fs-lg); white-space: nowrap; }
-.health-trend { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-/* The sparkline keeps its own aspect and never stretches: it sits between a label and a delta in
-   a flex row, and `flex-shrink` would squeeze the curve rather than the text beside it. */
-.health-trend .spark { display: block; flex: 0 0 auto; overflow: visible; }
-.health-trend .label { flex: 0 1 auto; min-width: 0; }
-.health-trend-delta { margin-left: auto; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
-
+/* §A5: «Корпус знань» — картка рейла Порадника (завантаження й редагування PDF/MD).
+   Її сусідка по рейлу, «Індекс здоровʼя», живе в `advisor.css` (шов C8, 2026-09-10). */
 .corpus-card { padding: 18px 20px; }
 .corpus-list { display: flex; flex-direction: column; gap: 2px; }
 .corpus-doc { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; border-top: 1px solid var(--line); }

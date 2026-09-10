@@ -1,7 +1,15 @@
 // Міні-тренд 6 міс у рядку списку (категорії/мерчанти). Крихітний SVG-polyline + крапка-кінець,
 // колір кінцевої крапки за трендом (зростання витрат = neg, спад = pos). Без осей/підписів.
-export function Sparkline({ values, color = "var(--muted)", width = 58, height = 20, goodUp = false }: {
+export function Sparkline({ values, color = "var(--muted)", width = 58, height = 20, goodUp = false, area = false }: {
   values: number[]; color?: string; width?: number; height?: number; goodUp?: boolean;
+  /**
+   * Fill the space under the line with a soft wash of `color`.
+   *
+   * Off by default: at 58×20 in a list row a fill is a grey smudge, and the point there is the
+   * direction of the line. It earns its place only when the sparkline is given real height and is
+   * the subject of its block rather than a footnote to it.
+   */
+  area?: boolean;
 }) {
   const clean = values ?? [];
   if (clean.length < 2 || clean.every((v) => v === clean[0])) {
@@ -28,8 +36,12 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
   const up = last > first * 1.05, down = last < first * 0.95;
   // goodUp: зростання = добре (індекс здоров'я). Інакше (витрати) зростання = погано.
   const trend = up ? (goodUp ? "var(--pos)" : "var(--neg)") : down ? (goodUp ? "var(--neg)" : "var(--pos)") : "var(--muted)";
+  // Closed down to the baseline and back, so the fill has a bottom edge. Built from the same
+  // `pts` string as the line — a second point list would drift the moment the padding changes.
+  const areaPts = `${x(0).toFixed(1)},${height} ${pts} ${x(clean.length - 1).toFixed(1)},${height}`;
   return (
     <svg className="spark" width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" aria-hidden>
+      {area && <polygon points={areaPts} fill={color} opacity={0.12} />}
       <polyline points={pts} fill="none" stroke={color} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" opacity={0.75} />
       <circle cx={x(clean.length - 1).toFixed(1)} cy={y(last).toFixed(1)} r={2} fill={trend} />
     </svg>

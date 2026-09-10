@@ -10,7 +10,6 @@ import type { Env } from "../env.ts";
 import type { MonoStatementItem } from "../lib/bank/mono.ts";
 import { upsertMonoTx } from "../lib/finance/repo.ts";
 import { applyEventBalance } from "../repo/accounts.ts";
-import { enrichStatusOf } from "../repo/transactions.ts";
 
 interface WebhookEvent {
   type: string;
@@ -53,15 +52,34 @@ webhook.post("/:token", async (c) => {
     /* transfer detection is best-effort */
   }
 
-  // Hybrid AI: only enrich when mcc/alias rules couldn't categorise it.
+  /**
+   * §ENRICH-GATE — hybrid AI: ask about what is genuinely unknown, and only that.
+   *
+   * The gate used to be `category_id IS NULL`, i.e. «did the rules file this». It let an Apple
+   * subscription through as an ordinary purchase for months: MCC said «Сервіси, SaaS продукти»,
+   * which is correct and complete as a category and says nothing about the charge REPEATING —
+   * and `ai_recurring`, the flag the subscription icon and §SUB-DETECT read, is written by
+   * enrichment alone. Pressing «Розпізнати» by hand fixed it every time, which is the app asking
+   * the person to do the one part it was built to do.
+   *
+   * `enrichVerdict` now answers «is there anything left to learn» instead, and answers it without
+   * a model: own-money movements and the everyday MCCs are skipped, a merchant already enriched
+   * has its verdict COPIED, and only a genuinely new charge is paid for. See that file for why
+   * each class is in the list it is in.
+   *
+   * Enrich holds too — вони тепер рахуються як витрата (stats.ts), тож мають мати категорію
+   * одразу, а не лише після сеттлменту. Опис у hold-події вже повний.
+   */
   try {
     if (c.env.ANTHROPIC_API_KEY) {
-      const row = await enrichStatusOf(c.env.DB, statementItem.id);
-      // Enrich holds too — вони тепер рахуються як витрата (stats.ts), тож мають мати
-      // категорію одразу, а не лише після сеттлменту. Опис у hold-події вже повний.
-      if (row && row.category_id == null && !row.ai_enriched) {
+      const { gateRow, enrichVerdict, applyCarry } = await import("../lib/ai/enrich-gate.ts");
+      const row = await gateRow(c.env, statementItem.id);
+      const v = row ? await enrichVerdict(c.env, row) : { verdict: "skip" as const, why: "no row" };
+      if (v.verdict === "ask") {
         const { enrichOne } = await import("../lib/ai/enrich.ts");
         await enrichOne(c.env, statementItem.id);
+      } else if (v.verdict === "carry") {
+        await applyCarry(c.env, statementItem.id, v.recurring);
       }
     }
   } catch {

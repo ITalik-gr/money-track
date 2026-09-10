@@ -55,7 +55,18 @@ export async function draftBudgets(env: Env, now: number): Promise<Draft[]> {
  *  • **not for a lump** — a projection that was deliberately not extrapolated carries no forecast
  *    to warn about;
  *  • **≥110% projected AND ≥200 ₴ over** — a projection landing at 101% is inside the method's own
- *    error, and the same 200 ₴ floor the pace radar uses keeps small envelopes quiet.
+ *    error, and the same 200 ₴ floor the pace radar uses keeps small envelopes quiet;
+ *  • **§BUDGET-PACE: the observed pace must ALSO be over the limit** (`pace_ratio >= 1`).
+ *
+ * ⚠️ That last gate is the one bought with a bug. `projected` is a BLEND of the current pace and
+ * the category's canonical level, weighted towards history early in the month — so on the 10th,
+ * an envelope with **nothing spent in it at all** still projects to ~48% of the level. The owner
+ * got «„Здоров'я“ іде на 227% бюджету … Витрачено поки що 0 ₴» on two envelopes in one morning:
+ * every figure in it was computed correctly, the calendar month was right, and the sentence was
+ * still false, because the thing it names — «за поточним темпом» — was zero. An envelope whose
+ * LEVEL exceeds its limit is a different statement, and the app already makes it, twice
+ * (§BUDGET-REACH `unreachable`, §ENV-PARTS `floor_over_limit`); re-telling it daily as a pace
+ * warning is the app arguing about the same money in a voice that does not fit it.
  * ⚠️ ONE event per envelope per MONTH: the projection moves daily, and a key with the day in it
  * would turn a single slow overspend into a three-week drumbeat.
  */
@@ -71,6 +82,7 @@ export async function draftBudgetForecast(env: Env, now: number): Promise<Draft[
   const out: Draft[] = [];
   for (const b of await budgetStatus(env, mult, now)) {
     if (b.lumpy || b.ratio >= 0.9 || b.projected_ratio < 1.1) continue;
+    if (b.pace_ratio < 1) continue;   // §BUDGET-PACE — see the header: the pace, not the history
     if (b.projected - b.amount < MIN_OVER) continue;
     out.push({
       kind: "budget",

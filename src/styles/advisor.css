@@ -66,3 +66,54 @@
 /* Refused advice stays on screen rather than disappearing: it is still part of what the adviser
    said this month, and a card that vanishes on tap reads as a bug. Dimmed, not hidden. */
 .advice-card.sg-dismissed { opacity: 0.55; }
+
+/* §HEALTH: «Індекс здоровʼя» — картка рейла Порадника (gauge-скор + складові + тренд).
+   Moved out of `settings.css` on 2026-09-10 under lint C8 (that part hit its 700-line cap when
+   the trend grew from a 120×26 footnote into a block). The seam is the one the file already
+   drew for itself: `.advisor-state > .health-card` is declared HERE, so the card's placement
+   and the card's insides now live together instead of two imports apart. «Корпус знань» stays
+   in `settings.css` — it is a document library, and only the rail put the two side by side. */
+.health-card { padding: 18px 20px; }
+/* Gauge ліворуч (натуральні 130px, не стискати — інакше центр «зі 100» обрізає),
+   складові — KPI-плитки в auto-fit гріді (заповнюють ширину без величезних розривів). */
+.health-body { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.health-gauge { flex-shrink: 0; }
+.health-factors { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 12px 20px; flex: 1; min-width: 240px; }
+.health-factor { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.health-factor .hf-lbl { color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); min-width: 0; }
+.health-factor .hf-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--muted); }
+.health-factor .hf-dot.pos { background: var(--pos); }
+.health-factor .hf-dot.warn { background: var(--warn); }
+.health-factor .hf-dot.neg { background: var(--neg); }
+.health-factor .hf-val { font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--fs-lg); white-space: nowrap; }
+/* How much of its own weight the component earned. A dot says which way, a bar says how far —
+   and the row under it says what that is worth in the 100 the score is out of. */
+.health-factor .hf-bar { display: block; height: 4px; border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; margin-top: 3px; }
+.health-factor .hf-bar > i { display: block; height: 100%; border-radius: inherit; background: var(--muted); }
+.health-factor .hf-bar.pos > i { background: var(--pos); }
+.health-factor .hf-bar.warn > i { background: var(--warn); }
+.health-factor .hf-bar.neg > i { background: var(--neg); }
+.health-factor .hf-pts { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The band, in words, at the far end of the card head. */
+.hic-band { margin-left: auto; align-self: flex-start; flex-shrink: 0; font-size: var(--fs-xs); font-weight: 600; padding: 2px 9px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink-2); }
+.hic-band.pos { background: color-mix(in srgb, var(--pos) 12%, transparent); color: var(--pos); }
+.hic-band.warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.hic-band.neg { background: color-mix(in srgb, var(--neg) 12%, transparent); color: var(--neg); }
+
+/* The trend is a BLOCK now, not a row: it was a 120×26 sparkline wedged between a label and a
+   delta, which is the size of a footnote for the only thing on this card that shows a direction
+   over time. Head → chart → axis, each on its own line, so the curve gets the card's full width. */
+.health-trend { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.health-trend .ht-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.health-trend .label { flex: 0 1 auto; min-width: 0; }
+.ht-deltas { margin-left: auto; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ht-delta { font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+/* goodUp: the index RISING is good, so the tones are the reverse of a spending chart's. */
+.ht-delta.pos { color: var(--pos); font-weight: 600; }
+.ht-delta.neg { color: var(--neg); font-weight: 600; }
+/* Fixed viewBox scaled to the card: `height: auto` keeps the aspect the SVG was drawn with, so
+   the curve never shears — the reason the chart is not sized in percent inside the component. */
+.ht-chart { margin-top: 8px; }
+.ht-chart .spark { display: block; width: 100%; height: auto; overflow: visible; }
+.ht-axis { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.ht-axis .ht-range { text-align: center; }

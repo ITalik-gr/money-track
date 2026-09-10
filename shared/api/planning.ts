@@ -116,6 +116,17 @@ export interface BudgetStatusRow {
   /** §BUDGET-FORECAST: where the month closes at this pace, ₴ minor. */
   projected: number;
   projected_ratio: number;
+  /**
+   * §BUDGET-PACE — where the month closes on THIS MONTH'S spending alone (`spent / elapsed`),
+   * ÷ the effective limit. No history in it at all.
+   *
+   * `projected_ratio` above blends the observed pace with the category's LEVEL, and early in a
+   * month that blend is almost entirely history: with `spent = 0` on the 10th it still returns
+   * ~48% of the level, so an envelope nobody has touched projects to 227% of its limit. That is a
+   * legitimate estimate and it is NOT a pace — the notification that quotes it says «за поточним
+   * темпом», and the current pace was zero. This field is the number that sentence is about.
+   */
+  pace_ratio: number;
   /** The projection was deliberately NOT extrapolated (a lump landed, or a fixed cost is pending). */
   lumpy: boolean;
   /** §BUDGET-REACH — the canonical monthly level for this category, ₴ minor. Null without history. */

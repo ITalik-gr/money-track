@@ -100,7 +100,19 @@ export async function financeHealth(env: Env): Promise<FinanceHealth> {
   const sSavings = clamp01(savingsRate / 0.2);  // 20%+ = максимум
   const sDebt = funds.debt <= 0 ? 1 : clamp01(1 - debtRatio / 3); // 3 міс доходу боргу = 0
   const sStable = clamp01(1 - cv);
-  const score = Math.round((sRunway * 0.35 + sSavings * 0.30 + sDebt * 0.20 + sStable * 0.15) * 100);
+  /**
+   * The weights, named once and used twice — by the sum below and by the components it reports.
+   *
+   * They were literals inside the sum, which was fine while nobody outside could see them, and
+   * stopped being fine the moment the card started printing how many of the 100 points each part
+   * contributes: two spellings of 0.35 in two files is exactly the drift lints C2/C4 exist for,
+   * and it would show up as a card whose four contributions do not add to the score above them.
+   */
+  const WEIGHTS = { runway: 0.35, savings: 0.30, debt: 0.20, stability: 0.15 } as const;
+  const score = Math.round(
+    (sRunway * WEIGHTS.runway + sSavings * WEIGHTS.savings
+      + sDebt * WEIGHTS.debt + sStable * WEIGHTS.stability) * 100,
+  );
   const band: FinanceHealth["band"] = score >= 70 ? "good" : score >= 45 ? "ok" : "risk";
 
   const pct = (x: number) => `${Math.round(x * 100)}%`;
@@ -110,9 +122,9 @@ export async function financeHealth(env: Env): Promise<FinanceHealth> {
   return {
     score, band,
     components: [
-      { key: "runway", label: st(loc, "healthRunway"), value: runway >= 12 ? st(loc, "healthMonthsMax") : st(loc, "healthMonths", { n: Math.round(runway * 10) / 10 }), score: Math.round(sRunway * 100), hint: st(loc, "healthRunwayHint") },
-      { key: "savings", label: st(loc, "healthSavings"), value: pct(savingsRate), score: Math.round(sSavings * 100), hint: st(loc, "healthSavingsHint") },
-      { key: "debt", label: st(loc, "healthDebt"), value: funds.debt <= 0 ? st(loc, "healthNoDebt") : st(loc, "healthDebtRatio", { n: Math.round(debtRatio * 10) / 10 }), score: Math.round(sDebt * 100), hint: st(loc, "healthDebtHint") },
+      { key: "runway", label: st(loc, "healthRunway"), value: runway >= 12 ? st(loc, "healthMonthsMax") : st(loc, "healthMonths", { n: Math.round(runway * 10) / 10 }), score: Math.round(sRunway * 100), weight: WEIGHTS.runway, hint: st(loc, "healthRunwayHint") },
+      { key: "savings", label: st(loc, "healthSavings"), value: pct(savingsRate), score: Math.round(sSavings * 100), weight: WEIGHTS.savings, hint: st(loc, "healthSavingsHint") },
+      { key: "debt", label: st(loc, "healthDebt"), value: funds.debt <= 0 ? st(loc, "healthNoDebt") : st(loc, "healthDebtRatio", { n: Math.round(debtRatio * 10) / 10 }), score: Math.round(sDebt * 100), weight: WEIGHTS.debt, hint: st(loc, "healthDebtHint") },
       /**
        * ⚠️ The DISPLAYED value is `sStable`, the clamped one the score uses — not `1 − cv`.
        *
@@ -122,7 +134,7 @@ export async function financeHealth(env: Env): Promise<FinanceHealth> {
        * fix that made the figure honest — and it would have shipped a number that reads as a
        * rendering bug to exactly the people whose income is the least stable.
        */
-      { key: "stability", label: st(loc, "healthStability"), value: pct(sStable), score: Math.round(sStable * 100), hint: st(loc, "healthStabilityHint") },
+      { key: "stability", label: st(loc, "healthStability"), value: pct(sStable), score: Math.round(sStable * 100), weight: WEIGHTS.stability, hint: st(loc, "healthStabilityHint") },
     ],
   };
 }

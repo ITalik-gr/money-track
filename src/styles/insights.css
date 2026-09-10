@@ -94,20 +94,32 @@
 
 /* ---- §FLOOR: the cost of changing nothing --------------------------------- */
 .floor-card { padding: 18px 20px; }
-.floor-nums {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--sp-4); margin-top: var(--sp-3);
-}
-.floor-main { min-width: 0; }
-/* The lumpy half is real money and must not read as an error or as a discount — muted, not red. */
-.floor-main .muted-num { color: var(--ink-2); }
-.floor-of { margin-top: 2px; font-size: var(--fs-xs); color: var(--muted); line-height: 1.45; }
+/* An addition, laid out as one: two addends, a rule, a total. Labels left, money right on a
+   shared column, so the digits line up and the sum can be checked by eye — the whole point of
+   the rewrite (the previous version printed the parts and the total in three different places
+   and expected the reader to relate them). */
+.floor-ledger { margin-top: var(--sp-3); }
+.fl-row { display: flex; align-items: baseline; gap: var(--sp-3); padding: 5px 0; }
+.fl-lbl { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* The «+» sits in the label column rather than before the amount: an operator next to the digits
+   would read as a positive sign on the number, which is the opposite of what it means here. */
+.fl-op { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fl-amt { flex: 0 0 auto; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--fs-lg); white-space: nowrap; }
+/* The uneven half is real money and must not read as an error or as a discount — muted, not red. */
+.fl-amt.muted-num { color: var(--ink-2); font-weight: 500; }
+.fl-row.total { border-top: 1px solid var(--line-strong); margin-top: 2px; padding-top: 9px; }
+.fl-row.total .fl-lbl { color: var(--ink); }
+.fl-row.total .fl-amt { font-size: var(--fs-2xl); }
+.fl-note { margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); }
+/* Each runway is a line of its own: a number, then the condition under which it is true. Side by
+   side they were two labels for a distinction the reader had to already be holding. */
 .floor-runways {
-  display: flex; flex-wrap: wrap; gap: 4px var(--sp-4);
   margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line);
   font-size: var(--fs-sm); color: var(--muted);
 }
-.floor-rw b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.floor-runways > .label { display: flex; align-items: baseline; gap: 5px; }
+.floor-rw { display: flex; align-items: baseline; gap: var(--sp-2); margin-top: 4px; }
+.floor-rw b { flex: 0 0 auto; min-width: 58px; font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
 /* The full-burn runway keeps the emphasis: it is the number every other screen shows, and letting
    the friendlier one look like the answer would be the app choosing the optimistic reading. */
 .floor-rw.strong { color: var(--ink); }
@@ -124,5 +136,5 @@
 .floor-chip b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
 @media (max-width: 620px) {
   .floor-card { padding: 14px; }
-  .floor-nums { grid-template-columns: 1fr; gap: var(--sp-3); }
+  .fl-row.total .fl-amt { font-size: var(--fs-xl); }
 }

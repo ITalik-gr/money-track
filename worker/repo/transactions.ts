@@ -209,20 +209,6 @@ export async function pendingEnrichCount(db: AppDb): Promise<number> {
 }
 
 /**
- * The three fields that decide whether a freshly stored operation needs the AI.
- *
- * Read right after the write rather than inferred from what was written: the deterministic
- * categoriser may have matched an alias, a subscription or an MCC rule during the insert, and
- * calling a model for a row that already has a category is money spent to learn nothing.
- */
-export async function enrichStatusOf(
-  db: AppDb, id: string,
-): Promise<{ category_id: number | null; ai_enriched: number; hold: number } | null> {
-  return await db.prepare("SELECT category_id, ai_enriched, hold FROM transactions WHERE id = ?")
-    .bind(id).first<{ category_id: number | null; ai_enriched: number; hold: number }>();
-}
-
-/**
  * How many of these ids are already stored — the CSV import's duplicate count.
  *
  * Chunked at 100 because the ids come from a file the user chose: a decade of statements is one
