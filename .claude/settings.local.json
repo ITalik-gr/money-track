@@ -1,6 +1,5 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions",
     "allow": [
       "Skill(update-config)",
       "Bash(npm install *)",
@@ -92,8 +91,10 @@
       "Bash(claude --print)",
       "Bash(graphify query *)",
       "Bash(node *)",
-      "Bash(graphify update *)"
-    ]
+      "Bash(graphify update *)",
+      "mcp__claude_ai_Money_Tracker__find_transactions"
+    ],
+    "defaultMode": "bypassPermissions"
   },
   "hooks": {
     "PostToolUse": [

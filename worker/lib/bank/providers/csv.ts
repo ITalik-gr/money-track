@@ -123,7 +123,16 @@ export interface ColumnMapping {
    * still read exactly as before.
    */
   credit?: number | null;
+  /**
+   * A settlement-state column (Revolut `State`, Wise/European `Status`). Those exports list
+   * DECLINED and REVERTED card attempts beside real ones, with a full amount — imported, every
+   * declined retry of a purchase counted as a second purchase. Rows that did not settle are skipped.
+   */
+  status?: number | null;
 }
+
+// Pending is skipped too: it settles later under the same content, and the next export brings it.
+const UNSETTLED = /declin|revert|fail|cancel|pending|reject|відхил|скасов|очіку|не проведен/i;
 
 /** `debit` is not a mapping field — it is how the AMOUNT column is found in a two-column
  *  ledger, and it lives here so both halves of the pair are described in one place. */
@@ -159,6 +168,7 @@ const HINTS: Record<keyof ColumnMapping | "debit", string[]> = {
   currency: ["валюта", "currency", "валюта операції", "валюта рахунку", "currency code", "ccy"],
   comment: ["коментар", "comment", "примітка", "note"],
   mcc: ["mcc", "мсс", "код мсс", "mcc-код", "mcc code", "код категорії"],
+  status: ["state", "status", "статус", "стан операції", "стан"],
 };
 
 /**
@@ -185,7 +195,7 @@ export function guessMapping(headers: string[]): Partial<ColumnMapping> {
   };
 
   const out: Partial<ColumnMapping> = {};
-  for (const key of ["date", "description", "currency", "comment", "mcc"] as const) {
+  for (const key of ["date", "description", "currency", "comment", "mcc", "status"] as const) {
     const idx = find(key);
     if (idx !== undefined) out[key] = idx;
   }
@@ -329,6 +339,11 @@ export async function toCanonical(
     }
     if (amount === 0) {
       skipped.push({ line, reason: st(locale, "csvZeroAmount") });
+      continue;
+    }
+    const state = mapping.status != null ? (row[mapping.status] ?? "").trim() : "";
+    if (state && UNSETTLED.test(state)) {
+      skipped.push({ line, reason: st(locale, "csvNotSettled", { value: state.slice(0, 32) }) });
       continue;
     }
     const description = (row[mapping.description] ?? "").trim();

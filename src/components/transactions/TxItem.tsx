@@ -31,6 +31,8 @@ export interface TxItemData {
   hold?: number;
   /** §COMPENSATION: скільки з цієї витрати вже компенсували (мінор, додатне). */
   reimbursed?: number | null;
+  /** §VOID-PAIR: the bank cancelled this purchase (id of the cancellation row). */
+  voided_by?: string | null;
 }
 
 interface Props {
@@ -52,6 +54,8 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
   // struck-through form (its `reimbursed` is always 0, but the arithmetic below assumes a debit).
   const reimbursed = t.amount < 0 ? (t.reimbursed ?? 0) : 0;
   const route = transferRoute(t);
+  // §VOID-PAIR: the purchase and its cancellation are one row; the cancellation is hidden by the list.
+  const voided = t.amount < 0 && !!t.voided_by;
 
   // Клітинки-осередки (logo · who · cat · date · amt) розкладаються сіткою:
   // stacked у 2 рядки (вузько) або вирівняні колонки (широко) — керує CSS-контейнер (§11.3).
@@ -69,6 +73,7 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
       <div className="tx-body">
         <div className="tx-line1">
           <span className="who-name">{t.merchant ?? t.comment ?? "—"}</span>
+          {voided && <span className="m-void">{tr("tx.cancelled")}</span>}
           {t.planned_id != null && !transfer && (
             <span className="m-sub" title={tr("tx.subCharge")}>🔁</span>
           )}
@@ -100,6 +105,13 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
           <span className="amt-neutral">
             <Icon name="swap" size={13} className="amt-swap" />
             <Money minor={Math.abs(t.amount)} currency={t.currency_code} className="neutral" />
+          </span>
+        ) : voided ? (
+          // Same two-line shape as a compensation: what it cost you (nothing), and what the bank
+          // first charged, struck through — so the cancellation is visible, not silently absent.
+          <span className="amt-reimb">
+            <Money minor={0} currency={t.currency_code} />
+            <s className="amt-was"><Money minor={t.amount} currency={t.currency_code} signed /></s>
           </span>
         ) : reimbursed > 0 ? (
           // §COMPENSATION made visible (user feedback: "я увімкнув компенсацію, а воно всюди

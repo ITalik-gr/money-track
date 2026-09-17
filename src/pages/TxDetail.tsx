@@ -397,9 +397,12 @@ export function TxDetail() {
               <label className="stack" style={{ gap: 4 }}>
                 <span className="label">{t("tx.label.merchant")}</span>
                 <input value={merchant} onChange={(e) => setMerchant(e.target.value)} placeholder={t("tx.placeholder.merchant")} />
+                {tx.bank_description && tx.bank_description.trim() !== (tx.merchant ?? "").trim() && (
+                  <span className="ai-block-sub">{t("tx.bankDescription")} «{tx.bank_description}»</span>
+                )}
                 {tx.name_locked ? (
                   <span className="ai-block-sub" style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                    {"🔒 "}{t("tx.nameLocked")}{" "}
+                    {"🔒 "}{t(tx.name_locked === 2 ? "tx.nameRemembered" : "tx.nameLocked")}{" "}
                     <button type="button" className="link-btn" onClick={unlockName}>{t("tx.unlockNameLink")}</button>
                   </span>
                 ) : (

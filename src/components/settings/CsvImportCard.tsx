@@ -19,7 +19,7 @@ import { takeSharedStatement } from "../../lib/push.ts";
  * meaning "the signed amount" and starts meaning "the debit column". A person looking at a file
  * the guesser read as one shape when it is the other has no other way to say so.
  */
-type Mapping = { date?: number; amount?: number; description?: number; comment?: number | null; mcc?: number | null; credit?: number | null };
+type Mapping = { date?: number; amount?: number; description?: number; comment?: number | null; mcc?: number | null; credit?: number | null; status?: number | null };
 
 interface Preview {
   delimiter: string;

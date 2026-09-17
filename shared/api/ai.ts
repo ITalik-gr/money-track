@@ -236,10 +236,10 @@ export type AiModelToken = "haiku" | "sonnet" | "opus";
 export interface AiChange {
   id: number;
   tx_id: string;
-  field: string;            // 'category_id' | 'is_transfer' | 'ai_note'
+  field: string;            // 'category_id' | 'real_category_id' | 'is_transfer' | 'ai_note' | 'merchant'
   old_value: string | null;
   new_value: string | null;
-  source: string;           // 'enrich' | 'chat' | 'resweep'
+  source: string;           // 'enrich' | 'chat' | 'resweep' | 'catchup' | 'rename_memory'
   created_at: number;
   /** Set once the user put the old value back. The row stays — see `repo/ai-changes.ts`. */
   reverted_at: number | null;

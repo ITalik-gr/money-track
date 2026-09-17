@@ -31,6 +31,10 @@ export interface TxRow {
   event_color?: string | null;
   importance?: string | null;   // §6: override вагомості операції (essential|discretionary|optional)
   reimbursed?: number | null;   // §COMPENSATION: скільки з цієї витрати компенсували (мінор)
+  /** §VOID-PAIR: on a purchase — the id of the bank's cancellation of it; on that cancellation —
+   *  the id of the purchase it cancels. Both set ⇒ the feed shows the pair as one row. */
+  voided_by?: string | null;
+  voids?: string | null;
 }
 
 export interface ReceiptItemRow { id: number; name: string | null; qty: number | null; price: number | null }
@@ -54,7 +58,9 @@ export interface TxDetail extends TxRow {
   account_type: string | null;
   is_transfer?: number;
   ai_enriched?: number;
-  name_locked?: number;             // §R7: ручну назву зафіксовано — AI не перезаписує
+  name_locked?: number;             // §R7: 1 = the person typed the name, 2 = §RENAME-MEMORY applied it; AI rewrites neither
+  /** The bank's own text for this operation, whatever the name is now (null for manual rows). */
+  bank_description?: string | null;
   reimbursed?: number | null;       // §COMPENSATION: скільки з цієї витрати компенсували
   reimburses_id?: string | null;    // §COMPENSATION: ця операція — компенсація за витрату X
   ai_note?: string | null;          // розуміння AI «що це» (§R5)

@@ -2,7 +2,7 @@
 import type { AppDb } from "../lib/platform/db-shim.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import { stLit } from "../lib/platform/i18n.ts";
-import { STATS_JOINS, SPEND_WHERE, amountSum } from "../lib/finance/stats.ts";
+import { STATS_JOINS, SPEND_WHERE, amountSum, refundDescOn } from "../lib/finance/stats.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 // Contract types, imported rather than re-declared — a private twin of a response row is D2 one
 // layer down: two spellings, drifting quietly, with `tsc` unable to compare them.
@@ -90,6 +90,34 @@ const FEED_COLUMNS = [
 ].map((c) => `t.${c}`).join(", ");
 
 /**
+ * §VOID-PAIR (2026-09-17) — a purchase and the bank's cancellation of it are ONE event on screen.
+ *
+ * monobank reports a cancelled card payment as two rows: «Bolt −181» and «Скасування. Bolt +181».
+ * The canon already nets them (§REFUND makes the second a negative spend of the same category),
+ * so every number was right; the feed still showed two rows for something that did not happen.
+ *
+ * `r` cancels `p` when: same account, exactly the opposite amount, `r` is no older than `p` and at
+ * most VOID_WINDOW later, `r` carries the bank's refund prefix, and its text ENDS with `p`'s
+ * merchant — or, when enrich has since renamed the purchase, both carry the same MCC. Transfers
+ * never pair. A partial refund is not a cancellation and stays two rows (§COMPENSATION's ground).
+ *
+ * One refund cancels one purchase: the refund takes the LATEST matching purchase before it, and a
+ * purchase claims a refund only if no later purchase matches that same refund. «buy, buy, cancel»
+ * therefore collapses the second buy and leaves the first as a real charge.
+ */
+const VOID_WINDOW = 30 * 86400;
+const cancels = (r: string, p: string) => `${r}.account_id = ${p}.account_id AND ${r}.amount = -${p}.amount
+  AND ${r}.time >= ${p}.time AND ${r}.time <= ${p}.time + ${VOID_WINDOW}
+  AND ${r}.is_transfer = 0 AND ${p}.is_transfer = 0 AND (${refundDescOn(`${r}.merchant`)})
+  AND (substr(${r}.merchant, -length(${p}.merchant)) = ${p}.merchant OR (${r}.mcc IS NOT NULL AND ${r}.mcc = ${p}.mcc))`;
+const VOID_COLUMNS = `
+  CASE WHEN t.amount < 0 THEN (SELECT r.id FROM transactions r WHERE ${cancels("r", "t")}
+    AND NOT EXISTS (SELECT 1 FROM transactions p2 WHERE p2.id <> t.id AND p2.time > t.time AND ${cancels("r", "p2")})
+    ORDER BY r.time LIMIT 1) END AS voided_by,
+  CASE WHEN t.amount > 0 THEN (SELECT p.id FROM transactions p WHERE ${cancels("t", "p")}
+    ORDER BY p.time DESC LIMIT 1) END AS voids`;
+
+/**
  * The transaction feed, newest first, with the display joins the list needs.
  *
  * The self-join on `transfer_pair_id` resolves the other leg of a transfer into a
@@ -105,7 +133,7 @@ export async function listFeed(
   const r = await db.prepare(
     `SELECT ${FEED_COLUMNS}, ${catNameSql(locale, "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
             a.title AS account_title, e.name AS event_name, e.color AS event_color,
-            ap.title AS pair_account_title
+            ap.title AS pair_account_title, ${VOID_COLUMNS}
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN accounts a ON a.id = t.account_id
@@ -138,7 +166,7 @@ export async function byId(
             a.title AS account_title, a.type AS account_type,
             e.name AS event_name, e.color AS event_color,
             p.title AS planned_title,
-            ap.title AS pair_account_title
+            ap.title AS pair_account_title, json_extract(t.raw_json, '$.description') AS bank_description
      FROM transactions t
      LEFT JOIN categories c ON c.id = t.category_id
      LEFT JOIN categories rc ON rc.id = t.real_category_id

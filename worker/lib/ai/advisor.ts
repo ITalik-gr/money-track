@@ -11,6 +11,7 @@ import { getState, setState } from "../finance/repo.ts";
 import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } from "../finance/money.ts";
 import { currencySign } from "../../../shared/currency.ts";
 import { monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
+import { merchantContext, type MerchantRow } from "./merchant-context.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, burnShape, type BurnShape, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
@@ -192,10 +193,10 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
        GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 8`,
     ).bind(from90).all<{ id: number; name: string; spent: number }>(),
     env.DB.prepare(
-      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent FROM transactions t ${STATS_JOINS}
+      `SELECT t.merchant AS merchant, ${amountSum(mult)} AS spent, MAX(t.time) AS last_at FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND ${SPEND_WHERE} AND t.merchant IS NOT NULL
        GROUP BY t.merchant ORDER BY spent DESC LIMIT 8`,
-    ).bind(from90).all<{ merchant: string; spent: number }>(),
+    ).bind(from90).all<MerchantRow>(),
     env.DB.prepare(
       `SELECT e.name AS name, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS} JOIN event_groups e ON e.id = t.event_id
@@ -338,7 +339,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     .slice(0, 5);
 
   const context: Record<string, unknown> = {
-    period_note: "top_categories/top_merchants/by_event hold totals for the LAST 90 DAYS (3 months). ⚠️ TWO DIFFERENT monthly figures, do not compare them: a CATEGORY carries avg_month_uah, the canonical monthly level (computed over whole months, aware of fixed costs and of facts the user told you); a MERCHANT or an event carries per_month_90d_uah, which is nothing more than its 90-day total divided by three. monthly_burn_uah is average spending per month. Do NOT confuse the 90-day total with a monthly one — rely on avg_month_uah. by_importance: essential (do not cut), discretionary (wanted), optional (safest to cut). monthly_trend: spend and income by month (6 months) — read the dynamics and seasonality, not just the average. budgets: limit vs actual this month (used_pct>100 means overspent — highlight it). subscriptions_monthly_uah: fixed subscriptions per month (near-constant). upcoming_charges: the nearest charges (in_days) — use them for advice on timing and payment priority. recent_oneoff holds this month's ONE-OFF expenses (taxes, doctor, a large purchase): do NOT project them as recurring. Cite specifics: categories, subscriptions, budgets.",
+    period_note: "top_categories/top_merchants/by_event hold totals for the LAST 90 DAYS (3 months). ⚠️ TWO DIFFERENT monthly figures, do not compare them: a CATEGORY carries avg_month_uah, the canonical monthly level (computed over whole months, aware of fixed costs and of facts the user told you); a MERCHANT or an event carries per_month_90d_uah, which is nothing more than its 90-day total divided by three. A merchant with stopped=true has NO monthly figure: the user no longer pays it (last_paid_days_ago says when they last did) — never describe it as a current or monthly expense, and never suggest cutting it. monthly_burn_uah is average spending per month. Do NOT confuse the 90-day total with a monthly one — rely on avg_month_uah. by_importance: essential (do not cut), discretionary (wanted), optional (safest to cut). monthly_trend: spend and income by month (6 months) — read the dynamics and seasonality, not just the average. budgets: limit vs actual this month (used_pct>100 means overspent — highlight it). subscriptions_monthly_uah: fixed subscriptions per month (near-constant). upcoming_charges: the nearest charges (in_days) — use them for advice on timing and payment priority. recent_oneoff holds this month's ONE-OFF expenses (taxes, doctor, a large purchase): do NOT project them as recurring. Cite specifics: categories, subscriptions, budgets.",
     period_days: 90,
     ...timeCtx.fields,
     situation: profile || "(not specified)",
@@ -387,9 +388,8 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     })),
     weekday_note: "weekday holds spending by day of week over 90 days; dow: 0=Sunday … 6=Saturday. typical_uah is the AVERAGE for such a day (the total divided by how many such days fall in the window), so the days are comparable with each other. ⚠️ one_payment=true means nearly the whole day's amount is ONE payment (rent, a tax): that is about the charge date, not about behaviour — do not call such a day expensive and do not advise spending less on those days. Read busiest_day and weekend_share only from days where one_payment=false.",
     top_categories: (cats.results ?? []).map((c) => ({ id: c.id, name: c.name, spent_90d_uah: Math.round(c.spent / 100), avg_month_uah: catAvgMonth(c.id, c.spent) })),
-    // ⚠️ `per_month_90d_uah`, not `avg_month_uah` (§0.2 audit): a CATEGORY's monthly figure is the
-    // canonical level, a merchant's is its 90-day total over three — one name, two definitions.
-    top_merchants: (merchants.results ?? []).map((m) => ({ merchant: m.merchant, spent_90d_uah: Math.round(m.spent / 100), per_month_90d_uah: Math.round(m.spent / 3 / 100) })),
+    // `per_month_90d_uah`, not `avg_month_uah` (§0.2 audit); none at all once the merchant went quiet (§MERCH-QUIET).
+    top_merchants: merchantContext(merchants.results ?? [], now),
     by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), per_month_90d_uah: Math.round(e.spent / 3 / 100) })),
     by_importance: (importance.results ?? []).map((x) => ({ level: x.importance, spent_90d_uah: Math.round(x.spent / 100) })),
     monthly_trend: (trend.results ?? []).map((t) => ({ month: t.m, spend_uah: Math.round(t.spend / 100), income_uah: Math.round(t.income / 100) })),

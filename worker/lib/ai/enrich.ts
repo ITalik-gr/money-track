@@ -269,7 +269,7 @@ async function applyEnrichment(
       const name = hit.merchant ?? tx.merchant;
       // §R7: якщо назву зафіксовано вручну (name_locked) — не перетираємо мерчант, лише категорію.
       await env.DB.prepare(
-        "UPDATE transactions SET merchant = CASE WHEN name_locked = 1 THEN merchant ELSE ? END, category_id = ?, ai_note = ?, ai_enriched = 1 WHERE id = ?",
+        "UPDATE transactions SET merchant = CASE WHEN name_locked >= 1 THEN merchant ELSE ? END, category_id = ?, ai_note = ?, ai_enriched = 1 WHERE id = ?",
       ).bind(name, hit.category_id, `category resolved from history (${hit.n}× the same merchant)`, tx.id).run();
       // Навчаємо alias на точному сирому описі — наступний ідентичний піде миттєво (не чіпаючи ручні).
       if (tx.source === "mono" && rawDesc) await writeAiAlias(env, rawDesc, name, hit.category_id, 0);
@@ -321,7 +321,7 @@ async function applyEnrichment(
 
   // §R7: name_locked → зберігаємо ручну назву (AI уточнює лише категорію/переказ/note).
   await env.DB.prepare(
-    "UPDATE transactions SET merchant = CASE WHEN name_locked = 1 THEN merchant ELSE ? END, category_id = COALESCE(?, category_id), is_transfer = ?, ai_note = ?, planned_id = COALESCE(?, planned_id), ai_recurring = ?, ai_enriched = 1 WHERE id = ?",
+    "UPDATE transactions SET merchant = CASE WHEN name_locked >= 1 THEN merchant ELSE ? END, category_id = COALESCE(?, category_id), is_transfer = ?, ai_note = ?, planned_id = COALESCE(?, planned_id), ai_recurring = ?, ai_enriched = 1 WHERE id = ?",
     // §AI-RECURRING: 0/1 once asked — "not asked" and "said no" mean different things downstream.
   ).bind(cleanName, finalCategory, isTransfer, result.note?.trim() || null, sub?.planned_id ?? null,
          result.recurring ? 1 : 0, tx.id).run();

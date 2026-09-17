@@ -566,6 +566,18 @@
   з `is_transfer=0` (виплата з банки, переказ між власними картками) рахувались доходом, хоча їхня
   вихідна сторона вже виключалась — саме ця асиметрія давала більшу частину завищення.
   ⚠️ `categoryMonthlyLevels` має підлогу 0: місяць може вийти від'ємним, якщо повернення перевищило витрати.
+- **§VOID-PAIR (2026-09-17): a purchase and the bank's cancellation of it are ONE row in the feed.**
+  The numbers were already right (§REFUND nets «Bolt −181» against «Скасування. Bolt +181»); the
+  feed still showed two rows for something that never happened. `listFeed` (`repo/transactions.ts`)
+  returns `voided_by` on the purchase and `voids` on the cancellation; the list hides a
+  cancellation whose purchase is on screen and draws the purchase as 0 with −181 struck through.
+  A pair is: same account, EXACTLY opposite amount, the cancellation 0–30 days after the purchase,
+  the refund prefix (`refundDescOn`, the same list §REFUND uses), and a text ending with the
+  purchase's merchant — or, after enrich renamed the purchase, the same MCC. Transfers never pair;
+  a partial refund stays two rows. **One-to-one:** a cancellation takes the LATEST matching purchase
+  before it, and a purchase claims a cancellation only if no later purchase matches it — so «buy,
+  buy, cancel» leaves the first buy as a real charge. Presentation only: no column is written, and
+  nothing about the canon changes. Pinned by `void-pair.test.ts`.
 - **Витрата:** `amount<0` (або рефанд, див. §REFUND), `transfer_pair_id IS NULL`, НЕ (`is_transfer=1 AND real_category_id IS NULL`), ефективна категорія `IS NOT 13` («Перекази і зняття»). **Holds рахуються** (mono надсилає лише виконані; коли hold закривається — той самий `id` перезаписується, тож без подвійного рахунку). Прапорець `hold` лишається на рядку для UI-бейджа «в обробці». *(Раніше `hold=0` різав свіжий тиждень у репорті — виправлено 2026-07-10.)*
 - **Ефективна категорія** = рол-ап `real_category_id` (готівка/зняття за реальною суттю), інакше рол-ап `category_id`. Хелпери: `EFF_CAT_*`, `SPEND_WHERE`, `INCOME_WHERE`, `STATS_JOINS`, `spendSum/incomeSum/amountSum`, `uahMult` (₴-зведення inline-CASE з курсів), `valueMode` (₴ або «чиста» валюта), `periodBounds/currentPeriodToDate/lastCompletePeriod`.
 - **Вагомість (§6):** `EFF_IMPORTANCE` = `COALESCE(t.importance, рол-ап importance ефективної категорії, 'discretionary')`. Рівні `essential|discretionary|optional`. Задається на категорії (дефолт) + override на транзакції. Міграція 0016.

@@ -101,6 +101,7 @@ const S = {
   csvBadDate: { uk: "не розпізнав дату: «{value}»", en: "could not parse the date: “{value}”" },
   csvBadAmount: { uk: "не розпізнав суму: «{value}»", en: "could not parse the amount: “{value}”" },
   csvZeroAmount: { uk: "нульова сума", en: "zero amount" },
+  csvNotSettled: { uk: "операція не проведена ({value})", en: "not settled ({value})" },
 
   // ---- manual transfer (`POST /transactions/transfer`) ----------------------
   errTransferAccounts: {

@@ -196,6 +196,15 @@
 
 ## Правила, здобуті з реальних багів
 
+- **§MERCH-QUIET (2026-09-17): a merchant the user stopped paying has no "per month" figure.**
+  The feed said «You spend 1293 ₴/month on Preply, cut it» 80 days after the last Preply charge.
+  `top_merchants[].per_month_90d_uah` is the 90-day total over three, and two June charges were
+  still inside the window. `period_note` already warned the model about that figure; it used it
+  anyway, and `numbersAreGrounded` passed it because the number WAS in the snapshot.
+  **Fix: don't state it.** `lib/ai/merchant-context.ts` drops the monthly figure for a merchant
+  silent for more than 45 days (`stopped: true`, plus `last_paid_days_ago`), so the grounding check
+  now rejects the sentence. A derived number the payload should not vouch for must be absent, not
+  annotated. Pinned by `merchant-quiet.test.ts` through the same grounding path the feed uses.
 - **§TIME-CTX (2026-08-27): the app never states a date it was not given.** The feed shipped «Rent
   due in 11 days, cushion covers only 0.8 months total» — for a rent the user pays on the 20th.
   Rent is not a `planned_payment`, so it was in no `upcoming_charges` row and had no date anywhere

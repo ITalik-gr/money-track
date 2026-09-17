@@ -11,7 +11,9 @@ import type { AiChange } from "../../shared/api/ai.ts";
  * no undo, which is the state §AI-AUDIT exists to end. A field the model may write and the person
  * may not take back is worse than one it cannot write at all.
  */
-export const AUDITED_FIELDS = ["category_id", "real_category_id", "is_transfer", "ai_note"] as const;
+// `merchant` (2026-09-17) is written by §RENAME-MEMORY, not by the model — the journal is about
+// what the app changed on its own, and the undo is the same.
+export const AUDITED_FIELDS = ["category_id", "real_category_id", "is_transfer", "ai_note", "merchant"] as const;
 export type AuditedField = (typeof AUDITED_FIELDS)[number];
 export const isAuditedField = (v: unknown): v is AuditedField =>
   AUDITED_FIELDS.includes(v as AuditedField);
@@ -88,7 +90,8 @@ export async function revert(
   // A whitelist, not interpolation of whatever arrived: this string goes straight into SQL.
   const column = change.field === "category_id" ? "category_id"
     : change.field === "real_category_id" ? "real_category_id"
-      : change.field === "is_transfer" ? "is_transfer" : "ai_note";
+      : change.field === "is_transfer" ? "is_transfer"
+        : change.field === "merchant" ? "merchant" : "ai_note";
 
   /**
    * ⚠️ **Refuse when the field has MOVED ON since the model touched it.**
@@ -114,9 +117,12 @@ export async function revert(
   }
 
   const value = change.old_value == null ? null
-    : change.field === "ai_note" ? change.old_value
+    : change.field === "ai_note" || change.field === "merchant" ? change.old_value
       : Number(change.old_value);
-  await db.prepare(`UPDATE transactions SET ${column} = ? WHERE id = ?`)
+  // Undoing a remembered name frees the row (name_locked 2 → 0): the bank's text is back, and AI
+  // may clean it up as it would any other. A name the person typed (1) is not the journal's to free.
+  const unlock = change.field === "merchant" ? ", name_locked = CASE WHEN name_locked = 2 THEN 0 ELSE name_locked END" : "";
+  await db.prepare(`UPDATE transactions SET ${column} = ?${unlock} WHERE id = ?`)
     .bind(value, change.tx_id).run();
   await db.prepare("UPDATE ai_changes SET reverted_at = ? WHERE id = ?").bind(at, change.id).run();
   return { ok: true };

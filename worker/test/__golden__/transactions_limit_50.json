@@ -29,7 +29,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0073",
@@ -59,7 +61,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0074",
@@ -89,7 +93,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0057",
@@ -119,7 +125,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0062",
@@ -149,7 +157,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0064",
@@ -179,7 +189,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0075",
@@ -209,7 +221,9 @@
       "account_title": "Рахунок $",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0059",
@@ -239,7 +253,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0065",
@@ -269,7 +285,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0066",
@@ -299,7 +317,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0076",
@@ -329,7 +349,9 @@
       "account_title": "Рахунок $",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0068",
@@ -359,7 +381,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0067",
@@ -389,7 +413,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0070",
@@ -419,7 +445,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0069",
@@ -449,7 +477,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0060",
@@ -479,7 +509,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "pair-out",
@@ -509,7 +541,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": "Банка"
+      "pair_account_title": "Банка",
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0071",
@@ -539,7 +573,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0063",
@@ -569,7 +605,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0072",
@@ -599,7 +637,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0061",
@@ -629,7 +669,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0051",
@@ -659,7 +701,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0050",
@@ -689,7 +733,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0055",
@@ -719,7 +765,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0052",
@@ -749,7 +797,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0053",
@@ -779,7 +829,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0056",
@@ -809,7 +861,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0054",
@@ -839,7 +893,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0044",
@@ -869,7 +925,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0043",
@@ -899,7 +957,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0048",
@@ -929,7 +989,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0045",
@@ -959,7 +1021,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0046",
@@ -989,7 +1053,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0049",
@@ -1019,7 +1085,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0047",
@@ -1049,7 +1117,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0037",
@@ -1079,7 +1149,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0036",
@@ -1109,7 +1181,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0041",
@@ -1139,7 +1213,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0038",
@@ -1169,7 +1245,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0039",
@@ -1199,7 +1277,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0042",
@@ -1229,7 +1309,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0040",
@@ -1259,7 +1341,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0030",
@@ -1289,7 +1373,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0029",
@@ -1319,7 +1405,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0034",
@@ -1349,7 +1437,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0031",
@@ -1379,7 +1469,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0032",
@@ -1409,7 +1501,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0035",
@@ -1439,7 +1533,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0033",
@@ -1469,7 +1565,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     },
     {
       "id": "tx0023",
@@ -1499,7 +1597,9 @@
       "account_title": "Картка ₴",
       "event_name": null,
       "event_color": null,
-      "pair_account_title": null
+      "pair_account_title": null,
+      "voided_by": null,
+      "voids": null
     }
   ]
 }

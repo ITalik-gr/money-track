@@ -23,6 +23,8 @@ import type { AppDb } from "../lib/platform/db-shim.ts";
 import type { CanonicalTx } from "../lib/bank/providers/provider.ts";
 import { categorize } from "../lib/finance/categorize.ts";
 import { descriptionIsTransfer } from "../lib/finance/transfers.ts";
+import { rememberedName } from "./rename-memory.ts";
+import { logChange } from "./ai-changes.ts";
 
 /** What to do when the id is already in the table. See the note above — this is the channel, not the bank. */
 export type ConflictPolicy = "refresh" | "ignore";
@@ -131,13 +133,17 @@ export async function upsertCanonicalTx(
   // рахунку" row counted as spending when it arrived in a file.
   const transfer = is_transfer || descriptionIsTransfer(tx.description ?? null) ? 1 : 0;
 
+  // §RENAME-MEMORY: only when no alias already named it — an explicit rule outranks an inferred one.
+  const remembered = !display_name && tx.description ? await rememberedName(db, tx.description, tx.amount) : null;
+  const now = Math.floor(Date.now() / 1000);
+
   await db
     .prepare(
       `INSERT INTO transactions
         (id, account_id, source, time, amount, currency_code, original_amount, original_currency,
          mcc, category_id, real_category_id, planned_id, merchant,
-         comment, balance_after, cashback, hold, is_transfer, raw_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         comment, balance_after, cashback, hold, is_transfer, raw_json, created_at, name_locked)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       tx.id,
@@ -152,16 +158,19 @@ export async function upsertCanonicalTx(
       category_id,
       real_category_id,
       planned_id,
-      display_name ?? tx.description ?? null,
+      display_name ?? remembered ?? tx.description ?? null,
       tx.comment ?? null,
       tx.balance_after ?? null,
       tx.cashback ?? null,
       tx.hold ? 1 : 0,
       transfer,
       tx.raw === undefined ? null : JSON.stringify(tx.raw),
-      Math.floor(Date.now() / 1000),
+      now,
+      remembered ? 2 : 0,
     )
     .run();
+  // Written to the change journal so the operation SAYS the app renamed it, with one-click undo.
+  if (remembered) await logChange(db, tx.id, "merchant", tx.description ?? null, remembered, "rename_memory", now);
 
   return { inserted: true };
 }

@@ -9,7 +9,7 @@
 > Стан: **у проді** (`https://money.italik.dev`), платформа-фаза, структурний рефактор (ARCH) і
 > банківська фаза закриті. Реєстрація ВІДКРИТА і тільки через Google; Telegram і MCP-токен —
 > ДРУГИЙ і ТРЕТІЙ ключі до наявного акаунта, створити ним акаунт не можна.
-> Міграції: `finance` до **0048**, `directory` до **0010**. Тестів — **919**.
+> Міграції: `finance` до **0048**, `directory` до **0010**. Тестів — **936**.
 > Оновлено 2026-09-10.
 
 ## 📁 Карта документів — що де лежить
@@ -252,6 +252,7 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 | §BASE-CUR | у якій валюті застосунок відповідає — це питання ЧИТАЧА, а не константа |
 | §REFUND | повернення — не дохід, а відʼємна витрата своєї категорії |
 | §SPLIT · §COMPENSATION | одна витрата на кілька категорій; одне надходження на кілька витрат |
+| §VOID-PAIR | a purchase and the bank's cancellation of it are one row in the feed (presentation only) |
 | §LEVEL-WINDOW | знаменник рівня — місяці, які покриває ОБЛІК, а не довжина вікна |
 | §BURN-SHAPE | burn каже, яка його частина повторюється, а яка разова |
 | §HEALTH · §HEALTH-INCOME | Індекс здоровʼя наживо; місяць без доходу — теж місяць |
@@ -283,6 +284,8 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 | §STUB-ACC | подія інжесту не втрачається через невідомий рахунок |
 | §BANK-PARSE · §CSV-PREAMBLE | рядки банку читає `normalize.ts`; шапка виписки — не заголовок |
 | §CSV-DEBIT | сума буває однією знаковою колонкою або парою Дебет/Кредит; знак — із колонки |
+| §CSV-STATE | declined / reverted / pending rows of a statement are skipped, not imported |
+| §RENAME-MEMORY | two agreeing manual renames of a bank description name the next one; `name_locked` 0/1/2 |
 | §BANK-FETCH · §BANK-POLL · §BANK-CRED · §BANK-CONN | вибірка й пейсинг від провайдера, полінг, креденшели, зʼєднання |
 | §SHARE-CSV · §STALE-IMPORT | поділитись випискою; рахунок, що годується лише файлом |
 | §TG-CSV | виписку можна кинути в чат боту; превʼю там — діалог, а рахунок не вгадується |
@@ -293,6 +296,7 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 | § | Про що |
 |---|---|
 | §AI-UNIT · §AI-AVGNAME | одиниця й імʼя поля мусять означати те, що дали моделі |
+| §MERCH-QUIET | a merchant the user stopped paying carries no monthly figure — absent, not annotated |
 | §TIME-CTX | застосунок ніколи не називає дату, якої йому не давали |
 | §AI-FEED · §NOVELTY | мова, повтори в часі й у тому ж прогоні |
 | §AI-AUDIT | що змінив AI — записано, і це можна відкотити |

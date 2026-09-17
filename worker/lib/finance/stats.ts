@@ -96,7 +96,8 @@ const REFUND_PREFIXES = ["Скасування", "скасування", "СКА
 // P2P без опису, імпорт CSV без колонки опису — мовчки зникало з доходу. Прогнано: зарплата
 // 5000 ₴ з `merchant IS NULL` давала дохід 0. Це той самий клас, що §COMPENSATION v1: гроші не
 // потрапляли ні у витрати, ні в дохід. Порожній рядок під LIKE — звичайний false.
-const REFUND_DESC = REFUND_PREFIXES.map((w) => `COALESCE(t.merchant, '') LIKE '${w}%'`).join(" OR ");
+export const refundDescOn = (col: string) => REFUND_PREFIXES.map((w) => `COALESCE(${col}, '') LIKE '${w}%'`).join(" OR ");
+const REFUND_DESC = refundDescOn("t.merchant");
 // ⚠️ Категорія мусить ІСНУВАТИ: `COALESCE(..., 0)` зробив би рефандом будь-яке надходження
 // без категорії — зокрема вхідний P2P «Від: Кирило», який є справжнім доходом. Некатегоризований
 // рефанд ловиться другою ознакою (описом), а не відсутністю категорії.

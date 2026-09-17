@@ -24,6 +24,14 @@
   Mono keeps only its NORMALISATION (§R2-CUR1 original_*), which is the rule
   `providers/provider.ts` already stated. Held by `ingest.test.ts` (10) + `integrations.test.ts`
   (the two unified behaviours have their own scenario).
+- **§CSV-STATE (2026-09-17): a row that did not settle is not a purchase.** Revolut (`State`) and
+  most European exports (`Status`) list DECLINED, REVERTED and PENDING card attempts beside real
+  ones, with the full amount — every declined retry imported as a second purchase. A status column
+  is now guessed (`HINTS.status`) and such rows are skipped with a reason in the preview. Pending is
+  skipped too: it settles later and the next export brings it. Real header rows of Raiffeisen,
+  monobank, PrivatBank, Revolut and Wise are pinned in `bank-exports.test.ts` — all five map without
+  a model call. The owner's real MyRaif file reconciles to the kopiyka: the sum of its 11 rows
+  equals closing minus opening balance from its preamble.
 - **§CSV-DEBIT (2026-09-02): виписка носить суму У ДВОХ ФОРМАХ, і другу читали НЕПРАВИЛЬНО.**
   - **Одна ЗНАКОВА колонка** («Сума» з мінусом на витрату) — так робить моно й більшість карткових
     експортів. Не змінилось нічого.
@@ -85,6 +93,21 @@
   all, owner included:** there is no single-user history to stay compatible with.
 
 ## Заглушка рахунку й авторитет ручної назви
+
+- **§RENAME-MEMORY (2026-09-17): a name the person keeps typing over a bank description is applied
+  for them.** `upsertCanonicalTx` asks `repo/rename-memory.ts` when no alias named the row: if the
+  two most recent MANUAL renames of the same `raw_json.description`, at an amount within 15% and of
+  the same sign, agree on one name, the new row gets that name. Derived from history, not stored —
+  a second table would keep a rule alive after the person changed their mind. The explicit
+  «remember» checkbox (a manual alias) still outranks it.
+  ⚠️ `name_locked` is now three-state: **0** free, **1** typed by the person, **2** applied by this
+  memory. Enrich leaves both 1 and 2 alone; learning reads ONLY 1, or one rule would reinforce
+  itself from its own output forever.
+  The rename is written to the change journal (`ai_changes`, field `merchant`, source
+  `rename_memory`), so the operation says the app did it, and «Повернути» restores the bank's text
+  and frees the row (2 → 0). The detail page now also shows the bank's own text under the name.
+  ⚠️ CSV rows carry no `raw_json`, so they cannot TEACH the memory (they can still receive a name
+  learned from bank-feed rows). Pinned by `rename-memory.test.ts`.
 
 - **Подія інжесту НЕ втрачається через невідомий рахунок (§STUB-ACC, 2026-08-07).** `upsertMonoTx`
   сам створює рядок-ЗАГЛУШКУ (`id` + валюта + баланс, `type`/`title` = NULL), якщо рахунку ще
