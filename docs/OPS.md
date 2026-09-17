@@ -21,6 +21,8 @@ D1 `directory` = `c72e2571-1fbb-44b2-8308-5a961aef9670`, секрети на м�
 
 1. **Деплой:** `npm run deploy` (build + wrangler deploy). Нові міграції — спершу
    `npm run db:migrate:remote` (і `npm run db:dir:migrate:remote` для `directory`).
+   ⚠️ 2026-09-17: `directory` 0011 (§QUICK-ADD) must be applied BEFORE the deploy — issuing a
+   phone token writes `users.quickadd_version`; without the column the button returns a 500.
    ⚠️ **Розклад крону змінився 2026-09-02:** тижневий і місячний звіти переїхали з `0 9` на `0 4`
    UTC (полудень за Києвом → 06:00–07:00). `wrangler deploy` перереєстровує тригери сам, але старий
    розклад живе, поки деплою не було — тобто звіт і далі приходитиме опівдні.

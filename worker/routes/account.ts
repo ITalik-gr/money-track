@@ -9,10 +9,12 @@ import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import type { Env } from "../env.ts";
 import { CLEAR_COOKIE_OPTS, DEMO_COOKIE, SESSION_COOKIE } from "../lib/platform/auth.ts";
-import { bumpTokenVersion, deleteUser, findUserById, issueMcpVersion, revokeMcp } from "../lib/platform/directory.ts";
-import { createMcpToken } from "../lib/platform/auth.ts";
+import {
+  bumpTokenVersion, deleteUser, findUserById, issueMcpVersion, revokeMcp, issueQuickAddVersion, revokeQuickAdd,
+} from "../lib/platform/directory.ts";
+import { createMcpToken, createQuickAddToken } from "../lib/platform/auth.ts";
 import { countUserGrants, deleteUserGrants } from "../lib/platform/oauth-store.ts";
-import type { McpStatus, McpToken } from "../../shared/api/index.ts";
+import type { McpStatus, McpToken, QuickAddStatus, QuickAddToken } from "../../shared/api/index.ts";
 
 export const account = new Hono<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>();
 
@@ -40,6 +42,8 @@ account.post("/logout-all", async (c) => {
    */
   await revokeMcp(c.env.DIRECTORY, userId);
   await deleteUserGrants(c.env.DIRECTORY, userId);
+  // §QUICK-ADD: the phone's token is a credential too — «someone has my credentials» covers it.
+  await revokeQuickAdd(c.env.DIRECTORY, userId);
   setCookie(c, SESSION_COOKIE, "", CLEAR_COOKIE_OPTS);
   setCookie(c, DEMO_COOKIE, "", { ...CLEAR_COOKIE_OPTS, httpOnly: true });
   return c.json({ ok: true });
@@ -154,4 +158,42 @@ account.delete("/mcp", async (c) => {
    */
   await deleteUserGrants(c.env.DIRECTORY, userId);
   return c.json({ active: false, connected_clients: 0, issued_at: null, url: mcpUrl(c.req.url) } satisfies McpStatus);
+});
+
+// ---- §QUICK-ADD: the write-only phone token -------------------------------------------------
+// The same three verbs and the same once-only rule as `/mcp` above; a separate generation, so
+// rotating the phone's token leaves Claude connected and vice versa.
+
+const quickAddUrl = (reqUrl: string) => `${new URL(reqUrl).origin}/quick-add`;
+
+account.get("/quick-add", async (c) => {
+  const userId = c.get("userId");
+  if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
+  const me = await findUserById(c.env.DIRECTORY, userId);
+  if (!me) return c.json({ error: "not_found" }, 404);
+  return c.json({
+    active: me.quickadd_issued_at != null, issued_at: me.quickadd_issued_at ?? null, url: quickAddUrl(c.req.url),
+  } satisfies QuickAddStatus);
+});
+
+account.post("/quick-add", async (c) => {
+  const userId = c.get("userId");
+  if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
+  if (!c.env.SESSION_SECRET && !c.env.APP_PASSWORD) {
+    return c.json({ error: "no_signing_key", detail: "SESSION_SECRET is not set" }, 500);
+  }
+  const version = await issueQuickAddVersion(c.env.DIRECTORY, userId);
+  const token = await createQuickAddToken(c.env, userId, version);
+  const me = await findUserById(c.env.DIRECTORY, userId);
+  return c.json({
+    token, active: true, url: quickAddUrl(c.req.url),
+    issued_at: me?.quickadd_issued_at ?? Math.floor(Date.now() / 1000),
+  } satisfies QuickAddToken);
+});
+
+account.delete("/quick-add", async (c) => {
+  const userId = c.get("userId");
+  if (userId.startsWith("demo:")) return c.json({ error: "demo_has_no_account" }, 400);
+  await revokeQuickAdd(c.env.DIRECTORY, userId);
+  return c.json({ active: false, issued_at: null, url: quickAddUrl(c.req.url) } satisfies QuickAddStatus);
 });

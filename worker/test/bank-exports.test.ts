@@ -10,6 +10,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findHeaderRow, toCanonical, type ColumnMapping } from "../lib/bank/providers/csv.ts";
+import { cleanUserMapping } from "../lib/bank/statement-import.ts";
 
 async function read(rows: string[][]) {
   const { index, mapping } = findHeaderRow(rows);
@@ -85,4 +86,13 @@ test("Wise: the plain «Amount» column, not «Exchange Rate» or «Total fees»
   assert.equal(r.header[r.mapping.amount!], "Amount");
   assert.equal(r.header[r.mapping.date!], "Date");
   assert.deepEqual(r.txs.map((t) => t.amount), [-840]);
+});
+
+test("a column choice from the client is kept only when it can mean a column", () => {
+  assert.deepEqual(
+    cleanUserMapping({ date: 0, amount: "x", description: 9, comment: null, mcc: 2.5, credit: -1, status: 3, evil: 1 }, 4),
+    { date: 0, comment: null, status: 3 },
+  );
+  assert.deepEqual(cleanUserMapping({ amount: null }, 4), {}, "a mandatory column cannot be cleared");
+  assert.equal(cleanUserMapping("nope", 4), undefined);
 });

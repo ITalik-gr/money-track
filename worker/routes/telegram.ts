@@ -10,6 +10,7 @@ import type { Env } from "../env.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
 import { computeSummary, createCashTx, recentTransactions } from "../lib/finance/finance.ts";
 import { parseText } from "../lib/ai/parse-text.ts";
+import { telegramSecretOk } from "../lib/platform/auth.ts";
 import {
   answerCallbackQuery, editMessageText, sendChatAction, sendMessage, type TgUpdate,
 } from "../lib/messaging/telegram.ts";
@@ -219,9 +220,8 @@ async function handleCallback(env: Env, chatId: number, messageId: number, cbId:
 // ---- webhook route ----------------------------------------------------------
 
 telegram.post("/:secret", async (c) => {
-  // 1) секретний сегмент шляху, 2) заголовок від Telegram — обидва мають збігтися.
-  if (!c.env.TG_SECRET || c.req.param("secret") !== c.env.TG_SECRET) return c.text("forbidden", 403);
-  if (c.req.header("X-Telegram-Bot-Api-Secret-Token") !== c.env.TG_SECRET) return c.text("forbidden", 403);
+  // The secret path segment AND Telegram's header, constant-time — the Worker checked the same first.
+  if (!telegramSecretOk(c.env, c.req.param("secret"), c.req.header("X-Telegram-Bot-Api-Secret-Token"))) return c.text("forbidden", 403);
 
   let update: TgUpdate;
   try { update = await c.req.json<TgUpdate>(); } catch { return c.text("bad json", 400); }

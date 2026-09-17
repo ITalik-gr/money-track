@@ -159,6 +159,45 @@ allowlist chat_id. Знайдене й закрите:
   ⚠️ `/mcp` — поза `/api/*`, тож він МУСИТЬ бути в `assets.run_worker_first` (`docs/OPS.md`): інакше
   клієнт отримає SPA-шелл і поскаржиться на «невалідний JSON», що читається як зламаний сервер.
   Тримається `worker/test/mcp.test.ts` (20 сценаріїв; вісім із них — про сам креденшел).
+- **Whole-perimeter pass (2026-09-17)** — the review the ARCH move left owed. Read: the session
+  guard, `/api/me`, the bank and Telegram webhooks, Google OAuth (state/nonce/`safeNext`), the
+  Mini App sign-in (`auth_date` window), identity forwarding (`withUserHeader` SETS, never merges),
+  admin (owner re-read per request), backups (name regex + per-user prefix), the OAuth consent
+  flow and the MCP/quick-add guards. Four fixes, none of them a data leak:
+  1. **`/tg/*` now proves Telegram sent the update before doing anything.** The Worker used to
+     parse the body, query `tg_links` and could make the bot message an arbitrary chat, and only
+     the object compared the secret — with `!==`. `telegramSecretOk` (constant-time, path AND
+     header) now runs in both hops.
+  2. **`POST /oauth/authorize` re-checks the session's generation and status**, as the GET does.
+     A consent blob fetched before «sign out everywhere» could otherwise be submitted with the
+     revoked cookie and mint a grant that outlives the sign-out.
+  3. **`/api/me` treats a revoked-generation cookie as signed out**, so other devices stop showing
+     a logged-in shell that answers 401 to everything.
+  4. **The consent page sends `frame-ancestors 'none'`** — the Telegram framing exemption is for
+     the app, and a grant button is the classic clickjacking target.
+  Checked and fine: the DO is reachable only through the Worker; every forward sets the identity
+  headers; demo ids cannot pass any bearer verifier; admin is re-read, not cookie-trusted.
+- **§QUICK-ADD (2026-09-17, directory 0011): a fourth key — write-only, for iPhone shortcuts.**
+  `POST /quick-add` with `Authorization: Bearer mtadd1.…` records ONE operation (a Wallet
+  automation after Apple Pay, a home-screen button, Siri). The owner chose a narrow token over
+  reusing the MCP one: a shortcut lives on a phone and in screenshots of the automation, and a
+  leak of it should cost «someone can add rows», not «someone can read my finances».
+  ⚠️ **Write-only is structural, twice:** the prefix is signed (an MCP token or a session cookie
+  does not verify as `mtadd1`, and `mtadd1` verifies nowhere else), and `quickAddGuard` is mounted
+  on one method and one path. `createBearer`/`verifyBearer` (`lib/platform/auth.ts`) are now the
+  shared body of both bearer types, so the two cannot drift in their checks.
+  ⚠️ Same full set as `mcpGuard`: signature → account open → OWN generation
+  (`users.quickadd_version`) → own rate-limit bucket → the same `toUserDo`. «Sign out everywhere»
+  revokes it too. No CORS: the caller is the Shortcuts app, never a web page.
+  ⚠️ `/quick-add` is in `assets.run_worker_first`. **Deploy needs `db:dir:migrate:remote`
+  first** — issuing a token writes the new columns.
+  The write itself goes through `upsertCanonicalTx` (`services/quick-add.ts`), so rules,
+  §RENAME-MEMORY and §ENRICH-GATE apply as to a bank row. Double counts are refused three ways: a
+  card whose name matches a bank-synced account (`synced` — the webhook can land AFTER the
+  shortcut, so a time window alone loses that race), the same signed amount already recorded
+  within 15 min, and the same shortcut firing twice within 2 min. ⚠️ A CSV imported later is not
+  seen by any of them; the settings card tells people to point the automation only at cards no
+  feed or statement brings in. Pinned by `quick-add.test.ts`.
 - **§MCP-OAUTH (2026-08-23, directory 0010): цей деплой САМ став authorization server —
   для власного ж `/mcp`.** Тепер конектор додається в Claude Desktop / claude.ai / телефоні
   адресою і нічим більше: `POST /mcp` віддає 401 з `WWW-Authenticate: … resource_metadata="…"`,

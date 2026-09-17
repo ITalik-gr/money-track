@@ -108,3 +108,32 @@ export interface McpToken extends McpStatus {
   /** Shown once and never again. */
   token: string;
 }
+
+/** §QUICK-ADD — the write-only phone token. Same once-only promise as `McpStatus`. */
+export interface QuickAddStatus {
+  active: boolean;
+  issued_at: number | null;
+  /** Absolute endpoint the shortcut POSTs to. */
+  url: string;
+}
+export interface QuickAddToken extends QuickAddStatus { token: string }
+
+/** What a shortcut may send. Every field is a string when it arrives as a form. */
+export interface QuickAddBody {
+  /** What was paid, positive («181», «₴181.00», «1 250,50 EUR»). */
+  amount?: number | string;
+  merchant?: string;
+  /** The Wallet card name — matched against account titles. */
+  card?: string;
+  /** A free line instead of amount+merchant: «200 кава». */
+  text?: string;
+  note?: string;
+  /** ISO letters, when the amount text carries no currency. */
+  currency?: string;
+  income?: boolean;
+}
+export type QuickAddResult =
+  | { ok: true; status: "added" | "duplicate"; id: string }
+  /** The card belongs to an account a bank already syncs — the feed will bring this operation. */
+  | { ok: true; status: "synced"; account: string | null }
+  | { ok: false; error: "amount_required" };

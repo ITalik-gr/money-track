@@ -21,7 +21,7 @@
  *     be listed too — see `cspForFormTarget`.
  * Neither shows up on any other page, because nothing else in this app posts a form at all.
  */
-export function cspDirectives(formAction: string[]): string {
+export function cspDirectives(formAction: string[], frameAncestors = "'self' https://web.telegram.org"): string {
   return [
     "default-src 'self'",
     "script-src 'self'",
@@ -29,7 +29,7 @@ export function cspDirectives(formAction: string[]): string {
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'",
-    "frame-ancestors 'self' https://web.telegram.org",
+    `frame-ancestors ${frameAncestors}`,
     "base-uri 'self'",
     `form-action ${formAction.join(" ")}`,
     "object-src 'none'",
@@ -50,7 +50,9 @@ export const CSP = cspDirectives(["'self'"]);
 export function cspForFormTarget(pageOrigin: string, redirectUri: string): string {
   let target = "";
   try { target = new URL(redirectUri).origin; } catch { target = ""; }
-  return cspDirectives(["'self'", pageOrigin, ...(target && target !== pageOrigin ? [target] : [])]);
+  // `frame-ancestors 'none'`: a grant button is the classic clickjacking target, and the consent
+  // page is never legitimately framed — the Telegram exemption exists for the app, not for this.
+  return cspDirectives(["'self'", pageOrigin, ...(target && target !== pageOrigin ? [target] : [])], "'none'");
 }
 
 export const SECURITY_HEADERS: Record<string, string> = {

@@ -136,32 +136,59 @@ export async function verifySession(
  * disabled. A signature proves the number was not edited, not that it is still current.
  */
 const MCP_VERSION = "mtmcp1";
-const MCP_TTL = 60 * 60 * 24 * 365;
+/**
+ * §QUICK-ADD (2026-09-17): the write-only phone token. Same shape, same year, its own prefix —
+ * and the prefix is what makes it write-only: it is accepted by `/quick-add` and nowhere else,
+ * and an MCP token is not accepted there. The signature covers the prefix, so one cannot be
+ * relabelled as the other.
+ */
+const QUICKADD_VERSION = "mtadd1";
+const BEARER_TTL = 60 * 60 * 24 * 365;
 
-export async function createMcpToken(env: Env, userId: string, mcpVersion: number): Promise<string> {
+async function createBearer(env: Env, prefix: string, userId: string, generation: number): Promise<string> {
   const key = signingKey(env);
   if (!key) throw new Error("no signing key: set SESSION_SECRET (or APP_PASSWORD)");
-  const exp = String(Math.floor(Date.now() / 1000) + MCP_TTL);
-  const payload = `${MCP_VERSION}.${userId}.${exp}.${mcpVersion}`;
+  const exp = String(Math.floor(Date.now() / 1000) + BEARER_TTL);
+  const payload = `${prefix}.${userId}.${exp}.${generation}`;
   return `${payload}.${await hmacHex(key, payload)}`;
 }
+
+async function verifyBearer(
+  env: Env, prefix: string, token: string | undefined,
+): Promise<{ userId: string; generation: number } | null> {
+  const key = signingKey(env);
+  if (!token || !key) return null;
+  const parts = token.split(".");
+  if (parts.length !== 5) return null;
+  const [version, userId, exp, gen, sig] = parts as [string, string, string, string, string];
+  if (version !== prefix) return null;
+  // Hex-only ids are also what keeps a demo sandbox out: its name is `demo:<random>`, which
+  // cannot survive this test, so a sandbox can never hold a bearer token no matter what is signed.
+  if (!/^[0-9a-f]+$/.test(userId) || !/^\d+$/.test(exp) || !/^\d+$/.test(gen)) return null;
+  if (Number(exp) < Date.now() / 1000) return null;
+  const expected = await hmacHex(key, `${version}.${userId}.${exp}.${gen}`);
+  return timingSafeEqual(sig, expected) ? { userId, generation: Number(gen) } : null;
+}
+
+export const createMcpToken = (env: Env, userId: string, mcpVersion: number) =>
+  createBearer(env, MCP_VERSION, userId, mcpVersion);
 
 /** Returns the user and the generation the token claims, or `null`. Never throws. */
 export async function verifyMcpToken(
   env: Env, token: string | undefined,
 ): Promise<{ userId: string; mcpVersion: number } | null> {
-  const key = signingKey(env);
-  if (!token || !key) return null;
-  const parts = token.split(".");
-  if (parts.length !== 5) return null;
-  const [version, userId, exp, mv, sig] = parts as [string, string, string, string, string];
-  if (version !== MCP_VERSION) return null;
-  // Hex-only ids are also what keeps a demo sandbox out: its name is `demo:<random>`, which
-  // cannot survive this test, so a sandbox can never hold an MCP token no matter what is signed.
-  if (!/^[0-9a-f]+$/.test(userId) || !/^\d+$/.test(exp) || !/^\d+$/.test(mv)) return null;
-  if (Number(exp) < Date.now() / 1000) return null;
-  const expected = await hmacHex(key, `${version}.${userId}.${exp}.${mv}`);
-  return timingSafeEqual(sig, expected) ? { userId, mcpVersion: Number(mv) } : null;
+  const c = await verifyBearer(env, MCP_VERSION, token);
+  return c ? { userId: c.userId, mcpVersion: c.generation } : null;
+}
+
+export const createQuickAddToken = (env: Env, userId: string, version: number) =>
+  createBearer(env, QUICKADD_VERSION, userId, version);
+
+export async function verifyQuickAddToken(
+  env: Env, token: string | undefined,
+): Promise<{ userId: string; quickAddVersion: number } | null> {
+  const c = await verifyBearer(env, QUICKADD_VERSION, token);
+  return c ? { userId: c.userId, quickAddVersion: c.generation } : null;
 }
 
 /**
@@ -308,4 +335,19 @@ export async function verifyShortLived(env: Env, token: string | undefined): Pro
   if (!/^\d+$/.test(exp) || Number(exp) < Date.now() / 1000) return null;
   const expected = await hmacHex(key, `${value}.${exp}`);
   return timingSafeEqual(sig, expected) ? value : null;
+}
+
+/**
+ * Is this a genuine Telegram webhook call: the secret path segment AND the secret-token header
+ * Telegram sends back, both equal to `TG_SECRET`, compared in constant time.
+ *
+ * One function for both hops (security pass, 2026-09-17). The check used to live only inside the
+ * Durable Object, and with `!==`: the Worker parsed a stranger's body, looked the chat up in the
+ * directory and could make the bot write to an arbitrary chat BEFORE anything proved Telegram sent
+ * the update. The Worker now refuses first; the object keeps its own check as the second layer.
+ */
+export function telegramSecretOk(env: Env, pathSecret: string | undefined, header: string | undefined): boolean {
+  const secret = env.TG_SECRET;
+  if (!secret || !pathSecret || !header) return false;
+  return timingSafeEqual(pathSecret, secret) && timingSafeEqual(header, secret);
 }

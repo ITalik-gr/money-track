@@ -23,7 +23,9 @@ import { ingest } from "./routes/ingest.ts";
 import { credentials } from "./routes/credentials.ts";
 import { importRoutes } from "./routes/import.ts";
 import { webhook } from "./routes/webhook.ts";
+import { errorBody } from "./lib/platform/error-body.ts";
 import { mcp } from "./routes/mcp.ts";
+import { quickAdd } from "./routes/quick-add.ts";
 import { telegram } from "./routes/telegram.ts";
 import { checkRate, isAiPath } from "./lib/platform/ratelimit.ts";
 
@@ -100,6 +102,8 @@ userApp.route("/tg", telegram);
 // Authenticated in the Worker by a bearer token — by the time a request reaches here it has
 // already been resolved to this object, exactly like a session request.
 userApp.route("/mcp", mcp);
+// §QUICK-ADD — authenticated in the Worker by the write-only phone token (see `quickAddGuard`).
+userApp.route("/quick-add", quickAdd);
 userApp.route("/api", api);
 
 userApp.all("*", (c) => c.json({ error: "not_found", detail: new URL(c.req.url).pathname }, 404));
@@ -110,7 +114,7 @@ userApp.all("*", (c) => c.json({ error: "not_found", detail: new URL(c.req.url).
 // written to end.
 userApp.onError((err, c) => {
   const path = new URL(c.req.url).pathname;
-  const msg = err instanceof Error ? err.message : String(err);
-  console.error(`[user-do] ${c.req.method} ${path} failed:`, msg, err instanceof Error ? err.stack : "");
-  return c.json({ error: msg || "internal_error", detail: `${c.req.method} ${path}` }, 500);
+  const { body, ref, msg } = errorBody(err, c.req.method, path, c.env.IS_OWNER === true);
+  console.error(`[user-do] ${c.req.method} ${path} failed (ref ${ref}):`, msg, err instanceof Error ? err.stack : "");
+  return c.json(body, 500);
 });

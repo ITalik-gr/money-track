@@ -37,34 +37,12 @@
 > connector. There is no card here an unattended run can finish, which is the honest state of the
 > queue rather than a gap in it.
 >
-> Closed 2026-09-17: statement import (the real MyRaif file reconciles; §CSV-STATE), §VOID-PAIR,
+> Closed 2026-09-17: the whole-perimeter security pass (docs/PERIMETER.md), §QUICK-ADD (iPhone shortcuts, write-only token), statement import (the real MyRaif file reconciles; §CSV-STATE), §VOID-PAIR,
 > §RENAME-MEMORY, §MERCH-QUIET. The one-off §ENRICH-GATE backfill was dropped — the owner: not
 > needed, the next billing cycle heals it.
 >
 > Closed 2026-09-04 (overnight): C11, §ENV-PARTS, §ADVICE-LOOP, and the C3 slack — the last one
 > written up as «C3 has no ratchet DOWN», **which turned out to be false**. See `HISTORY.md`.
-
-### Швидке додавання з телефона: шорткат iOS (половина TG — зроблена)
-
-> Власник, 2026-09-02: «треба буде колись обдумати варіант шорткатів на айфоні після оплати (якщо
-> банк цей не привязаний), типу оплатили — нотіфай надсилати що додай цю транзакцію ізі, чи щоб ізі
-> якось можна було виписки закидати в апку з тг».
-
-**Зроблено 2026-09-02: §TG-CSV — виписку можна кинути в чат боту.** Друга половина картки закрита;
-`docs/INGEST.md` §TG-CSV. Конвеєр виписки при цьому переїхав із роуту в
-`lib/bank/statement-import.ts`, бо бот став другим викликом того самого коду.
-
-**Лишився шорткат «додати операцію» після оплати — і він потребує РІШЕННЯ, не коду.**
-iOS Shortcuts уміє автоматизацію по NFC/додатку, але НЕ по «щойно пройшла оплата чужою карткою» —
-такого тригера немає. Реалістичне: шорткат на екрані / у Share Sheet, що відкриває `/add` з
-передзаповненою сумою, або POST-ить у застосунок готову операцію.
-
-**Питання, на яке треба відповісти першим:** потрібен ключ НА ПРИСТРОЇ, і це ЧЕТВЕРТИЙ ключ до
-акаунта після Google, TG і MCP (`docs/PERIMETER.md`). Або переиспользовуємо MCP-токен (нічого
-нового не заводимо, але шорткат отримує повний доступ до читання), або заводимо вузький
-write-only токен саме під «додай операцію».
-
-**Готово-коли:** вибрано, який це креденшел.
 
 ### UI-черга з живого прода
 
@@ -186,13 +164,8 @@ write-only токен саме під «додай операцію».
   у них інша природа, прогрес у %, а не «готово».
 - **Lazy-enrich** (варіант B) — за узгодженням.
 - **Prompt-кеш verify** на проді (`cache_read` у логах) — потребує деплою.
-- **Тексти помилок віддають сиру причину** (свідоме рішення, «Обробка помилок» у `CLAUDE.md`). Якщо
-  зʼявляться сторонні юзери поза колом друзів — сховати `detail` за owner-прапорцем.
 - **`src/pages/Stats.tsx`** — оболонка вже виділена, блоки в `components/stats/`; лишився розмір.
-- **Останні 3 inline-запити в шарі роутів**, усі в `telegram.ts`. Правило, яке тримало весь
-  переїзд: **жоден запит не переїжджає, поки щось не здатне спіймати помилку.** Бот — найнезручніший:
-  його хендлери керуються payload-ом апдейту, а вивід — це `fetch` у Telegram API.
-- **Перезапустити `/security-review`.** Периметр переїхав разом із кодом.
+
 
 ---
 

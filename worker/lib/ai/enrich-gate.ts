@@ -175,3 +175,24 @@ export async function applyCarry(env: Env, id: string, recurring: 0 | 1): Promis
     "UPDATE transactions SET ai_recurring = ? WHERE id = ? AND ai_recurring IS NULL",
   ).bind(recurring, id).run();
 }
+
+/**
+ * The gate, applied to one freshly written row: ask, carry, or skip. Shared by every live ingest
+ * path (the bank webhook, §QUICK-ADD) so a second caller cannot quietly enrich by a different
+ * rule. Best-effort: a failed enrichment never fails the write that preceded it.
+ */
+export async function enrichAfterIngest(env: Env, txId: string): Promise<void> {
+  try {
+    if (!env.ANTHROPIC_API_KEY) return;
+    const row = await gateRow(env, txId);
+    const v = row ? await enrichVerdict(env, row) : { verdict: "skip" as const, why: "no row" };
+    if (v.verdict === "ask") {
+      const { enrichOne } = await import("./enrich.ts");
+      await enrichOne(env, txId);
+    } else if (v.verdict === "carry") {
+      await applyCarry(env, txId, v.recurring);
+    }
+  } catch {
+    /* enrichment is best-effort */
+  }
+}

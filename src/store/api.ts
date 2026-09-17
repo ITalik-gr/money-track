@@ -14,7 +14,7 @@ import type {
   BudgetHistory, BudgetPlanResult, CapitalTrend, CashflowCalendar, CategoryDrill, CategorySpend, Compare,
   CredentialStatus, CurrenciesList, DomAnalytics, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
   BankConnections, CashProjection, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
-  KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, MerchantAnalytics, MonthlyHistory, Networth,
+  KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, QuickAddStatus, QuickAddToken, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, AiDetectResult, SubscriptionOverview, BudgetStatusList, CategoryOverview, CategoryShape, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SpendingShape, SetupStatus, SliceDrill, SparkData, SpendPatterns,
@@ -47,7 +47,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule", "Mcp"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule", "Mcp", "QuickAdd"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -765,6 +765,14 @@ export const api = createApi({
     revokeMcpToken: b.mutation<McpStatus, void>({
       query: () => ({ url: "/account/mcp", method: "DELETE" }), invalidatesTags: ["Mcp"],
     }),
+    // §QUICK-ADD: the write-only phone token — same once-only rule as the MCP one above.
+    getQuickAdd: b.query<QuickAddStatus, void>({ query: () => "/account/quick-add", providesTags: ["QuickAdd"] }),
+    issueQuickAddToken: b.mutation<QuickAddToken, void>({
+      query: () => ({ url: "/account/quick-add", method: "POST" }), invalidatesTags: ["QuickAdd"],
+    }),
+    revokeQuickAddToken: b.mutation<QuickAddStatus, void>({
+      query: () => ({ url: "/account/quick-add", method: "DELETE" }), invalidatesTags: ["QuickAdd"],
+    }),
     getBackups: b.query<BackupList, void>({ query: () => "/backups", providesTags: ["Backup"] }),
     runBackup: b.mutation<{ ok: boolean; size: number }, void>({
       query: () => ({ url: "/backups/run", method: "POST" }), invalidatesTags: ["Backup"],
@@ -1154,6 +1162,9 @@ export const {
   useGetMcpQuery,
   useIssueMcpTokenMutation,
   useRevokeMcpTokenMutation,
+  useGetQuickAddQuery,
+  useIssueQuickAddTokenMutation,
+  useRevokeQuickAddTokenMutation,
   useGetBackupsQuery,
   useRunBackupMutation,
   useDeleteBackupMutation,

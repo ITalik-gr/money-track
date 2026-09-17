@@ -70,21 +70,8 @@ webhook.post("/:token", async (c) => {
    * Enrich holds too — вони тепер рахуються як витрата (stats.ts), тож мають мати категорію
    * одразу, а не лише після сеттлменту. Опис у hold-події вже повний.
    */
-  try {
-    if (c.env.ANTHROPIC_API_KEY) {
-      const { gateRow, enrichVerdict, applyCarry } = await import("../lib/ai/enrich-gate.ts");
-      const row = await gateRow(c.env, statementItem.id);
-      const v = row ? await enrichVerdict(c.env, row) : { verdict: "skip" as const, why: "no row" };
-      if (v.verdict === "ask") {
-        const { enrichOne } = await import("../lib/ai/enrich.ts");
-        await enrichOne(c.env, statementItem.id);
-      } else if (v.verdict === "carry") {
-        await applyCarry(c.env, statementItem.id, v.recurring);
-      }
-    }
-  } catch {
-    /* enrichment is best-effort */
-  }
+  const { enrichAfterIngest } = await import("../lib/ai/enrich-gate.ts");
+  await enrichAfterIngest(c.env, statementItem.id);
 
   // §F2 крок 2: пер-транзакційний TG-алерт про вагому непояснену операцію / перевищений
   // бюджет. У waitUntil — щоб не тримати відповідь вебхука (Telegram/AI можуть бути повільні).

@@ -28,6 +28,8 @@
 			// answer it — and the symptom would be an MCP client reporting invalid JSON, which
 			// reads as a broken server rather than as "the SPA shell was returned instead".
 			"/mcp",
+			// §QUICK-ADD — the phone shortcut's endpoint; outside `/api/*` for the same reason as `/mcp`.
+			"/quick-add",
 			// §MCP-OAUTH. `/.well-known/*` is the one Anthropic's own docs single out as the
 			// classic Cloudflare failure: without it the asset router serves the SPA shell, the
 			// client never finds the authorization server, and the only symptom is "couldn't

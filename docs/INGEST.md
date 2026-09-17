@@ -106,8 +106,9 @@
   The rename is written to the change journal (`ai_changes`, field `merchant`, source
   `rename_memory`), so the operation says the app did it, and «Повернути» restores the bank's text
   and frees the row (2 → 0). The detail page now also shows the bank's own text under the name.
-  ⚠️ CSV rows carry no `raw_json`, so they cannot TEACH the memory (they can still receive a name
-  learned from bank-feed rows). Pinned by `rename-memory.test.ts`.
+  CSV rows store their source row as `raw_json` (`{description, row}`) since the same day, so an
+  import teaches the memory too; rows imported before that carry none. Pinned by
+  `rename-memory.test.ts`.
 
 - **Подія інжесту НЕ втрачається через невідомий рахунок (§STUB-ACC, 2026-08-07).** `upsertMonoTx`
   сам створює рядок-ЗАГЛУШКУ (`id` + валюта + баланс, `type`/`title` = NULL), якщо рахунку ще

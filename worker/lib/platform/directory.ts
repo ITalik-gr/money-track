@@ -34,6 +34,9 @@ export interface DirectoryUser {
   mcp_version: number;
   /** When the current MCP token was issued; NULL = never issued, or revoked since. */
   mcp_issued_at: number | null;
+  /** §QUICK-ADD write-only token generation (migration 0011) — the same mechanism, a third number. */
+  quickadd_version?: number;
+  quickadd_issued_at?: number | null;
 }
 
 /** What a user's Durable Object reports about itself. Volume only — never amounts. */
@@ -266,6 +269,22 @@ export async function issueMcpVersion(db: D1Database, id: string): Promise<numbe
 export async function revokeMcp(db: D1Database, id: string): Promise<void> {
   await db.prepare(
     "UPDATE users SET mcp_version = mcp_version + 1, mcp_issued_at = NULL WHERE id = ?",
+  ).bind(id).run();
+}
+
+/** §QUICK-ADD: the same two operations as the MCP pair above, for the write-only phone token. */
+export async function issueQuickAddVersion(db: D1Database, id: string): Promise<number> {
+  await db.prepare(
+    "UPDATE users SET quickadd_version = quickadd_version + 1, quickadd_issued_at = ? WHERE id = ?",
+  ).bind(Math.floor(Date.now() / 1000), id).run();
+  const row = await db.prepare("SELECT quickadd_version FROM users WHERE id = ?").bind(id).first<{ quickadd_version: number }>();
+  if (!row) throw new Error("user vanished while issuing a quick-add token");
+  return row.quickadd_version;
+}
+
+export async function revokeQuickAdd(db: D1Database, id: string): Promise<void> {
+  await db.prepare(
+    "UPDATE users SET quickadd_version = quickadd_version + 1, quickadd_issued_at = NULL WHERE id = ?",
   ).bind(id).run();
 }
 

@@ -7,11 +7,12 @@ import { auth } from "./routes/auth.ts";
 import { admin } from "./routes/admin.ts";
 import { backups } from "./routes/backups.ts";
 import { account } from "./routes/account.ts";
+import { errorBody } from "./lib/platform/error-body.ts";
 import { oauth } from "./routes/oauth.ts";
 import { wellKnown } from "./routes/wellknown.ts";
 import {
   SESSION_COOKIE, CLEAR_COOKIE_OPTS, verifySession, verifyWebhookToken,
-  DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId, timingSafeEqual, verifyMcpToken,
+  DEMO_COOKIE, createDemoToken, verifyDemoToken, newDemoId, timingSafeEqual, verifyMcpToken, verifyQuickAddToken,
 } from "./lib/platform/auth.ts";
 import { canonicalResource, verifyAccessToken, MCP_SCOPE } from "./lib/platform/oauth.ts";
 import { withUserHeader } from "./lib/platform/forward.ts";
@@ -44,12 +45,12 @@ async function resolveRequestUser(env: Env, cookieHeader: {
 // of every single API call; an outright revocation still needs the cookie to expire, which is the
 // known trade-off of stateless sessions.
 const ACCESS_TTL_MS = 60_000;
-interface Access { ok: boolean; isOwner: boolean; tokenVersion: number; mcpVersion: number }
+interface Access { ok: boolean; isOwner: boolean; tokenVersion: number; mcpVersion: number; quickAddVersion: number }
 const accessCache = new Map<string, Access & { at: number }>();
 async function userAccess(env: Env, userId: string): Promise<Access> {
   const hit = accessCache.get(userId);
   if (hit && Date.now() - hit.at < ACCESS_TTL_MS) {
-    return { ok: hit.ok, isOwner: hit.isOwner, tokenVersion: hit.tokenVersion, mcpVersion: hit.mcpVersion };
+    return { ok: hit.ok, isOwner: hit.isOwner, tokenVersion: hit.tokenVersion, mcpVersion: hit.mcpVersion, quickAddVersion: hit.quickAddVersion };
   }
   const user = await findUserById(env.DIRECTORY, userId);
   const val: Access = {
@@ -60,6 +61,8 @@ async function userAccess(env: Env, userId: string): Promise<Access> {
     // The same, for MCP bearer tokens (directory 0009). A SEPARATE number so that revoking one
     // credential does not revoke the other; both are cached in the row the guard already reads.
     mcpVersion: user?.mcp_version ?? 0,
+    // §QUICK-ADD (directory 0011): the phone's write-only token, a third independent generation.
+    quickAddVersion: user?.quickadd_version ?? 0,
   };
   accessCache.set(userId, { at: Date.now(), ...val });
   return val;
@@ -161,6 +164,9 @@ app.get("/api/me", async (c) => {
   // A valid signature for a user that no longer exists means the row was deleted while the
   // cookie lived on. Treat it as signed out rather than half-authenticated.
   if (!user || user.status === "disabled") return c.json({ authenticated: false });
+  // …and a cookie from a revoked generation is signed out here too, not only at the API guard —
+  // otherwise «sign out everywhere» left other devices showing a logged-in shell of 401s.
+  if (!resolved.isDemo && resolved.tokenVersion !== (user.token_version ?? 0)) return c.json({ authenticated: false });
   return c.json({
     authenticated: true,
     user: {
@@ -422,6 +428,12 @@ const TG_LINK_PROMPT =
   "This chat is not linked to an account. Open Settings → «Telegram» in the app and press the link button.";
 
 app.all("/tg/*", async (c) => {
+  // Proof that TELEGRAM sent this, before the body is read or any chat is looked up or messaged.
+  const { telegramSecretOk } = await import("./lib/platform/auth.ts");
+  const pathSecret = new URL(c.req.url).pathname.split("/")[2];
+  if (!telegramSecretOk(c.env, pathSecret, c.req.header("X-Telegram-Bot-Api-Secret-Token"))) {
+    return c.text("forbidden", 403);
+  }
   const ns = c.env.USER_DO;
   let raw = c.req.raw;
   let target: { id: string; isOwner: boolean } | null = null;
@@ -604,6 +616,34 @@ app.use("/mcp", mcpGuard);
 app.all("/mcp", toUserDo);
 
 /**
+ * §QUICK-ADD (2026-09-17) — an iPhone shortcut adds one operation. Nothing else.
+ *
+ * The same full set of checks as `mcpGuard` (signature → account still open → generation →
+ * own rate-limit bucket), then the same `toUserDo`. Write-only is enforced twice: this guard
+ * accepts ONLY an `mtadd1` token, and it is mounted on ONE method and ONE path, so the token
+ * cannot be presented to `/api/*` (cookie guard) or `/mcp` (different prefix) at all.
+ * No CORS: the caller is the Shortcuts app, not a web page, and a browser has no business here.
+ */
+const quickAddGuard = createMiddleware<{ Bindings: Env; Variables: { userId: string; isOwner: boolean } }>(async (c, next) => {
+  const header = c.req.header("authorization") ?? "";
+  const token = /^Bearer /i.test(header) ? header.slice(7).trim() : undefined;
+  const claim = await verifyQuickAddToken(c.env, token);
+  if (!claim) return c.json({ error: "unauthorized" }, 401);
+  const access = await userAccess(c.env, claim.userId);
+  if (!access.ok || claim.quickAddVersion !== access.quickAddVersion) return c.json({ error: "unauthorized" }, 401);
+  const retry = rateLimited(`quickadd:${claim.userId}`, RL_GENERAL);
+  if (retry != null) {
+    return c.json({ error: "rate_limited", detail: `too many requests, retry in ${retry}s` }, 429, {
+      "retry-after": String(retry),
+    });
+  }
+  c.set("userId", claim.userId);
+  c.set("isOwner", access.isOwner);
+  await next();
+});
+app.post("/quick-add", quickAddGuard, toUserDo);
+
+/**
  * Share-target fallback (§PUSH).
  *
  * `POST /share-receipt` is meant to be handled by the SERVICE WORKER, which parks the file and
@@ -624,9 +664,11 @@ app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.onError((err, c) => {
   const path = new URL(c.req.url).pathname;
   if (!path.startsWith("/api") && !path.startsWith("/ingest")) throw err;
-  const msg = err instanceof Error ? err.message : String(err);
-  console.error(`[api] ${c.req.method} ${path} failed:`, msg, err instanceof Error ? err.stack : "");
-  return c.json({ error: msg || "internal_error", detail: `${c.req.method} ${path}` }, 500);
+  // `isOwner` is set only once the guard has run; anything that failed before it is treated as a stranger's.
+  const isOwner = (c as unknown as { get(k: string): unknown }).get("isOwner") === true;
+  const { body, ref, msg } = errorBody(err, c.req.method, path, isOwner);
+  console.error(`[api] ${c.req.method} ${path} failed (ref ${ref}):`, msg, err instanceof Error ? err.stack : "");
+  return c.json(body, 500);
 });
 
 export default {

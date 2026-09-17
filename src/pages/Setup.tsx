@@ -29,6 +29,7 @@ import { ExportCard } from "../components/settings/ExportCard.tsx";
 import { AiActivityCard } from "../components/settings/AiActivityCard.tsx";
 import { BackupCard } from "../components/settings/BackupCard.tsx";
 import { McpCard } from "../components/settings/McpCard.tsx";
+import { QuickAddCard } from "../components/settings/QuickAddCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
 import { TelegramCard } from "../components/settings/TelegramCard.tsx";
@@ -116,6 +117,7 @@ export function Setup() {
               other. Hidden in the demo: a sandbox lives 24h, so a token minted here would stop
               working the same day (the server refuses it outright, §MCP). */}
           {!isDemo && <McpCard />}
+          {!isDemo && <QuickAddCard />}
           {!isDemo && <SessionsCard />}
           {!isDemo && <DangerZone />}
         </div>

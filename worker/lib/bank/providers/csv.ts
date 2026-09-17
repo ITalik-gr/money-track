@@ -361,6 +361,7 @@ export async function toCanonical(
       mcc,
       description: description || null,
       comment: comment || null,
+      raw: { description: description || null, row }, // the file's own words (§RENAME-MEMORY reads them)
     });
   }
   return { txs, skipped };

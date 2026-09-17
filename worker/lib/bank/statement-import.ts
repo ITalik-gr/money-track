@@ -78,6 +78,27 @@ export async function resolveMapping(
   return { mapping: out, source: complete(out) ? "ai" : "hints" };
 }
 
+const MAPPING_KEYS = ["date", "amount", "description", "currency", "comment", "mcc", "credit", "status"] as const;
+const OPTIONAL_KEYS = new Set<string>(["currency", "comment", "mcc", "credit", "status"]);
+
+/**
+ * The column choices the CLIENT sent, reduced to what they can mean: known keys, integer indices
+ * inside the table. Anything else is dropped rather than refused — the hints fill the gap and the
+ * preview shows the result. Before this, `{"amount": "x"}` reached `row["x"]` and a wrong index
+ * silently read `undefined` cells as a file of unparseable rows. `null` survives only for the
+ * optional columns, where it is how the picker says «none».
+ */
+export function cleanUserMapping(m: unknown, width: number): Partial<ColumnMapping> | undefined {
+  if (!m || typeof m !== "object") return undefined;
+  const out: Record<string, number | null> = {};
+  for (const k of MAPPING_KEYS) {
+    const v = (m as Record<string, unknown>)[k];
+    if (v === null && OPTIONAL_KEYS.has(k)) out[k] = null;
+    else if (typeof v === "number" && Number.isInteger(v) && v >= 0 && v < width) out[k] = v;
+  }
+  return out as Partial<ColumnMapping>;
+}
+
 export interface StatementOpts {
   delimiter?: string;
   hasHeader?: boolean;
@@ -98,7 +119,8 @@ async function readTable(env: Env, text: string, o: StatementOpts) {
   const hasHeader = o.hasHeader ?? true;
   const found = hasHeader ? findHeaderRow(rows) : { index: 0, mapping: guessMapping(rows[0] ?? []) };
   const table = rows.slice(found.index);
-  const { mapping, source } = await resolveMapping(env, table, found.mapping, o.mapping);
+  const width = Math.max(0, ...table.slice(0, 50).map((r) => r.length));
+  const { mapping, source } = await resolveMapping(env, table, found.mapping, cleanUserMapping(o.mapping, width));
   return { delimiter, rows, table, hasHeader, preamble: found.index, mapping, source };
 }
 

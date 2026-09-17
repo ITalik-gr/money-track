@@ -199,7 +199,12 @@ oauth.post("/oauth/authorize", async (c) => {
   // screen. Otherwise a consent page left open in one account could be submitted from another,
   // granting a client access to a ledger its owner never saw named.
   const sess = await verifySession(c.env, getCookie(c, SESSION_COOKIE));
-  if (!sess || sess.userId !== p.u) {
+  // …and that the session is still CURRENT (security pass, 2026-09-17). The GET checks generation
+  // and status; without the same check here, a consent blob fetched before «sign out everywhere»
+  // could be submitted with the revoked cookie for the blob's lifetime and mint a fresh grant.
+  const me = sess ? await findUserById(c.env.DIRECTORY, sess.userId) : null;
+  const current = !!me && me.status !== "disabled" && sess!.tokenVersion === (me.token_version ?? 0);
+  if (!sess || sess.userId !== p.u || !current) {
     return c.redirect(backToClient(p.r, { error: "access_denied", error_description: "session changed", state: p.s }, issuerFor(c.req.url)), 302);
   }
   if (form.decision !== "allow") {

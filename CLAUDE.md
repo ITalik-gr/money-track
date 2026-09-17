@@ -8,8 +8,9 @@
 >
 > Стан: **у проді** (`https://money.italik.dev`), платформа-фаза, структурний рефактор (ARCH) і
 > банківська фаза закриті. Реєстрація ВІДКРИТА і тільки через Google; Telegram і MCP-токен —
-> ДРУГИЙ і ТРЕТІЙ ключі до наявного акаунта, створити ним акаунт не можна.
-> Міграції: `finance` до **0048**, `directory` до **0010**. Тестів — **936**.
+> ДРУГИЙ і ТРЕТІЙ ключі до наявного акаунта, створити ним акаунт не можна. The fourth key is the
+> write-only phone token (§QUICK-ADD).
+> Міграції: `finance` до **0049**, `directory` до **0011**. Тестів — **951**.
 > Оновлено 2026-09-10.
 
 ## 📁 Карта документів — що де лежить
@@ -314,6 +315,7 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 | §REVOKE | сесію можна відкликати (`token_version`), перевірка підпису — лише половина |
 | §D1 · §TG-OFF · §TG-ROUTE · §TG-SURFACE · §TG-MINIAPP | Telegram: персональний адресат, відвʼязка, маршрутизація, вхід |
 | §MCP · §MCP-OAUTH | bearer-токен і власний authorization server для конектора |
+| §QUICK-ADD | a fourth, write-only key for iPhone shortcuts: one method, one path, its own generation |
 | §BACKUP | нічні бекапи в R2; відновлення — єдина операція, що навмисно стирає дані |
 
 **Клієнт — `docs/UI.md`** · §SET-FLOW (потік Налаштувань), §CHART-REF (опорна лінія на графіку),
@@ -327,6 +329,10 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 - **Сервер:** `app.onError` (`worker/index.ts`) віддає для `/api`+`/ingest` JSON `{error, detail}` і логує стек.
   Без нього неспійманий throw давав порожній 500 `text/plain` — клієнту не було що показати.
   Ендпоінти й далі можуть повертати свій `{error}` — форма та сама.
+  ⚠️ Since 2026-09-17 the RAW cause of an uncaught 500 goes to the owner only
+  (`lib/platform/error-body.ts`): registration is open, and a raw message can carry SQL and schema
+  names. Everyone else gets `internal_error` + `ref <id>`, and the same ref is in the log line.
+  A handler's own deliberate `{error}` (quota, missing key, AI failure) is unaffected.
 - **Числовий параметр із URL — лише `numParam()`** (`routes/api/_shared.ts`, 2026-08-21).
   `Number(x ?? d)` НЕ рятує від `NaN`: `??` ловить лише null/undefined, а `Number("abc")` — це
   значення, тож фолбек не спрацьовує і NaN їде в дату (виняток) або в `.bind()` (мовчазний нуль).
