@@ -105,6 +105,10 @@
 		{
 			"binding": "TX_INDEX",
 			"index_name": "money-track-tx"
+		},
+		{
+			"binding": "VECTORIZE",
+			"index_name": "money-track-tx"
 		}
 	],
 	// Workers AI: `@cf/baai/bge-m3` — multilingual (Ukrainian included), 1024 dimensions, which is
