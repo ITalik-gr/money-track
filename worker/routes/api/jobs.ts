@@ -5,7 +5,7 @@
 // which is a SCHEDULER — only `armAlarm` sets it (§A6).
 import * as txRepo from "../../repo/transactions.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes } from "./_shared.ts";
+import { apiRoutes, idParam } from "./_shared.ts";
 import type { AiJob } from "../../../shared/api/ai.ts";
 import type { AiUsageStats } from "../../../shared/types.ts";
 
@@ -60,7 +60,8 @@ jobs.get("/jobs", async (c) => {
 // Клієнт підтверджує, що показав тост. Без цього «завершені й не показані» показувались би
 // щоразу при вході — або губились би зовсім у того, хто закрив вкладку.
 jobs.post("/jobs/:id/seen", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
   const { markSeen } = await import("../../lib/ai/jobs.ts");
   await markSeen(c.env, id);

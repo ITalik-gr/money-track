@@ -15,7 +15,7 @@
 // minor-amount integers and unix timestamps, never pre-formatted strings, so "₴1,234" vs
 // "1 234 ₴" follows the viewer's locale rather than whatever the cron happened to pick.
 
-import { currencySign } from "./currency.ts";
+import { currencySign, hryvniaSign } from "./currency.ts";
 
 export type NotifLocale = "uk" | "en";
 
@@ -28,7 +28,7 @@ export type NotifTemplateKey =
   | "report" | "deadline_plan" | "deadline_credit" | "anomaly" | "win" | "budget"
   | "price_up" | "liquidity" | "big_tx" | "duplicate" | "health_drop"
   | "goal_risk" | "dead_sub" | "todo" | "job_done" | "cron_failed" | "budget_forecast"
-  | "stale_import";
+  | "stale_import" | "deadline_tax" | "deadline_tax_quiet" | "regulation" | "quiet_client";
 
 export interface RenderedNotif { title: string; body: string | null }
 
@@ -123,6 +123,67 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
       return {
         title: uk ? `${s(p, "title")} — списання ${w}` : `${s(p, "title")} — charge ${w}`,
         body: `${m(num(p, "amount"))} · ${dm(num(p, "at"))}`,
+      };
+    }
+
+    // §TAX-DUE. The amount is HRYVNIA (§TAX-UAH), not the reader's base — so it is printed with an
+    // explicit ₴ rather than through `m()`, which labels with the row's display currency. A tax
+    // bill relabelled into dollars would be a figure that appears on no document.
+    /**
+     * The quiet quarter, and the reason it has its own case rather than a flag in the one above:
+     * a quarter with no income at all is the one where the payment is most often missed, because
+     * «I earned nothing, so I owe nothing» is true of the single tax on group 3 and FALSE of the
+     * contribution. The sentence has to say that, not merely carry a smaller number.
+     */
+    case "deadline_tax_quiet": {
+      const w = when(locale, num(p, "days"));
+      const amount = `${Math.round(num(p, "amount") / 100).toLocaleString(uk ? "uk-UA" : "en-US")} ${hryvniaSign()}`;
+      return {
+        title: uk ? `ЄСВ — сплатити ${w}, навіть без доходу` : `Social contribution — due ${w}, income or not`,
+        body: uk
+          ? `${amount} · до ${s(p, "due")}. Доходу за ${s(p, "period")} не було, але ЄСВ фіксований у всіх групах — це не той платіж, що залежить від виторгу.`
+          : `${amount} · by ${s(p, "due")}. There was no income in ${s(p, "period")}, but the contribution is a flat figure in every group — it does not follow revenue.`,
+      };
+    }
+
+    case "deadline_tax": {
+      const w = when(locale, num(p, "days"));
+      const what = s(p, "title");
+      return {
+        title: uk ? `${what} — сплатити ${w}` : `${what} — due ${w}`,
+        // §TAX-UAH — HRYVNIA, not `cur`, and through the NAMED helper rather than a literal: a
+        // reader who meets `hryvniaSign()` here finds out in one step why this row does not follow
+        // the base currency every other notification uses (the decision behind it: docs/TAX.md).
+        body: `${Math.round(num(p, "amount") / 100).toLocaleString(uk ? "uk-UA" : "en-US")} ${hryvniaSign()} · ${uk ? "до" : "by"} ${s(p, "due")}`,
+      };
+    }
+
+    /**
+     * A client who has gone quiet. The sentence carries BOTH numbers on purpose: «45 days» means
+     * nothing without «usually every 14», and the pair is what makes it a broken rhythm rather
+     * than a date. Phrased as an observation — the app does not know why somebody stopped paying.
+     */
+    case "quiet_client": {
+      const name = s(p, "name");
+      const days = num(p, "days"), gap = num(p, "gap");
+      const amount = `${Math.round(num(p, "amount") / 100).toLocaleString(uk ? "uk-UA" : "en-US")} ${hryvniaSign()}`;
+      return {
+        title: uk ? `${name} замовк` : `${name} has gone quiet`,
+        body: uk
+          ? `Останній платіж ${days} дн тому, а звичайний ритм — раз на ${gap} дн (${num(p, "n")} платежів, у середньому ${amount}).`
+          : `Last payment ${days} days ago; the usual rhythm is every ${gap} days (${num(p, "n")} payments, ${amount} on average).`,
+      };
+    }
+
+    // §TAX-WATCH. Deliberately says only that the SOURCE moved, never what it now says: the app
+    // watches official pages and is never the one stating a requisite (docs/TAX.md §0.2).
+    case "regulation": {
+      const label = s(p, "title");
+      return {
+        title: uk ? `Офіційне джерело оновилось: ${label}` : `Official source updated: ${label}`,
+        body: uk
+          ? "Перевір реквізити й правила за посиланням — застосунок лише стежить за сторінкою, а не переказує її."
+          : "Check the requisites and rules at the link — the app only watches the page, it does not restate it.",
       };
     }
 

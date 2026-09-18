@@ -6,7 +6,7 @@
 > Куди йде результат: durable-правило → відповідний `docs/*.md` + рядок в індекс § у `CLAUDE.md` ·
 > наратив «що робив» → згори в `HISTORY.md` · дизайн-рішення → «Журнал рішень» `DESIGN.md`.
 >
-> Останнє оновлення: **2026-09-17**.
+> Останнє оновлення: **2026-09-18**.
 
 ## 🚦 Як працювати з цим файлом
 
@@ -33,9 +33,14 @@
 
 ## 🔥 Черга (роби згори вниз)
 
-> ⚠️ **Everything below this line is blocked on the OWNER** — a live file, a live screen, a live
-> connector. There is no card here an unattended run can finish, which is the honest state of the
-> queue rather than a gap in it.
+> ⚠️ **The «UI/live» section below is blocked on the OWNER** — a live screen or a live connector.
+> The build cards under it are not: they are self-contained and an unattended run can finish them.
+>
+> Closed 2026-09-18 by the owner's own live pass: the Statistics second sweep (Overview / Trends /
+> Compare, cashflow calendar, month forecast, health index — all read right on screen), the `/plan`
+> and Accounts design cards, the un-reviewed Advisor / Subscriptions / Categories screens, and the
+> three §BASE-CUR screens in a non-hryvnia base. Still open because he could not judge them from
+> the screen: the 13 no-op modifier classes, and the STYLES 0.5/4 conflicts.
 >
 > Closed 2026-09-17: the whole-perimeter security pass (docs/PERIMETER.md), §QUICK-ADD (iPhone shortcuts, write-only token), statement import (the real MyRaif file reconciles; §CSV-STATE), §VOID-PAIR,
 > §RENAME-MEMORY, §MERCH-QUIET. The one-off §ENRICH-GATE backfill was dropped — the owner: not
@@ -46,28 +51,11 @@
 
 ### UI-черга з живого прода
 
-- **Дизайн сторінки `/plan`** — картки конвертів і автобюджет переглянути вживу (смуга історії й
-  бейдж перенесення вже є).
-- **Назви груп рахунків** і перерозподіл колонок на сторінці Рахунків.
-- **Не переглянуто вживу після правок:** Порадник, Підписки, Категорії — чек-лист із «Дизайн»
-  нижче (локальний хардкод-колір / тінь / `transition:all` / тіснота).
 - **13 класів-модифікаторів, що НІЧОГО не роблять** — перелічені в `STYLELESS_OK`
   (`scripts/check-styles-used.mjs`): `advisor-main`, `pulse-cats`, `top-subs-card`, `lp-top-signin`,
   `goal-jar`, `tip-net`, `alt`… Кожен — або залишок, або намір, який не дописали, і відрізнити одне
   від іншого можна лише з екраном перед очима. **Список має скорочуватись під час живого проходу,
   а не рости.**
-
-### Статистика на екрані — другий прохід звірки
-
-Перший прохід (2026-08-27) звірив числа через MCP і закрив §LEVEL-WINDOW, §AI-AVGNAME,
-§HEALTH-INCOME. **Лишились блоки, яких MCP не бачить:** Огляд / Тренди / Порівняння на екрані
-(вісь, бакети, дельти), Cashflow-календар, прогноз місяця, Індекс здоровʼя. Їх треба звіряти з
-відкритим екраном — метод той самий: кожне число проти незалежного способу його дістати.
-
-**Питання ЗАКРИТЕ (власник, 2026-09-02): рівень не чіпати.** Застарілий рівень у категорії, яка
-замовкла, лишається як є. Рівень — це «скільки насправді пішло», і викидати з нього великі покупки
-означає рахувати життя, якого не було; §BURN-SHAPE уже КАЖЕ, яка частина разова, тож читач бачить
-обидва числа. Зрушити рівень означало б зробити runway оптимістичнішим за реальність.
 
 ### STYLES фази 0.5 + 4 — потребує ОКА власника (`STYLES.md`)
 
@@ -77,17 +65,6 @@
   з тієї ж причини).
 **Готово-коли:** 8 конфліктів розвʼязані проти живих екранів, без візуальних змін, яких власник
 не схвалив.
-
-### §BASE-CUR — три екрани подивитись із вибраними доларами
-
-Числа покриті тестами й лінтом C10; НЕ покрито те, як вони ВИГЛЯДАЮТЬ, а три місця розмічались під
-гривневі суми:
-- **Герой Головної + рядок KPI** — гривневий підсумок це 4-5 цифр, доларовий 3.
-- **Конверти `/plan`** — ліміти округлюються до цілої одиниці в чужій базі (50 ₴ → $1.21).
-- **Графіки з ₴-подібною віссю Y** — `width="auto"` мав би впоратись, але вісь — єдине місце, де
-  коротше число змінює площу графіка, а не лише підпис.
-⚠️ Не перевірено вживу: найперший рендер свіжого англійського акаунта, де мовний дефолт діє ще до
-відповіді `/rates`.
 
 ### MCP для ДРУГОГО асистента (ChatGPT) — лишилась ЖИВА перевірка
 
@@ -106,7 +83,35 @@
 
 ---
 
+## 🔨 Збірка (самодостатнє — не чекає власника)
+
+---
+
 ## 📌 Беклог (з відомим корінням, без дати)
+
+### ФОП — findings of audit A1 (2026-09-18, overnight run)
+
+Each one is a divergence the audit found and deliberately did NOT fix blind: all three need a canon
+decision about what the right answer IS, and a tax figure guessed confidently is the one failure in
+this project that costs money (`docs/TAX.md` §1).
+
+- ⬜ **Money returned to a client does not reduce the quarter's income.** `INCOME_WHERE` requires
+  `t.amount > 0`, so a returned advance leaves the base it was counted in untouched, and the app
+  bills 5% + 1% on money the user gave back. The direction is the safe one (it overstates what is
+  owed, so no penalty), which is exactly why it can sit unnoticed. The fix is a §-decision, not a
+  query: on a cash basis a return in the SAME period reduces income, and a return in a LATER one
+  does not touch the closed quarter — so it needs the §REFUND treatment for the income side
+  (`repo/tax.ts`, `docs/TAX.md` §2).
+- ⬜ **A future-dated business receipt is taxed but not counted against the annual ceiling.**
+  `taxStatus` reads the quarter over `[quarterStart, nextQuarter)` and the annual limit over
+  `[yearStart, now)`, so a receipt dated tomorrow (a manual entry accepts any `time`) accrues
+  ЄП/ВЗ while §TAX-LIMIT ignores it. One window has to win; picking one is a canon call
+  (`lib/finance/tax.ts`, `repo/tax.ts`).
+- ⬜ **The limit's pace has no minimum window, so early January projects from one day.**
+  `daysElapsed` is `max(1, …)`, so a single receipt on 1 January makes `perDay` the whole receipt
+  and the screen says «at this pace you cross the ceiling on the 11th». §CADENCE already owns the
+  question «is this delta meaningful» for the rest of the app; the limit projection never asked it
+  (`lib/finance/tax.ts`).
 
 ### Банки
 
@@ -162,8 +167,17 @@
 
 - **Масові прогони в чергу задач.** §A6 покрив одиничні задачі; ре-світ і батч-enrich не заводили —
   у них інша природа, прогрес у %, а не «готово».
+  *Розібрано вночі 2026-09-18, не робилось — і ось чому та що саме робити.* Наявний `ai_jobs`
+  тримає `kind|status|params|result`, тобто стан «готово / не готово»; масовому прогону треба
+  (а) `progress_done`/`progress_total` у рядку (міграція), (б) виконавець, що робить ОДНУ пачку за
+  тік і лишається `running`, (в) будильник DO, який тікає далі, поки лишилось > 0. **Ризик, через
+  який це не робиться наосліп:** пункт (в) — це цикл будильника, і помилка в умові зупинки означає
+  DO, що крутиться вічно й пече гроші на моделі, а корисне навантаження (`enrichPending`) без
+  живого ключа в тесті не проганяється — тобто саме ту частину, що коштує, перевірити нічим.
+  Механіку черги (а)+(б) протестувати МОЖНА фіктивним видом задачі; варто робити саме так: спершу
+  `kind: "noop_batch"` із тестом на «10 пачок по 3 → done, і жодного зайвого тіку», і лише потім
+  підключати enrich. Це прохід на живому власнику, не на нічному.
 - **Lazy-enrich** (варіант B) — за узгодженням.
-- **Prompt-кеш verify** на проді (`cache_read` у логах) — потребує деплою.
 - **`src/pages/Stats.tsx`** — оболонка вже виділена, блоки в `components/stats/`; лишився розмір.
 
 
@@ -186,7 +200,7 @@
 > Сирий список для пріоритезації. **[нове]** / **[лвл-ап]** / **[тех]**; розмір S/M/L — груба
 > оцінка. Реалізоване звідси **видаляється** (не викреслюється).
 
-### ФОП / податки (на паузі — рішення власника)
+### ФОП / податки *(знято з паузи 2026-09-18 — ядро поїхало в картку «ФОП / податковий модуль» вище)*
 
 - **[нове] Податковий конверт-автовідкладання (S/M).** З кожного доходу відкладати % (ЄП 5% + ЄСВ +
   ВЗ) у віртуальний конверт → видно, скільки з балансу насправді «не твоє».

@@ -161,7 +161,7 @@ function EventPlan({ eventId, kind, planned, plannedTotal, spent }: {
 
       <div className="evt-plan-add">
         <input placeholder={t("evt.plan.labelPh")} value={label} onChange={(e) => setLabel(e.target.value)} />
-        <input type="number" inputMode="decimal" placeholder="₴" value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
+        <input type="number" inputMode="decimal" placeholder={baseSign()} value={amount} onChange={(e) => setAmount(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") add(); }} />
         <button className="btn primary sm" onClick={add} disabled={!label.trim() || !amount}>{t("evt.plan.add")}</button>
       </div>
     </div>

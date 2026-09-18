@@ -23,6 +23,7 @@
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 import type { Env } from "../../env.ts";
 import { getState } from "../finance/repo.ts";
+import { CSV_STRINGS } from "./i18n-csv.ts";
 
 export type ServerLocale = NotifLocale;
 
@@ -56,6 +57,9 @@ import { TG } from "./i18n-tg.ts";
 import { CONSENT } from "./i18n-consent.ts";
 
 const S = {
+  // The `csv*` family lives in its own file (C3, 2026-09-18) — column headings for a spreadsheet
+  // are a different audience from text on a screen. Spread, so `st()` still sees ONE key space.
+  ...CSV_STRINGS,
   ...TG,
   ...CONSENT,
   // ---- fallback labels for missing data ------------------------------------
@@ -65,6 +69,15 @@ const S = {
   unidentified: { uk: "не визначено", en: "not identified" },
   incoming: { uk: "Надходження", en: "Incoming" },
   expense: { uk: "Витрата", en: "Expense" },
+
+  errTaxSourceUrl: {
+    uk: "Посилання має починатись із https:// — застосунок сам ходитиме на цю сторінку.",
+    en: "The link must start with https:// — the app will fetch this page itself.",
+  },
+  errTaxKind: { uk: "Невідомий вид платежу.", en: "Unknown payment kind." },
+  // The group is entered, never guessed: a guessed group yields a confidently wrong tax figure,
+  // which is the one kind of wrong answer here that carries a penalty.
+  errTaxGroup: { uk: "Група ФОП може бути 1, 2 або 3.", en: "The ФОП group can only be 1, 2 or 3." },
 
   // ---- income analytics (`/analytics/income`) -------------------------------
   stabilityUnknown: { uk: "мало даних", en: "not enough data" },
@@ -84,24 +97,7 @@ const S = {
     en: "Accounts with no transaction history ({accounts}) are drawn flat going back — their balance is a manual snapshot of today.",
   },
 
-  // ---- CSV export header ---------------------------------------------------
-  csvDate: { uk: "Дата", en: "Date" },
-  csvMerchant: { uk: "Мерчант", en: "Merchant" },
-  csvComment: { uk: "Коментар", en: "Comment" },
-  csvNote: { uk: "Нотатка", en: "Note" },
-  csvAmount: { uk: "Сума", en: "Amount" },
-  csvCurrency: { uk: "Валюта", en: "Currency" },
-  csvCategory: { uk: "Категорія", en: "Category" },
-  csvAccount: { uk: "Рахунок", en: "Account" },
-  csvGroup: { uk: "Група", en: "Group" },
-  csvTransfer: { uk: "Переказ", en: "Transfer" },
-  csvYes: { uk: "так", en: "yes" },
 
-  // ---- CSV import: why a row was skipped -----------------------------------
-  csvBadDate: { uk: "не розпізнав дату: «{value}»", en: "could not parse the date: “{value}”" },
-  csvBadAmount: { uk: "не розпізнав суму: «{value}»", en: "could not parse the amount: “{value}”" },
-  csvZeroAmount: { uk: "нульова сума", en: "zero amount" },
-  csvNotSettled: { uk: "операція не проведена ({value})", en: "not settled ({value})" },
 
   // ---- manual transfer (`POST /transactions/transfer`) ----------------------
   errTransferAccounts: {

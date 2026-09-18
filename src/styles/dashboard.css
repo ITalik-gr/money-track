@@ -125,28 +125,6 @@
   .cashflow-head { flex-direction: column; align-items: flex-start; gap: 8px; }
   .cashflow-head .legend { flex-wrap: wrap; gap: 6px 14px; }
 }
-/* §1: Календар списань — компактна сітка з датою в кутку (як справжній календар), а не
-   квадратні великі плитки по центру; хто/скільки видно прямо в клітинці, без ховеру. */
-.subs-cal { padding: 14px 16px; }
-.sc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.sc-head { margin-bottom: 5px; }
-.sc-wd { font-size: 10.5px; color: var(--muted); text-align: center; font-weight: 600; text-transform: uppercase; letter-spacing: 0.02em; }
-.sc-cell {
-  min-height: 48px; border-radius: 8px; border: 1px solid var(--line);
-  display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
-  gap: 3px; padding: 5px 6px; background: var(--surface); overflow: hidden;
-}
-.sc-cell.weekend { background: var(--surface-2); }
-.sc-cell.past { opacity: 0.45; }
-.sc-cell.has { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 35%, transparent); cursor: default; }
-.sc-cell.today { border-color: var(--accent); border-width: 1.5px; }
-.sc-day { font-size: 11px; font-variant-numeric: tabular-nums; color: var(--muted); }
-.sc-cell.today .sc-day { color: var(--accent); font-weight: 700; }
-.sc-cell.has .sc-day { color: var(--ink-2); font-weight: 600; }
-.sc-hit { display: flex; flex-direction: column; gap: 1px; margin-top: auto; min-width: 0; }
-.sc-title { font-size: 10px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sc-amt { font-size: 10.5px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; line-height: 1.2; }
-@media (max-width: 560px) { .sc-title { display: none; } }
 
 /* Головна — рядок швидких переходів (чипи-інсайти прибрано: дублювали картки) */
 .quickbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; margin-bottom: var(--sp-5); }

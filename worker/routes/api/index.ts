@@ -35,6 +35,7 @@ import { planned } from "./planned.ts";
 import { push } from "./push.ts";
 import { reports } from "./reports.ts";
 import { settings } from "./settings.ts";
+import { tax } from "./tax.ts";
 import { transactions } from "./transactions.ts";
 import { transfers } from "./transfers.ts";
 
@@ -77,5 +78,6 @@ api.route("/", planned);
 api.route("/", push);
 api.route("/", reports);
 api.route("/", settings);
+api.route("/", tax);
 api.route("/", transactions);
 api.route("/", transfers);

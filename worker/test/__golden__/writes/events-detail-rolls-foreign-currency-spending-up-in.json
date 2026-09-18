@@ -47,6 +47,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": null,
         "category_color": null,
         "account_title": "Картка ₴"
@@ -84,6 +86,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Транспорт",
         "category_color": "#2450C8",
         "account_title": "Рахунок $"
@@ -121,6 +125,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Подорожі",
         "category_color": "#127C86",
         "account_title": "Картка ₴"

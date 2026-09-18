@@ -36,6 +36,9 @@ const STATIC: StaticItem[] = [
   { key: "p-advisor", groupKey: "cmdk.groupPages", icon: "advisor", labelKey: "nav.advisor", to: "/advisor" },
   { key: "p-chat", groupKey: "cmdk.groupPages", icon: "spark", labelKey: "nav.chat", to: "/chat" },
   { key: "p-reports", groupKey: "cmdk.groupPages", icon: "report", labelKey: "nav.reports", to: "/reports" },
+  // The year in one screen. Reachable from here and from Reports — §MONTH-VIEW learnt the hard
+  // way that a page you can only get to by typing its path is a page that does not exist.
+  { key: "p-wrapped", groupKey: "cmdk.groupPages", icon: "chart", labelKey: "wr.nav", to: "/wrapped" },
   { key: "p-plan", groupKey: "cmdk.groupPages", icon: "plan", labelKey: "nav.plan", to: "/plan" },
   { key: "p-goals", groupKey: "cmdk.groupPages", icon: "target", labelKey: "nav.goals", to: "/goals" },
   { key: "p-subs", groupKey: "cmdk.groupPages", icon: "repeat", labelKey: "nav.subs", to: "/subs" },

@@ -8,9 +8,11 @@ import { Accounts } from "./pages/Accounts.tsx";
 import { Stats } from "./pages/Stats.tsx";
 import { Merchant } from "./pages/Merchant.tsx";
 import { Reports, ReportDetail } from "./pages/Reports.tsx";
+import { Wrapped } from "./pages/Wrapped.tsx";
 import { Advisor } from "./pages/Advisor.tsx";
 import { Chat } from "./pages/Chat.tsx";
 import { Plan } from "./pages/Plan.tsx";
+import { Fop } from "./pages/Fop.tsx";
 import { Category } from "./pages/Category.tsx";
 import { Subscription } from "./pages/Subscription.tsx";
 import { Categories } from "./pages/Categories.tsx";
@@ -39,11 +41,15 @@ const router = createBrowserRouter([
       { path: "stats", element: <Stats /> },
       { path: "merchant/:name", element: <Merchant /> },
       { path: "reports", element: <Reports /> },
+      // The year in one screen — read-only, assembled from endpoints that already existed.
+      { path: "wrapped", element: <Wrapped /> },
       { path: "reports/:id", element: <ReportDetail /> },
       { path: "advisor", element: <Advisor /> },
       { path: "chat", element: <Chat /> },
       { path: "add", element: <Add /> },
       { path: "plan", element: <Plan /> },
+      // §0.1 — the business is its own organism, so it is its own page, not a card on /plan.
+      { path: "fop", element: <Fop /> },
       { path: "categories", element: <Categories /> },
       // §CATEGORY-PAGE — the permalink. Below the list route, and a distinct path, so neither
       // shadows the other however the router is reordered later.

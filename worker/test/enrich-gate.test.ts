@@ -29,7 +29,7 @@ const SERVICES = 9;
 interface Seed {
   id: string; desc: string; merchant?: string | null; mcc?: number | null;
   category?: number | null; amount?: number; isTransfer?: number; pair?: string | null;
-  enriched?: number; recurring?: number | null; daysAgo?: number;
+  enriched?: number; recurring?: number | null; daysAgo?: number; note?: string | null;
 }
 
 function seedDb(rows: Seed[]): MemDb {
@@ -41,12 +41,13 @@ function seedDb(rows: Seed[]): MemDb {
   for (const s of rows) {
     d.raw.prepare(
       `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, merchant, mcc,
-                                 category_id, is_transfer, transfer_pair_id, ai_enriched, ai_recurring, raw_json)
-       VALUES (?, 'acc1', 'mono', ?, ?, 980, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                 category_id, is_transfer, transfer_pair_id, ai_enriched, ai_recurring,
+                                 raw_json, user_note)
+       VALUES (?, 'acc1', 'mono', ?, ?, 980, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       s.id, NOW - (s.daysAgo ?? 0) * DAY, s.amount ?? -4435, s.merchant ?? s.desc, s.mcc ?? null,
       s.category ?? null, s.isTransfer ?? 0, s.pair ?? null, s.enriched ?? 0,
-      s.recurring ?? null, JSON.stringify({ description: s.desc }),
+      s.recurring ?? null, JSON.stringify({ description: s.desc }), s.note ?? null,
     );
   }
   return d;
@@ -138,5 +139,61 @@ test("§ENRICH-GATE: what is worth asking a model about", async (t) => {
   await t.test("a row already enriched is never re-asked", async () => {
     const d = seedDb([{ id: "t1", desc: "APPLE.COM/BILL", mcc: 5734, category: SERVICES, enriched: 1, recurring: 0 }]);
     assert.equal((await verdictFor(d, "t1")).verdict, "skip");
+  });
+});
+
+/**
+ * A USER NOTE overrides every skip — the defect §AI-EVAL found on 2026-09-18 and the cap that
+ * made fixing it safe.
+ */
+test("§ENRICH-GATE: a note is a human sentence, and it outranks every skip", async (t) => {
+  await t.test("a note on a transfers-bucket row is asked about, not filed silently", async () => {
+    // The pinned-red eval case, as a unit test: MCC 4829 files it in the transfers bucket, so the
+    // gate used to stop there and the model never saw «I moved my own salary out of crypto».
+    const d = seedDb([{
+      id: "t1", desc: "Від Ihor P.", mcc: 4829, category: TRANSFERS, amount: 3_000_000,
+      note: "це я вивів свою зарплату з крипти через P2P",
+    }]);
+    assert.deepEqual(await verdictFor(d, "t1"), { verdict: "ask" });
+  });
+
+  await t.test("and on an obvious MCC too — the note knows something 5411 cannot", async () => {
+    const d = seedDb([{
+      id: "t1", desc: "ATB 1234", mcc: 5411, category: GROCERIES,
+      note: "купив ліки і вітаміни, не продукти",
+    }]);
+    assert.deepEqual(await verdictFor(d, "t1"), { verdict: "ask" });
+  });
+
+  await t.test("a note left BLANK is not a note", async () => {
+    // Without the trim, every row whose note field was opened and closed would buy a call.
+    const d = seedDb([{ id: "t1", desc: "ATB 1234", mcc: 5411, category: GROCERIES, note: "   " }]);
+    assert.equal((await verdictFor(d, "t1")).verdict, "skip");
+  });
+
+  await t.test("an already-enriched row is still not re-asked, note or no note", async () => {
+    const d = seedDb([{
+      id: "t1", desc: "ATB 1234", mcc: 5411, category: GROCERIES, enriched: 1, recurring: 0,
+      note: "щось важливе",
+    }]);
+    assert.equal((await verdictFor(d, "t1")).verdict, "skip");
+  });
+
+  await t.test("over the daily cap the note stops overriding, and the ordinary rules resume", async () => {
+    const d = seedDb([{
+      id: "t1", desc: "ATB 1234", mcc: 5411, category: GROCERIES, note: "ліки, не продукти",
+    }]);
+    const env = testEnv(d) as unknown as Env;
+    // Spend the allowance. A leaked §QUICK-ADD token is unattended, so the cap is the only thing
+    // between a forged note and an all-night run of Sonnet calls.
+    const { DAILY_NOTE_ENRICH } = await import("../lib/platform/quota.ts");
+    const { setState } = await import("../lib/finance/repo.ts");
+    const { localYmd } = await import("../lib/finance/stats.ts");
+    await setState(d, `note_enrich_${localYmd(Math.floor(Date.now() / 1000))}`, String(DAILY_NOTE_ENRICH));
+
+    const row = await gateRow(env, "t1");
+    const v = await enrichVerdict(env, row!);
+    // Not dropped — treated exactly as it was before the override existed.
+    assert.equal(v.verdict, "skip");
   });
 });

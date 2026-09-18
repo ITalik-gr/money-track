@@ -32,4 +32,6 @@ export * from "./planning.ts";
 export * from "./platform.ts";
 export * from "./rules.ts";
 export * from "./push.ts";
+export * from "./tax.ts";
 export * from "./transactions.ts";
+export type * from "./tax.ts";

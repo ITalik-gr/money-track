@@ -84,8 +84,39 @@ for (const [seg, files] of prefixOwners) {
   }
 }
 
+/**
+ * C7b — a numeric id from the PATH goes through `idParam`, never bare `Number(c.req.param(…))`.
+ *
+ * The same family of defect as the ordering rule above, and found the same way (A2 audit,
+ * 2026-09-18): `Number("abc")` is `NaN`, `NaN` binds as NULL, the UPDATE matches nothing, and the
+ * handler answers 200. A delete that deleted nothing reports success; a «mark paid» that marked
+ * nothing returns the unchanged status object. **A 500 gets retried and reported — a silent
+ * success is believed.** It was thirty-four call sites across nine files; `idParam` returns `null`
+ * for anything that is not a positive integer and the handler answers 400.
+ *
+ * Lives in the route-order check because it is the same concern — what a PATH means — and because
+ * a lint with one rule in it is a file people forget to run.
+ */
+const ID_RE = /Number\(\s*c\.req\.param\(/;
+for (const file of DIRS.flatMap(tsFiles)) {
+  // `_shared.ts` is where `idParam` itself lives, and its doc comment names the idiom it replaces.
+  if (file.endsWith("_shared.ts")) continue;
+  readFileSync(file, "utf8").split("\n").forEach((line, i) => {
+    const code = line.trim();
+    if (code.startsWith("//") || code.startsWith("*")) return;
+    if (ID_RE.test(line)) {
+      problems.push(
+        `${file}:${i + 1}: bare Number(c.req.param(…)).\n` +
+        `    Use idParam(c) — Number("abc") is NaN, NaN binds as NULL, the write matches nothing,\n` +
+        `    and the endpoint answers 200. A silent success is believed; a 500 at least gets retried.\n` +
+        `    ${code.slice(0, 110)}`,
+      );
+    }
+  });
+}
+
 if (problems.length) {
   console.error("✗ C7 route order:\n\n" + problems.map((p) => "  " + p).join("\n\n") + "\n");
   process.exit(1);
 }
-console.log("✓ C7 route order: no literal route shadowed by a parameterised one");
+console.log("✓ C7 route order: no literal route shadowed by a parameterised one; every path id goes through idParam");

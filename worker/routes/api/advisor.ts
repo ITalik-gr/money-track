@@ -4,7 +4,7 @@
 // and the adviser must not build their own context, or they answer with different figures about
 // the same money. Confirmed facts adjust the canon inside `categoryMonthlyLevels`, never here.
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, normChatMessages } from "./_shared.ts";
+import { apiRoutes, idParam, normChatMessages } from "./_shared.ts";
 import type { Insight, AdviceHistoryItem, Fact, Advice } from "../../../shared/api/ai.ts";
 
 export const advisor = apiRoutes();
@@ -79,7 +79,8 @@ advisor.delete("/advisor/history", async (c) => {
 // parameterised (C7), and the id is a plain number so `numParam` is not involved: a bad value
 // simply matches no entry.
 advisor.delete("/advisor/history/:at", async (c) => {
-  const at = Number(c.req.param("at"));
+  const at = idParam(c, "at");
+  if (at == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (!Number.isFinite(at)) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const { deleteAdviceHistoryEntry } = await import("../../lib/ai/advice-history.ts");
   return c.json({ ok: true, left: await deleteAdviceHistoryEntry(c.env, at) });
@@ -234,12 +235,16 @@ advisor.post("/facts", async (c) => {
 advisor.post("/facts/:id/confirm", async (c) => {
   const { confirmFact } = await import("../../lib/ai/facts.ts");
   const on = (await c.req.json<{ on?: boolean }>().catch(() => ({ on: true }))).on !== false;
-  await confirmFact(c.env, Number(c.req.param("id")), on);
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await confirmFact(c.env, id, on);
   return c.json({ ok: true });
 });
 
 advisor.delete("/facts/:id", async (c) => {
   const { deleteFact } = await import("../../lib/ai/facts.ts");
-  await deleteFact(c.env, Number(c.req.param("id")));
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await deleteFact(c.env, id);
   return c.json({ ok: true });
 });

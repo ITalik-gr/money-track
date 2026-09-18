@@ -5,6 +5,7 @@
 // user's Durable Object. Removing someone is `status='disabled'`, not a delete — their data
 // stays in their own DO, and the door simply stops opening.
 import { Hono } from "hono";
+import { idParam } from "./api/_shared.ts";
 import type { Env } from "../env.ts";
 import { deleteUser, findUserById, inviteUser, listUsers, setUserStatus, type UserStatus } from "../lib/platform/directory.ts";
 import type { AdminFeedback } from "../../shared/api/feedback.ts";
@@ -177,7 +178,12 @@ admin.post("/feedback/demo/:day/discount", async (c) => {
 admin.post("/feedback/:id/handled", async (c) => {
   const { markFeedbackHandled } = await import("../lib/platform/feedback.ts");
   const on = (await c.req.json<{ on?: boolean }>().catch(() => ({ on: true }))).on !== false;
-  await markFeedbackHandled(c.env.DIRECTORY, Number(c.req.param("id")), on);
+  // `idParam` reaches here too: it asks only for `c.req.param`, so a file with its own Hono
+  // instance uses the same helper as `/api/*`. NaN would bind as NULL, the UPDATE would match
+  // nothing, and the handler would answer `{ok:true}` regardless.
+  const id = idParam(c);
+  if (id == null) return c.json({ error: "bad id" }, 400);
+  await markFeedbackHandled(c.env.DIRECTORY, id, on);
   return c.json({ ok: true });
 });
 

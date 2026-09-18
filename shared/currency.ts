@@ -55,6 +55,13 @@ export const CURRENCY_META: Record<number, CurrencyMeta> = {
 /**
  * Letters → the numeric code we store. The REVERSE of `CURRENCY_META`, derived from it.
  *
+ * ⚠️ The NAME says which way round it goes, because the old one (`CURRENCY_BY_CODE`) did not
+ * and cost a real defect: `nbu.ts` read it as «currency by numeric code» and indexed it with
+ * 840. The map is typed `Record<string, number>`, so a numeric index compiles and quietly
+ * answers `undefined` — §TAX-FX then reported «no official rate» for every foreign receipt
+ * instead of fetching one, and no type or test could see it. Number → letters is
+ * `currencyCode()`, right below.
+ *
  * ⚠️ There were THREE tables for this one fact, and they disagreed (found 2026-08-21). This file
  * declared itself «the ONE symbol/code table» and knew seven currencies; `lib/bank/normalize.ts`
  * knew thirty-nine; `routes/api/export.ts` had a private six. The consequence was a round trip
@@ -63,7 +70,7 @@ export const CURRENCY_META: Record<number, CurrencyMeta> = {
  * hryvnia — so the row could not come back in. Derivation, not a second literal, is what makes
  * that impossible to reintroduce.
  */
-export const CURRENCY_BY_CODE: Record<string, number> = Object.fromEntries(
+export const CURRENCY_NUM_BY_LETTERS: Record<string, number> = Object.fromEntries(
   Object.entries(CURRENCY_META).map(([num, meta]) => [meta.code, Number(num)]),
 );
 
@@ -91,4 +98,23 @@ export function asBaseCurrency(n: unknown): BaseCurrency | undefined {
  */
 export function baseCurrencyForLocale(locale: "uk" | "en"): BaseCurrency {
   return locale === "en" ? 840 : 980;
+}
+
+/**
+ * §TAX-UAH — the hryvnia, named.
+ *
+ * §BASE-CUR says the currency of an answer is the READER's, and lint C10 enforces it by refusing
+ * a bare `980` in a sign call. The tax domain is the one deliberate exception: the state levies in
+ * hryvnia whatever the app is displaying, and a tax bill relabelled into dollars would be a figure
+ * that appears on no document and that nobody can pay.
+ *
+ * So the exception gets a NAME and lives here, in the module that owns the symbol table, instead
+ * of being a literal repeated across the ФОП screen. A reader who meets `hryvniaSign()` can find
+ * out in one hop why this money does not follow the base; a reader who met `currencySign(980)`
+ * would have to guess whether it was a rule or an oversight.
+ */
+export const HRYVNIA = 980;
+
+export function hryvniaSign(): string {
+  return currencySign(HRYVNIA);
 }

@@ -159,6 +159,14 @@ const paths: Record<string, React.ReactNode> = {
       <path d="M12 11v5M12 7.5v.01" />
     </>
   ),
+  // §0.1 — the business. A case, not a coin or a percent sign: `/fop` is about the whole
+  // organism (clients, rhythm, what is left), and a tax glyph would name only one card on it.
+  briefcase: (
+    <>
+      <rect x="3" y="7" width="18" height="13" rx="2" />
+      <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 12h18" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 18, className }: { name: keyof typeof paths | string; size?: number; className?: string }) {

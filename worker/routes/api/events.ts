@@ -5,7 +5,7 @@ import {
   baseMult, } from "../../lib/finance/stats.ts";
 import * as eventsRepo from "../../repo/events.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, normChatMessages } from "./_shared.ts";
+import { apiRoutes, idParam, normChatMessages } from "./_shared.ts";
 import type { EventWithAgg } from "../../../shared/api/platform.ts";
 
 export const events = apiRoutes();
@@ -29,7 +29,8 @@ events.get("/events", async (c) => {
 
 // Бюджет події («скільки закладаю на цю подорож»). amount<=0 або null — прибрати ліміт.
 events.patch("/events/:id", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   type Patch = { budget?: number | null; name?: string; note?: string | null; goal_id?: number | null };
   const b = await c.req.json<Patch>().catch(() => ({} as Patch));
   await eventsRepo.update(c.env.DB, id, {
@@ -59,7 +60,8 @@ events.post("/events", async (c) => {
 });
 
 events.delete("/events/:id", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   // Order matters and the spending outlives the event: the transactions are unlinked first, and
   // only the GROUP is archived. Deleting a trip must never delete what was spent on it.
   await eventsRepo.unlinkTransactions(c.env.DB, id);
@@ -69,7 +71,8 @@ events.delete("/events/:id", async (c) => {
 
 // Деталь події: підсумок + список транзакцій.
 events.get("/events/:id", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const event = await eventsRepo.find(c.env.DB, id);
   if (!event) return c.json({ error: "not_found" }, 404);
   // Підсумки рахує СЕРВЕР і зводить у ₴. Раніше сторінка рахувала їх сама, фільтруючи
@@ -96,7 +99,8 @@ events.get("/events/:id", async (c) => {
 
 // Plan line items CRUD (P2.3). Amounts arrive in the READER's base and are stored in hryvnia.
 events.post("/events/:id/planned", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const b = await c.req.json<{ label?: string; amount?: number; category_id?: number | null }>()
     .catch(() => ({} as { label?: string; amount?: number; category_id?: number | null }));
   if (!b.label?.trim() || !b.amount || b.amount <= 0) return c.json({ error: "label and positive amount required" }, 400);
@@ -108,17 +112,20 @@ events.post("/events/:id/planned", async (c) => {
 });
 
 events.delete("/events/:id/planned/:pid", async (c) => {
-  await eventsRepo.deletePlannedItem(
-    c.env.DB, Number(c.req.param("id")), Number(c.req.param("pid")));
+  const id = idParam(c), pid = idParam(c, "pid");
+  if (id == null || pid == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await eventsRepo.deletePlannedItem(c.env.DB, id, pid);
   return c.json({ ok: true });
 });
 
 // §GR2: AI-оцінка групи (структуровані факти) + чат по конкретній групі.
 events.post("/events/:id/ai", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const { evaluateGroupAdvice } = await import("../../lib/ai/advisor.ts");
   try {
-    const r = await evaluateGroupAdvice(c.env, Number(c.req.param("id")));
+    const r = await evaluateGroupAdvice(c.env, id);
     return r ? c.json(r) : c.json({ error: "not_found" }, 404);
   } catch (e) {
     return c.json({ error: String(e) }, 502);
@@ -130,9 +137,11 @@ events.post("/events/:id/chat", async (c) => {
   const body = await c.req.json<{ messages?: { role: string; content: string }[] }>();
   const msgs = normChatMessages(body.messages);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const { chatAboutGroup } = await import("../../lib/ai/advisor.ts");
   try {
-    return c.json(await chatAboutGroup(c.env, Number(c.req.param("id")), msgs));
+    return c.json(await chatAboutGroup(c.env, id, msgs));
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }

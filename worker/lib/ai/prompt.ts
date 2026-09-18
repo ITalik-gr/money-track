@@ -78,6 +78,18 @@ If the category is unclear, set category_guess to the nearest one; never invent 
 // (2) genuinely improve categorisation (detailed hints plus many real Ukrainian merchants).
 // Keep it stable — any edit invalidates the cache, so change it only deliberately.
 //
+// ⚠️ THE THRESHOLD IS LOAD-BEARING, AND IT WAS SILENTLY MISSED (measured 2026-09-18 by
+// `scripts/eval-ai.mjs`, §AI-EVAL). With the seed taxonomy this prefix measured **4 078 tokens —
+// eighteen short of 4 096**, so the API neither cached nor complained: 46 of 49 enrich calls in
+// that run paid full input price for a prefix that was supposed to be free after the first one.
+// Nothing surfaced it, because a cache that does not engage looks exactly like a cache that does
+// until you read the `usage` numbers. It is padded with real margin now (~5 000 tokens), and
+// `prompt-cache.test.ts` fails if a future edit trims it back under the line.
+//
+// ⚠️ The margin is measured against the SEED taxonomy, which is the smallest this prefix ever is:
+// the head block carries one line per category, so a user with their own categories only ever
+// sits further above the threshold, never below.
+//
 // ⚠️ MERCHANT NAMES ARE DATA and stay exactly as written, in whatever alphabet the bank uses:
 // they are matched against real descriptions. Categories are anchored by ID rather than by name,
 // because the taxonomy in `buildSystemPrefix` now arrives in the reader's language — a hardcoded
@@ -170,7 +182,28 @@ MORE EXAMPLES (raw description -> reasoning -> category id):
 - "Зняття готівки ATM" -> cash -> Transfers & withdrawals (13)
 - "Переказ на картку" -> card-to-card -> Transfers & withdrawals (13)
 - "На банку" -> topping up the user's own jar -> Transfers & withdrawals (13)
-If a merchant is unknown, pick the closest category by meaning and never invent a new one; when it is genuinely ambiguous, use Other (14).`;
+If a merchant is unknown, pick the closest category by meaning and never invent a new one; when it is genuinely ambiguous, use Other (14).
+
+GETTING FROM A TO B — transport or travel? Travel (11) is for a TRIP: a hotel, a flight, a tour, an intercity rail or coach ticket bought for one. Everything that is simply moving around, including intercity ride-sharing, is Transport (3): "BLABLACAR", "BOLT", "UBER", "UKLON", a car wash, parking, a toll, a scooter rental.
+- "BLABLACAR" -> a shared intercity ride -> Transport (3)
+- "PARKOVKA" / "PARKING" -> parking -> Transport (3)
+- "AVTOMYIKA" -> a car wash -> Transport (3)
+- "BOLT DRIVE" -> car sharing -> Transport (3)
+- "WIZZ AIR" / "RYANAIR" -> a flight -> Travel (11)
+- "AIRBNB" -> lodging -> Travel (11)
+
+WHICH CHARGES REPEAT (this decides the recurring field, not the category). Set recurring=true when the merchant bills on a SCHEDULE and the user keeps the service between charges:
+- mobile and internet: KYIVSTAR, VODAFONE, LIFECELL, VOLIA, TRIOLAN — a top-up that keeps a number alive is a recurring bill, even when the amount varies.
+- utilities billed monthly: YASNO, NAFTOGAZ, OBLENERGO, VODOKANAL, an OSBB or ЖЕК fee, rent.
+- streaming, software and cloud: NETFLIX, SPOTIFY, MEGOGO, YOUTUBE PREMIUM, ICLOUD, GOOGLE ONE, OPENAI, ANTHROPIC, FIGMA, GITHUB, ADOBE.
+- memberships and cover: a gym, a pool, a co-working desk, an insurance premium, a mobile-app plan.
+Set recurring=false for one-off purchases, however large or however familiar the merchant: a game or an app bought outright, a single film rental, groceries, a restaurant, a taxi, a plane ticket, a transfer, a hardware purchase from an electronics shop. Two charges from the same merchant do NOT make a subscription — a schedule does. When unsure, false: a wrong true plants a subscription the user has to dismiss.
+
+AMBIGUOUS BY DESIGN — these are the cases where the right move is the broad parent, not a confident leaf:
+- a general marketplace charge (AMAZON, ALIEXPRESS, OLX, PROM.UA) with nothing naming the goods -> Other (14).
+- a bookshop -> Education (19) for textbooks and courses, Entertainment (6) for fiction; with nothing to tell them apart, Other (14).
+- a kindergarten, a school club, a tutor -> Children (20) when it is care, Education (19) when it is teaching.
+- a charge that is plainly the user's own money moving (their own card, their own jar, a round-up, an ATM) -> Transfers & withdrawals (13), kind transfer or withdrawal.`;
 
 // P3.4/§12.5: make USER-FACING free-text answers come back in the right language. Structured
 // tasks (enrich/OCR/parse) intentionally do NOT use this — their output is ids, and the numeric

@@ -36,7 +36,7 @@ transactions.get("/transactions", async (c) => {
   const amin = url.searchParams.get("amin"); // мін. сума (₴, порівняння по модулю)
   const amax = url.searchParams.get("amax"); // макс. сума (₴)
 
-  return c.json(await txRepo.listFeed(c.env.DB, c.get("locale"), {
+  const rows = await txRepo.listFeed(c.env.DB, c.get("locale"), {
     limit, offset,
     category: category ? Number(category) : undefined,
     catparent: catparent ? Number(catparent) : undefined,
@@ -48,7 +48,17 @@ transactions.get("/transactions", async (c) => {
     // ₴ → копійки тут, бо це розбір ВВОДУ; порівняння по модулю — у репозиторії.
     aminMinor: amin ? Math.round(Number(amin) * 100) : undefined,
     amaxMinor: amax ? Math.round(Number(amax) * 100) : undefined,
-  }) satisfies TxRow[]);
+  });
+
+  // §SEARCH-VEC — the semantic fallback, and ONLY when the text filter came back short. The exact
+  // rows keep their place and their order; the extra ones are appended. A query `LIKE` already
+  // answered costs no embedding call, which is both the cost rule and the correctness one.
+  if (q) {
+    const { appendSemantic } = await import("../../lib/finance/search-vec.ts");
+    const out = await appendSemantic(c.env, c.get("locale"), q, rows, limit);
+    return c.json(out.rows satisfies unknown[] as TxRow[]);
+  }
+  return c.json(rows satisfies TxRow[]);
 });
 
 // Bulk-редагування виділених транзакцій (мультивибір на /tx): призначити групу,

@@ -13,6 +13,7 @@ import { api } from "../routes/api/index.ts";
 import { migratedDb, testEnv, freezeTime, type MemDb } from "./harness.ts";
 import { seed, FROZEN_NOW_ISO } from "./fixture.ts";
 import type { SpendProfile, Momentum, IncomeAllocation, SpendFloor } from "../../shared/api/insights.ts";
+import { localYearStart } from "../lib/finance/time.ts";
 
 async function get<T>(db: MemDb, path: string): Promise<T> {
   const res = await api.request(path, { method: "GET" }, testEnv(db));
@@ -204,5 +205,52 @@ test("§MOMENTUM: the same window on the same data twice gives the same answer",
     const a = await get<Momentum>(db, "/insights/momentum");
     const b = await get<Momentum>(db, "/insights/momentum");
     assert.deepEqual(a.rows.map((r) => r.category_id), b.rows.map((r) => r.category_id));
+  } finally { restore(); }
+});
+
+/**
+ * §APP_TZ at the hardest boundary there is: the turn of the year, in the hour where Kyiv and UTC
+ * disagree about which year it is.
+ *
+ * Every `/insights/*` window is a pair of unix seconds the CLIENT computes from Kyiv midnights,
+ * and the server then buckets rows inside it with an offset (`localFmtSql`). Both halves have to
+ * agree, and the only hour that proves it is the one where the two calendars differ — 31 December
+ * 22:30 in Kyiv is already 1 January in UTC. The same class of defect emptied Statistics for three
+ * hours a night in August 2026, and lint C12 can only see the JavaScript half of it.
+ */
+test("§APP_TZ: the year a spend belongs to is decided in KYIV, not in UTC", async () => {
+  const restore = freezeTime("2027-02-01T09:00:00.000Z");
+  try {
+    const db = migratedDb();
+    db.raw.prepare(
+      "INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit) VALUES (?,?,?,?,?,?)",
+    ).run("acc", "black", "Картка", 980, 0, 0);
+    const put = (id: string, iso: string, amount: number) => db.raw.prepare(
+      `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, category_id, merchant)
+       VALUES (?,?,?,?,?,?,?,?)`,
+    ).run(id, "acc", "mono", Math.floor(Date.parse(iso) / 1000), amount, 980, 1, "Крамниця");
+
+    // 22:30 Kyiv on 31 December — still 2026 where the user lives, already 2027 in UTC.
+    put("old-year", "2026-12-31T20:30:00.000Z", -10_000_00);
+    // 00:30 Kyiv on 1 January — the mirror image: 2027 for the user, still 2026 in UTC.
+    put("new-year", "2026-12-31T22:30:00.000Z", -20_000_00);
+
+    const y2026 = { from: localYearStart(Math.floor(Date.parse("2026-06-01T00:00:00Z") / 1000)),
+                    to: localYearStart(Math.floor(Date.parse("2026-06-01T00:00:00Z") / 1000), 1) };
+    const p2026 = await get<SpendProfile>(db, `/insights/spend-profile?from=${y2026.from}&to=${y2026.to}`);
+    assert.equal(p2026.total, 10_000_00, "the 22:30 row belongs to the year the user was living in");
+
+    const p2027 = await get<SpendProfile>(db, `/insights/spend-profile?from=${y2026.to}&to=${y2026.to + 86400 * 40}`);
+    assert.equal(p2027.total, 20_000_00, "and the 00:30 row belongs to the next one");
+
+    // ⚠️ THE HALF A SUM CANNOT SEE. A window total is zone-free — it only compares instants — so
+    // the assertions above would survive a server that bucketed rows in UTC. The DAY GROUPING is
+    // what cannot: in Kyiv these two rows fall on 31 December and 1 January, so a four-day window
+    // holding both has TWO days with spending in it; grouped in UTC they collapse onto 1 January
+    // and the answer would be one. That is exactly the bucket `localFmtSql` exists to get right.
+    const dec30 = localYearStart(Math.floor(Date.parse("2026-06-01T00:00:00Z") / 1000), 1) - 86400 * 2;
+    const span = await get<SpendProfile>(db, `/insights/spend-profile?from=${dec30}&to=${dec30 + 86400 * 4}`);
+    assert.equal(span.quiet_days.days, 4, "four whole days in the window");
+    assert.equal(span.quiet_days.days - span.quiet_days.quiet, 2, "two of them had spending — in KYIV");
   } finally { restore(); }
 });

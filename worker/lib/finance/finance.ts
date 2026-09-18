@@ -2,7 +2,7 @@
 // Telegram-бот (routes/telegram.ts): створення готівкової транзакції, підсумок
 // власних коштів (§5, кредитний ліміт) і останні транзакції. Одне джерело правди.
 import type { Env } from "../../env.ts";
-import { ownFundsMinor, debtMinor } from "./own-funds.ts";
+import { ownFundsMinor, debtMinor } from "../../../shared/own-funds.ts";
 import type { AppDb } from "../platform/db-shim.ts";
 import { getState } from "./repo.ts";
 import { getRates, toBaseMinor } from "./money.ts";

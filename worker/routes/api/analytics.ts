@@ -399,7 +399,17 @@ analytics.get("/analytics/patterns", async (c) => {
   const monthStart = localMonthStart(now);
   const nextMonthStart = localMonthStart(now, 1);
   const elapsedFrac = Math.min(1, Math.max(0.02, (now - monthStart) / (nextMonthStart - monthStart)));
-  const curKey = new Date(now * 1000).toISOString().slice(0, 7);
+  /**
+   * ⚠️ §APP_TZ — the CURRENT month's key must be Kyiv, like every key it is compared against.
+   *
+   * This was `new Date(now * 1000).toISOString().slice(0, 7)` — UTC — while the matrix it indexes
+   * is grouped with `localYmSql` and `trailingKeys` below are built with `localYm`. Between 00:00
+   * and 03:00 Kyiv on the FIRST of a month the two disagree: `cat.months.get(curKey)` then returns
+   * LAST month's total as this month's spending, and the same month appears again among the six
+   * trailing ones it is being compared with. Three hours a month, on the day a fresh month should
+   * read as nearly empty, the page reported a full month of spending as today's pace.
+   */
+  const curKey = localYm(now);
   // Трейлінг-вікно: 6 повних місяців перед поточним.
   const refStart = localMonthStart(now, -6);
   const trailingKeys: string[] = [];

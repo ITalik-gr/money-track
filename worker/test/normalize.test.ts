@@ -10,7 +10,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currencyNumeric, parseAmountMinor, parseStatementDate } from "../lib/bank/normalize.ts";
 import { localParts, localYmd } from "../lib/finance/stats.ts";
-import { currencyCode, currencySign, CURRENCY_META, CURRENCY_BY_CODE } from "../../shared/currency.ts";
+import { currencyCode, currencySign, CURRENCY_META, CURRENCY_NUM_BY_LETTERS } from "../../shared/currency.ts";
 
 test("statement dates: a zone-less wall clock is KYIV time", async (t) => {
   await t.test("an evening operation stays on the day it happened", () => {
@@ -134,6 +134,6 @@ test("a currency with no symbol prints its CODE, never a bare number", () => {
 
 test("the two directions cannot drift, because one is derived", () => {
   for (const [num, meta] of Object.entries(CURRENCY_META)) {
-    assert.equal(CURRENCY_BY_CODE[meta.code], Number(num), `${meta.code} disagrees with ${num}`);
+    assert.equal(CURRENCY_NUM_BY_LETTERS[meta.code], Number(num), `${meta.code} disagrees with ${num}`);
   }
 });

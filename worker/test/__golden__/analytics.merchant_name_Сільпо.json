@@ -73,6 +73,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -110,6 +112,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -147,6 +151,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -184,6 +190,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -221,6 +229,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -258,6 +268,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -295,6 +307,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -332,6 +346,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -369,6 +385,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -406,6 +424,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -443,6 +463,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -480,6 +502,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -517,6 +541,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -554,6 +580,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -591,6 +619,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -628,6 +658,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -665,6 +697,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"
@@ -702,6 +736,8 @@
         "reimbursed": 0,
         "reimburses_total": 0,
         "ai_recurring": null,
+        "is_business": null,
+        "tax_base_uah": null,
         "category_name": "Продукти",
         "category_color": "#1F6E4C",
         "category_icon": "cart"

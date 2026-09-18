@@ -93,6 +93,10 @@ const DYNAMIC_KEYS = [
   { prefix: "audit.source.", values: ["chat", "enrich", "resweep", "catchup"], since: "2026-08-12", why: "§AI-AUDIT — which path wrote the change" },
   { prefix: "audit.field.", values: ["category_id", "real_category_id", "is_transfer", "ai_note"], since: "2026-08-12", why: "§AI-AUDIT — the fields a model may rewrite (real_category_id joined 2026-09-02, §AI-CATCHUP)" },
   { prefix: "feedback.kind", values: ["Bug", "Idea", "Other"], since: "2026-08-01", why: "feedback inbox badges" },
+  // §TAX-DUE — the three payment kinds an obligation can be. The list is closed by the schema
+  // (`tax_obligations.kind`), so a fourth would have to be a migration, and this line fails the
+  // moment it is added without its strings.
+  { prefix: "fop.kind.", values: ["single_tax", "military_levy", "social_contribution"], since: "2026-09-18", why: "the ФОП obligation kinds on /fop" },
   { prefix: "imp.", values: ["essential", "discretionary"], since: "2026-07-14", why: "SafeToSpend's two-level legend — NOT the three-level set, which is `IMPORTANCE_META`" },
 ];
 for (const { prefix, values, since, why } of DYNAMIC_KEYS) {
@@ -119,9 +123,38 @@ for (const file of walk(SRC)) {
   });
 }
 
+/**
+ * 4. A key NOTHING reaches — dead weight in every bundle, and worse than that: a translator is
+ *    asked to keep a sentence in step with a screen that no longer says it, and the next reader
+ *    cannot tell the leftovers from the live strings.
+ *
+ * Cleared to zero on 2026-09-18 (26 keys: a password login that is gone since Google-only sign-in,
+ * a language picker that now renders its own labels, six Statistics legends that were rewritten).
+ * The check is added BECAUSE the list reached zero — a lint that ships with a 26-entry allowlist
+ * teaches people to add the twenty-seventh.
+ *
+ * ⚠️ Runtime-built keys are covered by DYNAMIC_KEYS above: a prefix that is declared there is
+ * skipped here, and an UNDECLARED runtime prefix is already refused by check 3. That is what makes
+ * a plain text search safe — there is no third way for a key to be reached.
+ */
+const usedIn = [SRC, "shared", "worker"].flatMap((root) => walk(root))
+  .filter((f) => !f.includes(`${join("worker", "test")}`) && !f.includes(join("src", "i18n")))
+  .map((f) => readFileSync(f, "utf8"))
+  .join("\n");
+const dead = [...enKeys].filter((k) =>
+  !DYNAMIC_KEYS.some((d) => k.startsWith(d.prefix)) &&
+  !usedIn.includes(`"${k}"`) && !usedIn.includes(`'${k}'`) && !usedIn.includes(`\`${k}\``));
+if (dead.length) {
+  problems.push(
+    `${dead.length} translation key(s) nothing uses: ${dead.slice(0, 8).join(", ")}${dead.length > 8 ? " …" : ""}\n` +
+    `    Delete them from BOTH dictionaries, or — if one is built at runtime — declare its prefix\n` +
+    `    in DYNAMIC_KEYS above, which is the only other way a key can legitimately be reached.`,
+  );
+}
+
 if (problems.length) {
   console.error(`✗ i18n lint: ${problems.length} problem(s)\n`);
   for (const p of problems) console.error("  " + p);
   process.exit(1);
 }
-console.log(`✓ i18n lint: no hardcoded locale tags; en/uk in parity; ${DYNAMIC_KEYS.length} runtime-built key prefixes resolved`);
+console.log(`✓ i18n lint: no hardcoded locale tags; en/uk in parity; ${DYNAMIC_KEYS.length} runtime-built key prefixes resolved; no unused keys`);

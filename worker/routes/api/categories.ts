@@ -6,7 +6,7 @@ import * as planningRepo from "../../repo/planning.ts";
 import { monthlyPlannedUAH } from "../../lib/finance/subscriptions.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, numParam } from "./_shared.ts";
+import { apiRoutes, idParam, numParam } from "./_shared.ts";
 import type { Category } from "../../../shared/types.ts";
 import type { CategoryOverview, CategoryShape } from "../../../shared/api/analytics.ts";
 import { normImportance } from "../../lib/finance/importance.ts";
@@ -42,7 +42,8 @@ categories.post("/categories", async (c) => {
 // Редагувати будь-яку категорію (зокрема вбудовану): назва/колір/іконка/батько.
 // Колонки вже є (міграція 0005), нової міграції не треба. parent_id=null → верхній рівень.
 categories.patch("/categories/:id", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const b = await c.req.json<{ name?: string; color?: string; icon?: string; parent_id?: number | null; importance?: string | null }>();
   if (!(await categoriesRepo.exists(c.env.DB, id))) return c.json({ error: "not_found" }, 404);
   if (b.name !== undefined && !b.name.trim()) return c.json({ error: "name required" }, 400);
@@ -60,13 +61,16 @@ categories.patch("/categories/:id", async (c) => {
 // Видалити можна лише кастомну категорію; транзакції знеприв'язуються.
 // Скільки всього прив'язано до категорії (для діалогу «куди перенести перед видаленням»).
 categories.get("/categories/:id/usage", async (c) => {
-  return c.json(await categoriesRepo.usage(c.env.DB, Number(c.req.param("id"))));
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  return c.json(await categoriesRepo.usage(c.env.DB, id));
 });
 
 // Видалити категорію, перенісши всі прив'язки на іншу (reassign) або знявши їх (null).
 // Захищена лише категорія «Перекази і зняття» (13) — на ній тримається логіка бакета.
 categories.delete("/categories/:id", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (id === 13) return c.json({ error: st(c.get("locale"), "errTransferCatLocked") }, 400);
   if (!(await categoriesRepo.exists(c.env.DB, id))) return c.json({ error: "not_found" }, 404);
 
@@ -109,7 +113,8 @@ categories.delete("/categories/:id", async (c) => {
  * The whole assembly lives in `lib/finance/category-shape.ts`; this is transport and the scope.
  */
 categories.get("/categories/:id/shape", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
   const now = Math.floor(Date.now() / 1000);
   const url = new URL(c.req.url);
@@ -129,7 +134,8 @@ categories.get("/categories/:id/shape", async (c) => {
 });
 
 categories.get("/categories/:id/overview", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
   const url = new URL(c.req.url);
   const now = Math.floor(Date.now() / 1000);

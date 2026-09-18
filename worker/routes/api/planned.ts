@@ -7,7 +7,7 @@ import { getRates } from "../../lib/finance/money.ts";
 import { monthlyPlannedUAH } from "../../lib/finance/subscriptions.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes } from "./_shared.ts";
+import { apiRoutes, idParam } from "./_shared.ts";
 import type { PlannedActual } from "../../../shared/types.ts";
 import type { UpcomingSubs, RecurringCandidate, PlanFromHabit, PlannedRow, AiDetectResult, SubscriptionOverview } from "../../../shared/api/planning.ts";
 
@@ -160,7 +160,8 @@ planned.get("/planned/:id/overview", async (c) => {
   const { subscriptionOverview } = await import("../../lib/finance/subscription-overview.ts");
   // A path id is not a query param with a sensible default: `Number("abc")` is NaN, and NaN in a
   // `.bind()` is a silent zero that answers "no such plan" as though the plan had been deleted.
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const out = Number.isFinite(id) ? await subscriptionOverview(c.env, id) : null;
   if (!out) return c.json({ error: st(c.get("locale"), "errPlanNotFound") }, 404);
   return c.json(out satisfies SubscriptionOverview);
@@ -181,20 +182,24 @@ planned.post("/planned/:id/relink", async (c) => {
   // A PATH id is not a query param: `numParam` clamps a query default, while here a non-numeric
   // segment is a bad request, and `Number("abc")` is NaN — which `.bind()` would treat as a silent
   // zero and answer "no such plan" as though it had been deleted (§Обробка помилок).
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (!Number.isFinite(id)) return c.json({ error: st(c.get("locale"), "errPlanNotFound") }, 404);
   return c.json(await linkPlanHistoryById(c.env.DB, id));
 });
 
 planned.delete("/planned/:id", async (c) => {
-  await planningRepo.deactivate(c.env.DB, Number(c.req.param("id")));
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await planningRepo.deactivate(c.env.DB, id);
   return c.json({ ok: true });
 });
 
 // §R5: редагувати підписку (наразі — опис для AI; розширювано за потреби).
 planned.patch("/planned/:id", async (c) => {
   const b = await c.req.json<{ note?: string | null; category_id?: number | null }>();
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   await planningRepo.update(c.env.DB, id, {
     ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
     ...(b.category_id !== undefined ? { category_id: b.category_id } : {}),

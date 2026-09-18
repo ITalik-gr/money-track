@@ -97,7 +97,13 @@ const EXCEPTIONS = {
   // forced that call and third time it named the right seam.
   // 2026-09-02: 861 → 817, §GOAL-PACE's drafter moved to `drafts-goals.ts` — fourth seam, and the
   // fourth time the file named it correctly.
-  "worker/lib/messaging/notify.ts": 817,
+  // 2026-09-18: 748 → 694. A new kind («a client went quiet») needed four lines here — a preference
+  // and a row in the drafter table — and four lines was all it took to prove the ceiling holds. The
+  // seam, sixth in a row that the file named itself: `draftPriceUps` + `draftDeadSubs` moved to
+  // `drafts-plans.ts`. Both read `plannedActuals()` against `planned_payments` and both answer «the
+  // plan you declared and the charges we see disagree» — which is neither «money leaves on a date»
+  // (`drafts-due`) nor «your month is going badly» (the pace drafters that stayed).
+  "worker/lib/messaging/notify.ts": 694,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
   // "one number, one home", and cutting it up would give that number two homes again.
   // 2026-08-27: 500 → 398, and the exception is kept only because the file is still over the cap.

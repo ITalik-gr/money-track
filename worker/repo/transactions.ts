@@ -39,6 +39,8 @@ export interface FeedFilter {
   to?: number;
   /** Free text over merchant / comment / note / event name. */
   q?: string;
+  /** §SEARCH-VEC — an explicit id set (the semantic fallback's hits). */
+  ids?: string[];
   /** Amount bounds in MINOR units, compared on absolute value. */
   aminMinor?: number;
   amaxMinor?: number;
@@ -60,6 +62,10 @@ function buildWhere(f: FeedFilter): { clause: string; binds: unknown[] } {
   // own denomination, which is what the amount in the row means.
   if (f.aminMinor !== undefined) { where.push("ABS(t.amount) >= ?"); binds.push(f.aminMinor); }
   if (f.amaxMinor !== undefined) { where.push("ABS(t.amount) <= ?"); binds.push(f.amaxMinor); }
+  if (f.ids !== undefined && f.ids.length) {
+    where.push(`t.id IN (${f.ids.map(() => "?").join(",")})`);
+    binds.push(...f.ids);
+  }
   if (f.q !== undefined) {
     where.push("(t.merchant LIKE ? OR t.comment LIKE ? OR t.user_note LIKE ? OR e.name LIKE ?)");
     binds.push(`%${f.q}%`, `%${f.q}%`, `%${f.q}%`, `%${f.q}%`);
@@ -124,6 +130,24 @@ const VOID_COLUMNS = `
  * "from → to" label. It joins nothing when `transfer_pair_id` is NULL (NULL = NULL is false in
  * SQL), so ordinary transactions are unaffected by it.
  */
+/**
+ * §SEARCH-VEC — the feed rows for a KNOWN set of ids, in the order the caller gives.
+ *
+ * Exists so the semantic fallback can hand back rows shaped exactly like the ordinary feed: the
+ * client renders one list, and a result that arrived by a different route must not look different.
+ *
+ * ⚠️ Ordered by the CALLER's array, not by time. The ids come back ranked by how well they match,
+ * and re-sorting them by date would throw away the only thing the ranking knew.
+ */
+export async function listFeedByIds(
+  db: AppDb, locale: NotifLocale, ids: string[],
+): Promise<TxRow[]> {
+  if (!ids.length) return [];
+  const rows = await listFeed(db, locale, { limit: ids.length, offset: 0, ids });
+  const pos = new Map(ids.map((id, i) => [id, i]));
+  return rows.sort((a, b) => (pos.get(a.id) ?? 0) - (pos.get(b.id) ?? 0));
+}
+
 export async function listFeed(
   db: AppDb,
   locale: NotifLocale,

@@ -17,7 +17,7 @@ import * as accountsRepo from "../../repo/accounts.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
 import { toBaseMinor, ratesForDays, moneyScope, rateDayKey, type Rates } from "./money.ts";
 import { localMonthStart } from "./stats.ts";
-import { ownFundsMinor } from "./own-funds.ts";
+import { ownFundsMinor } from "../../../shared/own-funds.ts";
 import { st } from "../platform/i18n.ts";
 
 export async function buildNetworth(env: Env, months: number, locale: NotifLocale): Promise<Networth> {

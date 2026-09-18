@@ -147,3 +147,39 @@ settings.delete("/settings/saved-filters/:id", async (c) => {
   await setState(c.env.DB, FILTERS_KEY, JSON.stringify(list));
   return c.json(list);
 });
+
+// ─── §SEARCH-VEC — semantic search over operations (docs/PERIMETER.md) ──────────────────────────
+
+/**
+ * Off by default, and turned on HERE rather than silently on first use.
+ *
+ * Switching it on is a decision about where the text of one's operations goes — inside Cloudflare,
+ * never to a new third party, but still out of the Durable Object. That is the user's call to
+ * make, and the answer is stored so the daily pass knows whether it may index anything at all.
+ */
+settings.get("/settings/search", async (c) => {
+  const { semanticEnabled, indexPending } = await import("../../lib/finance/search-vec.ts");
+  const on = await semanticEnabled(c.env.DB);
+  // `remaining` without indexing anything: the page needs to show progress, and a GET that
+  // embedded a batch would make opening Settings cost money.
+  return c.json({ enabled: on, remaining: on ? (await indexPending(c.env, 0)).remaining : 0 });
+});
+
+settings.put("/settings/search", async (c) => {
+  const body = await c.req.json<{ enabled?: boolean }>();
+  const { setSemanticEnabled } = await import("../../lib/finance/search-vec.ts");
+  await setSemanticEnabled(c.env.DB, !!body.enabled);
+  return c.json({ enabled: !!body.enabled });
+});
+
+/**
+ * One batch of the backfill; the client repeats while `remaining > 0`.
+ *
+ * The same shape as `enrichPending` and `/tax/backfill-rates`, for the same reason: a whole
+ * ledger in one request is a handler killed halfway with no record of how far it got.
+ */
+settings.post("/settings/search/index", async (c) => {
+  const { semanticEnabled, indexPending } = await import("../../lib/finance/search-vec.ts");
+  if (!(await semanticEnabled(c.env.DB))) return c.json({ indexed: 0, remaining: 0 });
+  return c.json(await indexPending(c.env, 50));
+});

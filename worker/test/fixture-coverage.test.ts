@@ -57,6 +57,19 @@ const EMPTY_OK: Record<string, string> = {
   transaction_tags: "secondary category ids; they do not sum (§6)",
   planned_dismissed: "a set of dismissed suggestions; ids only",
   ai_reports: "stored report JSON — reports.test.ts builds its own, and the fixture cannot fake a model",
+  // §TAX-* — the ФОП module drives both from its own suite (`tax.test.ts`). Seeding them in the
+  // shared fixture would put an official exchange rate and an accrued liability into every
+  // other test's world, where nothing reads them and they could only ever mislead a reader.
+  nbu_rates: "official NBU rates by date — tax.test.ts seeds the dates it asserts on (§TAX-FX)",
+  tax_obligations: "accruals, GENERATED from the rates and the period — never fixture data (§TAX-DUE)",
+  // §TAX-WATCH. `reg_sources` IS seeded (migration 0051 ships two national starting points), so it
+  // is absent from this list on purpose. The requisites are not: they are the one thing in the
+  // whole module a HUMAN types, and a fixture row would be the app pretending to know an IBAN.
+  tax_requisites: "the user's own payment details — typed by a person, never seeded (§TAX-WATCH)",
+  // §SEARCH-VEC. Bookkeeping for a DISPOSABLE index: drop the whole thing and no figure in the
+  // app changes. A fixture row would claim a vector exists in Vectorize for a transaction that
+  // this test database's Vectorize has never heard of — a lie that makes the backfill look done.
+  tx_search_index: "which rows are in the semantic index — disposable, rebuilt from scratch (§SEARCH-VEC)",
 };
 
 /** Directory tables — a separate database, so a separate (shorter) list. */

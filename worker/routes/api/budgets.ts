@@ -7,7 +7,7 @@ import {
 import * as categoriesRepo from "../../repo/categories.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, normChatMessages, numParam } from "./_shared.ts";
+import { apiRoutes, idParam, normChatMessages, numParam } from "./_shared.ts";
 import type { Budget } from "../../../shared/types.ts";
 import { budgetStatus, budgetHistory } from "../../lib/finance/budgets.ts";
 import type { AutoBudget, AutoBudgetItem, BudgetHistory, BudgetStatusList } from "../../../shared/api/planning.ts";
@@ -86,7 +86,8 @@ budgets.put("/budgets", async (c) => {
  * declared earlier and this is the only parameterised `/budgets/:…` route, on its own method.
  */
 budgets.delete("/budgets/:categoryId", async (c) => {
-  const categoryId = Number(c.req.param("categoryId"));
+  const categoryId = idParam(c, "categoryId");
+  if (categoryId == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (!Number.isFinite(categoryId)) return c.json({ error: "bad id" }, 400);
   const period = new URL(c.req.url).searchParams.get("period") === "week" ? "week" : "month";
   await budgetsRepo.clear(c.env.DB, categoryId, period);

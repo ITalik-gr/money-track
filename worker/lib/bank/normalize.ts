@@ -9,7 +9,7 @@
 // So they live here, once, above the providers. `csv.ts` was the first caller; PrivatBank will be
 // the second, and it must not get to decide these questions again.
 import { localWallTime } from "../finance/stats.ts";
-import { CURRENCY_BY_CODE } from "../../../shared/currency.ts";
+import { CURRENCY_NUM_BY_LETTERS } from "../../../shared/currency.ts";
 
 /**
  * "-1 234,56" / "1234.56" / "(1 234,56)" → minor units (integer kopecks).
@@ -110,7 +110,7 @@ export function parseStatementDate(raw: string): number | null {
 // Derived from `shared/currency.ts`, which is THE code table (see its note: this list used to be
 // the third and largest of three, and the disagreement between them lost data on a CSV round
 // trip). Adding a currency is still a one-line change — it just happens in one file now.
-const CURRENCY_NUMERIC = CURRENCY_BY_CODE;
+const CURRENCY_NUMERIC = CURRENCY_NUM_BY_LETTERS;
 
 export function currencyNumeric(code: string | number | null | undefined): number | null {
   if (code == null) return null;

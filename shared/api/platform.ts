@@ -23,7 +23,15 @@ export interface SearchResults {
 // Центр сповіщень: стрічка того, що система «хоче сказати» (репорти/дедлайни/аномалії/…).
 export type NotifKind =
   | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
-  | "big_tx" | "duplicate" | "health_drop" | "goal_risk" | "dead_sub" | "win" | "todo" | "ai";
+  | "big_tx" | "duplicate" | "health_drop" | "goal_risk" | "dead_sub" | "win" | "todo" | "ai"
+  // §TAX-WATCH — an official source changed. Its own kind, and its own preference: this is not
+  // news about the user's money but about the world the money is taxed in, and someone who mutes
+  // spending alerts has said nothing about whether they want to hear that a rule moved.
+  | "regulation"
+  // A client who used to pay on a rhythm and stopped. Its own kind for the same reason
+  // `regulation` has one: it is not news about spending, and somebody who muted spending alerts
+  // has said nothing about whether they want to hear that their business is shrinking.
+  | "quiet_client";
 export interface Notification {
   id: number; kind: NotifKind; title: string; body: string | null;
   // Template key + JSON params for locale-aware re-rendering of the feed (P3.3). NULL for the

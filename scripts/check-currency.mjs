@@ -55,11 +55,23 @@ const CLIENT_RULES = [
     re: /[!=]==\s*980|980\s*[!=]==/,
     say: "compares a currency against 980 to decide whether to convert or to show an equivalent. The question is 'is this the unit the screen totals in' — compare against getBaseCurrency().",
   },
+  {
+    // The client half of the ban the worker has had since 2026-08-18. `CLIENT_OK` still lets the
+    // currency PICKER name the hryvnia — there the sign is the subject, not an assumption about
+    // the reader — and comments are stripped before this runs, so prose about the rule is safe.
+    re: /₴/,
+    say: "writes a ₴ literal. Rolled-up money has no fixed currency (§BASE-CUR) — use baseSign(), or hryvniaSign() where the figure is hryvnia BY LAW (§TAX-UAH).",
+  },
 ];
 
 /** Lines where a hryvnia literal is the SUBJECT, not an assumption: currency pickers and the like. */
 const CLIENT_OK = [
   /value:\s*980,\s*label:/,          // a picker option that names UAH
+  // A MATCH KEY, not a printed sign: `highlight.tsx` finds amounts inside the model's prose, and
+  // the symbols it looks for are data (§LANG — match keys are never translated either).
+  /₴\|грн/,
+  // The table that DEFINES the symbols. Everything else takes them from here.
+  /\d{3}:\s*\{\s*sign:/,
   /currency:\s*980,?\s*(credit|\})/, // AddAccountModal presets: a manual UAH account
   /\?\?\s*980/,                      // a row's own currency, defaulted like the DB column does
   /rates\[String\(code\)\]/,         // the client-side converter itself
@@ -131,6 +143,39 @@ for (const file of tsFiles("")) {
   }
 }
 
+/**
+ * §TAX-UAH — the ФОП screen is the ONE deliberate exception to §BASE-CUR, and it was held by
+ * memory alone until the A1 audit went looking (2026-09-18).
+ *
+ * Every amount under `components/fop/` is hryvnia whatever the reader's display base is: the state
+ * levies in hryvnia, and a tax bill relabelled into dollars is a figure that appears on no
+ * document and that nobody can pay. `<Money minor={x} />` without `currency` prints the READER'S
+ * base — so one forgotten prop in a future card would render a plausible number in the wrong unit,
+ * which is the exact failure mode C10 exists for and the exact thing `tsc` cannot see.
+ *
+ * Checked by construction rather than by review: every `<Money` in that folder must name its
+ * currency. The value is not inspected — `HRYVNIA` is what the components pass today, and a card
+ * that genuinely needed another unit would be making a deliberate statement, which is what the
+ * explicit prop is for.
+ */
+const HRYVNIA_SCREEN = "src/components/fop";
+
+function checkHryvniaScreen(problems) {
+  for (const file of tsFiles("", "", HRYVNIA_SCREEN)) {
+    const code = stripComments(readFileSync(join(HRYVNIA_SCREEN, file), "utf8"));
+    // `<Money` may wrap onto the next line, so the props are read up to the closing `/>`.
+    for (const m of code.matchAll(/<Money\b[^>]*?\/>/gs)) {
+      if (!/\bcurrency=/.test(m[0])) {
+        problems.push(
+          `${HRYVNIA_SCREEN}/${file}: <Money> with no \`currency\` prop.\n` +
+          `    §TAX-UAH: every amount on the ФОП screen is HRYVNIA — pass currency={HRYVNIA}.\n` +
+          `    ${m[0].replace(/\s+/g, " ").slice(0, 110)}`,
+        );
+      }
+    }
+  }
+}
+
 for (const root of CLIENT_ROOTS) {
   for (const file of tsFiles("", "", root)) {
     const code = stripComments(readFileSync(join(root, file), "utf8"));
@@ -144,6 +189,8 @@ for (const root of CLIENT_ROOTS) {
     });
   }
 }
+
+checkHryvniaScreen(problems);
 
 if (problems.length) {
   console.error("✗ C10 display currency:\n\n" + problems.map((p) => "  " + p).join("\n\n") + "\n");

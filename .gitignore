@@ -23,3 +23,6 @@ HISTORY.md
 # (tax id, passport number, address) — and this repository is public.
 statement_*.csv
 statement_*.xls*
+
+# Eval runs are receipts of one paid run, not shared state (§AI-EVAL).
+worker/test/__eval__/last-run.json

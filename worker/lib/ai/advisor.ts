@@ -15,7 +15,7 @@ import { merchantContext, type MerchantRow } from "./merchant-context.ts";
 import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, burnShape, type BurnShape, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
-import { ownFundsMinor } from "../finance/own-funds.ts";
+import { ownFundsMinor } from "../../../shared/own-funds.ts";
 import { buildWeekdayAnalytics } from "../finance/weekday.ts";
 import { buildTimeContext, buildUpcomingCharges } from "./time-context.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
@@ -393,7 +393,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), per_month_90d_uah: Math.round(e.spent / 3 / 100) })),
     by_importance: (importance.results ?? []).map((x) => ({ level: x.importance, spent_90d_uah: Math.round(x.spent / 100) })),
     monthly_trend: (trend.results ?? []).map((t) => ({ month: t.m, spend_uah: Math.round(t.spend / 100), income_uah: Math.round(t.income / 100) })),
-    budgets,
+    budgets, ...(await (await import("../finance/tax.ts")).taxContext(env.DB, now)), // §TAX-RESERVE
   };
   if (facts.length) {
     context.facts = facts;

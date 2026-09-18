@@ -6,7 +6,7 @@ import { getRates, uahToMinorIn, convertMinorBetween, resolveBaseCurrency } from
 import { recalcGoal, isGoalKind, isAutofillKind, goalPace, goalCurrency } from "../../lib/finance/goals.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
-import { apiRoutes } from "./_shared.ts";
+import { apiRoutes, idParam } from "./_shared.ts";
 import type { SavingsGoal, GoalContribution, GoalProgressSeries } from "../../../shared/api/planning.ts";
 
 export const goals = apiRoutes();
@@ -118,7 +118,8 @@ goals.post("/goals", async (c) => {
 });
 
 goals.patch("/goals/:id", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const locale = c.get("locale");
   const b = await c.req.json<{ name?: string; target_amount?: number; current_amount?: number; account_id?: string | null; deadline?: number | null; color?: string; note?: string; kind?: string; autofill_kind?: string | null; autofill_value?: number | null }>();
   if (b.name !== undefined && !b.name.trim()) return c.json({ error: "name required" }, 400);
@@ -161,7 +162,9 @@ goals.patch("/goals/:id", async (c) => {
 });
 
 goals.delete("/goals/:id", async (c) => {
-  await goalsRepo.archive(c.env.DB, Number(c.req.param("id")));
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await goalsRepo.archive(c.env.DB, id);
   return c.json({ ok: true });
 });
 
@@ -182,7 +185,8 @@ goals.delete("/goals/:id", async (c) => {
  * literal segment after the parameter, so lint C7 is satisfied either way.
  */
 goals.get("/goals/:id/progress", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   if (!Number.isFinite(id)) return c.json({ error: "bad id" }, 400);
   const goal = (await goalsRepo.listActive(c.env.DB)).find((g) => g.id === id);
   if (!goal) return c.json({ error: st(c.get("locale"), "goalNotFound") }, 404);
@@ -218,7 +222,8 @@ goals.get("/goals/:id/progress", async (c) => {
  * target it does not share. Read and written raw for exactly that reason.
  */
 goals.get("/goals/:id/contributions", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const [rows, cur] = await Promise.all([
     goalsRepo.listContributions(c.env.DB, id),
     goalsRepo.currencyOf(c.env.DB, id),
@@ -228,7 +233,8 @@ goals.get("/goals/:id/contributions", async (c) => {
 });
 
 goals.post("/goals/:id/contributions", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const locale = c.get("locale");
   const b = await c.req.json<{ amount?: number; at?: number; note?: string | null }>()
     .catch(() => ({} as { amount?: number; at?: number; note?: string | null }));
@@ -247,8 +253,11 @@ goals.post("/goals/:id/contributions", async (c) => {
 });
 
 goals.delete("/goals/:id/contributions/:cid", async (c) => {
-  const id = Number(c.req.param("id"));
-  await goalsRepo.deleteContribution(c.env.DB, id, Number(c.req.param("cid")));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  const cid = idParam(c, "cid");
+  if (cid == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await goalsRepo.deleteContribution(c.env.DB, id, cid);
   // The SAME field as the add path two handlers up, so the same unit — the goal's own (§GOAL-CUR).
   // These two once disagreed (one converted, one did not) and a dollar screen saw the goal jump
   // ~40× on delete. The currency sweep cannot see this class at all: it reads GETs, and this is a

@@ -143,7 +143,7 @@ test("a notification gets 202 and no body", async () => {
 test("tools/list offers the snapshot and the read tools, and NOT the write tool", async () => {
   const { body } = await rpc(env(), "tools/list");
   const names = (body.result.tools as { name: string }[]).map((t) => t.name).sort();
-  assert.deepEqual(names, ["find_transactions", "get_finance_snapshot", "list_categories", "query_spend"]);
+  assert.deepEqual(names, ["find_transactions", "get_finance_snapshot", "get_tax_status", "list_categories", "query_spend"]);
   // Every tool must carry a schema under the MCP field name — `input_schema` is Anthropic's
   // spelling, and a client handed the wrong key sees a tool that takes no arguments.
   for (const t of body.result.tools as { inputSchema?: unknown }[]) assert.ok(t.inputSchema);
@@ -245,4 +245,18 @@ test("the snapshot answers in ONE unit, and names the currency as data", async (
     // not a monthly one, which is the mistake this data invites.
     assert.ok(typeof snap.period_note === "string");
   } finally { restore(); }
+});
+
+test("get_tax_status SAYS the module is off rather than answering with nothing", async () => {
+  /**
+   * The failure this guards is a silence that reads as an answer. With the ФОП module switched
+   * off the app knows nothing about the user's taxes — and an empty payload would let the model
+   * conclude «you owe nothing», which is a statement about somebody's tax position that nobody
+   * made and that has a penalty behind it.
+   */
+  const { body } = await rpc(env(), "tools/call", { name: "get_tax_status", arguments: {} });
+  const text = (body.result.content as { text: string }[])[0].text;
+  const payload = JSON.parse(text) as { enabled: boolean; note?: string };
+  assert.equal(payload.enabled, false);
+  assert.match(payload.note ?? "", /Do not state that they owe nothing/);
 });

@@ -57,16 +57,20 @@ runs all of them.
 
 | # | Check | Catches | Where |
 |---|---|---|---|
-| C1 | `.prepare()` only in `repo/` | SQL creeping back into routes | `scripts/check-repo-layer.mjs` |
+| C1 | no `.prepare()` in `routes/` or `services/` | SQL creeping back into routes | `scripts/check-repo-layer.mjs` |
 | C2 | no shapeless row types in `repo/`/`services/` | a response quietly losing a column | `scripts/check-api-contract.mjs` |
 | C3 | line ceiling per file in `routes/`+`services/`+`lib/` | `api.ts` regrowing | `scripts/check-route-size.mjs` |
 | C4 | client declares no API response types of its own | working around C2 | `scripts/check-api-contract.mjs` |
 | C5 | golden `/analytics` responses match to the kopeck | silent money regressions | `worker/test/golden.test.ts` |
-| C6 | golden DATABASE STATE after every write endpoint | silent regressions in writes, where the response says nothing | `worker/test/writes.test.ts` |
-| C7 | no literal route below a parameterised one that matches it; one prefix, one file | an endpoint silently unreachable — a real past outage | `scripts/check-route-order.mjs` |
+| C6 | golden DATABASE STATE after a write endpoint — 142 scenarios over ~48 of the 101 write routes | silent regressions in writes, where the response says nothing | `worker/test/writes.test.ts` |
+| C7 | no literal route below a parameterised one that matches it; one prefix, one file; every path id through `idParam` (added 2026-09-18) | an endpoint silently unreachable — a real past outage | `scripts/check-route-order.mjs` |
 | C8 | `index.css` is imports only; every part imported; line ceiling per part | the 4 182-line stylesheet regrowing | `scripts/check-styles.mjs` |
 | C9 | every `className` has a rule, every rule has a `className` | a block shipping unstyled, and dead CSS reading as live | `scripts/check-styles-used.mjs` |
-| C10 | one conversion target: `getStoredRates` only in `money.ts`, no `₴` literal in the worker (the Telegram exemption was dropped 2026-08-21) | a screen mixing the reader's currency with the hryvnia — arithmetic that renders perfectly and is wrong by the exchange rate | `scripts/check-currency.mjs` |
+| C10 | one conversion target: `getStoredRates` only in `money.ts`, no `₴` literal in the worker (the Telegram exemption was dropped 2026-08-21), every `<Money>` under `components/fop/` names its currency (§TAX-UAH), and no `₴` literal on the CLIENT either (both added 2026-09-18) | a screen mixing the reader's currency with the hryvnia — arithmetic that renders perfectly and is wrong by the exchange rate | `scripts/check-currency.mjs` |
+| C11 | no conditional CSS rule (`@media`/`@container`) is overridden by an unconditional one below it | a responsive rule that silently does nothing — `@media` adds no specificity (§COND-ORDER) | `scripts/check-styles-css.mjs` |
+| C12 | no local date PART read from the runtime clock in `worker/`, and no date/month KEY built in UTC | the whole app a day behind between 00:00 and 03:00 Kyiv — §APP_TZ, and that is a real past outage | `scripts/check-app-tz.mjs` |
+| C13 | every worker route outside `/api/*` is in `assets.run_worker_first` | Cloudflare serving the SPA SHELL instead of the endpoint — a 200 with HTML in it and no error anywhere (`docs/OPS.md`) | `scripts/check-worker-first.mjs` |
+| C14 | `balance − credit_limit` only in `shared/own-funds.ts` | the Accounts total and the dashboard cushion disagreeing about one card — it had already cost an evening once | `scripts/check-own-funds.mjs` |
 
 Two things learned about the checks themselves:
 
@@ -80,6 +84,20 @@ Two things learned about the checks themselves:
   before something can catch a mistake.** Its handlers are driven by an update payload rather than
   an HTTP route and they answer over `fetch`, so nothing could observe them until
   `worker/test/telegram.test.ts` began recording the bot's outgoing calls.
+  ⚠️ **Its SCOPE is `routes/` and `services/`, not «SQL only in `repo/`»** — which is what this
+  table and `CLAUDE.md` both claimed until the A1/A2 audit counted: 300 `.prepare()` call sites
+  live in `lib/` against 285 in `repo/`, because a domain module owning its own query is the
+  design, not a leak. Both documents now say what the check actually enforces. The invariant that
+  is real, and the one all four expensive bugs above came from breaking, is narrower and harder:
+  **no second definition of the same number.** A new query goes to `repo/` or to the module that
+  already answers that question — never to the handler that happens to be open.
+- **C6 covers the writes whose effect is arithmetic, not «every write endpoint»** — the table said
+  the latter until the A2/§6 audit counted (2026-09-18): 142 scenarios reach about 48 of the 101
+  write routes. The 53 without one are mostly out of reach rather than forgotten — the AI endpoints
+  need a live key, push needs VAPID, and a dozen settings writes store one field they read back in
+  the same request. The gap worth closing is the middle: `/tax/*`, `/goals/*`, `/notifications/*`
+  and `/settings/saved-filters` all change stored state that another screen reads later, which is
+  exactly the shape a golden catches and a unit test does not.
 - C3 deliberately is NOT a STRICT ratchet. A query count moves in whole steps and rarely, so a drop
   means someone forgot to tighten the budget. Line counts move on every edit, and a check that goes
   red because a file got three lines shorter trains people to edit the budget without reading it.

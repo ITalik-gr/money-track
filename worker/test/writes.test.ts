@@ -127,6 +127,11 @@ const EXTRA_PROBES = {
   facts: (db: MemDb) =>
     rows(db, `SELECT id, text, effective_from, expires_at, category_id, adjust_kind, adjust_value,
                      confirmed_at, source FROM facts ORDER BY id`),
+  // §TAX-DUE. `paid_tx_id` is the whole point: «paid» is a LINK to the operation that paid it, and
+  // the amount must keep the figure it was paid at — a later refresh re-pricing a settled quarter
+  // is the §BUDGET-MEMORY failure with a penalty attached, and the response says nothing about it.
+  tax_obligations: (db: MemDb) =>
+    rows(db, "SELECT id, kind, period, amount, due_date, paid_tx_id FROM tax_obligations ORDER BY id"),
 } satisfies Record<string, (db: MemDb) => unknown>;
 
 interface Scenario {
@@ -155,7 +160,49 @@ interface Scenario {
   raw?: boolean;
 }
 
+/**
+ * §TAX-DUE — an accrued obligation to settle, and an operation that could have settled it.
+ *
+ * Written straight into the table rather than through `refreshObligations`: the scenario is about
+ * what the WRITE does, and generating the row from the rate table would make the golden move every
+ * time a new year's minimum wage is added.
+ */
+function seedObligation(db: MemDb): void {
+  db.raw.prepare(
+    `INSERT INTO tax_obligations (id, kind, period, amount, due_date, created_at)
+     VALUES (1, 'single_tax', '2026-Q1', 500000, '2026-05-20', 0)`,
+  ).run();
+}
+
 const SCENARIOS: Scenario[] = [
+  // ---- §TAX-DUE: «paid» is a LINK, and a settled quarter stops moving ---------------------
+  {
+    name: "tax: an obligation is settled BY an operation, and keeps the amount it was paid at",
+    method: "POST",
+    path: () => "/tax/obligations/1/paid",
+    body: (db) => ({ tx_id: txId(db, "Сільпо") }),
+    setup: seedObligation,
+    extraProbes: ["tax_obligations"],
+  },
+  {
+    name: "tax: settled WITHOUT an operation — allowed, and visibly different from a link",
+    method: "POST",
+    path: () => "/tax/obligations/1/paid",
+    body: () => ({}),
+    setup: seedObligation,
+    extraProbes: ["tax_obligations"],
+  },
+  {
+    // The id names no row. The write must not report success — an UPDATE that matched nothing is
+    // not an error in SQL, and this endpoint used to answer 200 with the status object anyway.
+    name: "tax: an obligation id that names no row is refused, and nothing moves",
+    method: "POST",
+    path: () => "/tax/obligations/999/paid",
+    body: () => ({}),
+    setup: seedObligation,
+    extraProbes: ["tax_obligations"],
+  },
+
   // ---- §COMPENSATION: the arithmetic-heavy endpoint --------------------------------------
   {
     name: "reimbursement: explicit amount replaces the existing allocation",

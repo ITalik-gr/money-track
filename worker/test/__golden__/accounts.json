@@ -18,7 +18,8 @@
       "payment_day": null,
       "min_payment": null,
       "provider": "mono",
-      "connection_id": null
+      "connection_id": null,
+      "is_business": 0
     },
     {
       "id": "acc-cred",
@@ -37,7 +38,8 @@
       "payment_day": null,
       "min_payment": null,
       "provider": "mono",
-      "connection_id": null
+      "connection_id": null,
+      "is_business": 0
     },
     {
       "id": "acc-inv",
@@ -56,7 +58,8 @@
       "payment_day": null,
       "min_payment": null,
       "provider": "mono",
-      "connection_id": null
+      "connection_id": null,
+      "is_business": 0
     },
     {
       "id": "acc-usd",
@@ -75,7 +78,8 @@
       "payment_day": null,
       "min_payment": null,
       "provider": "mono",
-      "connection_id": null
+      "connection_id": null,
+      "is_business": 0
     },
     {
       "id": "acc-jar",
@@ -94,7 +98,8 @@
       "payment_day": null,
       "min_payment": null,
       "provider": "mono",
-      "connection_id": null
+      "connection_id": null,
+      "is_business": 0
     }
   ]
 }

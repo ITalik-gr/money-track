@@ -51,6 +51,10 @@ const INSTRUCTIONS = [
   "Call `list_categories` when unsure of a category's exact name — filtering by a name the user",
   "does not have returns nothing, which reads as 'you have no such spending'.",
   "",
+  "If the user is a sole trader (ФОП), `get_tax_status` answers what they owe, when, and how much",
+  "of the annual income ceiling is left. Its figures are HRYVNIA whatever currency the other tools",
+  "answer in, because the state levies in hryvnia — never convert them.",
+  "",
   "AMOUNTS ARE WHOLE CURRENCY UNITS across every tool here (a `_uah` suffix is historical and",
   "does NOT mean hryvnia — each answer states its own `currency` code). Never convert an amount",
   "into another currency, and never restate one with a different sign than the stated code.",
@@ -70,6 +74,40 @@ const SNAPSHOT_TOOL = {
   // assistant that answers as though it cannot see the ledger (`chat-tools.ts` → `strict`).
   inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
 };
+
+/**
+ * §TAX-* — the sole-trader position (docs/TAX.md).
+ *
+ * A tool of its own rather than a block inside the snapshot: the snapshot answers «how am I
+ * doing», and this answers «what do I owe and by when», which is a question with a deadline
+ * attached. A model that had to fetch the whole position to check a due date would either skip
+ * the check or pay for the rest of it every time.
+ *
+ * Returns `{enabled: false}` for everybody else — an empty answer would read as «nothing is owed».
+ */
+const TAX_TOOL = {
+  name: "get_tax_status",
+  description:
+    "The user's ФОП (Ukrainian sole trader) tax position: tax accrued and not yet paid, the next " +
+    "payment with its deadline and how many days are left, income this quarter, and how much of " +
+    "the annual income ceiling for their group is used. All amounts are HRYVNIA regardless of the " +
+    "currency other tools answer in. Call it for anything about taxes, deadlines, the single tax, " +
+    "ЄСВ, the military levy, or whether they are close to the limit for their group.",
+  inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
+};
+
+async function taxStatusTool(env: Env): Promise<unknown> {
+  const { taxContext, readProfile, refreshObligations } = await import("../lib/finance/tax.ts");
+  if (!(await readProfile(env.DB)).enabled) {
+    // Stated, not implied. An empty object would let the model answer «you owe nothing», which is
+    // a claim about the user's taxes that nobody made.
+    return { enabled: false, note: "The ФОП module is switched off for this user, so the app knows nothing about their taxes. Do not state that they owe nothing — say the module is off." };
+  }
+  // The open quarter's liability moves with every receipt, so it is recomputed on read for the
+  // same reason `/tax/status` does it: a figure this stale is one somebody is about to pay.
+  await refreshObligations(env.DB, Math.floor(Date.now() / 1000));
+  return { enabled: true, ...(await taxContext(env.DB, Math.floor(Date.now() / 1000))) };
+}
 
 /**
  * The snapshot, in the SAME unit as every other tool here.
@@ -130,7 +168,7 @@ async function handleRpc(env: Env, req: RpcRequest): Promise<unknown | null> {
       return ok(id, {});
 
     case "tools/list":
-      return ok(id, { tools: [SNAPSHOT_TOOL, ...financeReadTools().map((t) => ({
+      return ok(id, { tools: [SNAPSHOT_TOOL, TAX_TOOL, ...financeReadTools().map((t) => ({
         name: t.name, description: t.description, inputSchema: t.input_schema,
       }))] });
 
@@ -151,6 +189,7 @@ async function handleRpc(env: Env, req: RpcRequest): Promise<unknown | null> {
       const name = typeof params.name === "string" ? params.name : "";
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       if (name === SNAPSHOT_TOOL.name) return ok(id, toolText(await snapshot(env)));
+      if (name === TAX_TOOL.name) return ok(id, toolText(await taxStatusTool(env)));
       /**
        * The gate is `financeReadTools()`, not a check against the whole tool table: the list a
        * client was SHOWN is the list it may call. Dispatching on `runFinanceTool` alone would

@@ -1,0 +1,517 @@
+/* ФОП — the business page (docs/TAX.md §0.1).
+ *
+ * Its own file rather than a section of `planning.css`: the business is a separate organism, and
+ * the two screens share no component. `analytics.css` and `advisor.css` were carved off for the
+ * same reason — a domain that has its own page gets its own part (C8).
+ *
+ * ⚠️ Every amount on this page is hryvnia (§TAX-UAH), so nothing here reacts to the display base.
+ * There is no currency-dependent width trick, and none is wanted.
+ *
+ * ⚠️ §COND-ORDER — every `@media` block in this file sits BELOW the unconditional rule it
+ * overrides. A media query adds no specificity, so a conditional rule above its base silently
+ * does nothing (lint C11). */
+
+/* ── header: the reserve and the limit, side by side ─────────────────────────────────────────── */
+
+.fop-head {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-4);
+}
+
+.fop-big {
+  font-size: var(--fs-3xl);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: var(--sp-2) 0 var(--sp-1);
+}
+
+/* The one paragraph that keeps a tax figure from being read as a loss: said in plain words, at
+   reading size, not as fine print. */
+.fop-note {
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  margin: var(--sp-2) 0 0;
+}
+
+.fop-next {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-soft);
+}
+
+/* Overdue is a different STATE, not a louder shade: a missed subscription retries, a missed tax
+   deadline accrues a penalty and keeps accruing. */
+.fop-next.overdue {
+  border-color: var(--c-red);
+  background: var(--c-red-soft);
+}
+
+.fop-next-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-weight: 600;
+}
+
+.fop-next-kind { color: var(--text); }
+
+.fop-next-when {
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  margin: var(--sp-1) 0 var(--sp-2);
+}
+
+/* The cash gap is prose, not a figure: it needs a line of its own above the group table. */
+.fop-gap { margin: 0 0 var(--sp-3); }
+
+/* §BUDGET-PACE — the open quarter, three figures on one row. Not a chart: each of the three IS a
+   number, and a chart around a number the size of the number itself is decoration. */
+.fop-outlook {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+.fop-outlook-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  font-weight: 600;
+}
+
+.fop-outlook-label { color: var(--text-dim); font-size: var(--fs-sm); font-weight: 400; }
+
+/* The «which group» comparison. One row per group so the totals form a column that can be read
+   down; the parts sit under the total because they explain it rather than compete with it. */
+.fop-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.fop-group {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.fop-group.mine { border-color: var(--accent); }
+
+/* Past its ceiling the group is not a cheaper option, it is not an option: struck through rather
+   than merely greyed, because grey still reads as «available, just quieter». */
+.fop-group.closed .fop-group-total { text-decoration: line-through; }
+.fop-group.closed { color: var(--text-dim); }
+
+.fop-group-name { font-weight: 600; }
+
+.fop-group-mine {
+  margin-left: var(--sp-2);
+  color: var(--accent);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+}
+
+.fop-group-total { font-weight: 600; }
+
+.fop-group-parts {
+  grid-column: 1 / -1;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 560px) {
+  /* Three figures side by side stop being readable before they stop fitting. */
+  .fop-outlook { grid-template-columns: 1fr 1fr; }
+}
+
+/* §TAX-DUE — the year's deadlines. A four-column grid so the dates line up as a column the eye
+   can run down; the amount is `tabular-nums` through `Money`, which is what makes the column
+   comparable rather than merely aligned. */
+.fop-cal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.fop-cal-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.fop-cal-row:last-child { border-bottom: none; }
+
+/* Overdue is a STATE, like `.fop-next.overdue`: a missed deadline keeps accruing a penalty. */
+.fop-cal-row.overdue .fop-cal-when { color: var(--c-red); }
+
+.fop-cal-row.paid { color: var(--text-dim); }
+
+.fop-cal-when { font-family: var(--font-mono); font-size: var(--fs-sm); }
+
+/* «Show the N paid ones» — a row in the list, not a button beside it: it stands where the rows it
+   reveals will stand, so the list does not jump under the cursor. */
+.fop-cal-more {
+  align-self: start;
+  padding: var(--sp-2) 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.fop-cal-kind { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fop-cal-period { color: var(--text-dim); font-size: var(--fs-sm); }
+
+.fop-cal-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--c-green);
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 560px) {
+  /* Below the fold of a phone the four columns stop being columns: the label wraps under the date
+     and the action takes its own row, which keeps the amount readable instead of squeezed. */
+  .fop-cal-row {
+    grid-template-columns: auto 1fr;
+    gap: var(--sp-1) var(--sp-2);
+  }
+}
+
+/* §TAX-DUE — picking the operation that paid an obligation. A list of rows rather than a select:
+   the three fields that identify a payment (when, who, how much) are what the choice is made on,
+   and a collapsed control would hide two of them behind the one that identifies it worst. */
+.fop-paid {
+  margin-top: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.fop-paid-head { color: var(--text-dim); font-size: var(--fs-sm); }
+
+.fop-paid-empty { color: var(--text-dim); font-size: var(--fs-sm); }
+
+.fop-paid-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: var(--sp-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fop-paid-row:hover { border-color: var(--accent); }
+
+.fop-paid-when { color: var(--text-dim); font-family: var(--font-mono); font-size: var(--fs-sm); }
+
+.fop-paid-who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fop-limit-state { margin-top: var(--sp-3); text-align: center; }
+
+/* What the third limit state MEANS. Left-aligned under a centred gauge on purpose: it is prose,
+   and centred prose is read as a caption rather than as an instruction. */
+.fop-limit-what { margin-top: var(--sp-2); }
+
+.fop-warn { color: var(--c-red); font-size: var(--fs-sm); }
+.fop-ok { color: var(--c-green); font-size: var(--fs-sm); }
+.fop-muted { color: var(--text-dim); font-size: var(--fs-sm); }
+
+.fop-missing {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  margin-top: var(--sp-3);
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+}
+
+/* ── quarters ────────────────────────────────────────────────────────────────────────────────── */
+
+.fop-yoy { color: var(--text-dim); font-size: var(--fs-sm); }
+
+.fop-qgrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--sp-3);
+  margin-top: var(--sp-3);
+}
+
+.fop-q {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+}
+
+.fop-q-label { color: var(--text-dim); font-size: var(--fs-xs); }
+
+.fop-q-bar {
+  height: 72px;
+  display: flex;
+  align-items: flex-end;
+  border-radius: var(--radius-xs);
+  background: var(--bg-soft);
+  overflow: hidden;
+}
+
+.fop-q-fill {
+  width: 100%;
+  background: var(--c-teal);
+  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
+  transition: height var(--dur-2) var(--ease-out);
+}
+
+.fop-q-income { font-weight: 600; }
+
+.fop-q-rows { display: flex; flex-direction: column; gap: 2px; }
+
+.fop-q-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+}
+
+.fop-q-row i { font-style: normal; }
+
+/* What the business actually handed the person — the line the other three exist to produce. */
+.fop-q-row.net { color: var(--text); font-weight: 600; }
+
+.fop-q-rate { color: var(--text-dim); font-size: var(--fs-xs); }
+
+/* ── clients ─────────────────────────────────────────────────────────────────────────────────── */
+
+.fop-rhythm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-4);
+  margin: var(--sp-2) 0 var(--sp-4);
+}
+
+.fop-rhythm-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fop-rhythm-item i {
+  font-style: normal;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+}
+
+.fop-ranks { display: flex; flex-direction: column; gap: var(--sp-1); }
+
+.fop-rank {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+}
+
+/* The proportion bar sits BEHIND the text, like `.rank` elsewhere in the app — one visual
+   vocabulary for «this row is this big a share». */
+.fop-rank-bar {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--c-teal-soft);
+  border-radius: var(--radius-xs);
+  z-index: 0;
+}
+
+.fop-rank-name,
+.fop-rank-n,
+.fop-rank-sum { position: relative; z-index: 1; }
+
+.fop-rank-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fop-rank-n { color: var(--text-dim); font-size: var(--fs-xs); }
+
+/* ── regulatory watch ────────────────────────────────────────────────────────────────────────── */
+
+.fop-stale-banner {
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3);
+  border: 1px solid var(--c-red);
+  border-radius: var(--radius-sm);
+  background: var(--c-red-soft);
+  font-size: var(--fs-sm);
+}
+
+.fop-req { display: flex; flex-direction: column; gap: var(--sp-2); margin-top: var(--sp-3); }
+
+.fop-req-row {
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.fop-req-row.stale { border-color: var(--c-red); }
+
+.fop-req-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.fop-req-kind { font-weight: 600; }
+
+/* An IBAN is a code, so it takes the mono face — the one place this page uses it (DESIGN.md §2:
+   mono is for codes, never for money). */
+.fop-req-iban {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fop-req-state { margin-top: var(--sp-2); }
+
+.fop-req-form {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+.fop-sources { margin-top: var(--sp-5); }
+
+.fop-sources h4 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  color: var(--text-dim);
+  font-weight: 600;
+}
+
+.fop-source {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+
+/* A source that changes every day is dimmed rather than hidden: it is still being recorded, and
+   hiding it would make «why am I not being told about this page» unanswerable. */
+.fop-source.noisy { opacity: 0.6; }
+
+.fop-source-when { color: var(--text-dim); font-size: var(--fs-xs); }
+
+.fop-add-source {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+}
+
+/* ── profile ─────────────────────────────────────────────────────────────────────────────────── */
+
+.fop-profile-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  margin: var(--sp-3) 0;
+}
+
+.fop-profile-row label { color: var(--text-dim); font-size: var(--fs-sm); min-width: 80px; }
+
+.fop-check {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  margin: var(--sp-2) 0;
+  font-size: var(--fs-sm);
+}
+
+.fop-profile-actions { display: flex; gap: var(--sp-2); margin-top: var(--sp-4); }
+
+/* ── narrow ──────────────────────────────────────────────────────────────────────────────────── */
+/* §COND-ORDER: below every rule it overrides. */
+
+@media (max-width: 900px) {
+  .fop-head { grid-template-columns: 1fr; }
+  /* Six quarters do not fit a phone; three is still a trend and stays readable. */
+  .fop-qgrid { grid-template-columns: repeat(3, 1fr); }
+  .fop-add-source { grid-template-columns: 1fr; }
+}
+
+/* The two header cards carry real rules, so they keep their modifiers; the other four on this
+   page are plain `.card`s and were left unclassed on purpose. A class that styles nothing is the
+   `STYLELESS_OK` debt the roadmap is trying to shrink, and adding a fourteenth would be arguing
+   with the lint instead of listening to it. */
+.fop-reserve { display: flex; flex-direction: column; }
+
+.fop-limit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+/* ── the flag on one operation (§TAX-BASE) ───────────────────────────────────────────────────── */
+
+.fop-tx {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+  margin: var(--sp-3) 0;
+}
+
+.fop-tx-label { color: var(--text-dim); font-size: var(--fs-sm); }
+
+.fop-tx-note {
+  flex-basis: 100%;
+  color: var(--text-dim);
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+}
+
+/* ── income book ─────────────────────────────────────────────────────────────────────────────── */
+
+.fop-ledger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}

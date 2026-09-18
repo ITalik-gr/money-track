@@ -91,6 +91,27 @@
 			"bucket_name": "finance-receipts"
 		}
 	],
+	// §SEARCH-VEC — semantic transaction search (docs/PERIMETER.md, docs/TAX.md-style §-rule).
+	//
+	// ⚠️ Both bindings are Cloudflare's own, and that is the POINT, not a convenience: the text of
+	// an operation leaves the Durable Object to be embedded, and keeping it inside the same
+	// infrastructure that already holds D1, R2 and the DO means no NEW third party learns where
+	// this person buys food. An external embedding API would have bought a few points of quality
+	// and a vendor who sees the ledger.
+	//
+	// ⚠️ Vectorize is an INDEX, not a store: it holds 1024 numbers and a `tx_id`, never the text.
+	// It can be dropped and rebuilt and no figure in the app changes.
+	"vectorize": [
+		{
+			"binding": "TX_INDEX",
+			"index_name": "money-track-tx"
+		}
+	],
+	// Workers AI: `@cf/baai/bge-m3` — multilingual (Ukrainian included), 1024 dimensions, which is
+	// what the index above is created with. Changing the model means re-creating the index.
+	"ai": {
+		"binding": "AI"
+	},
 	// Weekly insight + weekly AI report (Mon 04:00 UTC ≈ 06:00-07:00 Kyiv), monthly AI report
 	// (1st, same hour), daily notification feed + rates (06:00 UTC ≈ 08:00-09:00 Kyiv). Each fires
 	// a fan-out to every user's Durable Object (worker/lib/platform/cron.ts).

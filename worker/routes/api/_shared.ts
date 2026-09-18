@@ -53,3 +53,31 @@ export function numParam(
   const v = Number.isFinite(n) ? n : fallback;
   return Math.min(range?.max ?? Number.MAX_SAFE_INTEGER, Math.max(range?.min ?? Number.MIN_SAFE_INTEGER, v));
 }
+
+/**
+ * A numeric id out of the PATH — `null` when it is not one.
+ *
+ * The sibling of `numParam`, and deliberately the opposite policy: a window bound off a URL is
+ * clamped to a default, but an id names one row, and there is no sensible default row. The idiom
+ * it replaces is `Number(c.req.param("id"))`, which yields `NaN` for `/abc`, binds cleanly as
+ * NULL, matches nothing — and the handler then reports success. Found by the A2 audit on
+ * 2026-09-18: `POST /tax/obligations/abc/paid` answered 200 with the obligation still unpaid, and
+ * `DELETE /tax/watch/sources/abc` answered `{ok:true}` having deleted nothing. A write that did
+ * nothing and said it worked is worse than a 500: nobody retries it.
+ *
+ * ⚠️ Non-positive is refused too, not just NaN. Every id in this schema is a positive
+ * AUTOINCREMENT, so `0` and `-1` are as malformed as `abc` and would fail the same way, silently.
+ */
+export function idParam(c: HasParams, name = "id"): number | null {
+  const n = Number(c.req.param(name));
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * The narrowest thing `idParam` needs, so it also serves the route files that build their OWN Hono
+ * instance (`routes/admin.ts` and friends) and therefore do not share `ApiEnv`. Typing the
+ * parameter as `Context<ApiEnv>` had left them writing the check out by hand — which is how the
+ * thirty-fifth copy of `Number(c.req.param(…))` survived the sweep that removed the other
+ * thirty-four.
+ */
+type HasParams = { req: { param(name: string): string | undefined } };

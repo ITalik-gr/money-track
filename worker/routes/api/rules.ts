@@ -19,7 +19,8 @@
 import * as rulesRepo from "../../repo/rules.ts";
 import * as categoriesRepo from "../../repo/categories.ts";
 import { catNameSql } from "../../lib/finance/categories-i18n.ts";
-import { apiRoutes } from "./_shared.ts";
+import { apiRoutes, idParam } from "./_shared.ts";
+import { st } from "../../lib/platform/i18n.ts";
 import type { RuleRow, RulePreview, RuleApplyResult } from "../../../shared/api/rules.ts";
 
 export const rules = apiRoutes();
@@ -87,7 +88,8 @@ rules.post("/rules", async (c) => {
  * uncategorised rows are touched — see `applyToUncategorised` for why.
  */
 rules.post("/rules/:id/apply", async (c) => {
-  const id = Number(c.req.param("id"));
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const rule = await rulesRepo.byId(c.env.DB, id);
   if (!rule) return c.json({ error: "not_found" }, 404);
   const updated = await rulesRepo.applyToUncategorised(
@@ -110,11 +112,15 @@ rules.patch("/rules/:id", async (c) => {
     patch.category_id = Number(b.category_id);
   }
   if (b.priority !== undefined) patch.priority = Math.trunc(Number(b.priority)) || 0;
-  await rulesRepo.update(c.env.DB, Number(c.req.param("id")), patch);
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await rulesRepo.update(c.env.DB, id, patch);
   return c.json({ ok: true });
 });
 
 rules.delete("/rules/:id", async (c) => {
-  await rulesRepo.remove(c.env.DB, Number(c.req.param("id")));
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  await rulesRepo.remove(c.env.DB, id);
   return c.json({ ok: true });
 });

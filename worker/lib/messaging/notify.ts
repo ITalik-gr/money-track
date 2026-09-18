@@ -10,11 +10,10 @@
 //    щоб подія все ж повторилась наступного разу, коли це справді нова новина.
 //  • Ліміт на прохід (`MAX_PER_RUN`) — стрічка не має перетворюватись на спам.
 import type { Env } from "../../env.ts";
-import { debtMinor } from "../finance/own-funds.ts";
 import { getRates, resolveBaseCurrency } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
-import { nextChargeUnix, plannedUAH, plannedActuals, chargesBetween } from "../finance/subscriptions.ts";
+import { chargesBetween } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
   categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom,
@@ -23,18 +22,25 @@ import {
 import { draftBudgets, draftBudgetForecast } from "./drafts-budget.ts";
 import { draftStaleImports } from "./drafts-import.ts";
 import { draftGoalRisk } from "./drafts-goals.ts";
+import { draftDeadlines } from "./drafts-due.ts";
+import { draftTaxDue, draftRegulation, draftQuietClients } from "./drafts-fop.ts";
+// §PRICE-STEPS and the dead-plan check live in `drafts-plans.ts` (C3, 2026-09-18).
+import { draftPriceUps, draftDeadSubs } from "./drafts-plans.ts";
 import { draftAiObservations } from "./drafts-ai.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams } from "../../../shared/notif-i18n.ts";
+import type { NotifKind } from "../../../shared/api/platform.ts";
 
-export type NotifKind =
-  | "report" | "deadline" | "anomaly" | "budget" | "price_up" | "liquidity"
-  | "big_tx" | "duplicate" | "health_drop" | "goal_risk" | "dead_sub" | "win" | "todo" | "ai";
+// ⚠️ RE-EXPORTED, not declared again (2026-09-18): it was declared here AND in shared/api, and the
+// copies stayed identical by luck. Adding `regulation` broke the `satisfies` in the route and
+// exposed it — the failure C2/C4 exists to end. One declaration, imported.
+export type { NotifKind } from "../../../shared/api/platform.ts";
 export type Severity = "info" | "warn" | "urgent";
 
 export const NOTIF_KINDS: NotifKind[] = [
   "report", "deadline", "anomaly", "budget", "price_up", "liquidity",
   "big_tx", "duplicate", "health_drop", "goal_risk", "dead_sub", "win", "todo", "ai",
+  "regulation",
 ];
 
 export interface NotifRow {
@@ -79,6 +85,11 @@ const DEFAULT_PREFS: NotifPrefs = {
   report: true, deadline: true, anomaly: true, budget: true, price_up: true, liquidity: true,
   big_tx: true, duplicate: true, health_drop: true, goal_risk: true, dead_sub: true,
   win: true, todo: true, ai: true,
+  // §TAX-WATCH. On by default: the whole point is that nobody thinks to go looking, and the
+  // noise detector — not a muted preference — is what keeps it from becoming wallpaper.
+  regulation: true,
+  // On by default; `quietClients` (three payments, a weekly-or-longer gap) is what keeps it quiet.
+  quiet_client: true,
 };
 
 export async function getPrefs(env: Env): Promise<NotifPrefs> {
@@ -315,84 +326,6 @@ async function draftReports(env: Env, now: number): Promise<Draft[]> {
   }));
 }
 
-/** Списання планів/підписок у горизонті 3 днів. §CUR-PLAN: сума зводиться plannedUAH. */
-async function draftDeadlines(env: Env, now: number): Promise<Draft[]> {
-  const rates = await getRates(env);
-  const rows = await env.DB.prepare(
-    `SELECT id, title, kind, period_amount, currency_code, period, period_count, start_date, end_date
-     FROM planned_payments WHERE is_active = 1`,
-  ).all<{
-    id: number; title: string; kind: string; period_amount: number | null; currency_code: number | null;
-    period: string; period_count: number | null; start_date: number; end_date: number | null;
-  }>();
-
-  const out: Draft[] = [];
-  for (const p of rows.results ?? []) {
-    const amt = p.period_amount ?? 0;
-    if (amt <= 0) continue;
-    const at = nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now);
-    if (p.end_date != null && at > p.end_date) continue;   // розстрочка добігла кінця
-    const days = Math.round((at - now) / 86400);
-    if (days > 3) continue;
-    const amountUAH = plannedUAH(amt, p.currency_code, rates);
-    out.push({
-      kind: "deadline",
-      tkey: "deadline_plan",
-      tparams: { title: p.title, days, amount: amountUAH, at },
-      severity: days <= 2 ? "warn" : "info",
-      entity_type: "planned", entity_id: String(p.id),
-      // Ключ по ДАТІ списання: наступного разу подія має зʼявитись знову.
-      dedup_key: `deadline:${p.id}:${isoDay(at)}`,
-    });
-  }
-
-  // Платіж по кредитці (§Кредитка): рахунки з payment_day + використаним кредитом. Нагадуємо
-  // за ≤3 дні. Це той самий `deadline` (та сама пресета/фільтр), лише entity=account.
-  let cards: { id: string; title: string | null; type: string | null; balance: number; credit_limit: number; currency_code: number; payment_day: number | null; min_payment: number | null }[] = [];
-  try {
-    const r = await env.DB.prepare(
-      `SELECT id, title, type, balance, credit_limit, currency_code, payment_day, min_payment
-       FROM accounts WHERE is_active = 1 AND credit_limit > 0 AND payment_day IS NOT NULL`,
-    ).all<typeof cards[number]>();
-    cards = r.results ?? [];
-  } catch { /* колонки кредитки можуть ще не бути на remote (0027) — гілка мовчки пропускається */ }
-  for (const a of cards) {
-    // Борг — це відʼємні власні кошти, а не окрема формула (§Інваріанти, `own-funds.ts`).
-    // Писати тут `credit_limit − balance` вдруге означало б завести другий вираз для одного
-    // числа — саме це реєстр дублювання й прийняв був за «інвертовану копію».
-    const used = debtMinor(a.balance, a.credit_limit);
-    if (used <= 0) continue;                                // нема боргу — нема про що нагадувати
-    const at = nextMonthlyDay(a.payment_day!, now);
-    const days = Math.round((at - now) / 86400);
-    if (days > 3) continue;
-    const amt = a.min_payment && a.min_payment > 0 ? a.min_payment : used;
-    const amtUAH = plannedUAH(amt, a.currency_code, rates);
-    const isMin = !!(a.min_payment && a.min_payment > 0);
-    out.push({
-      kind: "deadline",
-      tkey: "deadline_credit",
-      tparams: { title: a.title, days, isMin, amount: amtUAH, at },
-      severity: "warn",  // пропущений платіж по кредитці дорогий → завжди у TG-пуш
-      entity_type: "account", entity_id: a.id,
-      dedup_key: `deadline:credit:${a.id}:${isoDay(at).slice(0, 7)}`,
-    });
-  }
-  return out;
-}
-
-// Наступна дата, коли настане задане число місяця (payment_day), ≥ now. UTC-полудень, щоб
-// уникнути крайових зсувів; якщо в місяці менше днів — беремо останній день місяця.
-function nextMonthlyDay(day: number, now: number): number {
-  const d = new Date(now * 1000);
-  let y = d.getUTCFullYear(), m = d.getUTCMonth();
-  const mk = (yy: number, mm: number) => {
-    const last = new Date(Date.UTC(yy, mm + 1, 0)).getUTCDate();
-    return Math.floor(Date.UTC(yy, mm, Math.min(day, last), 12, 0, 0) / 1000);
-  };
-  let at = mk(y, m);
-  if (at < now) { m++; if (m > 11) { m = 0; y++; } at = mk(y, m); }
-  return at;
-}
 
 // Спільна база для `anomaly` і `win`: витрати поточного місяця по категоріях (канон) +
 // канонічні місячні рівні. Один запит на дві гілки — не сканим транзакції двічі.
@@ -480,38 +413,6 @@ function draftWins(pace: MonthPace): Draft[] {
     });
   }
   return out.slice(0, 2);
-}
-
-/** Подорожчання підписки: остання фактична сума помітно вища за план (plannedActuals). */
-async function draftPriceUps(env: Env): Promise<Draft[]> {
-  const [actuals, plans] = await Promise.all([
-    plannedActuals(env.DB),
-    env.DB.prepare("SELECT id, title, period_amount FROM planned_payments WHERE is_active = 1")
-      .all<{ id: number; title: string; period_amount: number | null }>(),
-  ]);
-  const titleById = new Map((plans.results ?? []).map((p) => [p.id, p]));
-
-  const out: Draft[] = [];
-  for (const a of actuals) {
-    if (a.price_change_pct == null || a.price_change_pct < 10) continue;
-    const p = titleById.get(a.id);
-    if (!p || !p.period_amount || a.last_amount == null || a.last_time == null) continue;
-    const delta = a.last_amount - p.period_amount;
-    if (delta <= 0) continue;
-    out.push({
-      kind: "price_up",
-      // Абсолютна дельта + вплив на рік читається краще за голий відсоток (як у Підписках).
-      tkey: "price_up",
-      tparams: {
-        title: p.title, pct: a.price_change_pct,
-        old: p.period_amount, new: a.last_amount, delta, year: delta * 12,
-      },
-      severity: "warn",
-      entity_type: "planned", entity_id: String(a.id),
-      dedup_key: `price_up:${a.id}:${isoDay(a.last_time)}`,
-    });
-  }
-  return out;
 }
 
 /** Провал ліквідності: подушка мінус усі планові списання йде в мінус у вікні 45 днів. */
@@ -671,34 +572,6 @@ async function draftHealthDrop(env: Env, now: number): Promise<Draft[]> {
   }];
 }
 
-/** «Мертва» підписка: активна понад 60 днів, а жодного фактичного списання не видно. */
-async function draftDeadSubs(env: Env, now: number): Promise<Draft[]> {
-  const [actuals, plans] = await Promise.all([
-    plannedActuals(env.DB),
-    env.DB.prepare(
-      "SELECT id, title, period_amount, currency_code, start_date FROM planned_payments WHERE is_active = 1",
-    ).all<{ id: number; title: string; period_amount: number | null; currency_code: number | null; start_date: number }>(),
-  ]);
-  const rates = await getRates(env);
-  const countById = new Map(actuals.map((a) => [a.id, a.count]));
-
-  const out: Draft[] = [];
-  for (const p of plans.results ?? []) {
-    if (now - p.start_date < 60 * 86400) continue;   // ще молода — рано судити
-    if ((countById.get(p.id) ?? 0) > 0) continue;    // списання бачимо
-    const perMonth = plannedUAH(p.period_amount, p.currency_code, rates);
-    out.push({
-      kind: "dead_sub",
-      tkey: "dead_sub",
-      tparams: { title: p.title, perMonth },
-      severity: "info",
-      entity_type: "planned", entity_id: String(p.id),
-      dedup_key: `dead_sub:${p.id}:${isoDay(now).slice(0, 7)}`,   // раз на місяць
-    });
-  }
-  return out.slice(0, 3);
-}
-
 /** Операційний борг: багато витрат без категорії — вся аналітика через це бреше. */
 async function draftTodo(env: Env, now: number): Promise<Draft[]> {
   const r = await env.DB.prepare(
@@ -757,7 +630,11 @@ export async function generateNotifications(
 
   const branches: [NotifKind, () => Promise<Draft[]>][] = [
     ["report", () => draftReports(env, now)],
-    ["deadline", () => draftDeadlines(env, now)],
+    // One preference for one concern: a subscription charge, a card payment and a tax deadline
+    // are all «money leaves on a date you did not choose», so muting one mutes all three.
+    ["deadline", async () => [...(await draftDeadlines(env, now)), ...(await draftTaxDue(env, now))]],
+    ["regulation", () => draftRegulation(env, now)],
+    ["quiet_client", () => draftQuietClients(env, now)],
     ["anomaly", async () => draftAnomalies(await getPace())],
     // Both budget drafters share the `budget` preference: they are one concern seen at two
     // moments (what already happened, and where it is heading), so muting one must mute both.

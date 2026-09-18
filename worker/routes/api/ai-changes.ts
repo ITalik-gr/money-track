@@ -11,7 +11,7 @@
  * offering the same undo twice.
  */
 import * as auditRepo from "../../repo/ai-changes.ts";
-import { apiRoutes } from "./_shared.ts";
+import { apiRoutes, idParam } from "./_shared.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import type { AiChange } from "../../../shared/api/ai.ts";
 
@@ -24,7 +24,9 @@ aiChanges.get("/ai-changes", async (c) => {
 });
 
 aiChanges.post("/ai-changes/:id/revert", async (c) => {
-  const change = await auditRepo.byId(c.env.DB, Number(c.req.param("id")));
+  const id = idParam(c);
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  const change = await auditRepo.byId(c.env.DB, id);
   if (!change) return c.json({ error: "not_found" }, 404);
   // Reverting twice would write a stale value over whatever the user has since chosen — the log
   // records what WAS, not what is.

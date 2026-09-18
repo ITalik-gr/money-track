@@ -9,6 +9,12 @@
 // It was four separate expressions before phase 4 (`computeSummary`, `fundsBreakdown`, and twice
 // in the net-worth reconstruction). They all agreed, which is luck rather than design: nothing
 // compared them, and the fifth copy is where a project like this loses an evening.
+//
+// ⚠️ IT LIVES IN `shared/` since 2026-09-18, and that is why. The module sat in `worker/lib/`,
+// where the CLIENT cannot import it — so the Accounts page carried its own `(balance ?? 0) - limit`
+// twice, plus an inline `own < 0 ? -own : 0` for the debt. Those were the fifth and sixth copies,
+// written the same week this comment predicted them. Same move, same reason as
+// `shared/currency.ts`: a rule both sides have to obey cannot live on one side.
 
 /** Own funds in the ACCOUNT's currency, minor units. Negative when a credit card is in debt. */
 export function ownFundsMinor(

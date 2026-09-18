@@ -83,6 +83,12 @@ export interface MonthlyHistory {
 }
 
 export interface SafeToSpend {
+  /**
+   * §TAX-RESERVE — accrued ФОП tax, in the READER'S base (converted, unlike every other tax
+   * figure, because it is subtracted from `safe` rather than shown as a tax bill). 0 when the
+   * module is off. The cushion and the runway deliberately do NOT carry it.
+   */
+  tax_reserved: number;
   /** §INCOME-PLAN — still scheduled to arrive before month end. NOT part of `safe`. */
   income_expected: number;
   /** Scheduled to have arrived by now and not seen. */

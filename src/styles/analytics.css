@@ -114,3 +114,41 @@
 /* §CASH-PROJ — the one line that says what the dashed forecast is made of. Under the card, not
    inside it: it explains the chart, it is not part of the chart's own reading. */
 .proj-note { margin: 8px 2px 0; font-size: 12px; line-height: 1.45; }
+
+/* ---- /wrapped: the year in one screen ---------------------------------------
+ *
+ * Deliberately built from the ordinary card, not from a bespoke «story» layout. This page is read
+ * once a year and screenshotted; a second visual language, invented for it and maintained by
+ * nobody, is how a screen rots between the two times anybody looks at it. What it does have is
+ * ONE size jump — the figure each slide exists for is large, everything around it is the usual
+ * label — because that is what makes a card a slide rather than a paragraph.
+ */
+.wrapped { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+
+/* The totals card spans the row: it is the only slide with five figures in it, and squeezed into
+   one column they would wrap into a list. */
+.wr-hero, .wr-wide { grid-column: 1 / -1; }
+
+/* A slide is a card that holds ONE figure, so it gets the height to make that figure the whole
+   card rather than a line at the top of an empty one. */
+.wr-slide { display: flex; flex-direction: column; justify-content: center; min-height: 128px; }
+
+.wr-label { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+
+.wr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 14px; }
+.wr-cell { display: flex; flex-direction: column; gap: 4px; }
+.wr-cell-label { color: var(--muted); font-size: 12px; }
+.wr-cell-val { font-size: 22px; line-height: 1.1; font-weight: 600; }
+.wr-cell-val.pos { color: var(--pos); }
+.wr-cell-val.neg { color: var(--neg); }
+
+/* The one figure the slide is about. `overflow-wrap` because a merchant name is not a number and
+   can be long enough to push the card wider than its column. */
+.wr-big { font-size: 26px; line-height: 1.15; font-weight: 600; overflow-wrap: anywhere; }
+.wr-note { color: var(--muted); font-size: 13px; margin-top: 6px; }
+
+.wr-foot { grid-column: 1 / -1; color: var(--muted); font-size: 13px; margin: 4px 2px 0; }
+
+/* «Part of this did not load» — a statement, not a broken slide, so it reads as prose with a way
+   out rather than as an error card wedged between two figures. */
+.wr-partial { display: flex; align-items: center; gap: 8px; color: var(--neg); }

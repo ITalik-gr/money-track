@@ -33,7 +33,7 @@ import { categoryMonthlyLevels, sumLevels, burnShape } from "./levels.ts";
 import { valueMode } from "./stats.ts";
 import { catNameSql } from "./categories-i18n.ts";
 import { resolveLocale } from "../platform/i18n.ts";
-import { ownFundsMinor } from "./own-funds.ts";
+import { ownFundsMinor } from "../../../shared/own-funds.ts";
 import { toBaseMinor, type Rates } from "./money.ts";
 import type { FloorPart, SpendFloor } from "../../../shared/api/insights.ts";
 

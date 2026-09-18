@@ -16,6 +16,7 @@ import { renderMarkdown } from "../lib/markdown.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { SimilarTx } from "../components/transactions/SimilarTx.tsx";
 import { WhyCategory } from "../components/transactions/WhyCategory.tsx";
+import { BusinessToggle } from "../components/fop/BusinessToggle.tsx";
 import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { toast } from "../lib/toast.ts";
@@ -288,6 +289,10 @@ export function TxDetail() {
               to itself.
             */}
             <WhyCategory txId={id} />
+
+            {/* §TAX-BASE — the business flag lives on the operation, next to the other things a
+                human decides about it, not on a settings screen. */}
+            <BusinessToggle txId={id} value={(tx as { is_business?: number | null }).is_business ?? null} />
 
             {/*
               The facts stay, folded. They are reference — the exact MCC, the tags, the plan link —

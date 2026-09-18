@@ -8,6 +8,36 @@
 
 ## Модель і вартість
 - Ціни за MTok: **Haiku $1/$5, Sonnet $3/$15, Opus 4.8 $5/$25.** Cache read ≈0.1× input, write ≈1.25–2×.
+- **§AI-EVAL — the model is MEASURED, not judged by impression** (`scripts/eval-ai.mjs`,
+  `worker/test/__eval__/`, 2026-09-18). 953 tests pin every number this app computes and, until
+  this one, not a single one asked whether the MODEL was right: every prompt edit, model swap and
+  gate change was assessed by reading a few rows. The harness runs the REAL ladder —
+  `categorize()` → `enrichVerdict()` → `enrichOne()` — over a dataset of raw bank descriptions and
+  scores four things separately: gate verdict, root category, exact category, `recurring`. It is
+  deliberately OUTSIDE `npm run check` (it costs money and is not deterministic): `npm run eval`,
+  with `--dry` for the free gate-only pass and `--record` to move the baseline. Baseline contract
+  is `__golden__`'s: a diff means the model behaves differently, and telling a regression from an
+  intended change is the whole job — never re-record to turn a run green.
+  ⚠️ **Ask rate and cost are reported together, always.** A gate that asks too much is money and a
+  gate that asks too little is errors; either number alone lets a «cheaper» change look like an
+  improvement while quietly going blind.
+  ⚠️ **Expectations are what a HUMAN would say.** The first run showed eight failures in the
+  subscriptions group — all eight were the DATASET repeating a taxonomy that migration 0047
+  (§SUBS-CAT) had retired. Check the migrations before blaming the model.
+- **The prompt cache was silently OFF, and only measurement found it (2026-09-18).** The bulk-enrich
+  prefix is padded with `CACHE_GUIDE` specifically to clear **Haiku's 4 096-token minimum** — and it
+  measured **4 078 tokens, eighteen short**. The API does not error, does not warn and does not
+  degrade in any visible way: it just bills full input forever, and a cache that never engages
+  looks exactly like one that does. 46 of 49 calls in the first eval run paid full price.
+  With the guide padded to ~5 000 tokens the same run went **187 532 billed input tokens → 4 498**,
+  and the cost of the whole suite **$0.21 → $0.05** (per 1 000 ingested rows at that ask rate:
+  **$2.86 → $0.68**). Root accuracy rose 96.6% → 98.3% and `recurring` 88.9% → 94.4% as a
+  side-effect, because the padding is real guidance rather than filler.
+  Held by `worker/test/prompt-cache.test.ts` — a CHARACTER floor converted at a ratio measured
+  against the real tokenizer (2.36 chars/token on this mix), because counting tokens honestly means
+  a network call and a rule that can only be checked by paying will not be checked.
+  ⚠️ The margin is measured against the SEED taxonomy — the smallest this prefix is ever. A user
+  with their own categories only sits further above the line.
 - **Лічильник** (`app_state.ai_usage`, міграція 0010): `recordUsage` акумулює usage+вартість у `callHaiku`/`callHaikuMessages`; `GET /ai-usage`; картка «💸 Витрати на AI» в Налаштуваннях.
 - **Задачі-моделі:** `report`/`advisor`/`insight`/`chat`/`budget`/`group`/**`notify`** (спостереження у стрічці сповіщень, дефолт Haiku, ≤1 виклик/добу).
 - Реалістично ~$1–2/міс на Sonnet-гібриді; user-facing на Opus ≈ $1.5–3/міс. Модель-за-задачею через `MODEL_SMART` в `ai.ts`.
@@ -104,8 +134,25 @@
   ще раз стало б нікому. З тієї ж причини `carry` лишає `ai_enriched = 0`: про ЦЕЙ рядок модель ніхто
   не питав, і прапорець сховав би його від ручної «Розпізнати» та від `enrichPending`.
   ⚠️ Ретроспективно нічого не переписується: списання, що вже лежить у базі, лишається як є, а
-  наступне списання того ж мерчанта піде через `ask` і принесе вердикт. Тримається
-  `enrich-gate.test.ts` (11 сценаріїв, більшість — про ВІДМОВУ платити).
+  наступне списання того ж мерчанта піде через `ask` і принесе вердикт.
+  ⚠️ **A USER NOTE OUTRANKS EVERY `skip` (2026-09-18).** Found by §AI-EVAL, pinned red for a day as
+  `note-says-salary`: «це я вивів свою зарплату з крипти через P2P» on a row whose MCC (4829) files
+  it in the transfers bucket was skipped, so **the one signal that is unambiguously a human sentence
+  was the one the gate could not see** — and the Sonnet exception of 2026-07-14, which exists
+  precisely because a note deserves the model that respects an explanation, was unreachable for
+  exactly those rows. Every other branch is a statement about what the DATA can tell us; a note is
+  what the PERSON told us, so it is checked first and beats all of them (`ai_enriched` excepted —
+  asking twice about one row buys nothing).
+  ⚠️ **And it is CAPPED, which is what made the fix safe rather than merely correct.** A note is the
+  cheapest thing to forge into an expensive call: §QUICK-ADD writes are token-authenticated but
+  UNATTENDED, so a leaked phone token could post noted rows all night, and enrichment RECORDS its
+  cost (`cost.ts`) without capping it. `countNoteEnrich` (`lib/platform/quota.ts`) bounds the Kyiv
+  day at 40 — Sonnet costs several times a receipt scan, and forty notes in a day is already an
+  unusual day. Over the cap the row falls through to the ordinary rules rather than being dropped:
+  it is treated exactly as it was before the branch existed. An empty or whitespace note is NOT a
+  note, or every field the user opened and closed would buy a call.
+  Тримається `enrich-gate.test.ts` (17 сценаріїв, більшість — про ВІДМОВУ платити) і §AI-EVAL
+  (`--dry` дає гейт безкоштовно: 132/132 на 2026-09-18, ask rate 75%).
 
 - **§AI-CATCHUP (2026-09-02): добовий ДРУГИЙ погляд на операції, які застосунок явно міг
   розкласти й не розклав — `lib/ai/catchup.ts`, крок `catchup` у добовому крон-проході.**

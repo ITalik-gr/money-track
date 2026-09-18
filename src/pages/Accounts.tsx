@@ -19,6 +19,7 @@ import { Skeleton } from "../components/ui/Skeleton.tsx";
 import { Sparkline } from "../components/ui/Sparkline.tsx";
 import { NetworthCard } from "../components/stats/NetworthCard.tsx";
 import { AddAccountModal } from "../components/accounts/AddAccountModal.tsx";
+import { AccountBusinessToggle } from "../components/fop/AccountBusinessToggle.tsx";
 import { toBaseMinor, formatMinor } from "../lib/format.ts";
 import { errText } from "../lib/errors.ts";
 import { toast } from "../lib/toast.ts";
@@ -26,6 +27,7 @@ import { accountTypeLabel } from "../lib/merchant.ts";
 import { currencySign } from "../lib/format.ts";
 import type { Account } from "../../shared/types.ts";
 import { baseSign, getBaseCurrency } from "../lib/currency.ts";
+import { ownFundsMinor, debtMinor } from "../../shared/own-funds.ts";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 
 // ₴-величина рахунку для сортування/підсумків — дзеркалить `shown` у картці (кредитка = власні).
@@ -34,7 +36,9 @@ import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 // цій сторінці й подушкою на Головній — те саме число в двох місцях означало різне.
 function uahValue(a: Account, rates: Record<string, number>): number {
   const limit = a.credit_limit ?? 0;
-  const own = (a.balance ?? 0) - limit;
+  // §Інваріанти — `ownFundsMinor`, not a local `balance − limit`. The rule lives in
+  // `shared/own-funds.ts` precisely so this page and the dashboard cushion cannot drift apart.
+  const own = ownFundsMinor(a.balance, a.credit_limit);
   const shown = limit > 0 ? own : (a.balance ?? 0);
   // §BASE-CUR: no `code !== 980` shortcut. The rates map is expressed in the READER's base and
   // carries its own 980 row, so the hryvnia is a currency like any other here — skipping it left
@@ -292,11 +296,13 @@ function AccountCard({ a, rates, spark }: {
   const pan = last4(a.title);
   const credit = (a.credit_limit ?? 0) > 0;
   const limit = a.credit_limit ?? 0;
-  const own = (a.balance ?? 0) - limit;
+  const own = ownFundsMinor(a.balance, a.credit_limit);
   // Власні кошти кредитки можуть бути від'ємними — показуємо як є (див. `uahValue` вище).
   // Блок «Використано / Ліміт» нижче лишається: він несе ліміт і метр, чого сама сума не каже.
   const shown = credit ? own : (a.balance ?? 0);
-  const usedCredit = credit && own < 0 ? -own : 0;
+  // And the debt is `debtMinor`, not `own < 0 ? -own : 0` written again: it is own funds seen from
+  // the other side, and a second expression for one number is what `own-funds.ts` exists to stop.
+  const usedCredit = credit ? debtMinor(a.balance, a.credit_limit) : 0;
   const code = a.currency_code ?? 980;
   const color = TYPE_COLOR[kind] ?? "var(--muted)";
 
@@ -323,6 +329,10 @@ function AccountCard({ a, rates, spark }: {
         <span className="acct2-badge" style={{ background: color }} />
         <span className="acct2-title">{title}</span>
         {isInvestment && <span className="acct2-role" title={t("acct.investmentBadgeTitle")}>{t("acct.investmentBadge")}</span>}
+        {/* §TAX-BASE: which account the tax module treats as the business one has to be
+            visible on the card, not only inside the editor — it decides what every receipt
+            on it counts as, including the imported history. */}
+        {a.is_business === 1 && <span className="acct2-role" title={t("fop.acct.badgeTitle")}>{t("fop.acct.badge")}</span>}
         {pan && a.type !== "jar" && <span className="acct2-pan">·· {pan}</span>}
         <button className="acct2-edit" onClick={() => setEditing(true)} aria-label={t("acct.settings")}>
           <Icon name="edit" size={14} />
@@ -415,6 +425,11 @@ function AccountEditor({ a, onClose, cls, manual, renameable }: {
         {canTitle && <input value={title} onChange={(e) => setTitleVal(e.target.value)} placeholder={t("acct.namePlaceholder")} />}
         {manual && <input type="number" inputMode="decimal" value={balance} onChange={(e) => setBalance(e.target.value)} placeholder={t("acct.balancePlaceholder")} />}
         <Select value={role} options={ROLE_OPTIONS} onChange={(v) => setRole(v as "liquid" | "investment")} />
+        {/* A separate control, NOT a third `role`: role decides whether the money is part of
+            the cushion, this decides whose income it is (docs/TAX.md rejected merging them).
+            It writes immediately rather than on Save, like the operation-level toggle — the
+            switch reaches over the whole history, so the effect is worth seeing at once. */}
+        <AccountBusinessToggle id={a.id} value={a.is_business} />
         <textarea className="acct-note-input" value={note} rows={2} maxLength={280}
           onChange={(e) => setNote(e.target.value)}
           placeholder={t("acct.notePlaceholder")} />
@@ -424,7 +439,9 @@ function AccountEditor({ a, onClose, cls, manual, renameable }: {
             <div className="ct-grid">
               <label>{t("acct.statement")}<input type="number" inputMode="numeric" min={1} max={31} value={stmtDay} onChange={(e) => setStmtDay(e.target.value)} placeholder={t("acct.dayPlaceholder")} /></label>
               <label>{t("acct.paymentBy")}<input type="number" inputMode="numeric" min={1} max={31} value={payDay} onChange={(e) => setPayDay(e.target.value)} placeholder={t("acct.dayPlaceholder")} /></label>
-              <label>{t("acct.minPaymentLabel")}<input type="number" inputMode="decimal" value={minPay} onChange={(e) => setMinPay(e.target.value)} placeholder="₴" /></label>
+              {/* The ACCOUNT's own currency, not the reader's base and certainly not a hardcoded ₴:
+                  a minimum payment is made in the currency the card bills in. */}
+              <label>{t("acct.minPaymentLabel")}<input type="number" inputMode="decimal" value={minPay} onChange={(e) => setMinPay(e.target.value)} placeholder={currencySign(a.currency_code ?? getBaseCurrency())} /></label>
             </div>
           </div>
         )}

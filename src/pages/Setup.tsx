@@ -29,6 +29,7 @@ import { ExportCard } from "../components/settings/ExportCard.tsx";
 import { AiActivityCard } from "../components/settings/AiActivityCard.tsx";
 import { BackupCard } from "../components/settings/BackupCard.tsx";
 import { McpCard } from "../components/settings/McpCard.tsx";
+import { SearchCard } from "../components/settings/SearchCard.tsx";
 import { QuickAddCard } from "../components/settings/QuickAddCard.tsx";
 import { FirstRun } from "../components/settings/FirstRun.tsx";
 import { UsersCard } from "../components/settings/UsersCard.tsx";
@@ -116,6 +117,9 @@ export function Setup() {
               reach this account — and the revoke buttons should be within one glance of each
               other. Hidden in the demo: a sandbox lives 24h, so a token minted here would stop
               working the same day (the server refuses it outright, §MCP). */}
+          {/* §SEARCH-VEC — above the MCP card: both are about where this person's data can
+              be reached from, and this one is the newer promise. */}
+          {!isDemo && <SearchCard />}
           {!isDemo && <McpCard />}
           {!isDemo && <QuickAddCard />}
           {!isDemo && <SessionsCard />}

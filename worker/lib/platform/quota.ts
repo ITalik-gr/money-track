@@ -48,3 +48,38 @@ export async function countReceiptUpload(env: Env): Promise<{ ok: boolean; left:
     return { ok: true, left: DAILY_RECEIPTS };
   }
 }
+
+/**
+ * Enrichment calls triggered by a USER NOTE, per user per day.
+ *
+ * §ENRICH-GATE lets a note override every skip (see `enrichVerdict`), because a note is the one
+ * unambiguous human statement about an operation — and that is exactly what made the change unsafe
+ * without this counter. A note is also the cheapest thing to forge into an expensive Sonnet call:
+ * §QUICK-ADD writes are token-authenticated but UNATTENDED, so a leaked phone token could post
+ * rows with notes all night and nothing would have stopped it. Enrichment records its cost
+ * (`cost.ts`) but nothing capped it.
+ *
+ * 40 rather than 60: this path is Sonnet (the 2026-07-14 exception — a note deserves the model
+ * that respects an explanation), so each call costs several times a receipt scan, while a human
+ * who writes forty notes in one day is already an unusual day. One constant to change if that
+ * turns out to be wrong.
+ *
+ * ⚠️ Charged when the ASK is about to happen, never per ingested row: the gate answers «skip» for
+ * most rows and those must not burn the allowance. Same rule as `countReceiptUpload` — charge on
+ * the expensive act, not on the attempt.
+ *
+ * Fails OPEN, for the same reason: a broken counter must not silently stop recognising operations.
+ */
+export const DAILY_NOTE_ENRICH = 40;
+
+export async function countNoteEnrich(env: Env): Promise<boolean> {
+  const key = `note_enrich_${localYmd(Math.floor(Date.now() / 1000))}`;
+  try {
+    const used = Number((await getState(env.DB, key)) ?? 0);
+    if (used >= DAILY_NOTE_ENRICH) return false;
+    await setState(env.DB, key, String(used + 1));
+    return true;
+  } catch {
+    return true;
+  }
+}

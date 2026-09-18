@@ -35,8 +35,11 @@ const KIND_META: Record<NotifKind, { labelKey:
   "notif.kind.ai" | "notif.kind.report" | "notif.kind.deadline" | "notif.kind.anomaly" |
   "notif.kind.budget" | "notif.kind.price_up" | "notif.kind.liquidity" | "notif.kind.big_tx" |
   "notif.kind.duplicate" | "notif.kind.health_drop" | "notif.kind.goal_risk" | "notif.kind.dead_sub" |
-  "notif.kind.win" | "notif.kind.todo"; icon: string }> = {
+  "notif.kind.win" | "notif.kind.todo" | "notif.kind.regulation" |
+  "notif.kind.quiet_client"; icon: string }> = {
   ai: { labelKey: "notif.kind.ai", icon: "spark" },
+  // §TAX-WATCH — about the world the money is taxed in, not about the money.
+  regulation: { labelKey: "notif.kind.regulation", icon: "alert" },
   report: { labelKey: "notif.kind.report", icon: "report" },
   deadline: { labelKey: "notif.kind.deadline", icon: "calendar" },
   anomaly: { labelKey: "notif.kind.anomaly", icon: "stats" },
@@ -48,6 +51,7 @@ const KIND_META: Record<NotifKind, { labelKey:
   health_drop: { labelKey: "notif.kind.health_drop", icon: "advisor" },
   goal_risk: { labelKey: "notif.kind.goal_risk", icon: "target" },
   dead_sub: { labelKey: "notif.kind.dead_sub", icon: "repeat" },
+  quiet_client: { labelKey: "notif.kind.quiet_client", icon: "tx" },
   win: { labelKey: "notif.kind.win", icon: "check" },
   todo: { labelKey: "notif.kind.todo", icon: "tag" },
 };

@@ -372,6 +372,67 @@ owner-шляху), заголовки безпеки на КОЖНІЙ відп�
   `worker/test/backup.test.ts` (6 сценаріїв).
 
 
+## §SEARCH-VEC — семантичний пошук: де опиняється текст операції (2026-09-18)
+
+Питання поставлене ДО коду, бо це перший випадок, коли текст операції має покинути Durable Object.
+
+**Що саме виходить:** склеєний рядок «мерчант · опис банку · коментар · нотатка» однієї операції,
+без сум, без рахунків, без дат і без імені людини. Він перетворюється на вектор із 1024 чисел і
+під ним же й зберігається — оригінальний текст у векторну базу НЕ кладеться.
+
+**Куди виходить:** **нікуди за межі Cloudflare.** Ембединги рахує Workers AI
+(`@cf/baai/bge-m3` — багатомовна, українську тримає), вектори лежать у Vectorize. Це та сама
+інфраструктура, де вже живуть D1, R2 і сам DO, тож НОВОЇ третьої сторони не зʼявляється — і саме
+це вирішило вибір моделі. Варіант «відправляти в Anthropic чи OpenAI» відкинуто: він дав би
+кращу якість на кілька відсотків і нового постачальника, який бачить, де людина купує їжу.
+
+⚠️ **Vectorize — це індекс, а не база.** Джерело правди лишається в DO; у векторі зберігається
+лише `tx_id` у метаданих. Індекс можна викинути й перебудувати, і жодне число від цього не
+зміниться — те саме відношення, що між `graphify-out/` і кодом.
+
+⚠️ **Простір на КОРИСТУВАЧА.** Кожен запит фільтрується за `namespace = user_id`, а не лише за
+метаданими: спільний простір із фільтром — це один забутий `where` від того, щоб чужа покупка
+опинилась у чиїйсь видачі. Той самий урок, що §D1 (персональний адресат у Telegram).
+
+⚠️ **Вимкнено за замовчуванням.** Індексація стартує лише коли людина увімкнула пошук у
+Налаштуваннях. Тихо проіндексувати чужу історію, бо «ми ж усередині Cloudflare», — це рішення за
+людину про її дані.
+
+## §TAX-OUT (§TAX-WATCH · §TAX-FX) — the two outbound calls the ФОП module adds (2026-09-18)
+
+Both `tax-watch.ts` and `docs/TAX.md` §0.2 already said «recorded in `docs/PERIMETER.md`». It was
+not — the A3 audit went looking for the record and found the claim instead. Written down now,
+because an unrecorded exception is one nobody re-checks.
+
+**§TAX-FX — `bank.gov.ua`.** One GET per (currency, date):
+`…/exchange?valcode=USD&date=YYYYMMDD&json`. Public, keyless. It carries a currency letter code
+and a calendar date and NOTHING else — no amount, no account, no id, no header. The NBU learns
+that somebody asked what a dollar was worth on a date, which is what its own front page answers.
+Cached forever in `nbu_rates`, so a date is fetched once ever (§TAX-FX: an official rate for a past
+date cannot change).
+
+**§TAX-WATCH — an official page the USER named.** This is the only outbound request in the project
+to a third party that is not a bank, the NBU or the model provider, and the only one whose address
+comes from user input. A bare GET: no query built from user data, no body, one user-agent header
+that names the app. The response is reduced to text and HASHED — the body is never read, never
+summarised and never shown, so nothing about the page reaches the user except «it changed» and the
+link they typed themselves.
+
+⚠️ **The URL is the untrusted field, and registration is OPEN.** It used to be accepted on
+`^https://\S+$`, which is true of `https://127.0.0.1/…`, of `https://[::1]/` and of any public
+host that answers 302 to one of those. That is a stranger choosing a request the worker makes
+every night from Cloudflare's network rather than from their own machine. The exposure was status
+probing rather than a content proxy — the body is only ever hashed — and «you cannot read the
+answer» is not a reason to make the request.
+
+`isWatchableUrl()` (in `lib/finance/tax-watch.ts`, the module that owns the fetch, so the rule
+cannot be restated and drift) now requires https, refuses an IP literal in any spelling
+(`new URL` normalises `2130706433` to dotted-quad, so the shape check covers the obfuscated ones),
+refuses a host with no dot (`localhost`, a container name) and refuses the reserved suffixes
+(`.local`, `.internal`, `.onion`, …). **It is applied twice: when the source is added, and again
+to `res.url` after the redirects** — the hop is the remote host's choice, not the user's, and it is
+the ordinary way past a check made only at insert time. Held by `tax-watch.test.ts`.
+
 ## Дані й безпека — правила з реальних багів
 
 - **Ресурс, що виглядає глобальним (`TG_CHAT_ID`, `MONO_TOKEN`, `ANTHROPIC_API_KEY`,

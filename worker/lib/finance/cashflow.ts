@@ -17,7 +17,7 @@ import type { AppDb } from "../platform/db-shim.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { chargesBetween } from "./subscriptions.ts";
 import { localYmd, localMonthStart } from "./stats.ts";
-import type { Rates } from "./money.ts";
+import { toBaseMinor, type Rates } from "./money.ts";
 import type { Env } from "../../env.ts";
 import { incomeOutlook } from "./income.ts";
 
@@ -80,6 +80,8 @@ export interface SafeToSpendCalc {
   safe: number; income: number; spend: number; essential: number; discretionary: number;
   subs_monthly: number; subs_remaining: number; month_start: number;
   income_expected: number; income_overdue: number; income_estimated: boolean;
+  /** §TAX-RESERVE — accrued ФОП tax, converted into the reader's base. 0 when the module is off. */
+  tax_reserved: number;
 }
 
 export async function safeToSpend(
@@ -102,8 +104,27 @@ export async function safeToSpend(
   const spend = tot?.spend ?? 0;
   const essential = tot?.essential ?? 0;
   const subsRemaining = sum(now + 1, monthEnd - 1);
+
+  /**
+   * §TAX-RESERVE — accrued tax is not free money.
+   *
+   * This is the ONE place the ФОП module reaches into a personal screen, and it reaches into the
+   * right one: «safe to spend» is the question the reserve actually answers. The cushion, the
+   * runway and the burn are deliberately left alone — how long the money lasts is a different
+   * question from what is owed, and folding tax into them would make runway move with the tax
+   * calendar rather than with spending.
+   *
+   * ⚠️ CONVERTED here, and only here. §TAX-UAH keeps tax figures in hryvnia wherever they are
+   * SHOWN as tax; this one is not shown, it is subtracted from a figure already rolled up into the
+   * reader's base. Leaving it in hryvnia would subtract kopecks from dollars.
+   */
+  const { taxContext } = await import("./tax.ts");
+  const fop = (await taxContext(env.DB, now)).fop as { tax_reserved_uah?: number } | undefined;
+  const reservedBase = fop?.tax_reserved_uah ? toBaseMinor(fop.tax_reserved_uah * 100, 980, rates) : 0;
+
   return {
-    safe: income - spend - subsRemaining,
+    safe: income - spend - subsRemaining - reservedBase,
+    tax_reserved: reservedBase,
     income, spend, essential,
     discretionary: Math.max(0, spend - essential),
     subs_monthly: sum(monthStart, monthEnd - 1),

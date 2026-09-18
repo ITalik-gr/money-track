@@ -114,6 +114,11 @@ export function Reports() {
           <div className="greet">{t("report.title")}</div>
           <div className="sub">{t("report.sub")}</div>
         </div>
+        {/* The year in one screen. It sits here rather than in the nav rail because it is read once
+            a year — a permanent tab for a seasonal page costs every other page a slot. */}
+        <div className="page-head-actions">
+          <Link className="pill-toggle" to="/wrapped"><Icon name="chart" size={14} />{t("wr.nav")}</Link>
+        </div>
       </div>
 
       <div className="card ai-block" style={{ marginBottom: 16 }}>

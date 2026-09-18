@@ -18,7 +18,7 @@
 // or statement will bring in.
 import type { Env } from "../env.ts";
 import { parseAmountMinor } from "../lib/bank/normalize.ts";
-import { CURRENCY_META, CURRENCY_BY_CODE } from "../../shared/currency.ts";
+import { CURRENCY_META, CURRENCY_NUM_BY_LETTERS } from "../../shared/currency.ts";
 import { resolveBaseCurrency } from "../lib/finance/money.ts";
 import { ensureCashAccount } from "../lib/finance/finance.ts";
 import { upsertCanonicalTx } from "../repo/ingest.ts";
@@ -40,7 +40,7 @@ export function splitLine(line: string): { amount: string; rest: string } | null
 /** A currency named inside the amount text («₴181.00», «EUR 12,50»), or null. */
 export function currencyIn(raw: string): number | null {
   const code = /\b([A-Z]{3})\b/.exec(raw.toUpperCase())?.[1];
-  if (code && CURRENCY_BY_CODE[code]) return CURRENCY_BY_CODE[code]!;
+  if (code && CURRENCY_NUM_BY_LETTERS[code]) return CURRENCY_NUM_BY_LETTERS[code]!;
   // Longest sign first, so «zł» is not read as something shorter it contains.
   const signs = Object.entries(CURRENCY_META)
     .filter(([, m]) => m.sign)
@@ -76,7 +76,7 @@ export async function quickAddTx(env: Env, b: QuickAddBody, now = Math.floor(Dat
   if (dup) return { ok: true, status: "duplicate", id: dup };
 
   const currency = card?.currency_code
-    ?? currencyIn(amountRaw) ?? (b.currency ? CURRENCY_BY_CODE[b.currency.trim().toUpperCase()] : undefined)
+    ?? currencyIn(amountRaw) ?? (b.currency ? CURRENCY_NUM_BY_LETTERS[b.currency.trim().toUpperCase()] : undefined)
     ?? await resolveBaseCurrency(env);
   const accountId = card?.id ?? await ensureCashAccount(env.DB, currency);
   const id = `qa_${crypto.randomUUID()}`;

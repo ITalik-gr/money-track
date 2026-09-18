@@ -234,6 +234,26 @@ export class UserDO extends DurableObject<Env> {
         const { runSubsReview, subsReviewPending } = await import("../lib/ai/subs-review.ts");
         if (await subsReviewPending(env)) await runSubsReview(env);
       });
+      // §TAX-WATCH — poll the official sources BEFORE the feed is generated, so a change found
+      // this morning is announced this morning rather than tomorrow. Best-effort by construction:
+      // `checkSource` records its own failures per source and never throws, because «the tax
+      // service was briefly down» must not cost the user their budget and report events.
+      await step("reg_watch", async () => {
+        const { readProfile } = await import("../lib/finance/tax.ts");
+        // Only for people who said they are ФОП. Fetching government pages on behalf of someone
+        // who never asked is outbound traffic nobody consented to.
+        if (!(await readProfile(this.db)).enabled) return;
+        const { checkAll } = await import("../lib/finance/tax-watch.ts");
+        await checkAll(this.db, Math.floor(Date.now() / 1000));
+      });
+      // §SEARCH-VEC — keep the semantic index in step with the words. A small batch a night:
+      // yesterday's operations plus anything whose text an enrichment has since rewritten. It
+      // does nothing at all until the user switches the feature on.
+      await step("search_index", async () => {
+        const { semanticEnabled, indexPending } = await import("../lib/finance/search-vec.ts");
+        if (!(await semanticEnabled(this.db))) return;
+        await indexPending(env, 100);
+      });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
         await generateNotifications(env);

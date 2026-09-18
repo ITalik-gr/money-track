@@ -2,6 +2,7 @@
   "status": 200,
   "body": {
     "safe": 0,
+    "tax_reserved": 0,
     "income": 0,
     "spend": 0,
     "essential": 0,

@@ -36,6 +36,11 @@ export interface Account {
   min_payment: number | null;
   // Банк-провайдер (0032): 'mono' | 'manual' | 'csv' | … — інституція рахунку (для групування, §P2.2).
   provider: string | null;
+  /**
+   * §TAX-BASE — is this a ФОП (business) account? Income here is business income unless the
+   * operation says otherwise. The account answers only for rows that never got their own answer.
+   */
+  is_business: number;
 }
 
 export interface Category {

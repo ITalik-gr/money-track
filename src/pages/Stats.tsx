@@ -5,7 +5,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   useGetCashProjectionQuery, useGetCurrenciesQuery, useGetOverviewQuery, useGetPeriodModeQuery, useSetPeriodModeMutation,
 } from "../store/api.ts";
-import { currencySign, formatMinor } from "../lib/format.ts";
+import { formatMinor } from "../lib/format.ts";
 import { signFor } from "../lib/currency.ts";
 import { CashflowChart } from "../components/stats/CashflowChart.tsx";
 import { CumulativeChart } from "../components/stats/CumulativeChart.tsx";
@@ -19,12 +19,11 @@ import { PriceDrift } from "../components/stats/PriceDrift.tsx";
 import { AiInsightCard } from "../components/advisor/AiInsightCard.tsx";
 import { HoverTip } from "../components/ui/HoverTip.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
-import { Select } from "../components/ui/Select.tsx";
-import { Icon } from "../components/ui/Icon.tsx";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { WeekdaySpend } from "../components/stats/WeekdaySpend.tsx";
 import { Habits } from "../components/stats/Habits.tsx";
 import { FactLabel, RANGES, labelFor, type Cur, type RangeKey } from "../components/stats/shared.tsx";
+import { StatsPeriodBar, curYm } from "../components/stats/StatsPeriodBar.tsx";
 import { ClickableKpis, ImportanceBreakdown, SpendingPatterns } from "../components/stats/StatsOverview.tsx";
 import { FxCostCard } from "../components/stats/FxCostCard.tsx";
 import { AvgCheckByCategory, CategoryBreakdown, PeriodCompare } from "../components/stats/StatsCategories.tsx";
@@ -78,19 +77,6 @@ function periodLength(range: RangeKey, mode: "calendar" | "rolling", from: numbe
 // §i18n: NEVER `new Intl.*` inline — a formatter built at module scope freezes the locale it was
 // imported with, and switching language would leave every date in the old one.
 const monthLongFmt = dateFmt({ month: "long", year: "numeric" });
-
-/** The CURRENT month as `YYYY-MM`, in the reader's own clock — the boundary `?ym=` may not cross. */
-function curYm(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
-
-/** `2026-07` ± n months, as `YYYY-MM`. */
-function shiftYm(ym: string, n: number): string {
-  const [y, m] = ym.split("-").map(Number);
-  const d = new Date(y, m - 1 + n, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-}
 
 export function Stats() {
   const t = useT();
@@ -152,7 +138,13 @@ export function Stats() {
   const merchMax = Math.max(...(data?.byMerchant ?? []).map((m) => m.spent), 1);
   const net = (data?.summary.income ?? 0) - (data?.summary.spend ?? 0);
   const avgDay = data ? Math.round(data.summary.spend / days) : 0;
-  const savingsRate = data && data.summary.income > 0 ? Math.round((net / data.summary.income) * 100) : null;
+  // §savingsRatePct — THE SERVER'S number. This was the fifth spelling of the same three tokens:
+  // `MonthPulse` gave up its copy («the FOURTH copy»), `MonthlyHistory` gave up the third, and the
+  // AI report has quoted `savings_rate_pct` since July. Identical arithmetic today, which is
+  // exactly what makes a second copy dangerous — the divergence arrives with the first edit to
+  // either side, and `tsc` cannot see inside two agreeing expressions (§Інваріанти: one number,
+  // one home; the golden files pin the server's).
+  const savingsRate = data?.summary.savings_rate_pct ?? null;
   const topCat = data?.byCategory?.[0] ?? null;
   // §1b: середній чек + прогноз витрат на кінець періоду (лише календарний, поки період не завершено).
   const avgCheck = data && data.summary.n ? Math.round(data.summary.spend / data.summary.n) : 0;
@@ -190,70 +182,18 @@ export function Stats() {
           <div className="greet">{t("stats.title")}</div>
           <div className="sub">{t("stats.sub")} · {ymLabel ?? periodNote}</div>
         </div>
-        <div className="page-head-actions">
-          {/* §MONTH-VIEW: in month mode the period controls are REPLACED, not merely ignored. A
-              range picker still on screen while a named month decides the window is a control
-              that does nothing — the same defect as `budgets.rollover` before §BUDGET-MEMORY. */}
-          {ym ? (
-            <div className="month-nav">
-              {/* Chevrons, not the literal «‹ ›» glyphs. Those are text: they inherit the body
-                  font, sit off the optical centre of a square button and change weight with the
-                  typeface — which is why the stepper read as unfinished next to every other
-                  control on the page, all of which are icon-drawn. */}
-              <button className="seg-btn month-nav-arrow" aria-label={t("stats.month.prev")} title={t("stats.month.prev")}
-                onClick={() => setParam("ym", shiftYm(ym, -1))}>
-                <Icon name="chevron" size={16} />
-              </button>
-              <span className="month-nav-lbl">{ymLabel}</span>
-              <button className="seg-btn month-nav-arrow next" aria-label={t("stats.month.next")} title={t("stats.month.next")}
-                disabled={shiftYm(ym, 1) >= curYm()}
-                onClick={() => setParam("ym", shiftYm(ym, 1))}>
-                <Icon name="chevron" size={16} />
-              </button>
-              <button className="pill-toggle" onClick={() => setParams((prev) => {
-                const p = new URLSearchParams(prev); p.delete("ym"); return p;
-              }, { replace: true })}>
-                <Icon name="calendar" size={14} />{t("stats.month.back")}
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="seg">
-                {(Object.keys(RANGES) as RangeKey[]).map((k) => (
-                  <button key={k} className={`seg-btn ${range === k ? "active" : ""}`} onClick={() => setParam("range", k)}>
-                    {t(RANGES[k].labelKey)}
-                  </button>
-                ))}
-              </div>
-              <button className="pill-toggle" title={t("stats.modeTip")}
-                onClick={() => setPeriodMode(mode === "calendar" ? "rolling" : "calendar")}>
-                <Icon name={mode === "calendar" ? "calendar" : "repeat"} size={14} />
-                {mode === "calendar" ? t("stats.mode.calendar") : t("stats.mode.rolling")}
-              </button>
-              {/* §MONTH-VIEW: the WAY IN. The mode shipped reachable only by typing `?ym=` into the
-                  address bar or by finding a bar to click on another tab — i.e. a feature that
-                  exists and cannot be found is a feature that does not exist. Opens the last
-                  COMPLETE month; the ‹ › stepper takes over from there. */}
-              {/* ⚠️ NOT another calendar pill. It sat next to the period-mode toggle wearing the
-                  same shape AND the same calendar icon, and the owner could not tell them apart —
-                  fairly, since they do unrelated things: one flips a SETTING, this one leaves for
-                  another VIEW. It now carries the same chevron as the stepper it becomes, and the
-                  accent outline says "this navigates" the way the toggle's plain one does not. */}
-              <button className="pill-toggle month-open" title={t("stats.month.browseTip")}
-                onClick={() => setParam("ym", shiftYm(curYm(), -1))}>
-                <Icon name="chevron" size={14} />{t("stats.month.browse")}
-              </button>
-            </>
-          )}
-          {currencies && currencies.length > 1 && (
-            <Select
-              className="ph-cur-sel"
-              value={currency ?? "all"}
-              options={[{ value: "all", label: t("stats.curUah") }, ...currencies.map((c) => ({ value: c, label: currencySign(c) }))]}
-              onChange={(v) => setCurrency(v === "all" ? null : Number(v))}
-            />
-          )}
-        </div>
+        <StatsPeriodBar
+          range={range} mode={mode} ym={ym} ymLabel={ymLabel}
+          currency={currency} currencies={currencies}
+          onRange={(k) => setParam("range", k)}
+          onToggleMode={() => setPeriodMode(mode === "calendar" ? "rolling" : "calendar")}
+          onYm={(next) => setParams((prev) => {
+            const p = new URLSearchParams(prev);
+            if (next == null) p.delete("ym"); else p.set("ym", next);
+            return p;
+          }, { replace: true })}
+          onCurrency={setCurrency}
+        />
       </div>
 
       <div className="stat-tabs" role="tablist">

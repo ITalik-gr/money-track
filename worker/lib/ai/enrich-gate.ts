@@ -34,6 +34,7 @@
 import type { Env } from "../../env.ts";
 import { descriptionIsTransfer } from "../finance/transfers.ts";
 import { TRANSFER_CAT } from "./enrich.ts";
+import { countNoteEnrich } from "../platform/quota.ts";
 
 /**
  * MCCs where the rules are already the whole answer, so a model call buys nothing.
@@ -73,12 +74,15 @@ interface GateRow {
   transfer_pair_id: string | null;
   ai_enriched: number;
   raw_json: string | null;
+  /** §ENRICH-GATE: the one unambiguous HUMAN statement about this operation. */
+  user_note: string | null;
 }
 
 /** The row the gate needs. One read, and the caller does not have to know the column list. */
 export async function gateRow(env: Env, id: string): Promise<GateRow | null> {
   return await env.DB.prepare(
-    `SELECT id, merchant, mcc, amount, category_id, is_transfer, transfer_pair_id, ai_enriched, raw_json
+    `SELECT id, merchant, mcc, amount, category_id, is_transfer, transfer_pair_id, ai_enriched,
+            raw_json, user_note
      FROM transactions WHERE id = ?`,
   ).bind(id).first<GateRow>();
 }
@@ -131,6 +135,27 @@ export async function enrichVerdict(env: Env, row: GateRow): Promise<EnrichVerdi
   if (row.ai_enriched) return { verdict: "skip", why: "already enriched" };
 
   const desc = rawDescription(row.raw_json);
+
+  /**
+   * ⚠️ A USER NOTE OVERRIDES EVERY SKIP BELOW, and it is checked first because every skip below
+   * is a statement about what the DATA can tell us — while a note is what the PERSON told us.
+   *
+   * Found by §AI-EVAL on 2026-09-18 and pinned red as `note-says-salary`: «це я вивів свою
+   * зарплату з крипти через P2P» on a row whose MCC (4829) files it in the transfers bucket was
+   * skipped, so the one signal that is unambiguously a human sentence never reached a model. The
+   * app asked nobody and filed it as a transfer. The 2026-07-14 exception in `models.ts` already
+   * says a note deserves SONNET rather than Haiku — the gate not seeing the note at all made that
+   * exception unreachable for exactly the rows it was written for.
+   *
+   * ⚠️ AND IT IS CAPPED. A note is also the cheapest thing to forge into an expensive call:
+   * §QUICK-ADD writes are token-authenticated but unattended, so a leaked phone token could post
+   * noted rows all night. `countNoteEnrich` bounds the day (40) and the row then falls through to
+   * the ordinary rules rather than being dropped — over the cap it is treated exactly as it was
+   * before this branch existed.
+   */
+  if ((row.user_note ?? "").trim() !== "") {
+    if (await countNoteEnrich(env)) return { verdict: "ask" };
+  }
 
   // Own money moving between own places: card-to-card, a jar top-up, a balance round-up. There is
   // no merchant, no rhythm and no category to find — §F2 already owns this class, and the pair

@@ -22,6 +22,8 @@ import type {
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
   BackupList, RestoreResult, PushStatus, PushSendResult, RatesSnapshot,
   SpendProfile, Momentum, IncomeAllocation, SpendFloor,
+  TaxStatus, TaxProfile as TaxProfileDto, TaxLedger, TaxBackfillResult, BusinessOverview, RegWatch,
+  TaxPaymentCandidates,
 } from "../../shared/api/index.ts";
 
 export const api = createApi({
@@ -47,7 +49,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule", "Mcp", "QuickAdd"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule", "Mcp", "QuickAdd", "Tax", "RegWatch", "Search"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -437,6 +439,93 @@ export const api = createApi({
       },
       providesTags: ["Tx"],
     }),
+    // ─── ФОП (docs/TAX.md) ────────────────────────────────────────────────────────────────────
+    // ⚠️ Every amount these return is HRYVNIA (§TAX-UAH), not the reader's base — the components
+    // print an explicit ₴ and never `baseSign()`. The state levies in hryvnia; a tax figure in
+    // the display base would be a number that appears on no document.
+    getTaxStatus: b.query<TaxStatus, void>({ query: () => "/tax/status", providesTags: ["Tax"] }),
+    getTaxBusiness: b.query<BusinessOverview, number | void>({
+      query: (quarters) => `/tax/business${quarters ? `?quarters=${quarters}` : ""}`,
+      providesTags: ["Tax"],
+    }),
+    updateTaxProfile: b.mutation<TaxProfileDto, Partial<TaxProfileDto>>({
+      query: (body) => ({ url: "/tax/profile", method: "PUT", body }),
+      // The profile decides what is owed, so the whole page is stale the moment it changes.
+      invalidatesTags: ["Tax"],
+    }),
+    /**
+     * §TAX-DUE — the operations that could be the payment of one obligation.
+     *
+     * Fetched on demand (`lazy`), not with the page: the list is only ever looked at when somebody
+     * presses «paid», and every quarter on screen would otherwise cost a query nobody reads.
+     */
+    getTaxPaymentCandidates: b.query<TaxPaymentCandidates, number>({
+      query: (id) => `/tax/obligations/${id}/candidates`,
+      providesTags: ["Tax"],
+    }),
+    markTaxPaid: b.mutation<TaxStatus, { id: number; tx_id?: string | null }>({
+      query: ({ id, ...body }) => ({ url: `/tax/obligations/${id}/paid`, method: "POST", body }),
+      invalidatesTags: ["Tax"],
+    }),
+    setTxBusiness: b.mutation<{ ok: boolean }, { id: string; business: 0 | 1 | null }>({
+      query: ({ id, business }) => ({ url: `/tax/transactions/${id}/business`, method: "POST", body: { business } }),
+      // Both: the operation's own screen shows the flag, and the tax figures move with it.
+      invalidatesTags: ["Tax", "Tx"],
+    }),
+    setAccountBusiness: b.mutation<{ ok: boolean }, { id: string; business: 0 | 1 }>({
+      query: ({ id, business }) => ({ url: `/tax/accounts/${id}/business`, method: "POST", body: { business } }),
+      // "Tx" as well: §TAX-BASE says an operation with no answer of its own INHERITS the account's,
+      // so this one switch changes what every such row is — including the toggle printed on each
+      // operation's own screen. Without it that toggle keeps showing «за рахунком: ні» over a
+      // business account until something else happens to refetch.
+      invalidatesTags: ["Tax", "Account", "Tx"],
+    }),
+    backfillTaxRates: b.mutation<TaxBackfillResult, void>({
+      query: () => ({ url: "/tax/backfill-rates", method: "POST" }),
+      invalidatesTags: ["Tax"],
+    }),
+    getTaxLedger: b.query<TaxLedger, { from?: number; to?: number } | void>({
+      query: (a) => `/tax/ledger${a?.from ? `?from=${a.from}&to=${a.to ?? ""}` : ""}`,
+      providesTags: ["Tax"],
+    }),
+    // §TAX-WATCH — sources and the user's own requisites. A separate tag from `Tax`: checking a
+    // source changes nothing about what is owed, and re-fetching the whole tax page for it would
+    // make the «check now» button look like it recomputed the money.
+    getRegWatch: b.query<RegWatch, void>({ query: () => "/tax/watch", providesTags: ["RegWatch"] }),
+    checkRegSources: b.mutation<{ results: { id: number; label: string; url: string; changed: boolean; suppressed: boolean; error: string | null }[] }, void>({
+      query: () => ({ url: "/tax/watch/check", method: "POST" }),
+      invalidatesTags: ["RegWatch"],
+    }),
+    addRegSource: b.mutation<RegWatch, { url: string; label?: string; topic?: string; region?: string }>({
+      query: (body) => ({ url: "/tax/watch/sources", method: "POST", body }),
+      invalidatesTags: ["RegWatch"],
+    }),
+    unmuteRegSource: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/tax/watch/sources/${id}/unmute`, method: "POST" }),
+      invalidatesTags: ["RegWatch"],
+    }),
+    removeRegSource: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/tax/watch/sources/${id}`, method: "DELETE" }),
+      invalidatesTags: ["RegWatch"],
+    }),
+    saveRequisite: b.mutation<RegWatch, { kind: string; iban?: string | null; recipient?: string | null; edrpou?: string | null; purpose?: string | null; source_id?: number | null; verified?: boolean }>({
+      query: (body) => ({ url: "/tax/watch/requisites", method: "PUT", body }),
+      invalidatesTags: ["RegWatch"],
+    }),
+
+    // §SEARCH-VEC — semantic search over operations (docs/PERIMETER.md).
+    getSearchSettings: b.query<{ enabled: boolean; remaining: number }, void>({
+      query: () => "/settings/search", providesTags: ["Search"],
+    }),
+    setSearchEnabled: b.mutation<{ enabled: boolean }, boolean>({
+      query: (enabled) => ({ url: "/settings/search", method: "PUT", body: { enabled } }),
+      invalidatesTags: ["Search"],
+    }),
+    indexSearchBatch: b.mutation<{ indexed: number; remaining: number }, void>({
+      query: () => ({ url: "/settings/search/index", method: "POST" }),
+      invalidatesTags: ["Search"],
+    }),
+
     getGoals: b.query<SavingsGoal[], void>({ query: () => "/goals", providesTags: ["Goal"] }),
     createGoal: b.mutation<{ ok: boolean; id: number }, GoalBody>({
       query: (body) => ({ url: "/goals", method: "POST", body }),
@@ -1090,6 +1179,24 @@ export const {
   useGetCompareQuery,
   useGetCategoryDrillQuery,
   useGetSliceDrillQuery,
+  useGetSearchSettingsQuery,
+  useSetSearchEnabledMutation,
+  useIndexSearchBatchMutation,
+  useGetTaxStatusQuery,
+  useGetTaxBusinessQuery,
+  useUpdateTaxProfileMutation,
+  useMarkTaxPaidMutation,
+  useSetTxBusinessMutation,
+  useSetAccountBusinessMutation,
+  useBackfillTaxRatesMutation,
+  useGetTaxLedgerQuery,
+  useLazyGetTaxPaymentCandidatesQuery,
+  useGetRegWatchQuery,
+  useCheckRegSourcesMutation,
+  useAddRegSourceMutation,
+  useUnmuteRegSourceMutation,
+  useRemoveRegSourceMutation,
+  useSaveRequisiteMutation,
   useGetGoalsQuery,
   useCreateGoalMutation,
   useUpdateGoalMutation,

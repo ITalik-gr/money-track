@@ -26,6 +26,7 @@ const items: { to: string; label: TranslationKey; tab?: TranslationKey; icon: st
   { to: "/advisor", label: "nav.advisor", tab: "nav.tab.advisor", icon: "advisor", end: false, core: true },
   { to: "/chat", label: "nav.chat", icon: "spark", end: false, core: false },
   { to: "/plan", label: "nav.plan", icon: "plan", end: false, core: false },
+  { to: "/fop", label: "nav.fop", icon: "briefcase", end: false, core: false },
   { to: "/goals", label: "nav.goals", icon: "target", end: false, core: false },
   { to: "/categories", label: "nav.categories", icon: "tag", end: false, core: false },
   { to: "/subs", label: "nav.subs", icon: "repeat", end: false, core: false },
