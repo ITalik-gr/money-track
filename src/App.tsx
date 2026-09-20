@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { Layout } from "./components/layout/Layout.tsx";
 import { Dashboard } from "./pages/Dashboard.tsx";
 import { Transactions } from "./pages/Transactions.tsx";
@@ -12,7 +12,7 @@ import { Wrapped } from "./pages/Wrapped.tsx";
 import { Advisor } from "./pages/Advisor.tsx";
 import { Chat } from "./pages/Chat.tsx";
 import { Plan } from "./pages/Plan.tsx";
-import { Fop } from "./pages/Fop.tsx";
+import { Business } from "./pages/Business.tsx";
 import { Category } from "./pages/Category.tsx";
 import { Subscription } from "./pages/Subscription.tsx";
 import { Categories } from "./pages/Categories.tsx";
@@ -28,6 +28,17 @@ import { TelegramLogin } from "./pages/TelegramLogin.tsx";
 import { telegramInitData } from "./lib/telegram.ts";
 import { useState } from "react";
 import { useGetMeQuery } from "./store/api.ts";
+import { useFopVisible } from "./components/fop/gate.ts";
+
+/** §FOP-GATE — the route half of the gate; `useFopVisible` is its single source of truth. */
+function BusinessRoute() {
+  const visible = useFopVisible();
+  const { data: me } = useGetMeQuery();
+  // Waits for `/me` before deciding: redirecting on a not-yet-loaded session would bounce the
+  // owner off his own page on every cold load.
+  if (!me) return null;
+  return visible ? <Business /> : <Navigate to="/" replace />;
+}
 
 const router = createBrowserRouter([
   {
@@ -49,7 +60,14 @@ const router = createBrowserRouter([
       { path: "add", element: <Add /> },
       { path: "plan", element: <Plan /> },
       // §0.1 — the business is its own organism, so it is its own page, not a card on /plan.
-      { path: "fop", element: <Fop /> },
+      // §FOP-GATE — and while the module is unfinished, only the owner has that page: a typed or
+      // bookmarked path lands on the dashboard rather than on a screen whose every request 404s.
+      { path: "business", element: <BusinessRoute /> },
+      // §BIZ-SPLIT — the page was `/fop` until 2026-09-21, when the business became the page and
+      // the tax became a feature inside it. Kept as a redirect rather than deleted: the owner's
+      // own setup notes link to it, and a dead bookmark on the one page he was asked to check is
+      // a bug report about the wrong thing.
+      { path: "fop", element: <Navigate to="/business" replace /> },
       { path: "categories", element: <Categories /> },
       // §CATEGORY-PAGE — the permalink. Below the list route, and a distinct path, so neither
       // shadows the other however the router is reordered later.

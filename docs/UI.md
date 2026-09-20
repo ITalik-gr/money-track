@@ -95,6 +95,39 @@
 трималось порожньо. **Sweep сліпий скрізь, де фікстура порожня** — той самий урок, що з
 `budget_months`. Тепер у фікстурі є покупка з `original_currency` та рядок `rate_history`.
 
+## C15 — a `var(--x)` that nothing defines takes the whole declaration with it (2026-09-21)
+
+The business page shipped against SEVEN custom properties that exist nowhere in this project —
+`--text`, `--text-dim`, `--c-red`, `--c-red-soft`, `--c-green`, `--bg-soft`, `--c-teal-soft` —
+sixty-five uses in one file, plus six more scattered across five other parts (`--r-md`, `--fg`,
+`--ink-3`, `--text-1`, `--text-2`, `--radius-md`).
+
+The owner's report was «гапів немає між блоками, та і в блоках… і не дуже там сторінка зрозуміла».
+That is what an undefined variable looks like from the outside: the declaration is **invalid at
+computed-value time**, so it is dropped and the element inherits.
+
+- `color: var(--text-dim)` — every dim label rendered at full strength. A page whose hierarchy is
+  built out of two text weights had one.
+- `background: var(--bg-soft)` — the «next payment» panel had no panel.
+- `background: var(--c-teal-soft)` on `.fop-rank-bar` — the proportion bar behind every client and
+  every cost row was invisible, so two ranked lists read as plain text.
+- `border-color: var(--c-red)` — dropped, so «overdue» looked identical to «due».
+- `color-mix(in srgb, var(--fg) 4%, transparent)` — an invalid component makes the WHOLE mix
+  invalid, so a row's hover had no background at all.
+
+**Nothing else in the repo could see it.** TypeScript does not read CSS; C8 checks files and C9
+checks class NAMES, not values; the browser fails silently by design. Same shape as C9 — a join
+that only exists at runtime — so it gets the same answer: a check, not care.
+`scripts/check-css-vars.mjs` collects definitions from every `.css` AND from inline
+`style={{ "--x": … }}` in TSX (that is how per-row colours are set), and allows `var(--x, fallback)`
+— the one form that states what happens when it is missing.
+
+⚠️ **The other half of that report was spacing, and it had a separate cause:** the page stacked
+bare `.card` siblings. `.card` carries no margin by design — spacing belongs to the CONTAINER
+everywhere in this app — and the page had no container. A page that stacks cards needs one
+(`.biz-stack`, a grid with a `gap`), and a grid rather than margins on the children, so a child
+that decides not to render leaves no orphan margin behind.
+
 ## §COND-ORDER — a conditional rule must sit BELOW its unconditional twin (2026-09-04)
 
 `@media` and `@container` add **zero specificity**. A responsive rule therefore beats the plain

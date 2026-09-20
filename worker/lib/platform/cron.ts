@@ -15,6 +15,41 @@
 import type { Env } from "../../env.ts";
 
 const RATES_KEY = "rates";
+/** The UTC day whose infrastructure pass already ran (see `infraDue`). */
+const INFRA_DAY_KEY = "infra_day";
+
+/**
+ * §DIGEST-HOUR made the cron HOURLY, which turned "is this the daily pass?" into a question with a
+ * silent failure mode: `getUTCHours() === 6` is true for exactly one delivery, and a tick that
+ * Cloudflare delivers late — a deploy, a platform hiccup — lands in hour 7 and the whole day's
+ * infrastructure work simply does not happen. For the rates snapshot that is not a delay but a
+ * PERMANENT hole: the net-worth series is only ever written forward, and the nightly backup for
+ * that day never exists either.
+ *
+ * So the rule is the same shape as the digest's: at or after the hour, once a UTC day, with a
+ * marker to keep "at or after" from firing twice. A directory that will not answer degrades to
+ * the old equality check rather than to silence.
+ */
+export async function infraDue(env: Env, now: number, hour: number): Promise<boolean> {
+  const d = new Date(now * 1000);
+  if (d.getUTCHours() < hour) return false;
+  const today = d.toISOString().slice(0, 10);
+  try {
+    const row = await env.DIRECTORY.prepare("SELECT value FROM shared_state WHERE key = ?")
+      .bind(INFRA_DAY_KEY).first<{ value: string }>();
+    return row?.value !== today;
+  } catch {
+    return d.getUTCHours() === hour;      // directory migration not applied yet
+  }
+}
+
+/** Marked AFTER the pass, so a run that threw halfway is retried by the next tick. */
+export async function markInfraRan(env: Env, now: number): Promise<void> {
+  await env.DIRECTORY.prepare(
+    `INSERT INTO shared_state (key, value, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ).bind(INFRA_DAY_KEY, new Date(now * 1000).toISOString().slice(0, 10), now).run();
+}
 
 /** Fetches monobank's public rates and stores them where every user's object can read them. */
 export async function refreshSharedRates(env: Env): Promise<number> {

@@ -4,7 +4,7 @@
 // The Telegram recipient is PERSONAL and comes only from `tgTarget()` (§D1); the deployment
 // secret is a fallback for the owner alone.
 import { apiRoutes } from "./_shared.ts";
-import type { NotifPrefs } from "../../../shared/api/platform.ts";
+import type { NotifPrefs, NotifSchedule } from "../../../shared/api/platform.ts";
 
 export const notifications = apiRoutes();
 
@@ -55,6 +55,22 @@ notifications.put("/notifications/prefs", async (c) => {
   const body = await c.req.json<Record<string, boolean>>().catch(() => ({}));
   const { setPrefs } = await import("../../lib/messaging/notify.ts");
   return c.json(await setPrefs(c.env, body) satisfies NotifPrefs);
+});
+
+// §DIGEST-HOUR — WHEN the scheduled pass speaks, as opposed to WHAT it is allowed to say.
+// Its own pair of endpoints for the same reason it is its own type: `/notifications/prefs` is a
+// map of kind → boolean, and an hour is neither.
+notifications.get("/notifications/schedule", async (c) => {
+  const { getDigestHour } = await import("../../lib/messaging/digest.ts");
+  return c.json({ hour: await getDigestHour(c.env) } satisfies NotifSchedule);
+});
+
+notifications.put("/notifications/schedule", async (c) => {
+  const body = await c.req.json<{ hour?: unknown }>().catch(() => ({} as { hour?: unknown }));
+  const { setDigestHour } = await import("../../lib/messaging/digest.ts");
+  // Clamped, not rejected: a stale client sending 25 should get 23 and a working feed, not a 400
+  // and silence until somebody notices (§Обробка помилок — `numParam` makes the same trade).
+  return c.json({ hour: await setDigestHour(c.env, body.hour) } satisfies NotifSchedule);
 });
 
 // Ручний тригер проактивного TG-пушу (тест без очікування тижневого крону).

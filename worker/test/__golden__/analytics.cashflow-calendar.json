@@ -7,8 +7,18 @@
     "cushion": 3950000,
     "items": [
       {
-        "at": 1778659200,
-        "date": "2026-05-13",
+        "at": 1777626000,
+        "date": "2026-05-01",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1778230800,
+        "date": "2026-05-08",
         "title": "Прибирання",
         "amount": 50000,
         "amount_orig": 50000,
@@ -27,13 +37,23 @@
         "kind": "subscription"
       },
       {
-        "at": 1779094800,
-        "date": "2026-05-18",
-        "title": "Страховка",
-        "amount": 360000,
-        "amount_orig": 360000,
+        "at": 1778835600,
+        "date": "2026-05-15",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
         "currency_code": 980,
-        "category_id": 14,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1779440400,
+        "date": "2026-05-22",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
         "kind": "subscription"
       },
       {
@@ -47,8 +67,28 @@
         "kind": "subscription"
       },
       {
-        "at": 1781337600,
-        "date": "2026-06-13",
+        "at": 1780045200,
+        "date": "2026-05-29",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1780650000,
+        "date": "2026-06-05",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1781254800,
+        "date": "2026-06-12",
         "title": "Прибирання",
         "amount": 50000,
         "amount_orig": 50000,
@@ -67,13 +107,13 @@
         "kind": "subscription"
       },
       {
-        "at": 1781773200,
-        "date": "2026-06-18",
-        "title": "Страховка",
-        "amount": 360000,
-        "amount_orig": 360000,
+        "at": 1781859600,
+        "date": "2026-06-19",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
         "currency_code": 980,
-        "category_id": 14,
+        "category_id": 8,
         "kind": "subscription"
       },
       {
@@ -87,8 +127,28 @@
         "kind": "subscription"
       },
       {
-        "at": 1783929600,
-        "date": "2026-07-13",
+        "at": 1782464400,
+        "date": "2026-06-26",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1783069200,
+        "date": "2026-07-03",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
+        "at": 1783674000,
+        "date": "2026-07-10",
         "title": "Прибирання",
         "amount": 50000,
         "amount_orig": 50000,
@@ -107,6 +167,16 @@
         "kind": "subscription"
       },
       {
+        "at": 1784278800,
+        "date": "2026-07-17",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
         "at": 1784365200,
         "date": "2026-07-18",
         "title": "Страховка",
@@ -117,6 +187,16 @@
         "kind": "subscription"
       },
       {
+        "at": 1784883600,
+        "date": "2026-07-24",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
+        "kind": "subscription"
+      },
+      {
         "at": 1785052800,
         "date": "2026-07-26",
         "title": "Стрімінг",
@@ -124,6 +204,16 @@
         "amount_orig": 19900,
         "currency_code": 980,
         "category_id": 42,
+        "kind": "subscription"
+      },
+      {
+        "at": 1785488400,
+        "date": "2026-07-31",
+        "title": "Прибирання",
+        "amount": 50000,
+        "amount_orig": 50000,
+        "currency_code": 980,
+        "category_id": 8,
         "kind": "subscription"
       }
     ]

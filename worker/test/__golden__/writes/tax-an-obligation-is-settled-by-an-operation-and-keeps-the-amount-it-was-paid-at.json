@@ -3,6 +3,7 @@
   "body": {
     "enabled": false,
     "profile": {
+      "business": false,
       "enabled": false,
       "group": 3,
       "vat": false,

@@ -12,11 +12,10 @@
 import type { Env } from "../../env.ts";
 import { getRates, resolveBaseCurrency } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
-import { catNameSql } from "../finance/categories-i18n.ts";
 import { chargesBetween } from "../finance/subscriptions.ts";
 import {
   STATS_JOINS, SPEND_WHERE, EFF_CAT_ID, EFF_CAT_NAME, amountSum, valueMode,
-  categoryMonthlyLevels, projectSpend, isRecurringExpr, defaultRefFrom,
+  categoryMonthlyLevels, projectSpend,
   localMonthStart, localYm, localYmd,
 } from "../finance/stats.ts";
 import { draftBudgets, draftBudgetForecast } from "./drafts-budget.ts";
@@ -25,7 +24,9 @@ import { draftGoalRisk } from "./drafts-goals.ts";
 import { draftDeadlines } from "./drafts-due.ts";
 import { draftTaxDue, draftRegulation, draftQuietClients } from "./drafts-fop.ts";
 // §PRICE-STEPS and the dead-plan check live in `drafts-plans.ts` (C3, 2026-09-18).
-import { draftPriceUps, draftDeadSubs } from "./drafts-plans.ts";
+import { draftPriceUps, draftDeadSubs, draftMissedPlans } from "./drafts-plans.ts";
+// One operation, not a period: the big-cheque and double-debit cards (C3, 2026-09-20).
+import { draftBigTx, draftDuplicates, TX_SPEND } from "./drafts-tx.ts";
 import { draftAiObservations } from "./drafts-ai.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams } from "../../../shared/notif-i18n.ts";
@@ -37,10 +38,15 @@ import type { NotifKind } from "../../../shared/api/platform.ts";
 export type { NotifKind } from "../../../shared/api/platform.ts";
 export type Severity = "info" | "warn" | "urgent";
 
+// ⚠️ EVERY member of `NotifKind`, and the list is what makes a kind real: `getPrefs`/`setPrefs`
+// iterate it, and `listNotifications` filters by it. `quiet_client` was missing here from the day
+// it was added (2026-09-18) — it fired, because the drafter reads the pref map and an absent key
+// defaults to on, but it could not be MUTED and the feed could not be filtered to it. A kind that
+// cannot be switched off is a kind the user cannot disagree with.
 export const NOTIF_KINDS: NotifKind[] = [
   "report", "deadline", "anomaly", "budget", "price_up", "liquidity",
   "big_tx", "duplicate", "health_drop", "goal_risk", "dead_sub", "win", "todo", "ai",
-  "regulation",
+  "regulation", "quiet_client", "plan_missed",
 ];
 
 export interface NotifRow {
@@ -90,6 +96,9 @@ const DEFAULT_PREFS: NotifPrefs = {
   regulation: true,
   // On by default; `quietClients` (three payments, a weekly-or-longer gap) is what keeps it quiet.
   quiet_client: true,
+  // §PLAN-LATE. Separate from `deadline` on purpose: muting «money leaves on the 20th» says
+  // nothing about wanting to hear that it did not.
+  plan_missed: true,
 };
 
 export async function getPrefs(env: Env): Promise<NotifPrefs> {
@@ -459,93 +468,6 @@ async function draftLiquidity(env: Env, now: number): Promise<Draft[]> {
   return [];
 }
 
-// ⚠️ Гілки нижче свідомо працюють з `t.amount`, а НЕ з канонічним `EFF_AMOUNT`/STATS_JOINS:
-// це подієві сигнали про ОДНУ ОПЕРАЦІЮ (великий чек, дубль списання), а не агрегати по
-// категоріях. Спліт ділить операцію на частини для КАТЕГОРІЙНОЇ аналітики, але з погляду
-// банку це одне списання однією сумою — саме її і треба показати. Фільтри витрати
-// повторюють суть `SPEND_WHERE` на рівні рядка (без рол-апу категорій).
-const TX_SPEND = "t.amount < 0 AND t.transfer_pair_id IS NULL AND t.is_transfer = 0";
-
-/**
- * Незвично велика ОДНА витрата: ≥3× середнього чека своєї категорії за 90 днів.
- *
- * ⚠️ Регулярне виключаємо канонічним `isRecurringExpr` (підписка/розстрочка за `planned_id`
- * АБО мерчант із витратами в ≥3 різних місяцях). Без цього оренда 12 500 ₴ щомісяця летіла б
- * у стрічку як «велика витрата» — перевірено на реальних даних. Регулярний платіж великий
- * за визначенням і користувач про нього знає; новина — лише НЕсподіваний великий чек.
- */
-async function draftBigTx(env: Env, now: number): Promise<Draft[]> {
-  // §LANG-ARCH: the category name is rendered in the feed, so it resolves like every other name
-  // that reaches a screen. `catNameSql` was applied to `repo/*` and then to `lib/ai/*`, and
-  // `lib/messaging/*` — which writes the feed the reader actually sees — used it NOWHERE: an
-  // English reader got «Продукти» in a notification and "Groceries" in the category list.
-  const locale = await resolveLocale(env);
-  const MIN_ABS = 50000;                      // 500 ₴ — нижче не сигнал, хоч би який множник
-  const notRecurring = `NOT ${isRecurringExpr(defaultRefFrom(now), now)}`;
-  const rows = await env.DB.prepare(
-    `WITH avg_check AS (
-       SELECT t.category_id AS cat, AVG(-t.amount) AS avg_amt, COUNT(*) AS n
-       FROM transactions t
-       WHERE t.time >= ? AND t.time < ? AND ${TX_SPEND}
-       GROUP BY t.category_id
-     )
-     SELECT t.id AS id, t.merchant AS merchant, -t.amount AS amount, t.time AS time,
-            ${catNameSql(locale, "c.name")} AS category, a.avg_amt AS avg_amt
-     FROM transactions t
-     LEFT JOIN categories c ON c.id = t.category_id
-     JOIN avg_check a ON a.cat IS t.category_id
-     WHERE t.time >= ? AND ${TX_SPEND} AND a.n >= 5 AND ${notRecurring}
-       AND -t.amount >= ? AND -t.amount >= a.avg_amt * 3
-     ORDER BY t.amount ASC LIMIT 3`,
-  ).bind(now - 90 * 86400, now - 2 * 86400, now - 2 * 86400, MIN_ABS)
-    .all<{ id: string; merchant: string | null; amount: number; time: number; category: string | null; avg_amt: number }>();
-
-  return (rows.results ?? []).map((r) => ({
-    kind: "big_tx" as const,
-    tkey: "big_tx" as const,
-    tparams: {
-      merchant: r.merchant, amount: r.amount, mult: (r.amount / r.avg_amt).toFixed(1),
-      category: r.category, avg: Math.round(r.avg_amt),
-    },
-    severity: "info" as const,
-    entity_type: "tx", entity_id: r.id,
-    dedup_key: `big_tx:${r.id}`,
-  }));
-}
-
-/** Дубль списання: той самий мерчант і та сама сума у вікні доби. Термінал/подвійний тап. */
-async function draftDuplicates(env: Env, now: number): Promise<Draft[]> {
-  const rows = await env.DB.prepare(
-    `SELECT a.id AS id, b.id AS other_id, a.merchant AS merchant, -a.amount AS amount, a.time AS time
-     FROM transactions a
-     JOIN transactions b ON b.merchant = a.merchant AND b.amount = a.amount AND b.id <> a.id
-       AND b.time BETWEEN a.time - 86400 AND a.time + 86400
-     WHERE a.time >= ? AND ${TX_SPEND.replace(/t\./g, "a.")}
-       AND a.merchant IS NOT NULL AND a.merchant <> '' AND -a.amount >= 5000
-     ORDER BY a.time DESC LIMIT 20`,
-  ).bind(now - 3 * 86400)
-    .all<{ id: string; other_id: string; merchant: string; amount: number; time: number }>();
-
-  const seen = new Set<string>();
-  const out: Draft[] = [];
-  for (const r of rows.results ?? []) {
-    // Джойн дає обидва напрямки (A→B і B→A) — ключ із відсортованої пари згортає їх в одне.
-    const pair = [r.id, r.other_id].sort().join("~");
-    if (seen.has(pair)) continue;
-    seen.add(pair);
-    out.push({
-      kind: "duplicate",
-      tkey: "duplicate",
-      tparams: { merchant: r.merchant, amount: r.amount },
-      severity: "warn",
-      entity_type: "tx", entity_id: r.id,
-      dedup_key: `duplicate:${pair}`,
-    });
-    if (out.length >= 3) break;
-  }
-  return out;
-}
-
 /** Індекс фінздоровʼя помітно просів проти минулого тижня (дані з health_history). */
 async function draftHealthDrop(env: Env, now: number): Promise<Draft[]> {
   const rows = await env.DB.prepare(
@@ -646,6 +568,9 @@ export async function generateNotifications(
     ["health_drop", () => draftHealthDrop(env, now)],
     ["goal_risk", () => draftGoalRisk(env, now)],
     ["dead_sub", () => draftDeadSubs(env, now)],
+    // §PLAN-LATE — the date went by and the charge is not there. AFTER `deadline`, which speaks
+    // about dates still ahead: the same plan must never be both «due in 2 days» and «missed».
+    ["plan_missed", () => draftMissedPlans(env, now)],
     ["win", async () => draftWins(await getPace())],
     // Both `todo` drafters share one preference: they are the same concern — the app asking a
     // person to finish something only they can finish — so muting one must mute both.

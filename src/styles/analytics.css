@@ -99,7 +99,7 @@
 .month-open svg { transform: rotate(90deg); }
 /* Why the "now" blocks are missing — said in the flow, not tucked into a tooltip nobody opens. */
 .month-note {
-  padding: 10px 14px; border: 1px dashed var(--line); border-radius: var(--r-md);
+  padding: 10px 14px; border: 1px dashed var(--line); border-radius: var(--radius-sm);
   color: var(--ink-2); line-height: 1.45;
 }
 

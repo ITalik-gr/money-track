@@ -393,7 +393,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), per_month_90d_uah: Math.round(e.spent / 3 / 100) })),
     by_importance: (importance.results ?? []).map((x) => ({ level: x.importance, spent_90d_uah: Math.round(x.spent / 100) })),
     monthly_trend: (trend.results ?? []).map((t) => ({ month: t.m, spend_uah: Math.round(t.spend / 100), income_uah: Math.round(t.income / 100) })),
-    budgets, ...(await (await import("../finance/tax.ts")).taxContext(env.DB, now)), // §TAX-RESERVE
+    budgets, ...(await (await import("../finance/tax.ts")).taxContextFor(env, now)), // §TAX-RESERVE · §FOP-GATE
   };
   if (facts.length) {
     context.facts = facts;

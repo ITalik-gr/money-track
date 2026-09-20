@@ -413,6 +413,43 @@
   сховати результат щойно замовленої дії — це не тиша, а зникнення роботи).
 
 
+- **§DIGEST-HOUR (2026-09-20): the hour the app speaks is the READER'S, not the deployment's.**
+  Three crons at fixed UTC hours meant the weekly report, the budget breaches and the model's
+  observations all landed at 07:01 Kyiv — before the day they describe had begun. The cron is now
+  a single hourly tick (`0 * * * *`); each user's object holds `notify_hour` (default **20:00**,
+  APP_TZ) and decides whether this tick is theirs (`lib/messaging/digest.ts`, Settings → the feed's
+  «Коли надсилати»). The weekly report is generated on Monday AT THAT HOUR and the monthly one on
+  the 1st, so the rule below — announced in the same pass that created it — still holds.
+  ⚠️ **The preference lives in the user's object only.** Copying it into the directory row would
+  make a second place that knows when somebody wants to be spoken to; the price is that every
+  object is woken hourly to be asked, which is three indexed reads.
+  ⚠️ **«At or after the hour, once a day», not «at the hour».** A missed tick (a deploy, a hiccup)
+  would otherwise drop that whole day's feed; the day marker `notify_digest_day` is what stops the
+  looser condition from firing twice, and it is written AFTER the pass so a half-failed run retries.
+  ⚠️ Infra work (shared rates, the rate snapshot, backups, admin counters) stays on 06:00 UTC: it
+  is work nobody reads live, so its clock is ours to choose — but it runs **at or after** that hour,
+  once a UTC day (`infraDue`/`markInfraRan`, `lib/platform/cron.ts`), for the same reason the digest
+  does. `getUTCHours() === 6` is true for exactly one delivery, and one tick lost to a deploy took
+  the day's rates snapshot and every user's backup with it — and the net-worth series is written
+  forward only, so that hole never fills (2026-09-21).
+- **§PLAN-LATE (2026-09-20): a scheduled payment is news only AFTER its date goes by.** The feed
+  shipped «Квартира відсутня в цьому місяці — 12500 ₴ очікується 20 числа … в рахунках на сьогодні
+  цього платежу немає» on the 15th. Every figure and date in it was grounded — the rent IS an
+  `upcoming_charges` row — and the model merely observed that no charge had happened yet, which is
+  true of every scheduled payment every day until its date. Two halves, because the fix is about
+  TIMING and not about truth:
+  - the app announces a late plan ITSELF, deterministically, `LATE_GRACE_DAYS = 3` days after the
+    expected date and only for a plan that has a charge history (`draftMissedPlans`,
+    `drafts-plans.ts`; a plan that never charged is `dead_sub`'s story). A charge up to 5 days
+    EARLY counts as that period's payment — people pay rent before the weekend — but never more
+    than HALF a period: on a weekly plan a flat 5 days reaches back past the previous due date, so
+    a charge that was merely 3 days late for the previous cycle (inside the grace, never reported)
+    would be read as this cycle's payment and a weekly plan that actually stopped would stay
+    silent for an extra week.
+  - the model may not say it sooner: `claimsMissingFutureCharge` drops an observation that names a
+    plan still ahead alongside an absence word («відсутн», «немає», «missing»…). Own kind and own
+    preference (`plan_missed`): muting «money leaves on the 20th» says nothing about wanting to
+    hear that it did not.
 - **Подія, створена в прогоні крону, оголошується в ЦЬОМУ ж прогоні.** Репорт народжувався о
   09:00, а стрічку наповнював добовий прохід о 06:00 — сповіщення відставало на добу й описувало
   період, який скінчився півтори доби тому. Вік сповіщення не має залежати від розкладу іншої задачі.
@@ -459,4 +496,38 @@
 - **Поллінг лише поки є активна задача.** Постійний інтервал заради події, що стається раз на
   добу, — податок на кожного користувача; `pollingInterval: 0` вимикає таймер, початковий
   запит при монтуванні лишається (саме він ловить «закрив вкладку на середині»).
+
+### §A6-BATCH — a mass run is a LOOP over the alarm, and the loop must be able to stop (2026-09-20)
+
+A re-sweep or a batch enrich is a different animal from one generation: it goes in batches, it is
+unfinished in between, and the only meaningful question about it is «how many of how many». The
+mechanism (migration 0053 + `runBatchTick` in `lib/ai/jobs.ts`):
+
+- **`progress_done` / `progress_total` on the row, NULL for a single-pass job.** The missing
+  denominator is how the two kinds are told apart — on screen and in the client's job list — so
+  no `is_batch` flag was added to say the same thing a second time.
+- **A finished batch leaves the row `queued`, not `running`.** That is the entire loop: a queued
+  row is claimable on the next pass, `hasQueuedJobs` therefore reports work, and `armAlarm`
+  re-arms. **Nothing in the scheduler had to change** — which also means the danger lives here and
+  nowhere else.
+- **The stop condition is NOT «the executor says it is finished». It is that `progress_done` must
+  STRICTLY increase.** A batch that moved nothing fails the job, whatever it claims. An executor
+  returning the same cursor twice — an empty page, an off-by-one, a query that stopped matching —
+  is the exact shape of a bug that would otherwise wake the object forever, and for a real kind
+  every wake-up is a paid model call.
+- **`attempts` is reset by a tick that moved.** For a single job it counts pickups; a mass run has
+  many legitimate ones (a 10-batch run died at batch four under the old meaning). What it still
+  bounds is CONSECUTIVE failures, which is what it was for.
+- **The first kind is `noop_batch`, and it is not real work — it counts.** The payload of a real
+  mass run cannot be exercised in a test at all (no live key, no model), so the LOOP is built and
+  pinned against something free: `job-batch.test.ts` asserts «10 batches of 3 → done in exactly
+  10 ticks, and not one more», that progress is visible between ticks, and that a stalled executor
+  ends the job. Hanging the paying kinds on it is a pass with the owner watching, not an
+  overnight one (`ROADMAP.md`).
+- **`JOB_KINDS` — the list the API accepts — deliberately does NOT contain the batch kinds.** A
+  test fixture a client could start is a way to spend alarm ticks on nothing.
+- ⚠️ **A batch kind announces nothing yet.** A real mass run arrives with its own `NotifKind`,
+  preference and template rather than borrowing the one-shot generation's sentence — and the
+  client's job chip now skips a kind it has no screen for instead of throwing on
+  `undefined.tag`, which would have taken every OTHER job's toast down with it.
 

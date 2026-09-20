@@ -24,11 +24,18 @@
  */
 import type { Env } from "../../env.ts";
 import { localYmd } from "../finance/stats.ts";
-import { readProfile, refreshObligations, quarterWindow } from "../finance/tax.ts";
+import { readProfile, refreshObligations, quarterWindow, fopAvailable } from "../finance/tax.ts";
 import * as taxRepo from "../../repo/tax.ts";
 import { listSources } from "../finance/tax-watch.ts";
 import { quietClients } from "../finance/business.ts";
 import type { Draft } from "./notify.ts";
+
+/**
+ * §FOP-GATE — every drafter in this file asks first, including the regulation one, which is the
+ * only one that does not otherwise read the profile. The cron runs for every user; a reader the
+ * module is hidden from must not be told about a tax deadline he has no screen to open.
+ */
+const hidden = (env: Env) => !fopAvailable(env);
 
 /**
  * §TAX-DUE — an accrued tax that has not been paid, inside the horizon.
@@ -42,6 +49,7 @@ import type { Draft } from "./notify.ts";
  * most useful sentence this feed can produce.
  */
 export async function draftTaxDue(env: Env, now: number): Promise<Draft[]> {
+  if (hidden(env)) return [];
   const profile = await readProfile(env.DB);
   if (!profile.enabled) return [];
   await refreshObligations(env.DB, now);
@@ -106,6 +114,7 @@ const TAX_TITLE: Record<string, string> = {
  * asserting that something is wrong.
  */
 export async function draftQuietClients(env: Env, now: number): Promise<Draft[]> {
+  if (hidden(env)) return [];
   const profile = await readProfile(env.DB);
   if (!profile.enabled) return [];
   const month = localYmd(now).slice(0, 7);
@@ -129,6 +138,7 @@ export async function draftQuietClients(env: Env, now: number): Promise<Draft[]>
  * The check itself is the cron's job, not this drafter's — this reads the flags the watcher left.
  */
 export async function draftRegulation(env: Env, now: number): Promise<Draft[]> {
+  if (hidden(env)) return [];
   const out: Draft[] = [];
   for (const s of await listSources(env.DB)) {
     // A noisy source is one that changes whenever its footer does. It keeps recording, and stops

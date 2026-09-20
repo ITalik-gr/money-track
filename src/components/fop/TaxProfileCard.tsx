@@ -8,18 +8,21 @@ import type { TaxProfile } from "../../store/api.ts";
 /**
  * The group, the rate, the exemption — typed by the user, never guessed.
  *
+ * ⚠️ §BIZ-SPLIT (2026-09-21): configuration ONLY. Whether the tax module is on at all is a switch
+ * in `BizSetup`, because it is now one of two independent switches and no longer a property of
+ * this card.
+ *
  * ⚠️ A guessed group produces a confidently wrong tax figure, and wrong-and-confident is the one
- * failure on this page that costs a penalty rather than an evening (docs/TAX.md §7). So the whole
- * screen stays behind this card until it is answered, and `intro` is the version that says why.
+ * failure on this page that costs a penalty rather than an evening (docs/TAX.md §7). So nothing
+ * here has a default that pretends to know: the tax tab appears only once these are answered.
  *
  * ⚠️ The card also states, once and plainly, that the app is not a tax adviser: every number on
- * `/fop` follows from what is entered here.
+ * the tax tab follows from what is entered here.
  */
-export function TaxProfileCard({ profile, onSave, saving, intro }: {
+export function TaxProfileCard({ profile, onSave, saving }: {
   profile: TaxProfile | undefined;
   onSave: (p: Partial<TaxProfile>) => { unwrap: () => Promise<unknown> };
   saving: boolean;
-  intro?: boolean;
 }) {
   const t = useT();
   const [group, setGroup] = useState(String(profile?.group ?? 3));
@@ -33,7 +36,6 @@ export function TaxProfileCard({ profile, onSave, saving, intro }: {
   return (
     <div className="card">
       <div className="section-head"><h3>{t("fop.profile")}</h3></div>
-      {intro && <p className="fop-note">{t("fop.introNote")}</p>}
 
       <div className="fop-profile-row">
         <label>{t("fop.group")}</label>
@@ -63,17 +65,15 @@ export function TaxProfileCard({ profile, onSave, saving, intro }: {
         <span>{t("fop.esvExempt")}</span>
       </label>
 
+      {/* §BIZ-SPLIT — this card no longer turns the module ON or OFF. That is two switches now,
+          and they live in `BizSetup`: a card that both configures a thing and toggles it made
+          «Save» ambiguous — it enabled the module as a side effect of correcting a rate. */}
       <div className="fop-profile-actions">
         <button
           className="btn primary"
           disabled={saving}
-          onClick={() => save({ enabled: true, group: Number(group) as 1 | 2 | 3, vat, esv_exempt: esvExempt })}
-        >{intro ? t("fop.enable") : t("common.save")}</button>
-        {!intro && profile?.enabled && (
-          <button className="btn ghost" disabled={saving} onClick={() => save({ enabled: false })}>
-            {t("fop.disable")}
-          </button>
-        )}
+          onClick={() => save({ group: Number(group) as 1 | 2 | 3, vat, esv_exempt: esvExempt })}
+        >{t("common.save")}</button>
       </div>
 
       <p className="fop-note">{t("fop.notAdvice")}</p>

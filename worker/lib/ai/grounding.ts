@@ -115,6 +115,35 @@ export function timeClaimsAreGrounded(
 }
 
 /**
+ * §PLAN-LATE — a charge that has not come due yet is not a charge that is MISSING.
+ *
+ * The feed shipped «Квартира відсутня в цьому місяці — 12500 ₴ очікується 20 числа … в рахунках
+ * на сьогодні цього платежу немає» on the 15th. Every figure and every date in it was grounded:
+ * the rent IS an `upcoming_charges` row, due on the 20th, and the model simply observed that no
+ * charge had happened yet — which is true of every scheduled payment, every day, until its date.
+ * As news it is noise; as a warning, five days early, it is worse than noise.
+ *
+ * So the check is not about truth but about TIMING, and the app already owns the timing: a plan
+ * that is late is announced deterministically by `draftMissedPlans` after its grace period, with
+ * the date and the delay in it. The model has nothing to add before then.
+ *
+ * ⚠️ Title match, not topic match: only an observation naming a plan that is still ahead is
+ * dropped, so «ти витрачаєш більше на житло» survives. Titles under four characters are ignored —
+ * a plan called «Дім» inside a sentence would match half the language.
+ */
+const MISSING_WORDS = [
+  "відсутн", "немає", "нема ", "не пройш", "не списа", "не видно", "не зафіксован",
+  "не надійш", "не сплач", "пропущ", "бракує", "не побач",
+  "missing", "absent", "no payment", "no charge", "not seen", "not charged", "not paid",
+  "hasn't", "has not", "haven't", "have not", "yet to",
+];
+export function claimsMissingFutureCharge(text: string, notYetDueTitles: string[]): boolean {
+  const low = text.toLowerCase();
+  if (!MISSING_WORDS.some((w) => low.includes(w))) return false;
+  return notYetDueTitles.some((t) => t.trim().length >= 4 && low.includes(t.trim().toLowerCase()));
+}
+
+/**
  * Does the text read in the language the app asked for?
  *
  * The prompts are English (§LANG-ARCH) and the language is requested by one final directive, so a

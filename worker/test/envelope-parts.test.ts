@@ -46,7 +46,7 @@ function plan(db: MemDb, title: string, amount: number): number {
   const r = db.raw.prepare(
     `INSERT INTO planned_payments (title, kind, period, period_amount, start_date, category_id,
                                    is_active, currency_code, period_count)
-     VALUES (?, 'subscription', 'monthly', ?, ?, ?, 1, 980, 1)`,
+     VALUES (?, 'subscription', 'month', ?, ?, ?, 1, 980, 1)`,
   ).run(title, amount, MAY_5 - 120 * DAY, CAT);
   return Number(r.lastInsertRowid);
 }

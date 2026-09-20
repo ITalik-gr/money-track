@@ -8,7 +8,7 @@
 import { apiRoutes, idParam, numParam } from "./_shared.ts";
 import { localParts, localQuarterStart, localYearStart, localYmd } from "../../lib/finance/time.ts";
 import {
-  readProfile, writeProfile, refreshObligations, taxStatus,
+  readProfile, writeProfile, refreshObligations, taxStatus, fopAvailable,
 } from "../../lib/finance/tax.ts";
 import type { TaxProfile } from "../../lib/finance/tax-rates.ts";
 import * as taxRepo from "../../repo/tax.ts";
@@ -26,6 +26,19 @@ import type {
 export const tax = apiRoutes();
 
 const now = () => Math.floor(Date.now() / 1000);
+
+/**
+ * §FOP-GATE — the whole surface is the owner's while the module is unfinished.
+ *
+ * 404 rather than 403: a 403 admits the surface exists and would still put a toast on every
+ * screen that asks about the business (`apiErrorMiddleware` toasts any failed request), whereas
+ * the client simply does not mount those blocks for a non-owner. One middleware over the prefix,
+ * not nineteen checks — a per-handler gate is a gate the twentieth handler will be missing.
+ */
+tax.use("/tax/*", async (c, next) => {
+  if (!fopAvailable(c.env)) return c.json({ error: "not_found" }, 404);
+  await next();
+});
 
 /**
  * The whole picture, in one request.
@@ -52,6 +65,7 @@ tax.put("/tax/profile", async (c) => {
     return c.json({ error: st(c.get("locale"), "errTaxGroup") }, 400);
   }
   const next: TaxProfile = {
+    business: body.business ?? current.business,
     enabled: body.enabled ?? current.enabled,
     group: group as TaxProfile["group"],
     vat: body.vat ?? current.vat,

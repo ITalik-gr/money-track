@@ -28,7 +28,8 @@ export type NotifTemplateKey =
   | "report" | "deadline_plan" | "deadline_credit" | "anomaly" | "win" | "budget"
   | "price_up" | "liquidity" | "big_tx" | "duplicate" | "health_drop"
   | "goal_risk" | "dead_sub" | "todo" | "job_done" | "cron_failed" | "budget_forecast"
-  | "stale_import" | "deadline_tax" | "deadline_tax_quiet" | "regulation" | "quiet_client";
+  | "stale_import" | "deadline_tax" | "deadline_tax_quiet" | "regulation" | "quiet_client"
+  | "plan_missed";
 
 export interface RenderedNotif { title: string; body: string | null }
 
@@ -317,6 +318,21 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
       };
     }
 
+    // §PLAN-LATE. The body names the DATE and the days, never «today»: the row is read whenever
+    // the person opens the feed, and «no payment today» about the 20th read on the 23rd is wrong
+    // in a way the reader cannot detect.
+    case "plan_missed": {
+      const title = s(p, "title");
+      const amount = num(p, "amount");
+      const due = num(p, "due");
+      const days = num(p, "days");
+      return {
+        title: uk ? `${title} — платіж не пройшов` : `${title} — payment not seen`,
+        body: uk
+          ? `За планом ${amount > 0 ? `${m(amount)} ` : ""}мало списатись ${dayMonth(locale, due)}${days > 0 ? ` (${days} дн. тому)` : ""}, але операції до цього плану не видно. Якщо платили інакше — додайте операцію вручну.`
+          : `The plan expected ${amount > 0 ? `${m(amount)} ` : ""}on ${dayMonth(locale, due)}${days > 0 ? ` (${days} days ago)` : ""}, but no transaction is linked to it. If you paid another way, add the operation manually.`,
+      };
+    }
     case "dead_sub": {
       const title = s(p, "title");
       const perMonth = num(p, "perMonth");

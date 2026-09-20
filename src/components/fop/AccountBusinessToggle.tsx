@@ -1,5 +1,6 @@
 import { useT } from "../../i18n/index.ts";
 import { useSetAccountBusinessMutation, useGetTaxStatusQuery } from "../../store/api.ts";
+import { useFopVisible } from "./gate.ts";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
 
@@ -24,9 +25,12 @@ import { errText } from "../../lib/errors.ts";
  */
 export function AccountBusinessToggle({ id, value }: { id: string; value: number }) {
   const t = useT();
-  const { data: status } = useGetTaxStatusQuery();
+  // §FOP-GATE — asked BEFORE the request, not after: a refused query would toast a 404 on a
+  // screen that is meant to show nothing at all.
+  const visible = useFopVisible();
+  const { data: status } = useGetTaxStatusQuery(undefined, { skip: !visible });
   const [setBusiness, { isLoading }] = useSetAccountBusinessMutation();
-  if (!status?.enabled) return null;
+  if (!visible || !status?.enabled) return null;
 
   const set = async (business: 0 | 1) => {
     try { await setBusiness({ id, business }).unwrap(); }

@@ -9,9 +9,11 @@ import {
   useGetNotificationsQuery, useGetNotifPrefsQuery, useSetNotifPrefsMutation,
   useMarkNotificationsReadMutation, useMarkAllNotificationsReadMutation,
   useClearNotificationsMutation, useGenerateNotificationsMutation,
+  useGetNotifScheduleQuery, useSetNotifScheduleMutation,
 } from "../store/api.ts";
 import type { Notification, NotifKind } from "../store/api.ts";
 import { Icon } from "../components/ui/Icon.tsx";
+import { Select } from "../components/ui/Select.tsx";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
@@ -36,7 +38,7 @@ const KIND_META: Record<NotifKind, { labelKey:
   "notif.kind.budget" | "notif.kind.price_up" | "notif.kind.liquidity" | "notif.kind.big_tx" |
   "notif.kind.duplicate" | "notif.kind.health_drop" | "notif.kind.goal_risk" | "notif.kind.dead_sub" |
   "notif.kind.win" | "notif.kind.todo" | "notif.kind.regulation" |
-  "notif.kind.quiet_client"; icon: string }> = {
+  "notif.kind.quiet_client" | "notif.kind.plan_missed"; icon: string }> = {
   ai: { labelKey: "notif.kind.ai", icon: "spark" },
   // §TAX-WATCH — about the world the money is taxed in, not about the money.
   regulation: { labelKey: "notif.kind.regulation", icon: "alert" },
@@ -52,6 +54,8 @@ const KIND_META: Record<NotifKind, { labelKey:
   goal_risk: { labelKey: "notif.kind.goal_risk", icon: "target" },
   dead_sub: { labelKey: "notif.kind.dead_sub", icon: "repeat" },
   quiet_client: { labelKey: "notif.kind.quiet_client", icon: "tx" },
+  // §PLAN-LATE — веде на сторінку планів: єдина дія по такій події — глянути сам план.
+  plan_missed: { labelKey: "notif.kind.plan_missed", icon: "calendar" },
   win: { labelKey: "notif.kind.win", icon: "check" },
   todo: { labelKey: "notif.kind.todo", icon: "tag" },
 };
@@ -134,6 +138,12 @@ function Row({ n, onRead }: { n: Notification; onRead: (id: number) => void }) {
     : <button type="button" className={cls} onClick={() => onRead(n.id)}>{body}</button>;
 }
 
+// 00:00 … 23:00 у зоні застосунку (§APP_TZ). Рядок, а не локальний формат часу: година без
+// хвилин читається однаково в обох мовах, а «8 PM» тут нічого не додало б.
+const HOURS = Array.from({ length: 24 }, (_, h) => ({
+  value: h, label: `${String(h).padStart(2, "0")}:00`,
+}));
+
 export function Notifications() {
   const t = useT();
   const [kind, setKind] = useState<NotifKind | null>(null);
@@ -141,6 +151,8 @@ export function Notifications() {
   const { data, error, isLoading, refetch } = useGetNotificationsQuery({ kind });
   const { data: prefs } = useGetNotifPrefsQuery();
   const [setPrefs] = useSetNotifPrefsMutation();
+  const { data: schedule } = useGetNotifScheduleQuery();
+  const [setSchedule] = useSetNotifScheduleMutation();
   const [markRead] = useMarkNotificationsReadMutation();
   const [markAll] = useMarkAllNotificationsReadMutation();
   const [clearAll] = useClearNotificationsMutation();
@@ -197,7 +209,19 @@ export function Notifications() {
 
       {showPrefs && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <div className="section-head"><span>{t("notif.whichToCollect")}</span></div>
+          <div className="section-head"><span>{t("notif.whenToSpeak")}</span></div>
+          {/* §DIGEST-HOUR — коли саме говорити. Стоїть ПЕРЕД списком типів: «о котрій» стосується
+              всього, що нижче, і людина, яка прийшла сюди через ранковий шум, шукає саме це. */}
+          <label className="nt-hour">
+            <span>{t("notif.hourLabel")}</span>
+            <Select
+              value={schedule?.hour ?? 20}
+              options={HOURS}
+              onChange={(v) => { void setSchedule(Number(v)); }}
+            />
+          </label>
+          <p className="ai-block-hint">{t("notif.hourHint")}</p>
+          <div className="section-head" style={{ marginTop: 14 }}><span>{t("notif.whichToCollect")}</span></div>
           <p className="ai-block-hint">{t("notif.prefsHint")}</p>
           <div className="nt-prefs">
             {KINDS.map((k) => (

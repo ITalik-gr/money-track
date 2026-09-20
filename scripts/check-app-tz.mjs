@@ -65,6 +65,11 @@ const KEY_OK = {
   "lib/finance/money.ts": "`rateDayKey` — the date a bank PUBLISHED a rate, not an event in the reader's day",
   "lib/finance/networth.ts": "the series point is built at a UTC month end and keyed the same way",
   "lib/ai/receipt.ts": "an R2 object prefix, read by nobody as a calendar",
+  // §DIGEST-HOUR made the cron hourly, and `infraDue`/`markInfraRan` mark «this UTC day's
+  // infrastructure pass has run». Deliberately UTC and deliberately NOT the reader's day: the
+  // infrastructure half is not addressed to anybody — nobody reads it as a calendar, and the
+  // rates snapshot it guards is keyed the same way (`networth.ts`, exempted two lines up).
+  "lib/platform/cron.ts": "the infra pass's own day marker — UTC on both sides, read by no reader",
 };
 
 function tsFiles(dir, prefix = "") {

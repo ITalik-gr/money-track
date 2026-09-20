@@ -31,7 +31,7 @@
 /* §CSV-AI — the line that admits the column mapping came from a model. Warm border, not red: it
    is a caution to read, not an error to fix. */
 .csv-ai-note {
-  font-size: 13px; line-height: 1.45; padding: 8px 11px; border-radius: var(--r-md);
+  font-size: 13px; line-height: 1.45; padding: 8px 11px; border-radius: var(--radius-sm);
   border: 1px solid color-mix(in srgb, var(--c-ochre) 40%, transparent);
   background: color-mix(in srgb, var(--c-ochre) 8%, var(--surface));
 }

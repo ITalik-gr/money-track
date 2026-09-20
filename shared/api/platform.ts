@@ -31,7 +31,12 @@ export type NotifKind =
   // A client who used to pay on a rhythm and stopped. Its own kind for the same reason
   // `regulation` has one: it is not news about spending, and somebody who muted spending alerts
   // has said nothing about whether they want to hear that their business is shrinking.
-  | "quiet_client";
+  | "quiet_client"
+  // §PLAN-LATE — a payment the user SCHEDULED has not been seen since its date passed. Its own
+  // kind rather than a `deadline`: a deadline is news about a date that is coming, this one is
+  // news about a date that went by, and the two are wanted by different people at different
+  // moments (see `drafts-plans.ts`).
+  | "plan_missed";
 export interface Notification {
   id: number; kind: NotifKind; title: string; body: string | null;
   // Template key + JSON params for locale-aware re-rendering of the feed (P3.3). NULL for the
@@ -43,6 +48,14 @@ export interface Notification {
 }
 export interface NotificationFeed { items: Notification[]; unread: number }
 export type NotifPrefs = Record<NotifKind, boolean>;
+/**
+ * §DIGEST-HOUR — the hour (0-23, APP_TZ) at which the scheduled pass speaks to this user.
+ *
+ * Its own shape rather than a field on `NotifPrefs`, which is a `Record<NotifKind, boolean>`:
+ * an hour is not a kind and not a boolean, and widening that record would make every consumer
+ * of it handle a member that is neither.
+ */
+export interface NotifSchedule { hour: number }
 
 /** Owner-only directory row (admin UI, D2). Carries identity only — never anything financial. */
 export interface AdminUser {

@@ -17,7 +17,7 @@
     "incomeOverdue": 0,
     "incomeEstimated": false,
     "projectedNet": 842296,
-    "upcomingPlanned": 419900,
+    "upcomingPlanned": 209900,
     "upcomingItems": [
       {
         "title": "Хмара",
@@ -25,14 +25,24 @@
         "at": 1778832000
       },
       {
-        "title": "Страховка",
-        "amount": 360000,
-        "at": 1779094800
+        "title": "Прибирання",
+        "amount": 50000,
+        "at": 1778835600
+      },
+      {
+        "title": "Прибирання",
+        "amount": 50000,
+        "at": 1779440400
       },
       {
         "title": "Стрімінг",
         "amount": 19900,
         "at": 1779782400
+      },
+      {
+        "title": "Прибирання",
+        "amount": 50000,
+        "at": 1780045200
       }
     ]
   }

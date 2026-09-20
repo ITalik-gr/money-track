@@ -188,16 +188,26 @@ export interface ReportListItem {
 export interface ReportFull extends ReportListItem { data: FinancialReport }
 
 // §A6 — фонова AI-генерація. Дзеркалить рядок `ai_jobs` у БД юзера.
+//
+// `kind` is a plain string, not the worker's union: a mass run is a KIND the client may see in
+// the list before it has a screen for it (`noop_batch` today, a re-sweep later), and a client
+// that fails to parse a row it does not recognise would lose the rows it does.
 export type AiJobKind = "advisor" | "report" | "budget";
 export interface AiJob {
   id: number;
-  kind: AiJobKind;
+  kind: AiJobKind | (string & {});
   status: "queued" | "running" | "done" | "failed";
   result_json: string | null;
   error: string | null;
   created_at: number;
   finished_at: number | null;
   seen_at: number | null;
+  /**
+   * A mass run reports PROGRESS, not «done / not done» — both NULL for a single-pass job, and the
+   * missing denominator is how the two are told apart on screen (migration 0053).
+   */
+  progress_done?: number | null;
+  progress_total?: number | null;
 }
 
 // §A1: факт про світ. adjust_* рухає числа лише коли confirmed_at != null (гейт підтвердження).

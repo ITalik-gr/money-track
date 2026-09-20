@@ -328,6 +328,59 @@ export async function businessExpenses(
   return row ?? { uah: 0, n: 0, foreign_n: 0 };
 }
 
+/**
+ * Business income and cost per MONTH — the resolution quarters cannot give.
+ *
+ * Quarters answer «what do I owe»; months answer «how is the business going», which is the
+ * question someone with no ФОП at all opens this page for (§BIZ-SPLIT). One statement rather than
+ * two loops of `businessIncome`/`businessExpenses`: twelve months would otherwise be twenty-four
+ * aggregate scans over the same table for one chart.
+ *
+ * ⚠️ §APP_TZ — bucketed through `localFmtSql`, like every other month bucket in this project. A
+ * raw `strftime` would be UTC, and every receipt in the last three hours of a month would land in
+ * the next one.
+ *
+ * ⚠️ Same population rule as the totals above: income is valued at its FROZEN base (§TAX-FX),
+ * costs count hryvnia rows only — so a month here adds up to the quarter that contains it.
+ */
+export async function businessMonths(
+  db: AppDb, fromUnix: number, toUnix: number, now: number,
+): Promise<{ ym: string; income: number; costs: number }[]> {
+  const res = await db.prepare(
+    `SELECT ${localFmtSql(now, "%Y-%m", "t.time")} AS ym,
+            COALESCE(SUM(CASE WHEN t.amount > 0 THEN COALESCE(${TAX_BASE}, 0) ELSE 0 END), 0) AS income,
+            COALESCE(SUM(CASE WHEN t.amount < 0 AND t.currency_code = 980 THEN -t.amount ELSE 0 END), 0) AS costs
+     FROM transactions t
+     JOIN accounts a ON a.id = t.account_id
+     WHERE ${IS_BUSINESS} = 1 AND t.time >= ? AND t.time < ?
+       AND (${canonIncome(false)} OR ${canonSpend(false)})
+     GROUP BY ym ORDER BY ym`,
+  ).bind(fromUnix, toUnix).all<{ ym: string; income: number; costs: number }>();
+  return res.results ?? [];
+}
+
+/**
+ * How much of ALL money that came in was the business's — the one figure that says whether this
+ * page is about a side project or about the whole livelihood.
+ *
+ * Reuses `INCOME_WHERE`, the same canon as every income figure elsewhere (§CANON), so the
+ * denominator here is the number the Statistics screen prints for the same window. A second
+ * definition would let the two disagree about one month's income, and the believed one would be
+ * whichever screen was opened last.
+ */
+export async function businessShare(
+  db: AppDb, fromUnix: number, toUnix: number,
+): Promise<{ business_uah: number; total_uah: number }> {
+  const row = await db.prepare(
+    `SELECT COALESCE(SUM(CASE WHEN ${IS_BUSINESS} = 1 THEN COALESCE(${TAX_BASE}, 0) ELSE 0 END), 0) AS business_uah,
+            COALESCE(SUM(COALESCE(${TAX_BASE}, 0)), 0) AS total_uah
+     FROM transactions t
+     JOIN accounts a ON a.id = t.account_id
+     WHERE ${canonIncome()} AND t.time >= ? AND t.time < ?`,
+  ).bind(fromUnix, toUnix, fromUnix, toUnix).first<{ business_uah: number; total_uah: number }>();
+  return row ?? { business_uah: 0, total_uah: 0 };
+}
+
 export interface BusinessExpenseRow {
   category_id: number;
   name: string;

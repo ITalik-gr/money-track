@@ -116,6 +116,15 @@ const cancels = (r: string, p: string) => `${r}.account_id = ${p}.account_id AND
   AND ${r}.time >= ${p}.time AND ${r}.time <= ${p}.time + ${VOID_WINDOW}
   AND ${r}.is_transfer = 0 AND ${p}.is_transfer = 0 AND (${refundDescOn(`${r}.merchant`)})
   AND (substr(${r}.merchant, -length(${p}.merchant)) = ${p}.merchant OR (${r}.mcc IS NOT NULL AND ${r}.mcc = ${p}.mcc))`;
+/**
+ * «This spend already has its cancellation in the table» — for callers that must not SPEAK about a
+ * charge that came back (`drafts-tx.ts`). The feed's one-to-one nicety is deliberately left out:
+ * a notification is a claim about money the person lost, so any matching cancellation is reason
+ * enough to stay quiet, and the strict pairing only matters when rows are drawn side by side.
+ */
+export const isVoidedExpr = (p: string) =>
+  `EXISTS (SELECT 1 FROM transactions r WHERE ${cancels("r", p)})`;
+
 const VOID_COLUMNS = `
   CASE WHEN t.amount < 0 THEN (SELECT r.id FROM transactions r WHERE ${cancels("r", "t")}
     AND NOT EXISTS (SELECT 1 FROM transactions p2 WHERE p2.id <> t.id AND p2.time > t.time AND ${cancels("r", "p2")})

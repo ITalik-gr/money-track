@@ -43,6 +43,77 @@
 Тому `/fop` — сторінка, а не картка. На особистих екранах лишається рівно одне: конверт зменшує
 ВІЛЬНІ гроші (§TAX-RESERVE). Бізнес не має протікати в подушку й runway — це різні організми.
 
+## 0.12 §BIZ-SPLIT — the page is the BUSINESS; ФОП is a feature inside it (2026-09-21)
+
+Owner, on seeing the live page: «це саме сторінка бізнес, щоб можна було і просто свій бізнес
+фінанси трекати, а фоп вже це як фіча просто додаткова». He is right, and the old shape was the
+accident: the tax module gated the WHOLE screen, so a person with work income and no ФОП — a
+freelancer before registration, somebody between registrations, somebody whose ФОП an accountant
+runs — had nothing at all.
+
+**Two independent switches, in `TaxProfile`:**
+
+| Flag | Owns | True without the other? |
+|---|---|---|
+| `business` | clients, costs, margin, the monthly series, concentration, quiet clients | yes |
+| `enabled` (ФОП) | the reserve, the obligations, the annual ceiling, the income book, §TAX-WATCH | **no** — it implies `business` |
+
+The implication is enforced in **`writeProfile`**, once, rather than asked of every reader: a
+profile with `enabled` and no `business` would accrue tax on income the page does not show, and
+the two flags would then disagree about whether the user has a business at all.
+
+**What the tax module being OFF must NOT do is produce a confident zero.** Two places had to
+change, and both were the same mistake in different clothes: `accrualsFor` answers for a GROUP,
+and the default group is 3 — so asking it with the module off puts a 5% figure on the screen of
+somebody who never said they are a ФОП. `businessOverview` already guarded this; `quarterOutlook`
+did not, and `projected_tax` is now null rather than zero, because that field is a CLAIM about
+what will be owed.
+
+⚠️ `outlook.groups` deliberately stays either way. That one is explicitly a hypothetical — «what
+would a ФОП cost on this income» is exactly the question somebody WITHOUT one is asking.
+
+**The page is `/business` with five tabs** (Overview · Clients · Costs · Tax · Settings), the
+shell owning the two shared requests for the reason `Stats.tsx` does: five sections each fetching
+their own quarter could disagree about one quarter, and the reader could not tell which card was
+stale. The Tax tab is absent, not empty, while the module is off; `/fop` redirects.
+
+### Sample mode
+
+There is no way to judge this screen without a business behind it, and the owner has none right
+now. So the Settings tab carries a **sample**: a fictional business built in the browser
+(`components/fop/sample.ts`), rendering every state the page can reach — an overdue payment, a
+ceiling the pace will cross, a client gone quiet, a month in the red, receipts with no NBU rate.
+
+⚠️ **Seeding demonstration rows into the real ledger was rejected outright.** This page reports
+money; a synthetic receipt that outlives the demonstration is a wrong figure in a tax export.
+Nothing is written anywhere, the page says so in a banner, and the banner carries its own way out.
+
+## 0.15 §FOP-GATE — the module is the owner's while it is unfinished (2026-09-20)
+
+Owner's call: «ФОП там ще і близько поки не так як я планував» — so `/fop` is hidden from every
+account except his, the demo sandbox included. A product decision with an expiry, not a permission
+model: when the module is what he meant it to be, the gate is one function to delete.
+
+**The gate is `fopAvailable(env)` in `lib/finance/tax.ts`, and it reads the env, never a stored
+flag.** A stored flag would be flipped through the write endpoint, and the write endpoint is part
+of what is being hidden. `readProfile` cannot ask the question itself — it takes a `db`, not an
+env — so each DOOR asks, and there are exactly five:
+
+| Door | Where | What it does |
+|---|---|---|
+| the API surface | `routes/api/tax.ts` | one middleware over `/tax/*` → **404** (not 403: a 403 admits the surface exists, and `apiErrorMiddleware` would toast it on every screen) |
+| the MCP tool | `routes/mcp.ts` | `get_tax_status` is left out of `tools/list`, and answers «module off» if a client calls the name anyway |
+| the feed | `messaging/drafts-fop.ts` | all three drafters return `[]`; the cron runs for everyone, and a deadline announced to someone with no screen to open is the failure |
+| the adviser and the projection | `taxContextFor(env, …)` | the ONE env-aware wrapper both use, so the reserve cannot leak into a payload built for everybody |
+| the client | `components/fop/gate.ts` | `useFopVisible()` (`/me` → `is_owner`) hides the nav item, redirects `/fop`, and — the point — **skips the query** rather than letting it be refused |
+
+Both halves are needed. The server half is the one that HOLDS; the client half is what keeps a
+hidden module from announcing itself through an error toast.
+
+⚠️ `fop-gate.test.ts` pins the CLASS, not a list: it reads the declared paths **off the Hono
+instance** and asserts 404 for each. The failure it exists to catch is a twentieth route mounted
+outside the `/tax/*` prefix, which a hand-written list of nineteen would never notice.
+
 ## 0.2 §TAX-WATCH — регуляторний нагляд: СТЕЖИМО, а не ПЕРЕКАЗУЄМО
 
 **Задача з життя (власник, 2026-09-18):** у знайомого змінились реквізити сплати, він про це не

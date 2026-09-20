@@ -90,3 +90,39 @@ test("not a cancellation: partial refund, other account, transfer, too late, no 
   for (const id of ["p1", "p2", "p3", "p4", "p5"]) assert.equal(f[id]!.voided_by, null, id);
   for (const id of ["r1", "r2", "r3", "r4", "r5"]) assert.equal(f[id]!.voids, null, id);
 });
+
+/**
+ * The feed's cards are claims about money the person LOST. A charge the bank already cancelled is
+ * money that came back, so «велика витрата» about it is a false alarm — and «списано двічі» about
+ * a double charge whose second leg was reversed sends the person to the bank over nothing.
+ */
+test("a cancelled charge produces no card about itself", async () => {
+  const { draftBigTx, draftDuplicates } = await import("../lib/messaging/drafts-tx.ts");
+  const m = db();
+  const env = { DB: m } as unknown as Parameters<typeof draftBigTx>[0];
+  const now = T0 + 3600;
+  // A category with an ordinary history, so the big-spend branch has an average to compare to.
+  for (let i = 0; i < 6; i++) {
+    m.raw.prepare(
+      `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, merchant,
+         category_id, hold, is_transfer, created_at)
+       VALUES (?, 'acc-uah', 'manual', ?, -20000, 980, ?, 2, 0, 0, 0)`,
+    ).run(`h${i}`, now - (10 + i * 5) * 86400, `Кафе ${i}`);
+  }
+  const big = (id: string, at: number) => m.raw.prepare(
+    `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, merchant,
+       category_id, hold, is_transfer, created_at)
+     VALUES (?, 'acc-uah', 'manual', ?, -300000, 980, 'Ресторан', 2, 0, 0, 0)`,
+  ).run(id, at);
+
+  big("big", now - 3600);
+  assert.equal((await draftBigTx(env, now)).length, 1, "an uncancelled big charge IS news");
+
+  tx(m, "big-cancel", now - 1800, 300000, "Скасування. Ресторан");
+  assert.deepEqual(await draftBigTx(env, now), [], "once cancelled it is not");
+
+  // The same for a double charge: two identical debits, one of them reversed.
+  big("dup2", now - 3000);
+  assert.deepEqual(await draftDuplicates(env, now), [],
+    "the surviving charge has no uncancelled twin");
+});

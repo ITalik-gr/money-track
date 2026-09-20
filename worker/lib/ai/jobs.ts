@@ -16,10 +16,37 @@
  */
 import type { Env } from "../../env.ts";
 
-export type JobKind = "advisor" | "report" | "budget";
+/**
+ * A job that runs in ONE pass. Each already has a synchronous endpoint; the queue just removes
+ * the person waiting on it.
+ */
+export type SingleJobKind = "advisor" | "report" | "budget";
+
+/**
+ * A job that runs in MANY passes, one batch per alarm tick, reporting progress in between.
+ *
+ * `noop_batch` is deliberately the only member for now, and it is not real work: it counts. The
+ * mechanism below is a loop over an alarm that re-arms itself, and the failure mode of a wrong
+ * stop condition is an object that spins forever and burns money on a model. So the loop is built
+ * and pinned against a payload that costs nothing, and only then will the paying kinds
+ * (re-sweep, batch enrich) be hung on it — with the owner watching, not overnight (`ROADMAP.md`).
+ */
+export type BatchJobKind = "noop_batch";
+
+export type JobKind = SingleJobKind | BatchJobKind;
 export type JobStatus = "queued" | "running" | "done" | "failed";
 
-export const JOB_KINDS: JobKind[] = ["advisor", "report", "budget"];
+/**
+ * The kinds the API will enqueue on request.
+ *
+ * `noop_batch` is NOT here, and that is the point: a test fixture that a client could start is a
+ * way to spend alarm ticks on nothing. The batch kinds stay unreachable from outside until a real
+ * one exists.
+ */
+export const JOB_KINDS: SingleJobKind[] = ["advisor", "report", "budget"];
+
+const BATCH_KINDS: BatchJobKind[] = ["noop_batch"];
+const isBatch = (kind: string): kind is BatchJobKind => (BATCH_KINDS as string[]).includes(kind);
 
 export interface JobRow {
   id: number;
@@ -33,6 +60,9 @@ export interface JobRow {
   started_at: number | null;
   finished_at: number | null;
   seen_at: number | null;
+  /** Both NULL for a single-pass job — the absence of a denominator IS how the two are told apart. */
+  progress_done: number | null;
+  progress_total: number | null;
 }
 
 /** Скільки тримаємо завершені задачі. Прибирає добовий крон. */
@@ -153,6 +183,11 @@ export async function runNextJob(env: Env): Promise<boolean> {
     "UPDATE ai_jobs SET status = 'running', started_at = ?, attempts = attempts + 1 WHERE id = ?",
   ).bind(now, job.id).run();
 
+  if (isBatch(job.kind)) {
+    await runBatchTick(env, job);
+    return true;
+  }
+
   try {
     const result = await executeJob(env, job.kind, job.params_json ? JSON.parse(job.params_json) : undefined);
     await env.DB.prepare(
@@ -169,6 +204,88 @@ export async function runNextJob(env: Env): Promise<boolean> {
     await announce(env, job.kind, job.id, msg, isAuto(job.params_json));
   }
   return true;
+}
+
+
+/**
+ * ONE batch of a mass run, and the decision of whether there is to be another.
+ *
+ * ⚠️ THIS IS A LOOP OVER AN ALARM, and that is the whole reason it was built this way. The tick
+ * leaves the row 'queued' rather than 'running', `hasQueuedJobs` therefore sees work, `armAlarm`
+ * re-arms, and the next alarm takes the next batch. Nothing in the scheduler had to change — but
+ * it does mean a wrong stop condition is not a stuck job, it is an object that wakes itself
+ * forever, and for a real kind each of those wake-ups would be a paid model call.
+ *
+ * So the stop condition is not «the executor says it is finished». It is **`progress_done` must
+ * strictly increase**: a batch that moved nothing ends the job as failed, whatever it claims. An
+ * executor that returns the same cursor twice — an empty page, an off-by-one, a query that stops
+ * matching — is exactly the bug that would otherwise spin, and it is the one case a test cannot
+ * enumerate in advance. `total <= 0` finishes immediately for the same reason: there is no batch
+ * that could make progress against it.
+ *
+ * `attempts` is reset by a tick that moved: for a single job it counts pickups, and a mass run
+ * has many legitimate ones. What it still bounds is CONSECUTIVE failures, which is what it was
+ * there to bound.
+ */
+async function runBatchTick(env: Env, job: JobRow): Promise<void> {
+  const before = job.progress_done ?? 0;
+  const finish = async (status: "done" | "failed", error: string | null, done: number, total: number) => {
+    await env.DB.prepare(
+      "UPDATE ai_jobs SET status = ?, error = ?, progress_done = ?, progress_total = ?, finished_at = ? WHERE id = ?",
+    ).bind(status, error, done, total, Math.floor(Date.now() / 1000), job.id).run();
+  };
+
+  let tick: BatchTick;
+  try {
+    tick = await executeBatch(env, job.kind as BatchJobKind, job.params_json ? JSON.parse(job.params_json) : undefined, before);
+  } catch (e) {
+    // §Обробка помилок — the real cause, same as the single-pass path. A mass run that stops
+    // needs to say which batch stopped it, and `progress_done` is left where it actually got to.
+    await finish("failed", e instanceof Error ? e.message : String(e), before, job.progress_total ?? 0);
+    return;
+  }
+
+  const total = Math.max(0, Math.trunc(tick.total));
+  const done = Math.max(0, Math.trunc(tick.done));
+  if (total <= 0) return void await finish("done", null, 0, 0);
+  if (done >= total) return void await finish("done", null, Math.min(done, total), total);
+  if (done <= before) {
+    return void await finish("failed", `batch made no progress at ${before}/${total}`, before, total);
+  }
+
+  // Back to 'queued': claimable on the very next pass, which is what keeps the run moving without
+  // waiting out `STALE_RUNNING_SEC`. `attempts = 0` because this pickup succeeded.
+  await env.DB.prepare(
+    "UPDATE ai_jobs SET status = 'queued', attempts = 0, progress_done = ?, progress_total = ? WHERE id = ?",
+  ).bind(done, total, job.id).run();
+}
+
+/** What one batch reports: where the run has got to, and how far it has to go. */
+export interface BatchTick { done: number; total: number }
+
+/**
+ * The batch executors.
+ *
+ * `noop_batch` counts and nothing else — `{total, size}` in, `size` more done each tick. It is a
+ * fixture, and it earns its place by being the only way to test the LOOP without paying for the
+ * payload: the real kinds (re-sweep, batch enrich) cannot be run in a test at all, because
+ * without a live key their payload never executes.
+ */
+async function executeBatch(
+  _env: Env, kind: BatchJobKind, params: unknown, done: number,
+): Promise<BatchTick> {
+  if (kind === "noop_batch") {
+    const p = (params ?? {}) as { total?: number; size?: number; stall?: boolean };
+    const total = Math.max(0, Math.trunc(p.total ?? 0));
+    const size = Math.max(1, Math.trunc(p.size ?? 1));
+    // `stall` exists so the STOP CONDITION can be tested, not the happy path: it reproduces the
+    // executor that keeps answering with the same cursor, which is the shape of every bug that
+    // would otherwise spin the alarm forever. A fixture with no way to fail tests nothing.
+    return { done: p.stall ? done : Math.min(done + size, total), total };
+  }
+  // Unreachable while `noop_batch` is the only member — and a compile error the moment it is not,
+  // which is the point: a new batch kind must arrive with its executor, not with a silent default.
+  throw new Error(`no batch executor for ${kind satisfies never}`);
 }
 
 /**
@@ -217,6 +334,10 @@ async function executeJob(env: Env, kind: JobKind, params: unknown): Promise<unk
  * задачу, яка насправді відпрацювала.
  */
 async function announce(env: Env, kind: JobKind, jobId: number, error: string | null, auto = false): Promise<void> {
+  // A batch kind says nothing yet: `noop_batch` has nothing to announce, and a REAL mass run
+  // arrives with its own `NotifKind`, preference and template (CLAUDE.md) rather than borrowing
+  // the one-shot generation's sentence.
+  if (isBatch(kind)) return;
   try {
     const { pushJobNotification } = await import("../messaging/notify.ts");
     await pushJobNotification(env, kind, jobId, error, auto);

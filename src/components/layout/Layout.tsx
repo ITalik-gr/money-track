@@ -13,11 +13,12 @@ import { useBrandMark } from "../../lib/brand.ts";
 import { asBaseCurrency } from "../../../shared/currency.ts";
 import { api } from "../../store/api.ts";
 import { store } from "../../store/index.ts";
+import { useFopVisible } from "../fop/gate.ts";
 
 // Пункти навігації. desktop=сайдбар (усі), mobile=нижній таб-бар (тільки core).
 // `label` is a translation key resolved at render (see PLATFORM.md §12) — not a literal.
 // `tab` is the SHORT label for the bottom bar, where six items share one phone width.
-const items: { to: string; label: TranslationKey; tab?: TranslationKey; icon: string; end: boolean; core: boolean }[] = [
+const items: { to: string; label: TranslationKey; tab?: TranslationKey; icon: string; end: boolean; core: boolean; ownerOnly?: boolean }[] = [
   { to: "/", label: "nav.overview", tab: "nav.tab.overview", icon: "overview", end: true, core: true },
   { to: "/tx", label: "nav.tx", tab: "nav.tab.tx", icon: "tx", end: false, core: true },
   { to: "/accounts", label: "nav.accounts", icon: "accounts", end: false, core: false },
@@ -26,7 +27,9 @@ const items: { to: string; label: TranslationKey; tab?: TranslationKey; icon: st
   { to: "/advisor", label: "nav.advisor", tab: "nav.tab.advisor", icon: "advisor", end: false, core: true },
   { to: "/chat", label: "nav.chat", icon: "spark", end: false, core: false },
   { to: "/plan", label: "nav.plan", icon: "plan", end: false, core: false },
-  { to: "/fop", label: "nav.fop", icon: "briefcase", end: false, core: false },
+  // §FOP-GATE — `ownerOnly` is the whole reason this field exists: the module is unfinished, so
+  // it is the owner's alone, and a link to a 404 is worse than no link.
+  { to: "/business", label: "nav.business", icon: "briefcase", end: false, core: false, ownerOnly: true },
   { to: "/goals", label: "nav.goals", icon: "target", end: false, core: false },
   { to: "/categories", label: "nav.categories", icon: "tag", end: false, core: false },
   { to: "/subs", label: "nav.subs", icon: "repeat", end: false, core: false },
@@ -189,6 +192,10 @@ export function Layout() {
   const { data: me } = useGetMeQuery();
   useAdoptServerBase();
   const isDemo = me?.demo === true;
+  // §FOP-GATE — resolved once, for all three places the nav is rendered (sidebar, bottom bar,
+  // "more" sheet). Filtering at each site is how one of them ends up still showing the link.
+  const fopVisible = useFopVisible();
+  const nav = items.filter((it) => !it.ownerOnly || fopVisible);
   const accountName = (me?.user?.name ?? "").trim().split(/\s+/)[0] || t("layout.account");
 
   return (
@@ -203,7 +210,7 @@ export function Layout() {
 
         <div className="side-group">{t("nav.menu")}</div>
         <nav className="side-nav">
-          {items.map((it) => (
+          {nav.map((it) => (
             <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => (isActive ? "active" : "")}>
               <span className="ico"><Icon name={it.icon} /></span>
               {t(it.label)}
@@ -269,7 +276,7 @@ export function Layout() {
           is what made every page scroll sideways. Short label + `.lbl` truncation, so a longer
           translation degrades to an ellipsis instead of breaking the layout. */}
       <nav className="nav bottom">
-        {items.filter((it) => it.core).map((it) => (
+        {nav.filter((it) => it.core).map((it) => (
           <NavLink key={it.to} to={it.to} end={it.end} className={({ isActive }) => (isActive ? "active" : "")}>
             <span className="ico"><Icon name={it.icon} size={20} /></span>
             <span className="lbl">{t(it.tab ?? it.label)}</span>
@@ -290,7 +297,7 @@ export function Layout() {
           <div className="more-sheet" onClick={(e) => e.stopPropagation()}>
             <div className="more-grip" />
             <div className="more-grid">
-              {items.filter((it) => !it.core).map((it) => (
+              {nav.filter((it) => !it.core).map((it) => (
                 <NavLink key={it.to} to={it.to} end={it.end} onClick={() => setMoreOpen(false)}
                   className={({ isActive }) => `more-item ${isActive ? "active" : ""}`}>
                   <span className="ico"><Icon name={it.icon} size={22} /></span>

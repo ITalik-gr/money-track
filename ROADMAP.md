@@ -6,7 +6,7 @@
 > Куди йде результат: durable-правило → відповідний `docs/*.md` + рядок в індекс § у `CLAUDE.md` ·
 > наратив «що робив» → згори в `HISTORY.md` · дизайн-рішення → «Журнал рішень» `DESIGN.md`.
 >
-> Останнє оновлення: **2026-09-18**.
+> Останнє оновлення: **2026-09-20**.
 
 ## 🚦 Як працювати з цим файлом
 
@@ -41,6 +41,21 @@
 > and Accounts design cards, the un-reviewed Advisor / Subscriptions / Categories screens, and the
 > three §BASE-CUR screens in a non-hryvnia base. Still open because he could not judge them from
 > the screen: the 13 no-op modifier classes, and the STYLES 0.5/4 conflicts.
+>
+> **2026-09-21 — §BIZ-SPLIT.** `/fop` → `/business`: five tabs, the business is the page and ФОП
+> is a switch inside it, plus a sample mode so the screen can be judged without a real business.
+> The «no gaps» report had a second cause worth knowing — seven CSS variables that do not exist,
+> now closed by lint C15 (`docs/UI.md`). The three ФОП audit findings below are still open.
+>
+> **2026-09-20 — §FOP-GATE.** The ФОП module is hidden from every account but the owner's, the
+> demo included (his call: «ще і близько поки не так як я планував»). One gate, five doors,
+> `docs/TAX.md §0.15`. The three ФОП audit findings in the backlog below are NOT closed by this —
+> they are still wrong, just wrong where only he can see them.
+>
+> Closed 2026-09-20 (owner's screenshot, not a queue card): §DIGEST-HOUR — the hour the app speaks
+> is a setting now (Сповіщення → «Коли надсилати», default 20:00) and the cron is one hourly tick;
+> §PLAN-LATE — a scheduled payment is announced 3 days AFTER its date, never before it. Both in
+> `docs/AI.md`.
 >
 > Closed 2026-09-17: the whole-perimeter security pass (docs/PERIMETER.md), §QUICK-ADD (iPhone shortcuts, write-only token), statement import (the real MyRaif file reconciles; §CSV-STATE), §VOID-PAIR,
 > §RENAME-MEMORY, §MERCH-QUIET. The one-off §ENRICH-GATE backfill was dropped — the owner: not
@@ -165,20 +180,16 @@ this project that costs money (`docs/TAX.md` §1).
 
 ### Архітектурне / потребує рішення
 
-- **Масові прогони в чергу задач.** §A6 покрив одиничні задачі; ре-світ і батч-enrich не заводили —
-  у них інша природа, прогрес у %, а не «готово».
-  *Розібрано вночі 2026-09-18, не робилось — і ось чому та що саме робити.* Наявний `ai_jobs`
-  тримає `kind|status|params|result`, тобто стан «готово / не готово»; масовому прогону треба
-  (а) `progress_done`/`progress_total` у рядку (міграція), (б) виконавець, що робить ОДНУ пачку за
-  тік і лишається `running`, (в) будильник DO, який тікає далі, поки лишилось > 0. **Ризик, через
-  який це не робиться наосліп:** пункт (в) — це цикл будильника, і помилка в умові зупинки означає
-  DO, що крутиться вічно й пече гроші на моделі, а корисне навантаження (`enrichPending`) без
-  живого ключа в тесті не проганяється — тобто саме ту частину, що коштує, перевірити нічим.
-  Механіку черги (а)+(б) протестувати МОЖНА фіктивним видом задачі; варто робити саме так: спершу
-  `kind: "noop_batch"` із тестом на «10 пачок по 3 → done, і жодного зайвого тіку», і лише потім
-  підключати enrich. Це прохід на живому власнику, не на нічному.
+- **Масові прогони — МЕХАНІКА ЗРОБЛЕНА (2026-09-20), лишилось підключити реальний вид.**
+  Черга вміє пачки: `progress_done/total` (міграція 0053), виконавець, що робить одну пачку за
+  тік і лишає рядок `queued`, і зупинка на «прогрес мусить ЗРОСТАТИ» (§A6-BATCH у `docs/AI.md`).
+  Планувальник DO чіпати не довелось — `hasQueuedJobs` + `armAlarm` уже роблять цикл.
+  Запінено на фіктивному `noop_batch`: «10 пачок по 3 → done рівно за 10 тіків».
+  **Лишилось:** повісити на це `enrichPending` (ре-світ / батч-enrich) — окремим видом задачі з
+  власним `NotifKind` і шаблоном. Це прохід НА ЖИВОМУ ВЛАСНИКОВІ, не нічний: саме корисне
+  навантаження без живого ключа не проганяється, тобто ту частину, що коштує, перевірити нічим.
+
 - **Lazy-enrich** (варіант B) — за узгодженням.
-- **`src/pages/Stats.tsx`** — оболонка вже виділена, блоки в `components/stats/`; лишився розмір.
 
 
 ---

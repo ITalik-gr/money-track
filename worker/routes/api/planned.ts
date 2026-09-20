@@ -358,25 +358,29 @@ planned.get("/planned/upcoming", async (c) => {
   const now = Math.floor(Date.now() / 1000);
   const horizon = now + days * 86400;
 
-  const { nextChargeUnix, plannedUAH } = await import("../../lib/finance/subscriptions.ts");
+  const { chargesBetween } = await import("../../lib/finance/subscriptions.ts");
   const rates = await getRates(c.env);
   const planned = await planningRepo.activeWithCategory(c.env.DB);
 
+  // ⚠️ EVERY occurrence in the window, not the next one per plan (2026-09-21). This used to call
+  // `nextChargeUnix` once per plan, so a weekly plan contributed ONE charge to a 30-day horizon
+  // while the cashflow calendar and the month forecast — both on `chargesBetween` — expanded the
+  // same plan into four. The widget's own total then disagreed with the calendar directly below
+  // it, and it disagreed downwards: it under-warned about exactly the plans that charge most
+  // often. `chargesBetween` is the ONE expansion (§SUB-MONTH) and it already honours `end_date`,
+  // which is why the instalment filter went with it.
+  //
   // §CUR-PLAN: `amount` лишається у ВАЛЮТІ ПЛАНУ (щоб показати «$5», а не «≈208 ₴»),
   // `amount_uah` — зведення для підсумків. Раніше валюта губилась і $5 ставало 5 ₴.
-  const items = planned
-    .filter((p) => !(p.kind === "installment" && p.end_date != null && p.end_date <= now))
-    .map((p) => ({
+  const items = chargesBetween(planned, rates, now + 1, horizon)
+    .map(({ plan: p, at, amount }) => ({
       id: p.id, title: p.title,
       amount: p.period_amount ?? 0,
       currency_code: p.currency_code ?? 980,
-      amount_uah: plannedUAH(p.period_amount, p.currency_code, rates),
-      at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now),
-      days_until: 0,
-    }))
-    .filter((p) => p.amount > 0 && p.at <= horizon)
-    .map((p) => ({ ...p, days_until: Math.max(0, Math.round((p.at - now) / 86400)) }))
-    .sort((a, b) => a.at - b.at);
+      amount_uah: amount,
+      at,
+      days_until: Math.max(0, Math.round((at - now) / 86400)),
+    }));
 
   return c.json({ days, total: items.reduce((s, p) => s + p.amount_uah, 0), items } satisfies UpcomingSubs);
 });

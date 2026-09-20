@@ -11,6 +11,9 @@ export type ObligationKind = "single_tax" | "military_levy" | "social_contributi
 export type LimitState = "ok" | "projected" | "exceeded";
 
 export interface TaxProfile {
+  /** §BIZ-SPLIT — the business half: clients, costs, margin. True whether or not there is a ФОП. */
+  business: boolean;
+  /** The tax half (ФОП). Implies `business`; the server enforces that, no reader has to. */
   enabled: boolean;
   group: TaxGroup;
   vat: boolean;
@@ -148,15 +151,33 @@ export interface CashGap {
   days_short: number;
 }
 
+/** One month of the business, income and costs at the resolution a quarter cannot show. */
+export interface BusinessMonth { ym: string; income: number; costs: number }
+
+/** §RHYTHM — a client who used to pay on a rhythm and has stopped. */
+export interface QuietClient {
+  name: string; days_since_last: number; median_gap_days: number; avg_uah: number; n: number;
+}
+
 export interface BusinessOverview {
   outlook: QuarterOutlook;
   costs: BusinessExpenseRow[];
   cash_gap: CashGap | null;
   quarters: BusinessQuarter[];
+  /** The last 12 months, oldest first. Sparse: a month with no business movement is absent. */
+  months: BusinessMonth[];
   counterparties: TaxCounterparty[];
+  /** §RHYTHM — clients who went quiet. The feed has spoken from this list for a while; the page
+   *  shows the same one, so a notification and the screen can never name different clients. */
+  quiet: QuietClient[];
   rhythm: BusinessRhythm;
   year_ago: { label: string; income: number } | null;
   top_share_pct: number | null;
+  /**
+   * The business's share of ALL income over the last 12 months, or null when nothing came in.
+   * Answers whether this page is about a side project or about the whole livelihood.
+   */
+  share_pct: number | null;
 }
 
 // ─── §TAX-WATCH ─────────────────────────────────────────────────────────────────────────────────

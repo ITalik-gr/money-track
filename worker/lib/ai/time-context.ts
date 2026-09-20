@@ -15,7 +15,7 @@
  * lower floor on the money one.
  */
 import { localYmd, localParts, localMonthStart } from "../finance/stats.ts";
-import { nextChargeUnix, plannedUAH } from "../finance/subscriptions.ts";
+import { chargesBetween } from "../finance/subscriptions.ts";
 import type { Rates } from "../finance/money.ts";
 
 export interface UpcomingCharge { in_days: number; date: string }
@@ -86,15 +86,18 @@ export function buildUpcomingCharges(
   rows: PlannedRow[], rates: Rates, now: number,
 ): { title: string; in_days: number; date: string; on_day: number; amount_uah: number; kind: string }[] {
   const in30 = now + 30 * 86400;
-  return rows
-    .map((p) => ({
+  // ⚠️ EVERY occurrence in the window (2026-09-21). This listed the NEXT charge per plan, so a
+  // weekly plan reached the model as one charge in thirty days — a quarter of the money it will
+  // actually take — while the cashflow calendar on screen drew all four. A model that sums this
+  // list to answer «скільки піде до кінця місяця» then quotes a figure the app's own screen
+  // contradicts. `chargesBetween` is the ONE expansion (§SUB-MONTH) and honours `end_date`.
+  return chargesBetween(rows, rates, now + 1, in30)
+    .map(({ plan: p, at, amount }) => ({
       title: p.title,
-      at: nextChargeUnix(p.start_date, p.period, p.period_count ?? 1, now),
-      amount_uah: Math.round(plannedUAH(p.period_amount, p.currency_code, rates) / 100),
+      at,
+      amount_uah: Math.round(amount / 100),        // §AI-UNIT: whole units, the field name says so
       kind: p.kind,
     }))
-    .filter((p) => p.at <= in30)
-    .sort((a, b) => a.at - b.at)
     .slice(0, 12)
     .map((p) => {
       const date = localYmd(p.at);

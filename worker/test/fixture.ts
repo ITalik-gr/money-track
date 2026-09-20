@@ -186,17 +186,24 @@ export function seed(db: MemDb): void {
   // §CUR-PLAN: period_amount is in the PLAN's currency — a $10 plan must not weigh 10 ₴.
   // §SUB-MONTH: the monthly burden differs per period; a quarterly plan is not a full charge
   // every month, and a weekly one is ~4.3 charges.
-  const plans: [string, string, number, number, number, number][] = [
-    ["Стрімінг",  "monthly",    199_00, UAH, NOW - 200 * DAY, 42],
-    ["Хмара",     "monthly",     10_00, USD, NOW - 150 * DAY, 43],
-    ["Страховка", "quarterly", 3_600_00, UAH, NOW - 300 * DAY, 14],
-    ["Прибирання", "weekly",     500_00, UAH, NOW - 90 * DAY, 8],
+  // ⚠️ `period` is 'month' | 'week' and NOTHING ELSE (migration 0001, `routes/api/planned.ts`),
+  // the cadence being the pair `period` + `period_count` — quarterly is three months, not a word.
+  // These rows used to say "monthly"/"quarterly"/"weekly", which no writer in the app produces and
+  // no reader understands: `nextChargeUnix` and `monthlyPlannedUAH` both branch on `=== "week"`
+  // and treat everything else as one month, so the quarterly and weekly plans here were silently
+  // MONTHLY and the two §SUB-MONTH branches this comment advertises were never executed by any
+  // test (found 2026-09-21).
+  const plans: [string, string, number, number, number, number, number][] = [
+    ["Стрімінг",  "month", 1,   199_00, UAH, NOW - 200 * DAY, 42],
+    ["Хмара",     "month", 1,    10_00, USD, NOW - 150 * DAY, 43],
+    ["Страховка", "month", 3, 3_600_00, UAH, NOW - 300 * DAY, 14],
+    ["Прибирання", "week", 1,    500_00, UAH, NOW - 90 * DAY, 8],
   ];
-  for (const [title, period, amount, cur, start, cat] of plans) {
+  for (const [title, period, count, amount, cur, start, cat] of plans) {
     exec(db,
       `INSERT INTO planned_payments (title, kind, period_amount, period, start_date, category_id,
-         is_active, currency_code, period_count) VALUES (?, 'subscription', ?, ?, ?, ?, 1, ?, 1)`,
-      [title, amount, period, start, cat, cur]);
+         is_active, currency_code, period_count) VALUES (?, 'subscription', ?, ?, ?, ?, 1, ?, ?)`,
+      [title, amount, period, start, cat, cur, count]);
   }
 
   // ---- budgets -----------------------------------------------------------------------------
@@ -261,7 +268,7 @@ export function seedCategoryCascade(db: MemDb): void {
     [CASCADE_CAT]);
 
   exec(db, `INSERT INTO planned_payments (title, kind, period_amount, period, start_date, category_id,
-      is_active, currency_code, period_count) VALUES ('Клуб', 'subscription', ?, 'monthly', ?, ?, 1, ?, 1)`,
+      is_active, currency_code, period_count) VALUES ('Клуб', 'subscription', ?, 'month', ?, ?, 1, ?, 1)`,
     [300_00, NOW - 60 * DAY, CASCADE_CAT, UAH]);
   exec(db, "INSERT INTO budgets (category_id, period, amount, currency_code) VALUES (?, 'month', 100000, ?)",
     [CASCADE_CAT, UAH]);

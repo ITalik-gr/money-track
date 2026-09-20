@@ -27,7 +27,7 @@
 .runway-val { font-size: 22px; }
 /* §BURN-SHAPE: the one-off share, under the burn it is part of. Muted and small on purpose —
    it qualifies the hero figure, it does not compete with it. */
-.runway-sub { font-size: 12px; line-height: 1.35; color: var(--ink-3); margin-top: 2px; }
+.runway-sub { font-size: 12px; line-height: 1.35; color: var(--muted); margin-top: 2px; }
 .runway-comment { grid-column: 1 / -1; margin: 6px 0 0; font-size: 14px; line-height: 1.55; padding-top: 12px; border-top: 1px solid var(--line); color: var(--ink-2); }
 /* Narrow: the gauge stops being a column of its own and sits above the metrics. */
 @media (max-width: 640px) {

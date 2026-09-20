@@ -64,6 +64,11 @@
 .nt-text { font-size: var(--fs-sm); color: var(--muted); line-height: 1.45; font-variant-numeric: tabular-nums; }
 .nt-time { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* §DIGEST-HOUR — година зведення. Підпис і селект в один рядок, селект не тягнеться на всю
+   ширину: це одне коротке значення, а не поле вводу. */
+.nt-hour { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--ink-2); }
+.nt-hour .sel { min-width: 104px; }
+
 .nt-prefs { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4); margin-top: var(--sp-3); }
 .nt-pref { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); cursor: pointer; }
 .nt-pref > svg { color: var(--muted); }
@@ -241,8 +246,8 @@
 @media (prefers-reduced-motion: reduce) { .wd-bar { transition: none; } }
 .wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
 .wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
-.wd-col.weekend .wd-label { color: var(--text-2); font-weight: 600; }
-.wd-val { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wd-col.weekend .wd-label { color: var(--muted); font-weight: 600; }
+.wd-val { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .wd-label { font-size: 11px; }
 .wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
 
@@ -261,9 +266,9 @@
 .hb-card { padding: 16px; }
 .hb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .hb-kind { font-size: 13px; font-weight: 600; }
-.hb-kind.started { color: var(--warn, var(--text-1)); }
-.hb-kind.stopped { color: var(--text-2); }
-.hb-total { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.hb-kind.started { color: var(--warn); }
+.hb-kind.stopped { color: var(--muted); }
+.hb-total { font-size: 13px; color: var(--muted); white-space: nowrap; }
 /* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
 .hb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 0; font-size: 13px; }
 .hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

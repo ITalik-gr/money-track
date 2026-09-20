@@ -677,6 +677,14 @@ export default {
   /**
    * Cron: fan out scheduled work to every active user's Durable Object.
    *
+   * HOURLY since 2026-09-20 (§DIGEST-HOUR), where it used to be three crons at fixed UTC hours.
+   * The hour a person is spoken to is now theirs to choose, and the preference lives in their own
+   * object — so the only way to learn whether this is their hour is to ask them. Each tick is a
+   * few indexed reads per user; an object whose hour it is not returns immediately.
+   *
+   * INFRA_UTC_HOUR keeps the work nobody reads live — shared rates, the rate snapshot, the admin
+   * counters, the nightly backup — on exactly the clock it ran on before.
+   *
    * Rates are fetched ONCE here rather than inside each object — they are a fact about the
    * world, not about a person, and monobank rate-limits that endpoint hard. Every object then
    * copies the shared value into its own `app_state.rates`, so `getRates()` and the canonical
@@ -685,16 +693,23 @@ export default {
    * The per-minute backfill cron is gone: pacing now lives in each object's `alarm()`, which
    * only ticks for whoever is actually backfilling (see `UserDO.alarm`).
    */
-  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    const kind: "daily" | "weekly" | "monthly" =
-      event.cron === "0 6 * * *" ? "daily" : event.cron === "0 4 1 * *" ? "monthly" : "weekly";
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    // 06:00 UTC — the hour the old daily cron ran on, kept so the backup series has no seam.
+    // AT OR AFTER that hour, once a day (`infraDue`), never «exactly at it»: the trigger is hourly
+    // now, so an equality check would drop a whole day of rates and backups the first time a tick
+    // arrived late — and the rates snapshot is a series that is only ever written forward.
+    const INFRA_UTC_HOUR = 6;
 
     ctx.waitUntil(
       (async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const { infraDue, markInfraRan } = await import("./lib/platform/cron.ts");
+        const infra = await infraDue(env, now, INFRA_UTC_HOUR);
         // Rates first: the daily snapshot feeds the net-worth history, and a missed day is a
-        // permanent hole in that series — it is only ever written forward.
+        // permanent hole in that series — it is only ever written forward. Fetched on the infra
+        // tick alone: monobank rate-limits this endpoint, and hourly polling would trip it.
         let ratesJson: string | null = null;
-        try {
+        if (infra) try {
           const { refreshSharedRates, readSharedRates } = await import("./lib/platform/cron.ts");
           await refreshSharedRates(env);
           ratesJson = await readSharedRates(env);
@@ -715,13 +730,13 @@ export default {
           // keeps one slow or failing object from being lost in a Promise.all rejection.
           try {
             const stub = env.USER_DO.get(env.USER_DO.idFromName(u.id));
-            const res = await stub.runCron(kind, ratesJson, u.is_owner === 1);
-            if (res.failed.length) console.error(`[cron] ${kind} ${u.id}:`, res.failed.join(" | "));
+            const res = await stub.runCron({ infra }, ratesJson, u.is_owner === 1);
+            if (res.failed.length) console.error(`[cron] ${u.id}:`, res.failed.join(" | "));
             // Piggyback on the pass that already woke this object: the admin screen needs to know
             // whether an account is actually in use, and asking every object on page load would
             // get slower exactly as the number being measured grows. Best-effort — a directory
             // that will not take counters must never fail somebody's scheduled report.
-            if (kind === "daily") {
+            if (infra) {
               try {
                 const { saveUserStats } = await import("./lib/platform/directory.ts");
                 await saveUserStats(env.DIRECTORY, u.id, await stub.selfStats());
@@ -750,13 +765,13 @@ export default {
               }
             }
           } catch (e) {
-            console.error(`[cron] ${kind} ${u.id} unreachable:`, e instanceof Error ? e.message : e);
+            console.error(`[cron] ${u.id} unreachable:`, e instanceof Error ? e.message : e);
           }
         }
 
         // Demo orphan sweep (P4.2): each demo object self-destructs on its own 24h alarm, but an
         // eviction can drop that alarm, so once a day we wipe any sandbox already past expiry.
-        if (kind === "daily") {
+        if (infra) {
           try {
             const { listExpiredDemoSessions, deleteDemoSession } = await import("./lib/platform/directory.ts");
             for (const demoId of await listExpiredDemoSessions(env.DIRECTORY)) {
@@ -769,6 +784,14 @@ export default {
             }
           } catch (e) {
             console.error("[cron] demo sweep skipped:", e instanceof Error ? e.message : e);
+          }
+          // AFTER the pass, never before: a fan-out that died halfway is retried by the next hour
+          // rather than counted as today's infrastructure run. Every step above is idempotent per
+          // day (the backup key IS the date), so a repeat costs work, not correctness.
+          try {
+            await markInfraRan(env, now);
+          } catch (e) {
+            console.error("[cron] infra marker:", e instanceof Error ? e.message : e);
           }
         }
       })(),

@@ -123,17 +123,6 @@ export class UserDO extends DurableObject<Env> {
   }
 
   /**
-   * Scheduled work for THIS user, driven by the Worker's cron fan-out (`lib/cron.ts`).
-   *
-   * Every branch is isolated: a thrown report generator must not stop notifications from being
-   * written. That rule predates multi-user — it is why the old `scheduled()` wrapped each job
-   * in its own try/catch — and the fan-out keeps it, returning the failures instead of
-   * swallowing them so the cron log says which user's which job broke.
-   *
-   * `ratesJson` comes from the shared cache: rates are a fact about the world, so the Worker
-   * fetches them once and every object copies the value into its own `app_state`.
-   */
-  /**
    * What this object can say about itself for the owner's admin screen (directory migration 0004).
    *
    * Volume only, never value. The owner administers accounts; they do not get to read other
@@ -150,10 +139,34 @@ export class UserDO extends DurableObject<Env> {
     };
   }
 
-  async runCron(kind: "daily" | "weekly" | "monthly", ratesJson: string | null, isOwner = false): Promise<{ ran: string[]; failed: string[] }> {
+  /**
+   * Scheduled work for THIS user, one tick of the hourly cron fan-out.
+   *
+   * Two passes, and the split is the point (§DIGEST-HOUR):
+   *
+   *   • INFRA — once a day at a fixed hour, the same one the old `daily` cron used. Rates,
+   *     the goal autofill, the semantic index, job retention: work nobody reads the moment it
+   *     happens, so the clock it runs on is ours to choose.
+   *   • DIGEST — at the hour THIS user asked to be spoken to. Everything whose output is a
+   *     sentence the person reads: the regulation watch, the two model passes that file what the
+   *     app failed to file, the weekly and monthly reports, and the feed itself.
+   *
+   * Before 2026-09-20 there was no such thing as the user's hour: the crons fired at 04:00 and
+   * 06:00 UTC, so the weekly report and the morning's budget breaches all landed at 07:01 Kyiv.
+   *
+   * Every branch is isolated: a thrown report generator must not stop notifications from being
+   * written. That rule predates multi-user — it is why the old `scheduled()` wrapped each job
+   * in its own try/catch — and the fan-out keeps it, returning the failures instead of
+   * swallowing them so the cron log says which user's which job broke.
+   *
+   * `ratesJson` comes from the shared cache: rates are a fact about the world, so the Worker
+   * fetches them once and every object copies the value into its own `app_state`.
+   */
+  async runCron(tick: { infra: boolean }, ratesJson: string | null, isOwner = false): Promise<{ ran: string[]; failed: string[] }> {
     // `isOwner` comes from the directory row the fan-out already read — the deployment-wide
     // API keys are the owner's, so only the owner's cron may use them (see `userCredentials`).
     const env = await this.appEnv(undefined, isOwner || (await this.storedOwnerFlag()));
+    const now = Math.floor(Date.now() / 1000);
     const ran: string[] = [];
     const failed: string[] = [];
     const step = async (name: string, fn: () => Promise<unknown>) => {
@@ -164,6 +177,20 @@ export class UserDO extends DurableObject<Env> {
         failed.push(`${name}: ${e instanceof Error ? e.message : String(e)}`);
       }
     };
+
+    // Is this the tick that speaks to this person today? Asked BEFORE anything runs, because the
+    // answer decides whether the expensive half of the pass happens at all.
+    const { digestDueNow, markDigestRan } = await import("../lib/messaging/digest.ts");
+    let digest = false;
+    try {
+      digest = await digestDueNow(env, now);
+    } catch (e) {
+      // An unreadable preference must not mean permanent silence: fall back to speaking on the
+      // infra tick, which is exactly the old behaviour.
+      failed.push(`digest_hour: ${e instanceof Error ? e.message : String(e)}`);
+      digest = tick.infra;
+    }
+    if (!tick.infra && !digest) return { ran, failed };
 
     if (ratesJson) {
       await step("rates", async () => {
@@ -181,18 +208,17 @@ export class UserDO extends DurableObject<Env> {
     // and the monthly report both go through `budgetStatus`, and on the 1st they would otherwise
     // speak about envelopes that have not yet received their carry.
     //
-    // ⚠️ Runs for EVERY kind, not just `daily`. It used to sit inside the daily block, which was
-    // safe only while the report crons fired at 09:00 — three hours AFTER the daily pass. They now
-    // fire at 04:00, ahead of it, so the ordering that made this correct no longer exists. It is
-    // idempotent (INSERT OR IGNORE) and costs one indexed lookup, so running it three times a week
-    // more is not worth reasoning about a second time.
+    // ⚠️ Runs on BOTH passes, not just the infra one. It used to sit inside the daily block, which
+    // was safe only while the report crons fired after it; the user's digest hour can be any hour
+    // of the day, including one before the infra tick, so the ordering that made this correct no
+    // longer exists. It is idempotent (INSERT OR IGNORE) and costs one indexed lookup.
     await step("close_budget_month", async () => {
       const { closeBudgetMonths } = await import("../lib/finance/budgets.ts");
       await closeBudgetMonths(env);
     });
 
-    if (kind === "daily") {
-      // §P2.1 — авто-внески в цілі. У ДОБОВОМУ проході, хоч правило й місячне: місячний крон
+    if (tick.infra) {
+      // §P2.1 — авто-внески в цілі. У ДОБОВОМУ проході, хоч правило й місячне: місячний прохід
       // ходить лише 1-го числа, і правило «% від доходу» при нульовому минулому місяці
       // пропустило б місяць цілком. Ідемпотентність тримає `autofill_last_ym`, тож зайві
       // прогони нічого не додають.
@@ -200,12 +226,50 @@ export class UserDO extends DurableObject<Env> {
         const { runGoalAutofill } = await import("../lib/finance/goals.ts");
         await runGoalAutofill(env);
       });
+      // §SEARCH-VEC — keep the semantic index in step with the words. A small batch a night:
+      // yesterday's operations plus anything whose text an enrichment has since rewritten. It
+      // does nothing at all until the user switches the feature on.
+      await step("search_index", async () => {
+        const { semanticEnabled, indexPending } = await import("../lib/finance/search-vec.ts");
+        if (!(await semanticEnabled(this.db))) return;
+        await indexPending(env, 100);
+      });
+      // §A6 retention: a finished job row is a receipt, not history. Kept a week so a toast
+      // missed over a weekend still has something to show.
+      await step("prune_jobs", async () => {
+        const { pruneJobs } = await import("../lib/ai/jobs.ts");
+        await pruneJobs(env);
+      });
+    }
+
+    if (digest) {
+      const { localParts } = await import("../lib/finance/stats.ts");
+      const p = localParts(now);
+      // ISO weekday: the weekly report speaks about the week that ENDED, so it belongs to Monday.
+      const isMonday = new Date(Date.UTC(p.y, p.m - 1, p.d)).getUTCDay() === 1;
+      const isFirstOfMonth = p.d === 1;
+
+      // §TAX-WATCH — poll the official sources BEFORE the feed is generated, so a change found
+      // today is announced today rather than tomorrow. Best-effort by construction: `checkSource`
+      // records its own failures per source and never throws, because «the tax service was briefly
+      // down» must not cost the user their budget and report events.
+      await step("reg_watch", async () => {
+        const { readProfile, fopAvailable } = await import("../lib/finance/tax.ts");
+        // Only for people who said they are ФОП — and, while §FOP-GATE holds, only the owner.
+        // Fetching government pages on behalf of someone who never asked is outbound traffic
+        // nobody consented to.
+        if (!fopAvailable(env) || !(await readProfile(this.db)).enabled) return;
+        const { checkAll } = await import("../lib/finance/tax-watch.ts");
+        await checkAll(this.db, now);
+      });
       /**
        * §AI-CATCHUP — one batched second look at operations the app failed to file.
        *
        * BEFORE `notifications` deliberately: the feed's «N операцій без категорії» asks the person
        * to finish work only they can finish, and asking them to do what the app was about to do
-       * itself, minutes earlier, is the app wasting their attention on its own backlog.
+       * itself, minutes earlier, is the app wasting their attention on its own backlog. That is
+       * also why it moved onto the digest pass with the feed rather than staying on the infra one:
+       * the ordering has to hold at whatever hour the person chose.
        *
        * Skipped entirely when there is nothing waiting — the check is one indexed count, and an
        * account with no gaps must not pay for a model call to be told so.
@@ -234,102 +298,55 @@ export class UserDO extends DurableObject<Env> {
         const { runSubsReview, subsReviewPending } = await import("../lib/ai/subs-review.ts");
         if (await subsReviewPending(env)) await runSubsReview(env);
       });
-      // §TAX-WATCH — poll the official sources BEFORE the feed is generated, so a change found
-      // this morning is announced this morning rather than tomorrow. Best-effort by construction:
-      // `checkSource` records its own failures per source and never throws, because «the tax
-      // service was briefly down» must not cost the user their budget and report events.
-      await step("reg_watch", async () => {
-        const { readProfile } = await import("../lib/finance/tax.ts");
-        // Only for people who said they are ФОП. Fetching government pages on behalf of someone
-        // who never asked is outbound traffic nobody consented to.
-        if (!(await readProfile(this.db)).enabled) return;
-        const { checkAll } = await import("../lib/finance/tax-watch.ts");
-        await checkAll(this.db, Math.floor(Date.now() / 1000));
-      });
-      // §SEARCH-VEC — keep the semantic index in step with the words. A small batch a night:
-      // yesterday's operations plus anything whose text an enrichment has since rewritten. It
-      // does nothing at all until the user switches the feature on.
-      await step("search_index", async () => {
-        const { semanticEnabled, indexPending } = await import("../lib/finance/search-vec.ts");
-        if (!(await semanticEnabled(this.db))) return;
-        await indexPending(env, 100);
-      });
-      await step("notifications", async () => {
-        const { generateNotifications } = await import("../lib/messaging/notify.ts");
-        await generateNotifications(env);
-      });
-      // §A6 retention: a finished job row is a receipt, not history. Kept a week so a toast
-      // missed over a weekend still has something to show.
-      await step("prune_jobs", async () => {
-        const { pruneJobs } = await import("../lib/ai/jobs.ts");
-        await pruneJobs(env);
-      });
-    }
 
-    // A report generated in THIS run must be announced in THIS run. The report crons fire at
-    // 09:00 while the notification pass is the 06:00 daily one, so a freshly generated report
-    // was only announced the NEXT morning — by which time the feed says "weekly report ready"
-    // about a period that ended a day and a half ago, and the newest one looks missing.
-    // `generateNotifications` is idempotent (UNIQUE dedup_key) and its AI branch has its own
-    // once-a-day guard, so calling it a second time costs nothing.
-    let reported = false;
-
-    if (kind === "weekly") {
-      if (env.ANTHROPIC_API_KEY) {
-        await step("insight", async () => {
-          const { buildAndStoreInsight } = await import("../lib/ai/insight.ts");
-          await buildAndStoreInsight(env);
-        });
-        await step("weekly_report", async () => {
-          const { generateAndStoreReport } = await import("../lib/ai/report.ts");
-          await generateAndStoreReport(env, "week");
-          reported = true;
+      // A report generated in THIS pass is announced in THIS pass: `notifications` runs last, so
+      // the feed never says "weekly report ready" about a period that ended a day and a half ago.
+      if (isMonday) {
+        if (env.ANTHROPIC_API_KEY) {
+          await step("insight", async () => {
+            const { buildAndStoreInsight } = await import("../lib/ai/insight.ts");
+            await buildAndStoreInsight(env);
+          });
+          await step("weekly_report", async () => {
+            const { generateAndStoreReport } = await import("../lib/ai/report.ts");
+            await generateAndStoreReport(env, "week"); // idempotent per period
+          });
+        }
+        await step("tg_proactive", async () => {
+          const { runWeeklyProactive } = await import("../lib/messaging/proactive.ts");
+          await runWeeklyProactive(env);
         });
       }
-      await step("tg_proactive", async () => {
-        const { runWeeklyProactive } = await import("../lib/messaging/proactive.ts");
-        await runWeeklyProactive(env);
-      });
-    }
 
-    if (kind === "monthly" && env.ANTHROPIC_API_KEY) {
-      await step("monthly_report", async () => {
-        const { generateAndStoreReport } = await import("../lib/ai/report.ts");
-        await generateAndStoreReport(env, "month"); // idempotent per period
-        reported = true;
-      });
-      // Місячний авто-огляд: разом зі звітом оновлюємо ПОРАДУ, щоб 1-го числа Порадник говорив
-      // про новий місяць, а не показував знімок, зроблений колись у середині минулого. Через
-      // чергу (§A6), а не напряму: два Sonnet-виклики поспіль в одному прогоні крону — це
-      // довше за будь-який розумний бюджет, а alarm рознесе їх сам.
-      await step("monthly_advice", async () => {
-        const { enqueueJob } = await import("../lib/ai/jobs.ts");
-        // `auto` доїжджає до сповіщення (`isAuto`) і міняє його текст: людина цю генерацію не
-        // запускала, тож рядок мусить назвати причину, а не рапортувати «готово».
-        await enqueueJob(env, "advisor", { auto: true, reason: "monthly" });
-        await this.armAlarm();
-      });
-    }
+      if (isFirstOfMonth && env.ANTHROPIC_API_KEY) {
+        await step("monthly_report", async () => {
+          const { generateAndStoreReport } = await import("../lib/ai/report.ts");
+          await generateAndStoreReport(env, "month"); // idempotent per period
+        });
+        // Місячний авто-огляд: разом зі звітом оновлюємо ПОРАДУ, щоб 1-го числа Порадник говорив
+        // про новий місяць, а не показував знімок, зроблений колись у середині минулого. Через
+        // чергу (§A6), а не напряму: два Sonnet-виклики поспіль в одному прогоні крону — це
+        // довше за будь-який розумний бюджет, а alarm рознесе їх сам.
+        await step("monthly_advice", async () => {
+          const { enqueueJob } = await import("../lib/ai/jobs.ts");
+          // `auto` доїжджає до сповіщення (`isAuto`) і міняє його текст: людина цю генерацію не
+          // запускала, тож рядок мусить назвати причину, а не рапортувати «готово».
+          await enqueueJob(env, "advisor", { auto: true, reason: "monthly" });
+          await this.armAlarm();
+        });
+      }
 
-    if (reported) {
-      /**
-       * §AI-CATCHUP — one batched second look at operations the app failed to file.
-       *
-       * BEFORE `notifications` deliberately: the feed's «N операцій без категорії» asks the person
-       * to finish work only they can finish, and asking them to do what the app was about to do
-       * itself, minutes earlier, is the app wasting their attention on its own backlog.
-       *
-       * Skipped entirely when there is nothing waiting — the check is one indexed count, and an
-       * account with no gaps must not pay for a model call to be told so.
-       */
-      await step("catchup", async () => {
-        const { runCatchup, catchupPending } = await import("../lib/ai/catchup.ts");
-        if (await catchupPending(env)) await runCatchup(env);
-      });
       await step("notifications", async () => {
         const { generateNotifications } = await import("../lib/messaging/notify.ts");
-        await generateNotifications(env);
+        await generateNotifications(env, now);
       });
+      // AFTER the pass, never before: a tick that threw halfway must be retried by the next hour
+      // rather than counted as today's digest.
+      try {
+        await markDigestRan(env, now);
+      } catch (e) {
+        failed.push(`digest_mark: ${e instanceof Error ? e.message : String(e)}`);
+      }
     }
 
     /**

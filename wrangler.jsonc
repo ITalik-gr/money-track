@@ -139,10 +139,12 @@
 	// and that now lives in `UserDO.alarm()`. As a global cron it would have woken every user's
 	// object 1440 times a day just to find nothing to do.
 	"triggers": {
+		// Hourly, one trigger (§DIGEST-HOUR). The three fixed-hour crons that used to live here
+		// decided WHEN every user heard from the app; that hour is now each user's own setting, so
+		// the cron only supplies ticks and each object decides whether this one is its hour.
+		// Infra work (shared rates, backups, admin counters) still runs once, at 06:00 UTC.
 		"crons": [
-			"0 4 * * 1",
-			"0 4 1 * *",
-			"0 6 * * *"
+			"0 * * * *"
 		]
 	},
 	"vars": {

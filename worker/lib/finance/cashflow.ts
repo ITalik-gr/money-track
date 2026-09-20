@@ -118,8 +118,10 @@ export async function safeToSpend(
    * SHOWN as tax; this one is not shown, it is subtracted from a figure already rolled up into the
    * reader's base. Leaving it in hryvnia would subtract kopecks from dollars.
    */
-  const { taxContext } = await import("./tax.ts");
-  const fop = (await taxContext(env.DB, now)).fop as { tax_reserved_uah?: number } | undefined;
+  // §FOP-GATE — `taxContextFor` is the env-aware door: a reader the module is hidden from has no
+  // reserve, the same as one who never switched it on.
+  const { taxContextFor } = await import("./tax.ts");
+  const fop = (await taxContextFor(env, now)).fop as { tax_reserved_uah?: number } | undefined;
   const reservedBase = fop?.tax_reserved_uah ? toBaseMinor(fop.tax_reserved_uah * 100, 980, rates) : 0;
 
   return {

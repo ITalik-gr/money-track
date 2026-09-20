@@ -1,14 +1,14 @@
 {
   "status": 200,
   "body": {
-    "safe": 2099700,
+    "safe": 2309700,
     "tax_reserved": 0,
     "income": 4770000,
     "spend": 2250400,
     "essential": 390400,
     "discretionary": 1860000,
-    "subs_monthly": 469900,
-    "subs_remaining": 419900,
+    "subs_monthly": 309900,
+    "subs_remaining": 209900,
     "month_start": 1777582800,
     "income_expected": 0,
     "income_overdue": 0,

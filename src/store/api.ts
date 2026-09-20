@@ -15,7 +15,7 @@ import type {
   CredentialStatus, CurrenciesList, DomAnalytics, EventWithAgg, AiJobKind, Preset, ReportPeriodType, StructuredInsight, Fact, FactInput, FinanceHealth, Forecast,
   BankConnections, CashProjection, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, QuickAddStatus, QuickAddToken, MerchantAnalytics, MonthlyHistory, Networth,
-  NotifPrefs, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
+  NotifPrefs, NotifSchedule, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, AiDetectResult, SubscriptionOverview, BudgetStatusList, CategoryOverview, CategoryShape, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SpendingShape, SetupStatus, SliceDrill, SparkData, SpendPatterns,
   Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
@@ -1053,6 +1053,12 @@ export const api = createApi({
       query: (body) => ({ url: "/notifications/prefs", method: "PUT", body }),
       invalidatesTags: ["Notification"],
     }),
+    // §DIGEST-HOUR — коли саме застосунок говорить (а не що саме він каже).
+    getNotifSchedule: b.query<NotifSchedule, void>({ query: () => "/notifications/schedule", providesTags: ["Notification"] }),
+    setNotifSchedule: b.mutation<NotifSchedule, number>({
+      query: (hour) => ({ url: "/notifications/schedule", method: "PUT", body: { hour } }),
+      invalidatesTags: ["Notification"],
+    }),
 
     // §P2.1 — внески в ціль. `current` тепер SUM цих рядків, тож будь-яка мутація тут
     // інвалідує і сам список цілей.
@@ -1322,6 +1328,8 @@ export const {
   useGenerateNotificationsMutation,
   useGetNotifPrefsQuery,
   useSetNotifPrefsMutation,
+  useGetNotifScheduleQuery,
+  useSetNotifScheduleMutation,
   useGetGoalContributionsQuery,
   useAddGoalContributionMutation,
   useDeleteGoalContributionMutation,

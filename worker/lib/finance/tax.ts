@@ -30,6 +30,25 @@ const DAY = 86_400;
 
 export type ObligationKind = "single_tax" | "military_levy" | "social_contribution";
 
+/**
+ * §FOP-GATE — WHO may reach the ФОП module at all, asked once.
+ *
+ * The module ships unfinished (owner, 2026-09-20: «ще і близько не так як я планував»), so it is
+ * the owner's alone until he says otherwise — including in the demo sandbox, where a stranger
+ * would otherwise meet a half-built tax screen as if it were the product.
+ *
+ * A gate on the ENV rather than a stored flag, for the reason every owner-only resource here is:
+ * a stored one can be flipped by whoever reaches the write endpoint, and the write endpoint is
+ * part of what is being hidden. `readProfile` cannot ask this itself — it takes a `db`, not an
+ * env — so each DOOR asks it, and `fop-gate.test.ts` pins the class rather than the list.
+ */
+export function fopAvailable(env: { IS_OWNER?: boolean }): boolean {
+  // Truthy, not `=== true`: the flag arrives as a header value in some paths and as a boolean in
+  // others, and every other owner gate in the worker reads it the same loose way. A strict check
+  // here would be the one gate that disagrees with the rest about the same user.
+  return !!env.IS_OWNER;
+}
+
 export async function readProfile(db: AppDb): Promise<TaxProfile> {
   const raw = await getState(db, PROFILE_KEY);
   if (!raw) return DEFAULT_PROFILE;
@@ -44,7 +63,10 @@ export async function readProfile(db: AppDb): Promise<TaxProfile> {
 }
 
 export async function writeProfile(db: AppDb, p: TaxProfile): Promise<void> {
-  await setState(db, PROFILE_KEY, JSON.stringify(p));
+  // §BIZ-SPLIT — the tax half implies the business half, enforced HERE rather than asked of every
+  // reader. A profile with `enabled` and no `business` would accrue tax on income the page does
+  // not show, and the two flags would then disagree about whether the user has a business at all.
+  await setState(db, PROFILE_KEY, JSON.stringify({ ...p, business: p.business || p.enabled }));
 }
 
 // ─── periods ────────────────────────────────────────────────────────────────────────────────────
@@ -328,6 +350,20 @@ export async function taxStatus(db: AppDb, now: number): Promise<TaxStatus> {
  * suggest. It is told, in the payload, that the reserve is ALREADY inside own funds and that
  * runway is deliberately computed without it (§TAX-RESERVE).
  */
+/**
+ * §FOP-GATE + §TAX-RESERVE — the same context, for a caller that holds an env rather than a db.
+ *
+ * The adviser and the cash-flow projection mix the ФОП figures into a payload built for everyone,
+ * so the gate has to be asked at exactly the point where the two meet. Written here rather than at
+ * both call sites: a hidden module that still reasons out loud about a tax reserve is the failure,
+ * and it only takes one of the two forgetting to ask.
+ */
+export async function taxContextFor(
+  env: { DB: AppDb; IS_OWNER?: boolean }, now: number,
+): Promise<Record<string, unknown>> {
+  return fopAvailable(env) ? taxContext(env.DB, now) : {};
+}
+
 export async function taxContext(db: AppDb, now: number): Promise<Record<string, unknown>> {
   const profile = await readProfile(db);
   if (!profile.enabled) return {};

@@ -23,9 +23,14 @@ D1 `directory` = `c72e2571-1fbb-44b2-8308-5a961aef9670`, секрети на м�
    `npm run db:migrate:remote` (і `npm run db:dir:migrate:remote` для `directory`).
    ⚠️ 2026-09-17: `directory` 0011 (§QUICK-ADD) must be applied BEFORE the deploy — issuing a
    phone token writes `users.quickadd_version`; without the column the button returns a 500.
-   ⚠️ **Розклад крону змінився 2026-09-02:** тижневий і місячний звіти переїхали з `0 9` на `0 4`
-   UTC (полудень за Києвом → 06:00–07:00). `wrangler deploy` перереєстровує тригери сам, але старий
-   розклад живе, поки деплою не було — тобто звіт і далі приходитиме опівдні.
+   ⚠️ **Розклад крону змінився 2026-09-20 (§DIGEST-HOUR):** три тригери з фіксованими годинами
+   замінені ОДНИМ погодинним (`0 * * * *`). Годину, о якій людина чує від застосунку, тепер тримає
+   вона сама (Сповіщення → «Коли надсилати», дефолт 20:00 за Києвом); інфраструктурна половина
+   (курси, бекапи, лічильники адмінки) лишилась на 06:00 UTC. `wrangler deploy` перереєстровує
+   тригери сам, але старий розклад живе, поки деплою не було — до деплою налаштування години не
+   працюватиме, бо тіків просто не буде.
+   Попередній зсув (2026-09-02, звіти з `0 9` на `0 4` UTC) цим скасовано — години більше не
+   зашиті в тригери.
 2. **Секрети** (`npx wrangler secret put`): `MONO_TOKEN`, `ANTHROPIC_API_KEY`, `WEBHOOK_SECRET`,
    `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `SECRETS_MASTER_KEY`,
    `OWNER_EMAIL`; бот — `TG_BOT_TOKEN`, `TG_SECRET`, `TG_CHAT_ID`.

@@ -7,7 +7,7 @@
       "kind": "subscription",
       "total_amount": null,
       "period_amount": 19900,
-      "period": "monthly",
+      "period": "month",
       "start_date": 1761469200,
       "end_date": null,
       "occurrences": null,
@@ -26,7 +26,7 @@
       "kind": "subscription",
       "total_amount": null,
       "period_amount": 1000,
-      "period": "monthly",
+      "period": "month",
       "start_date": 1765789200,
       "end_date": null,
       "occurrences": null,
@@ -45,7 +45,7 @@
       "kind": "subscription",
       "total_amount": null,
       "period_amount": 360000,
-      "period": "quarterly",
+      "period": "month",
       "start_date": 1752829200,
       "end_date": null,
       "occurrences": null,
@@ -53,10 +53,10 @@
       "account_id": null,
       "is_active": 1,
       "currency_code": 980,
-      "period_count": 1,
+      "period_count": 3,
       "note": null,
       "amount_varies": 0,
-      "monthly_base": 360000
+      "monthly_base": 120000
     },
     {
       "id": 4,
@@ -64,7 +64,7 @@
       "kind": "subscription",
       "total_amount": null,
       "period_amount": 50000,
-      "period": "weekly",
+      "period": "week",
       "start_date": 1770973200,
       "end_date": null,
       "occurrences": null,
@@ -75,7 +75,7 @@
       "period_count": 1,
       "note": null,
       "amount_varies": 0,
-      "monthly_base": 50000
+      "monthly_base": 217411
     }
   ]
 }

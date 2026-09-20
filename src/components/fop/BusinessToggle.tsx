@@ -1,5 +1,6 @@
 import { useT } from "../../i18n/index.ts";
 import { useSetTxBusinessMutation, useGetTaxStatusQuery } from "../../store/api.ts";
+import { useFopVisible } from "./gate.ts";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
 
@@ -19,9 +20,12 @@ import { errText } from "../../lib/errors.ts";
  */
 export function BusinessToggle({ txId, value }: { txId: string; value: number | null }) {
   const t = useT();
-  const { data: status } = useGetTaxStatusQuery();
+  // §FOP-GATE — asked BEFORE the request, not after: a refused query would toast a 404 on a
+  // screen that is meant to show nothing at all.
+  const visible = useFopVisible();
+  const { data: status } = useGetTaxStatusQuery(undefined, { skip: !visible });
   const [setBusiness, { isLoading }] = useSetTxBusinessMutation();
-  if (!status?.enabled) return null;
+  if (!visible || !status?.enabled) return null;
 
   const set = async (business: 0 | 1 | null) => {
     try { await setBusiness({ id: txId, business }).unwrap(); }

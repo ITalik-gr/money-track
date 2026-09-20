@@ -25,6 +25,7 @@ import { getState, setState } from "../finance/repo.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import {
   collectNumbers, numbersAreGrounded, timeClaimsAreGrounded, scriptMatchesLocale,
+  claimsMissingFutureCharge,
 } from "../ai/grounding.ts";
 import { localYmd } from "../finance/stats.ts";
 import type { Draft } from "./notify.ts";
@@ -152,6 +153,11 @@ export async function draftAiObservations(env: Env, now: number, already: string
   // made up — see `timeClaimsAreGrounded`.
   const anchorDays = new Set(snap.timeAnchors.days);
   const anchorMonths = new Set(snap.timeAnchors.months);
+  // §PLAN-LATE: the plans whose date is still AHEAD — the ones an observation may not call
+  // missing. Read back out of the PAYLOAD rather than recomputed, for the same reason the anchors
+  // above are: the guard has to check the answer against what the model was actually handed.
+  const futureCharges = ((snap.context.upcoming_charges ?? []) as { title?: string; in_days?: number }[])
+    .filter((u) => (u.in_days ?? 0) > 0).map((u) => u.title ?? "");
   const loc = await resolveLocale(env);
 
   const out: Draft[] = [];
@@ -170,6 +176,13 @@ export async function draftAiObservations(env: Env, now: number, already: string
     // was a small one.
     if (!timeClaimsAreGrounded(text, anchorDays, anchorMonths)) {
       console.warn("notify/ai: відкинуто спостереження з вигаданою датою:", title);
+      continue;
+    }
+    // 🔒 §PLAN-LATE: a scheduled payment that is not due yet is not missing. The app announces a
+    // late plan itself, after its grace period (`draftMissedPlans`) — until then there is nothing
+    // to report, and «оплата квартири відсутня» five days early is the card this guard exists for.
+    if (claimsMissingFutureCharge(text, futureCharges)) {
+      console.warn("notify/ai: відкинуто спостереження про ще не настале списання:", title);
       continue;
     }
     // 🔒 One card, one language. The prompts are English (§LANG-ARCH) and only a final directive

@@ -59,6 +59,24 @@ export type TaxGroup = 1 | 2 | 3;
  * number, which is worse than no number at all (docs/TAX.md §7).
  */
 export interface TaxProfile {
+  /**
+   * §BIZ-SPLIT — the BUSINESS half: «I have business income and costs, show me them apart from my
+   * personal money». It owns the clients, the costs, the margin and the quarters — everything
+   * that is true of a business whether or not the state is involved.
+   *
+   * Its own switch because the two are genuinely independent (owner, 2026-09-21: «це саме
+   * сторінка бізнес, щоб можна було і просто свій бізнес фінанси трекати, а фоп вже це як фіча
+   * просто додаткова»). A freelancer without a ФОП, a person between registrations, someone
+   * whose ФОП is run by an accountant — all have a business and none of them have a tax module
+   * we may compute for.
+   */
+  business: boolean;
+  /**
+   * The TAX half (ФОП): the reserve, the obligations, the annual ceiling, the income book.
+   *
+   * ⚠️ Implies `business` and is never on without it — a tax accrual with no business income to
+   * accrue on is a number about nothing. `writeProfile` enforces that so no reader has to.
+   */
   enabled: boolean;
   group: TaxGroup;
   /** Group 3 only: a VAT payer pays 3% instead of 5%. */
@@ -78,7 +96,7 @@ export interface TaxProfile {
 }
 
 export const DEFAULT_PROFILE: TaxProfile = {
-  enabled: false, group: 3, vat: false, single_override: null, esv_exempt: false,
+  business: false, enabled: false, group: 3, vat: false, single_override: null, esv_exempt: false,
 };
 
 /** The basis in force on a given Kyiv date. */

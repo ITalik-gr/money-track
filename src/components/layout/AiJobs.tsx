@@ -32,6 +32,17 @@ const JOB_META: Record<AiJobKind, { to: string; tag: "Advice" | "Report" | "Budg
 
 const isActive = (j: AiJob) => j.status === "queued" || j.status === "running";
 
+/**
+ * The job's screen and tag — or `undefined` for a kind this build has no screen for.
+ *
+ * A mass run (`noop_batch` today, a re-sweep later) is a real row in the same list, and indexing
+ * `JOB_META` blindly turned an unrecognised kind into `undefined.tag` — one unknown row would
+ * throw inside the effect and take the toasts for every OTHER job down with it. An unknown kind
+ * is a row this shell has nothing to say about, which is not the same as a broken shell.
+ */
+const metaFor = (kind: AiJob["kind"]) =>
+  (JOB_META as Partial<Record<string, (typeof JOB_META)[AiJobKind]>>)[kind];
+
 export function AiJobChip() {
   const t = useT();
   const navigate = useNavigate();
@@ -62,7 +73,10 @@ export function AiJobChip() {
         markSeen(j.id);
         continue;
       }
-      const meta = JOB_META[j.kind];
+      const meta = metaFor(j.kind);
+      // Nothing to announce and nowhere to send them: mark it seen so it does not queue up
+      // behind every later toast, and leave the notification feed to carry the trace.
+      if (!meta) { markSeen(j.id); continue; }
       if (j.status === "done") {
         // Інвалідуємо ТІЛЬКИ тег свого виду: результат уже в базі, лишилось попросити той
         // екран перечитати його. Глобальний ресет перетягнув би всю сторінку без причини.
@@ -79,19 +93,22 @@ export function AiJobChip() {
     }
   }, [jobs, dispatch, markSeen, t]);
 
-  if (!active.length) return null;
+  // The chip names ONE running job, so it can only show a kind it has a name for.
+  const shown = active.filter((j) => metaFor(j.kind));
+  if (!shown.length) return null;
 
-  const first = active[0];
+  const first = shown[0];
+  const firstMeta = metaFor(first.kind)!;
   return (
     <button
       type="button"
       className="ai-job-chip"
-      onClick={() => navigate(JOB_META[first.kind].to)}
-      title={t("jobs.running", { what: t(JOB_META[first.kind].label) })}
+      onClick={() => navigate(firstMeta.to)}
+      title={t("jobs.running", { what: t(firstMeta.label) })}
     >
       <Icon name="spark" size={14} />
-      <span className="ajc-text">{t("jobs.running", { what: t(JOB_META[first.kind].label) })}</span>
-      {active.length > 1 && <span className="ajc-more">+{active.length - 1}</span>}
+      <span className="ajc-text">{t("jobs.running", { what: t(firstMeta.label) })}</span>
+      {shown.length > 1 && <span className="ajc-more">+{shown.length - 1}</span>}
     </button>
   );
 }

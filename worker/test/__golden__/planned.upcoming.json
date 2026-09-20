@@ -2,7 +2,7 @@
   "status": 200,
   "body": {
     "days": 30,
-    "total": 469900,
+    "total": 309900,
     "items": [
       {
         "id": 2,
@@ -14,13 +14,22 @@
         "days_until": 1
       },
       {
-        "id": 3,
-        "title": "Страховка",
-        "amount": 360000,
+        "id": 4,
+        "title": "Прибирання",
+        "amount": 50000,
         "currency_code": 980,
-        "amount_uah": 360000,
-        "at": 1779094800,
-        "days_until": 4
+        "amount_uah": 50000,
+        "at": 1778835600,
+        "days_until": 1
+      },
+      {
+        "id": 4,
+        "title": "Прибирання",
+        "amount": 50000,
+        "currency_code": 980,
+        "amount_uah": 50000,
+        "at": 1779440400,
+        "days_until": 8
       },
       {
         "id": 1,
@@ -37,8 +46,26 @@
         "amount": 50000,
         "currency_code": 980,
         "amount_uah": 50000,
-        "at": 1781337600,
-        "days_until": 30
+        "at": 1780045200,
+        "days_until": 15
+      },
+      {
+        "id": 4,
+        "title": "Прибирання",
+        "amount": 50000,
+        "currency_code": 980,
+        "amount_uah": 50000,
+        "at": 1780650000,
+        "days_until": 22
+      },
+      {
+        "id": 4,
+        "title": "Прибирання",
+        "amount": 50000,
+        "currency_code": 980,
+        "amount_uah": 50000,
+        "at": 1781254800,
+        "days_until": 29
       }
     ]
   }

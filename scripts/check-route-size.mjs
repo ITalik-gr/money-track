@@ -103,7 +103,12 @@ const EXCEPTIONS = {
   // `drafts-plans.ts`. Both read `plannedActuals()` against `planned_payments` and both answer «the
   // plan you declared and the charges we see disagree» — which is neither «money leaves on a date»
   // (`drafts-due`) nor «your month is going badly» (the pace drafters that stayed).
-  "worker/lib/messaging/notify.ts": 694,
+  // 2026-09-20: 694 → 619. §PLAN-LATE («the date went by and the charge is not there») needed a
+  // kind, a preference and a drafter row, and the ceiling refused them — which is the check doing
+  // its job. Seventh seam, again one the file had already drawn in prose: the comment above
+  // `draftBigTx` explained why those two branches read raw `t.amount` instead of the canon, i.e.
+  // why they are not like their neighbours. They are now `drafts-tx.ts`.
+  "worker/lib/messaging/notify.ts": 619,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
   // "one number, one home", and cutting it up would give that number two homes again.
   // 2026-08-27: 500 → 398, and the exception is kept only because the file is still over the cap.

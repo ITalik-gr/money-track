@@ -96,9 +96,17 @@ const TAX_TOOL = {
   inputSchema: { type: "object", properties: {}, required: [], additionalProperties: false },
 };
 
+/** §FOP-GATE, loaded the same lazy way the tool body loads the module it gates. */
+async function fopVisible(env: Env): Promise<boolean> {
+  return (await import("../lib/finance/tax.ts")).fopAvailable(env);
+}
+
 async function taxStatusTool(env: Env): Promise<unknown> {
-  const { taxContext, readProfile, refreshObligations } = await import("../lib/finance/tax.ts");
-  if (!(await readProfile(env.DB)).enabled) {
+  const { taxContext, readProfile, refreshObligations, fopAvailable } = await import("../lib/finance/tax.ts");
+  // §FOP-GATE — the same answer as a switched-off module, deliberately: a connector told the tool
+  // exists but refused is a connector that will keep asking. The tool is also kept out of
+  // `tools/list` below, so this branch only catches a client calling a name it remembered.
+  if (!fopAvailable(env) || !(await readProfile(env.DB)).enabled) {
     // Stated, not implied. An empty object would let the model answer «you owe nothing», which is
     // a claim about the user's taxes that nobody made.
     return { enabled: false, note: "The ФОП module is switched off for this user, so the app knows nothing about their taxes. Do not state that they owe nothing — say the module is off." };
@@ -168,7 +176,9 @@ async function handleRpc(env: Env, req: RpcRequest): Promise<unknown | null> {
       return ok(id, {});
 
     case "tools/list":
-      return ok(id, { tools: [SNAPSHOT_TOOL, TAX_TOOL, ...financeReadTools().map((t) => ({
+      // §FOP-GATE — an unavailable tool is not advertised; the list a client was SHOWN is the
+      // list it may call, and that invariant is what the dispatch below relies on.
+      return ok(id, { tools: [SNAPSHOT_TOOL, ...(await fopVisible(env) ? [TAX_TOOL] : []), ...financeReadTools().map((t) => ({
         name: t.name, description: t.description, inputSchema: t.input_schema,
       }))] });
 

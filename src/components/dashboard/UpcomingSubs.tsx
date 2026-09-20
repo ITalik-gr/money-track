@@ -55,7 +55,7 @@ export function UpcomingSubs() {
           {data.items.slice(0, 6).map((s) => {
             const w = whenLabel(s.days_until);
             return (
-              <div key={s.id} className="up-sub">
+              <div key={`${s.id}:${s.at}`} className="up-sub">
                 <MerchantLogo merchant={s.title} color={null} fallbackLabel={s.title} />
                 <div className="us-mid">
                   <span className="us-name">{s.title}</span>

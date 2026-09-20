@@ -4,6 +4,9 @@ import type { PlannedPayment } from "../types.ts";
 
 export interface UpcomingSubs {
   days: number; total: number;
+  // One item per OCCURRENCE, not per plan: a weekly plan appears four times in a 30-day horizon,
+  // the same way the cashflow calendar draws it, so `id` is not unique in this list — a key needs
+  // `id` + `at`.
   // §CUR-PLAN: `amount` — у валюті плану (показуємо як є, «$5»), `amount_uah` — зведення
   // для підсумків; `total` уже в ₴.
   items: { id: number; title: string; amount: number; currency_code: number; amount_uah: number; at: number; days_until: number }[];

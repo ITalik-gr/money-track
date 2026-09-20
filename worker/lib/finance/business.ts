@@ -18,49 +18,19 @@
  */
 import type { AppDb } from "../platform/db-shim.ts";
 import * as taxRepo from "../../repo/tax.ts";
-import { localParts, localQuarterStart, localYearStart, localYmd } from "./time.ts";
+import { localMonthStart, localParts, localQuarterStart, localYearStart, localYmd } from "./time.ts";
 import { quarterLabel, accrualsFor, readProfile } from "./tax.ts";
 import { ratesFor } from "./tax-rates.ts";
+// §RHYTHM moved next door under C3 (2026-09-21). One-way: `clients.ts` never imports back.
+import { rhythmOf, quietClients, type Rhythm, type QuietClient } from "./clients.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
 
+// Re-exported: the notification drafters and the route already import these FROM here, and a move
+// that renames every call site is a move somebody reverts.
+export { rhythmOf, quietClients };
+export type { Rhythm, QuietClient };
+
 const DAY = 86_400;
-
-export interface Rhythm {
-  /** Receipts in the window. */
-  n: number;
-  /** Median days between consecutive receipts; null under two receipts. */
-  median_gap_days: number | null;
-  /** Days since the last one — the number that says «it has gone quiet». */
-  days_since_last: number | null;
-  /** Average receipt, ₴ minor. */
-  avg_uah: number;
-}
-
-/**
- * The MEDIAN gap, not the mean.
- *
- * One three-month gap in an otherwise monthly year drags a mean past six weeks and the reading
- * becomes «you get paid every month and a half», which is true of no month that actually happened.
- * The same reason §RHYTHM matches subscriptions on rhythm rather than on an average.
- */
-export function rhythmOf(times: number[], now: number, totalUah: number): Rhythm {
-  const n = times.length;
-  if (n === 0) return { n: 0, median_gap_days: null, days_since_last: null, avg_uah: 0 };
-  const gaps: number[] = [];
-  for (let i = 1; i < n; i++) gaps.push((times[i]! - times[i - 1]!) / DAY);
-  gaps.sort((a, b) => a - b);
-  const median = gaps.length
-    ? gaps.length % 2
-      ? gaps[(gaps.length - 1) / 2]!
-      : (gaps[gaps.length / 2 - 1]! + gaps[gaps.length / 2]!) / 2
-    : null;
-  return {
-    n,
-    median_gap_days: median == null ? null : Math.round(median),
-    days_since_last: Math.floor((now - times[n - 1]!) / DAY),
-    avg_uah: Math.round(totalUah / n),
-  };
-}
 
 export interface QuarterRow {
   label: string;
@@ -93,10 +63,16 @@ export interface BusinessOverview {
   /** §TAX-DUE meets §RHYTHM: the tax falls due before the money that pays it arrives. */
   cash_gap: CashGap | null;
   rhythm: Rhythm;
+  /** §BIZ-SPLIT — the last 12 months at month resolution. Sparse: a quiet month is absent. */
+  months: { ym: string; income: number; costs: number }[];
+  /** §RHYTHM — clients who went quiet. The same list the notification feed speaks from. */
+  quiet: QuietClient[];
   /** Same quarter one year earlier, for the only comparison a seasonal business can use. */
   year_ago: { label: string; income: number } | null;
   /** How much of the quarter's income the single largest client is — concentration risk. */
   top_share_pct: number | null;
+  /** The business's share of ALL income over 12 months — side project, or the livelihood. */
+  share_pct: number | null;
 }
 
 /**
@@ -156,8 +132,20 @@ export async function businessOverview(
   const thisQuarter = rows.at(-1)?.income ?? 0;
   const top = parties[0]?.total_uah ?? 0;
 
+  // §BIZ-SPLIT — the three slices a business without a ФОП opens this page for. All three come
+  // from statements the module already owns, so none of them is a second definition of a figure
+  // printed elsewhere: `months` is the same population as `quarters` at a finer bucket, `share`
+  // divides by the app's canonical income (`INCOME_WHERE`), and `quiet` is the very list the
+  // notification feed speaks from — until now computed daily and never shown on a screen.
+  const months = await taxRepo.businessMonths(db, localMonthStart(now, -11), now, now);
+  const share = await taxRepo.businessShare(db, localMonthStart(now, -11), now);
+  const quiet = await quietClients(db, now);
+
   return {
     quarters: rows,
+    months,
+    quiet,
+    share_pct: share.total_uah > 0 ? Math.round((share.business_uah / share.total_uah) * 1000) / 10 : null,
     outlook: await quarterOutlook(db, now),
     // The nearest UNPAID obligation, read from the same rows `taxStatus` reads — not recomputed
     // here, or the two screens could name different deadlines for one quarter.
@@ -264,56 +252,6 @@ export async function cashGap(
   return { due_date: next.due_date, amount: next.amount, expected_income: expected, days_short: daysShort };
 }
 
-export interface QuietClient {
-  name: string;
-  /** How many payments the rhythm was read from. */
-  n: number;
-  median_gap_days: number;
-  days_since_last: number;
-  /** ₴ minor: what this client usually pays — the size of what has gone quiet. */
-  avg_uah: number;
-}
-
-/**
- * A client who used to pay on a rhythm and has stopped — the income-side twin of §SUB-DETECT.
- *
- * The spending side has watched for a subscription that went quiet since the beginning; the income
- * side had nothing, and it is the more consequential of the two: a dead subscription is money
- * saved, a client who stopped paying is the business shrinking, and a freelancer normally notices
- * it weeks late because no single missing invoice looks like an event.
- *
- * ⚠️ RHYTHM, not a fixed threshold — the same rule §RHYTHM keeps. A client who pays monthly is
- * late at six weeks; a client who pays twice a year is not late at four months, and a «90 days
- * since last payment» rule would announce the second one every year while missing the first for a
- * month. So the comparison is against THIS client's own median gap.
- *
- * ⚠️ Three payments minimum, and a gap of at least a week. Two payments give one interval, which
- * is not a rhythm but a coincidence — and a client who pays every other day is «late» by lunchtime
- * on the third, which is how a signal becomes noise.
- */
-export async function quietClients(db: AppDb, now: number, lookbackDays = 550): Promise<QuietClient[]> {
-  const rows = await taxRepo.counterparties(db, now - lookbackDays * DAY, now, 100);
-  const out: QuietClient[] = [];
-  for (const c of rows) {
-    if (c.n < 3 || c.name === "?") continue;
-    const times = await taxRepo.receiptTimes(db, now - lookbackDays * DAY, now, c.name);
-    const r = rhythmOf(times, now, c.total_uah);
-    if (r.median_gap_days == null || r.median_gap_days < 7 || r.days_since_last == null) continue;
-    // Twice the usual gap, and never sooner than a week past it: doubling alone would fire at 16
-    // days for a client who pays weekly, which is inside the ordinary slack of an invoice.
-    const late = r.days_since_last > Math.max(r.median_gap_days * 2, r.median_gap_days + 7);
-    if (late) {
-      out.push({
-        name: c.name, n: r.n, median_gap_days: r.median_gap_days,
-        days_since_last: r.days_since_last, avg_uah: r.avg_uah,
-      });
-    }
-  }
-  // The biggest payer first: «who has gone quiet» is a question about the business, and the
-  // answer is ordered by how much of it is missing.
-  return out.sort((a, b) => b.avg_uah - a.avg_uah);
-}
-
 /**
  * §BUDGET-PACE for the tax quarter: what this quarter will cost, and what another group would.
  *
@@ -347,7 +285,12 @@ export async function quarterOutlook(db: AppDb, now: number): Promise<QuarterOut
     ? Math.round((income.base_uah / daysElapsed) * daysTotal)
     : null;
 
-  const accrued = (await accrualsFor(db, profile, qStart)).reduce((n, a) => n + a.amount, 0);
+  // §BIZ-SPLIT — a business without the tax module accrues nothing. `accrualsFor` answers for a
+  // GROUP, and the default group is 3, so asking it with the module off would put a confident 5%
+  // on a screen belonging to someone who never told us they are a ФОП.
+  const accrued = profile.enabled
+    ? (await accrualsFor(db, profile, qStart)).reduce((n, a) => n + a.amount, 0)
+    : 0;
 
   const priceOn = (group: 1 | 2 | 3, base: number): GroupCost => {
     // The rates in force at the quarter's START, like every other accrual (§TAX-RATES).
@@ -368,7 +311,11 @@ export async function quarterOutlook(db: AppDb, now: number): Promise<QuarterOut
     income_so_far: income.base_uah,
     projected_income: projectedIncome,
     accrued_now: accrued,
-    projected_tax: projectedIncome == null ? null : priceOn(profile.group, projectedIncome).total,
+    // §BIZ-SPLIT — null with the tax module off: this field is a CLAIM about what will be owed.
+    // `groups` below stays either way, because that one is explicitly a hypothetical — «what a
+    // ФОП would cost on this income» is exactly the question someone without one is asking.
+    projected_tax: projectedIncome == null || !profile.enabled
+      ? null : priceOn(profile.group, projectedIncome).total,
     days_elapsed: daysElapsed,
     days_left: daysLeft,
     groups: [1, 2, 3].map((g) => priceOn(g as 1 | 2 | 3, basis)),

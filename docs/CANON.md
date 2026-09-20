@@ -125,6 +125,16 @@
   Формула описана ще в міграції 0011, але жоден із сумувальників її не застосовував; сторінка
   Підписок ділила правильно, тож користувач бачив ДВІ різні цифри про свої підписки (його ж
   скарга).
+  ⚠️ **A window of days is a SCHEDULE, never one date per plan** (2026-09-21). `/planned/upcoming`
+  («Скоро спишеться») and the advisor's `upcoming_charges` both called `nextChargeUnix` once per
+  plan, so a weekly plan contributed ONE charge to a 30-day horizon while the cashflow calendar and
+  the month forecast — both on `chargesBetween` — drew four. The widget's total disagreed with the
+  calendar directly below it, and it disagreed DOWNWARDS: it under-warned about exactly the plans
+  that charge most often, and the model was handed a quarter of the money it was asked about. One
+  item per OCCURRENCE, so `id` repeats in those lists. Found only because the test fixture had been
+  writing `period` values no writer produces ("weekly"/"quarterly"), which `nextChargeUnix` reads as
+  monthly — every plan in every test was effectively monthly, and both §SUB-MONTH branches went
+  unexercised.
   ⚠️ **Той фікс накрив пʼять СЕРВЕРНИХ сум і лишив сторінку рахувати самій** (закрито 2026-08-21).
   Множник збігався — і поруч стояв коментар, що збігається, — а «чи план завершено» розійшлось:
   локальний `isFinished` перевіряв `kind === "installment"`, канон завершує будь-що після
@@ -578,6 +588,12 @@
   before it, and a purchase claims a cancellation only if no later purchase matches it — so «buy,
   buy, cancel» leaves the first buy as a real charge. Presentation only: no column is written, and
   nothing about the canon changes. Pinned by `void-pair.test.ts`.
+  ⚠️ **The feed's per-operation cards obey it too** (2026-09-21): `drafts-tx.ts` skips a charge that
+  already has its cancellation (`isVoidedExpr`, exported from `repo/transactions.ts` so there is one
+  spelling of the pairing). A card is a claim about money the person LOST — «велика витрата» about a
+  reversed charge is a false alarm, and «списано двічі» about a double charge whose second leg came
+  back sends them to the bank over nothing. The duplicate finder also filters BOTH sides as spends:
+  only the `a` side was, so the other leg of a transfer could play the second charge.
 - **Витрата:** `amount<0` (або рефанд, див. §REFUND), `transfer_pair_id IS NULL`, НЕ (`is_transfer=1 AND real_category_id IS NULL`), ефективна категорія `IS NOT 13` («Перекази і зняття»). **Holds рахуються** (mono надсилає лише виконані; коли hold закривається — той самий `id` перезаписується, тож без подвійного рахунку). Прапорець `hold` лишається на рядку для UI-бейджа «в обробці». *(Раніше `hold=0` різав свіжий тиждень у репорті — виправлено 2026-07-10.)*
 - **Ефективна категорія** = рол-ап `real_category_id` (готівка/зняття за реальною суттю), інакше рол-ап `category_id`. Хелпери: `EFF_CAT_*`, `SPEND_WHERE`, `INCOME_WHERE`, `STATS_JOINS`, `spendSum/incomeSum/amountSum`, `uahMult` (₴-зведення inline-CASE з курсів), `valueMode` (₴ або «чиста» валюта), `periodBounds/currentPeriodToDate/lastCompletePeriod`.
 - **Вагомість (§6):** `EFF_IMPORTANCE` = `COALESCE(t.importance, рол-ап importance ефективної категорії, 'discretionary')`. Рівні `essential|discretionary|optional`. Задається на категорії (дефолт) + override на транзакції. Міграція 0016.
