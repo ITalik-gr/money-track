@@ -74,7 +74,7 @@ for (const route of [...routes].sort()) {
       `${INDEX}: route "${route}" is not covered by assets.run_worker_first.\n` +
       `    Cloudflare's asset router answers first, so this path would be served the SPA SHELL —\n` +
       `    a 200 with HTML in it, and no error anywhere. Add "${route.replace(/\/:[^/]+.*/, "/*")}"\n` +
-      `    to the list in ${CONFIG} (docs/OPS.md).`,
+      `    to the list in ${CONFIG} (CLAUDE.md, Hard invariants).`,
     );
   }
 }

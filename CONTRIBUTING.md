@@ -11,8 +11,8 @@ index of every § rule pointing at the `docs/` file that explains it. It covers 
 canonically defined, the security model, and ops. For anything touching UI, read **`DESIGN.md`**
 first instead — it owns the design tokens and carries a decision log.
 
-`ROADMAP.md` is the live queue of what still needs doing. `ARCHITECTURE.md` states the target
-layering (`routes → services → lib → repo`) and what each check C1–C10 buys.
+`ROADMAP.md` is the live queue of what still needs doing. `CLAUDE.md` states the target
+layering (`routes → services → lib → repo`) and what each check C1–C15 buys.
 
 ## Local setup
 
@@ -42,13 +42,11 @@ npm run build
 - **SQL lint** — a query using a canonical helper (`amountSum`, `SPEND_WHERE`, `EFF_*`) must also
   include `STATS_JOINS`. SQL is a string, so `tsc` is blind to it; without this lint the failure
   is a runtime `no such column: sp.amount`.
-- **Layer lint (C1)** — `.prepare()` belongs in `worker/repo/`. `worker/routes/` carries a
-  ratcheting budget that may only fall (10 queries left, all on ingest paths); `worker/services/`
-  has no budget at all. This is the check that keeps "I'll just write the query here" from
-  re-creating the four most expensive bugs in the project.
-- **File size (C3)** — no file under `worker/routes/` or `worker/services/` exceeds 400 lines,
-  bar two recorded exceptions that may never rise. `api.ts` reached 3 331 lines one small append
-  at a time; splitting it once would not have kept it split.
+- **Layer lint (C1)** — no `.prepare()` in `worker/routes/` or `worker/services/`. A query goes
+  to `worker/repo/` or to the `lib/` module that already owns that question — never a second
+  definition of the same number.
+- **File size (C3)** — a line ceiling per file under `routes/`, `services/` and `lib/`; recorded
+  exceptions may never rise. Hitting it means "extract", not "raise the number".
 - **API contract (C2/C4)** — every response shape is declared ONCE, in `shared/api/`. The client
   imports and re-exports it; the worker annotates its returns with it. `src/store/api.ts` may not
   declare a type of its own, and `repo/`/`services/` may not describe a row as
@@ -70,7 +68,8 @@ These exist because breaking them has already cost real money in wrong numbers:
    there — do not write a second query that means almost the same thing. Every expensive bug in
    this project came from a *second* place deciding what a number meant.
 3. **Layering:** `routes/*` is transport and validation, `services/*` holds multi-step scenarios,
-   `lib/*` holds the domain logic and `repo/*` is the only layer that issues SQL. Route modules
+   `lib/*` holds the domain logic (a domain module may own its query) and `repo/*` is data access;
+   no SQL in `routes/*` or `services/*`. Route modules
    live in `routes/api/<first-path-segment>.ts`, so one file owns a whole prefix — that is what
    makes the literal-before-parameterised rule readable in one file. No SQL in components.
 4. **A response shape is declared once, in `shared/api/`**, and BOTH sides use that declaration.

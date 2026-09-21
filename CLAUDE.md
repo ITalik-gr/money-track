@@ -1,423 +1,203 @@
-# CLAUDE.md — Money Track (точка входу)
+# CLAUDE.md — Money Track
 
-> **Цей файл вантажиться щосесії. Тут — тільки те, що треба ЗАВЖДИ:** карта документів, робочий
-> процес, стек, мапа коду, тверді інваріанти та індекс усіх §-правил.
-> Деталі («чому саме так», абзаци, куплені багами в проді) живуть у `docs/` — читай той файл,
-> домену якого торкаєшся. Історія раунд-за-раундом — `HISTORY.md`, і його **не читають за
-> замовчуванням**.
+> The one working document. Money canon lives in `docs/CANON.md`; design in `DESIGN.md`; the queue
+> in `ROADMAP.md`. Everything else is here, one or two sentences per rule. The story behind each
+> rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
-> Стан: **у проді** (`https://money.italik.dev`), платформа-фаза, структурний рефактор (ARCH) і
-> банківська фаза закриті. Реєстрація ВІДКРИТА і тільки через Google; Telegram і MCP-токен —
-> ДРУГИЙ і ТРЕТІЙ ключі до наявного акаунта, створити ним акаунт не можна. The fourth key is the
-> write-only phone token (§QUICK-ADD).
-> Міграції: `finance` до **0054**, `directory` до **0011**. Тестів — **1095**. Лінти — **C1–C15**.
-> Оновлено 2026-09-21.
+> In production (`https://money.italik.dev`). Migrations: `finance` to **0054**, `directory` to
+> **0011**. Lints **C1–C15**.
 
-## 📁 Карта документів — що де лежить
+## Documents
 
-| Файл | Що в ньому | Коли читати |
-|---|---|---|
-| **`CLAUDE.md`** | цей файл: процес, стек, мапа коду, індекс § | завжди (вантажиться сам) |
-| **`NIGHT.md`** | овернайт-черга: що робить ВЛАСНИК (§0), протокол і задачі нічного прогону, журнал | перед автономним прогоном; §0 — власнику |
-| **`ROADMAP.md`** | 🔥 **жива черга задач** — тільки невиконане | перед тим як брати задачу |
-| **`docs/CANON.md`** | гроші, статистика, рівні, бюджети, підписки, цілі, категоризація | **перед будь-яким числом про гроші** |
-| **`docs/INGEST.md`** | вебхук, полінг, CSV-імпорт, `bank_connections` | робота з банком чи імпортом |
-| **`docs/AI.md`** | моделі, вартість, промти, grounding, стрім, фонові задачі, сповіщення | будь-який AI-виклик |
-| **`docs/JEV.md`** | Jev (TypeSafe) as the judgment layer: phases 1–3 measured (§7.1–7.3), Jev → Haiku cascade, proposals | перед роботою над enrich/категоризацією |
-| **`docs/PERIMETER.md`** | безпека, ідентичність (Google/TG/MCP), де лежать дані | нова автентифікація, спільний ресурс, аудит |
-| **`docs/TAX.md`** | ФОП: діловий дохід, конверт, ліміт, дедлайни, регуляторний нагляд | будь-що про податки, бізнес-дохід або курс НБУ |
-| **`docs/I18N.md`** | мова відповіді, `t()`, `st()`, назви категорій | новий рядок, який побачить людина |
-| **`docs/UI.md`** | інженерні правила клієнта: розкладка, графіки, зникомі блоки | правки в компонентах |
-| **`docs/OPS.md`** | деплой, секрети, міграції, service worker | деплой (рутина ВЛАСНИКА) |
-| **`DESIGN.md`** | дизайн-система: токени, патерни, «Журнал рішень» | **ПЕРШИМ перед будь-якою UI/UX-роботою** |
-| **`STYLES.md`** | архітектура стилів: чому не Tailwind, лінти C8/C9, що лишилось | структурна робота з CSS |
-| **`ARCHITECTURE.md`** | шари `routes → services → lib → repo`, лінти C1–C10 | структурна зміна або новий лінт |
-| **`BANKS.md`** | що банки реально віддають, агрегатори, крипта | нова банківська інтеграція |
-| **`README.md`** · `SECURITY.md` · `CONTRIBUTING.md` | публічне обличчя (англійською) | зміни для сторонніх |
-| **`HISTORY.md`** | архів «як ми сюди дійшли» (у `.gitignore`) | ⛔ **не читати за замовчуванням** — тільки коли треба зʼясувати «чому саме так», і `docs/` не вистачило |
-| **`AGENTS.md`** | конвенція для НЕ-Claude агентів (Codex/Cursor) | — |
-
-## ✍️ Куди писати задачу
-
-- **Нова задача, ідея, баг** → `ROADMAP.md`, одразу. Формат картки — у шапці того файлу.
-- **Доробив** → (а) ВИДАЛИ картку з `ROADMAP.md`; (б) якщо зʼявився новий інваріант чи канонічне
-  визначення — додай його у відповідний `docs/*.md` **і рядок в індекс § нижче**;
-  (в) наратив («що робив у цьому раунді») — згори в `HISTORY.md`.
-- **UI/UX-зміна** → фіксуй у «Журналі рішень» `DESIGN.md`.
-- **Live-звірку в чергу НЕ писати** — власник ганяє її сам і повідомляє, якщо не так.
-
-## 🕸 graphify — карта коду
-
-This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
-
-Rules:
-- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
-- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
-- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
-- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
-
-
-## 🔁 Робочий процес
-
-1. **Бери найвищу невиконану картку з `ROADMAP.md`.** Спочатку прочитай згадані в ній файли.
-2. **Домен вирішує, який `docs/*.md` читати ПЕРЕД кодом** (таблиця вище). Гроші → `docs/CANON.md`.
-   UI/UX → `DESIGN.md`. Це не рекомендація: більшість §-правил існує саме тому, що хтось написав
-   друге визначення того, що вже було визначене.
-3. **Новий файл** → у наявну доменну папку (§Мапа коду). Якщо файл «нікуди не лягає» — це сигнал,
-   що домен не продуманий, а не привід класти в корінь. **Новий ресурс, спільний для всіх юзерів**
-   (секрет, чат, бакет) → одразу гейт `env.IS_OWNER` (`docs/PERIMETER.md` — на цьому вже двічі
-   спіймались).
-4. **Гроші/статистика** — тільки через `worker/lib/finance/stats.ts` і сусідів. Не дублюй
-   SQL-фільтри в ендпоінтах.
-5. **Green-бар перед «готово»:** `npm run check` + `npm run build`. Канонічний SQL — валідуй на D1.
-6. **Деплой і жива перевірка — рутина ВЛАСНИКА** (`docs/OPS.md`). Секрети й реальний ключ — не в мене.
-7. **Доробив → онови документи** (див. «Куди писати задачу» вище).
-8. **Перевірка > інструкція.** Якщо коректність тримається на памʼяті розробника або моделі —
-   зроби детерміновану перевірку. Правило вже двічі окупилось: SQL-лінт (регресія §SPLIT) і
-   `numbersAreGrounded` (вигадані суми в AI-сповіщеннях).
-9. **Код читатиме сторонній інженер** (репозиторій публічний):
-   - 🔴 **ENGLISH IS THE WRITING LANGUAGE OF THIS REPOSITORY.** Усе НОВОНАПИСАНЕ — англійською:
-     коментарі й **кожне доповнення в `.md`, навіть усередині українського документа**. Правило
-     про те, що ти ПИШЕШ, а не про те, що у файлі вже лежить. Наявна українська проза масово НЕ
-     перекладається — вона мігрує, коли той текст переписують з іншої причини.
-     **Ніколи не перекладається** (це дані, не проза): UI-рядки через `t()` · матч-ключі
-     (`.includes("фоп")`, `/переказ|зняття/i`) · сідові назви категорій · приклади мерчантів.
-     Промти моделі — англійські з 2026-08-08 (`docs/I18N.md` §LANG-ARCH).
-     ⚠️ Відповіді власнику в чаті лишаються українськими — правило про артефакти в репозиторії.
-   - Коментувати **«чому саме так»**, а не «що робить рядок»: яку альтернативу відкинуто, який баг
-     це закриває, який інваріант тримається. Обовʼязково — біля канону, біля обходів чужих вад і
-     біля кожної перевірки, що існує через невдачу.
-   - **Шари:** `routes/*` — транспорт і валідація; `services/*` — сценарії; `lib/*` — логіка й
-     канон; `repo/*` — шар доступу до даних. **SQL живе в `repo/` і в тих `lib/`-модулях,
-     що володіють власним доменним запитом** (`stats.ts`, `nbu.ts`, `tax-watch.ts` …); у
-     `routes/*` і `services/*` він ЗАБОРОНЕНИЙ повністю (лінт C1). Жодного SQL у компонентах.
-
-## Стек
-PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook + бекфіл). React 19 + Redux Toolkit + React Router 7 + Recharts, Vite + vite-plugin-pwa, `@cloudflare/vite-plugin`. AI = гібрид **Haiku 4.5** (масово: enrich/OCR/parse/insight/batch) / **Sonnet 5** (розумний user-facing: порадник, репорти, txChat, бюджет-план, рев'ю). **Виняток (2026-07-14):** enrich бере Sonnet, коли користувач САМ описав операцію нотаткою (`user_note` непорожній) — розпізнання поважає пояснення (не плутає «вивів зарплату» з «Подарунком»); авто-enrich без нотатки лишається на Haiku. **Judgments go to Jev first (2026-09-21, `docs/JEV.md`):** with `AI_JUDGE = "jev"` (on, owner-only — the TypeSafe key is the owner's) enrich, §SUB-REVIEW, §F2, §AI-CATCHUP and §CSV-AI ask Jev and fall back to Claude when it is off, down or unsure; everything generative stays on Claude. Telegram-бот (каркас). Мова UI — українська. Шрифти: Geist Sans (герой-суми) / Geist Mono (колонки, `tabular-nums`).
-
-### Скрипти
-`npm run dev` · `npm run build` (types + tsc -b + vite build) · `npm run check` (types + tsc + лінти + тести) · `npm run deploy` (build + wrangler deploy) · `npm run db:migrate:local` / `:remote` · `npm run db:seed:local` · **`npm run eval`** (§AI-EVAL — точність і вартість моделі; ПОЗА `check`, бо платний і недетермінований; `-- --dry` безкоштовно міряє лише гейт).
-
-⚠️ **`worker-configuration.d.ts` ГЕНЕРУЄТЬСЯ, і генерація стоїть ПЕРШИМ кроком `build`/`check`**
-(2026-08-07). Файл у `.gitignore`, тож на CI (Cloudflare Build) його просто немає — збірка падала
-`TS2688: Cannot find type definition file`, хоч локально все зелене. Коміт файлу теж вирішив би
-проблему, але 549 КБ згенерованого, що мовчки старіє відносно `wrangler.jsonc`, — гірший розмін:
-локальна копія була від 24 липня й НЕ знала про `vars.SIGNUP`, доданий 31-го.
-⚠️ **`wrangler types` виводить ЛІТЕРАЛ поточного значення vars** (`SIGNUP: "open"`), бо описує те,
-що задеплоєно. Тому `env.ts` виключає `SIGNUP` з успадкованого типу (`Omit<Cloudflare.Env, "DB" |
-"SIGNUP">`) і оголошує ширше — інакше кіл-світч `open|invite` неможливо було б перемкнути без
-помилки компіляції. **Нова змінна у `vars` + її оголошення в `env.ts` = той самий конфлікт**;
-рішення — Omit із коментарем ЧОМУ, а не `--strict-vars=false` (той прибирає літерали в усіх vars).
-
-### Мапа коду (структура за доменами, 2026-07-26)
-> Було: `worker/lib/` (29 файлів) і `src/components/` (59) плоскими списками — знайти щось можна
-> було лише пошуком, а межі відповідальності не читались із дерева. Тепер папка = домен.
-> **Правило: новий файл кладеться в наявну доменну папку; нова папка — лише під новий домен.**
-
-**Воркер**
-- `worker/index.ts` — Hono: авторизація, заголовки безпеки, роутинг у Durable Object, крон
-  (ПОГОДИННИЙ з 2026-09-20 — §DIGEST-HOUR; інфраструктурна половина лишилась на 06:00 UTC).
-- `worker/user-app.ts` — застосунок ВСЕРЕДИНІ DO; `worker/do/*` — сам `UserDO`, міграції, імпорт.
-- `worker/routes/*` — транспорт і валідація: `setup`, `credentials`, `admin`, `auth`,
-  `webhook`, `telegram`, `ingest`, `import`, `account`.
-  **`worker/routes/api/`** (2026-08-07) — 25 доменних файлів, ФАЙЛ = ПЕРШИЙ СЕГМЕНТ ШЛЯХУ
-  (`transactions.ts` тримає весь `/transactions/*`, зокрема `POST /transactions/:id/enrich`, хоч
-  за змістом це enrich). Один файл володіє цілим префіксом → правило «літерал вище
-  параметризованого» видно в одному файлі, а не в порядку монтування. `index.ts` — лише мідлвар
-  локалі + `api.route("/", …)`; **власних роутів не оголошує ніколи** (файл, який приймає ще один
-  обробник, набере й наступний — так і виріс `api.ts` до 3331 рядка). Ліміт — 400 рядків на файл
-  (лінт C3).
-- `worker/services/*` — СЦЕНАРІЇ: обробники, що є послідовністю кроків над кількома таблицями
-  (`transactions.editTransaction`, `reimbursements.setReimbursement`, `categories.deleteCategory`).
-  Сервіс бере вже розпарсений вхід і повертає РЕЗУЛЬТАТ: не читає запит, не обирає код статусу,
-  не будує рядок для людини — помилку він НАЗИВАЄ (`errReimbCurrency`), а словами її оформлює
-  роут через `st(locale)`. Простий CRUD сюди не їде: сервіс на кожну таблицю — це церемонія.
-- `worker/repo/*` — шар доступу до даних. Лінт C1 — це ФЛЕТ-БАН на `.prepare()` у `routes/*`
-  і `services/*` (без бюджету), а не «SQL лише в `repo/`»: у `lib/` його 300 виклик-сайтів
-  проти 285 у `repo/`, і так і замислено — доменний модуль володіє своїм запитом. Правило,
-  що лишається твердим: **другого визначення того самого числа не буває** — новий запит їде
-  або в `repo/`, або в той доменний модуль, що вже відповідає на це питання, і НІКОЛИ в
-  обробник (2026-09-18: документація казала «ЄДИНЕ місце», і це було неправдою про код).
-- `worker/lib/finance/` — **гроші й канон**: `stats.ts` (ЄДИНЕ джерело розрахунків),
-  **`plan-match.ts`** (§PLAN-LINK — «яка транзакція є цим планом» + привʼязка історії; єдина
-  половина підписок, що ходить у БД, винесена зі `subscriptions.ts` під C3 2026-08-27),
-  **`recurring.ts`** (§SUB-DETECT — що з витрат схоже на нерозпізнану підписку),
-  **`envelope-parts.ts`** (§ENV-PARTS — з чого складається місяць конверта; питає §PLAN-LINK і
-  §SUB-DETECT і НЕ заводить третього визначення «регулярного»; винесено з `budgets.ts` під C3
-  2026-09-04, імпорт односторонній),
-  **`levels.ts`** (канонічний місячний рівень, `coveredMonths` і §BURN-SHAPE — яка частина burn
-  повторюється), **`health.ts`** (§HEALTH — Індекс здоровʼя; винесено з `advisor.ts` під C3
-  2026-08-27, імпорт односторонній),
-  **`time.ts`** (§APP_TZ — увесь календар; `stats.ts` ре-експортує), `finance`
-  (+ `savingsRatePct`), `cadence` (§CADENCE — чи дельта осмислена + злиття двох періодів),
-  `fx` (§FX-COST), `forecast`, `price-drift`,
-  **`money.ts`** (§BASE-CUR: rates, conversion, and WHICH currency the answer is in — the only
-  module allowed to read the raw rate table), `subscriptions`, `transfers`, `categorize`,
-  `categories-i18n`, `repo`, `merchants`.
-- `worker/lib/ai/` — усе модельне, ШАРАМИ (2026-08-07, було 1335 рядків в одному `ai.ts`):
-  `ai.ts` — ЛИШЕ транспорт (єдиний файл, що POST-ить в Anthropic) · `models.ts` — яка модель на
-  яку задачу · `cost.ts` — скільки коштував виклик і лічильник · **`json.ts` — ШОВ ПРОВАЙДЕРА**
-  (усе вище нього провайдер-агностичне) · `prompt.ts` — стабільний префікс + мовна директива ·
-  `tasks.ts` — розмовні виклики без власного фіча-файлу · **`enrich-gate.ts`** (§ENRICH-GATE —
-  ХТО взагалі вартий виклику: пропустити рух власних коштів і очевидні MCC, скопіювати вердикт
-  уже відомого мерчанта, спитати лише про нове; поза `enrich.ts`, бо той під стелею C3) ·
-  **`judge.ts` + `judge-tx.ts` + `judge-guide.ts`** (docs/JEV.md) — the only file that POSTs to
-  TypeSafe, the Jev question set for enrich (root → leaf + importance rounds, span-selected name,
-  cascade to Haiku below root p 0.8), and the category guide parsed out of `CACHE_GUIDE` (ONE guide
-  for both judges); NOT behind the `json.ts` seam; `judgeOn(env)` is the one switch ·
-  **`judge-subs` / `judge-spend` / `judge-columns`** — phase 4, one file per call site (§SUB-REVIEW,
-  §F2 + §AI-CATCHUP, §CSV-AI), each null → the Claude path · `judge-search.ts` — measured, NOT wired ·
-  `advisor`, `enrich`, `insight`,
-  `report`, `receipt`, **`advice-actions.ts`** (§ADVICE-LOOP — реєстр «що радили / що з цього
-  вийшло»; єдиний писар `app_state.advisor_suggestions`) · **`advice-fallback.ts`** (детермінована
-  порада, коли моделі немає — винесено з `advisor.ts` під C3 2026-09-04), **`budget.ts`** (§3 — AI-план конвертів; винесено з `advisor.ts` під C3
-  2026-08-27, імпорт ОДНОСТОРОННІЙ: три виклики беруть його напряму, бо ре-експорт замкнув би
-  цикл) — фіча-логіка ЖИВЕ ТУТ, а не в транспорті · **`generate.ts`** — одноразові
-  генерації (порада, план бюджетів, спостереження стрічки, вердикт групи): payload → структурований
-  JSON, ніхто не читає наживо, тому вивід перевіряється кодом · **`chat-tools.ts`** — інструменти,
-  якими модель сама читає базу (схема + виконавець поруч, щоб розбіжність було видно) ·
-  **`scripts/eval-ai.mjs` + `worker/test/__eval__/`** (§AI-EVAL) — the only check that scores the
-  MODEL rather than a number: it runs the real ladder over raw bank descriptions and reports
-  accuracy, ask rate and cost together. Outside `npm run check` — it is paid and not
-  deterministic · 
-  `facts.ts` — §A1 CRUD фактів і ЄДИНИЙ писар таблиці `facts` (§A1-WRITE)
-  (винесено з `advisor.ts` 2026-08-07: чистий CRUD без логіки поради, і без цього виносу
-  `chat-tools`↔`advisor` замкнули б цикл імпортів) · **`subs-review.ts`** (§SUB-REVIEW — добовий вердикт «рахунок чи магазин» над
-  кандидатами в підписки; вирішує раз і зберігає, бо `/planned/detect` — це GET на кожне
-  відкриття сторінки) · **`transfers-ai.ts`** (§F2 крок 2 — що
-  насправді було переказом/зняттям; винесено з `enrich.ts` під C3 2026-08-27 по шву, який той файл
-  уже намалював сам роздільником, — після чого `enrich.ts` уперше з весни ВЗАГАЛІ втратив виняток
-  і живе під загальною стелею 400) · `knowledge/` (корпус).
-  ⚠️ **Новий AI-виклик кладеться у ФІЧА-файл, а не в `ai.ts`.** Саме так `generateFinancialReport`
-  опинився в транспорті, хоч поруч лежав 330-рядковий `report.ts`: правила не було — і фіча
-  розмазалась по двох файлах, а наступний дописував у той, який був відкритий.
-- `worker/lib/platform/` — мультиюзерність: `auth`, `directory`, `secrets`, `demo`, `forward`,
-  `cron`, `db-shim`, `quota` (добові стелі на РЕАЛЬНОГО юзера; `demo.ts` — стелі на незнайомців),
-  `feedback` (відгуки + щоденний лічильник демо — обидва в СПІЛЬНІЙ directory, тому не в `repo/`).
-- `worker/lib/bank/` — `mono`, `backfill`, `providers/` (реєстр банків).
-- `worker/lib/messaging/` — вихідні сигнали: `notify` (центр сповіщень: преференції, дедуп,
-  рендер, доставка), `telegram`, `alert`, `proactive`, `deliver`.
-  **`drafts-*.ts` — по файлу на КЛАС новини**, і кожен винесено з `notify.ts` під C3 (виняток не
-  піднімається, тож нова гілка отримує шов): `drafts-due` — гроші йдуть у дату, якої ти не обирав
-  (підписки, кредитка) · **`drafts-fop`** (2026-09-18) — усе, що існує лише для ФОП і мовчить, поки
-  модуль вимкнено (§TAX-DUE, §TAX-WATCH, «клієнт замовк») · **`drafts-plans`** (2026-09-18) — план і
-  фактичні списання розійшлись (§PRICE-STEPS, мертва підписка, §PLAN-LATE) · `drafts-goals` · `drafts-budget` ·
-  `drafts-import` · `drafts-ai` ·
-  **`drafts-tx`** (2026-09-20) — новина про ОДНУ операцію (великий чек, дубль списання): ці дві
-  гілки навмисно читають сирий `t.amount`, а не канон, бо спліт ділить операцію для КАТЕГОРІЙНОЇ
-  аналітики, а банк списав одну суму один раз.
-  **`digest.ts`** (2026-09-20, §DIGEST-HOUR) — КОЛИ говорити (година читача + «раз на добу»),
-  тоді як `notify.ts` вирішує ЩО сказати.
-  ⚠️ **Хедер драфтера — це ЗАЯВА, яку перевіряють при додаванні гілки.** `drafts-due` довелось
-  ділити не через розмір, а через те, що його власний опис перестав описувати вміст (2026-09-18).
-  Telegram — власне сімейство `tg-*` (вхід, команди, формат, адресат, імпорт, кнопки).
-  ⚠️ **Новий вид сповіщення = новий `NotifKind` + рядок у `DEFAULT_PREFS` + шаблон у
-  `shared/notif-i18n.ts` + мітка `notif.kind.*`.** Власна преференція, а не чужа: хто заглушив
-  витрати, не казав нічого про те, чи хоче чути, що правило змінилось або що клієнт замовк.
-
-**Клієнт**
-- `src/pages/*` — по сторінці на роут (плоско: файл = роут, групувати нема за чим).
-  ⚠️ **`Stats.tsx` — ОБОЛОНКА** (2026-08-08, було 1 379 рядків): період, валюта, режим і ОДИН
-  запит `/analytics/overview`, який читають усі вкладки. Самі блоки — у `components/stats/`
-  (`StatsOverview`/`StatsCategories`/`StatsTrends`/`StatsMerchants`/`StatsCompare` + `shared.tsx`).
-  Розріз — ПО ВКЛАДКАХ: це межа, яку користувач і так бачить, і будь-яка інша дала б файли, назви
-  яких довелось би вигадувати. **Спільний запит лишається в оболонці й передається вниз** — інакше
-  чотири вкладки перезапитували б той самий період при кожному перемиканні, а дві з них могли б
-  розійтись у числах про одні й ті самі гроші, поки одна застаріла.
-- `src/components/ui/` — примітиви без доменних знань (`Icon`, `Select`, `Money`, `Skeleton`,
-  `ErrorNote`, `EmptyCard`, `Gauge`, `Sparkline`…). **Тут не має бути жодного `useGet*Query`.**
-- `src/components/layout/` — оболонка (`Layout`, `CommandPalette`).
-- `src/components/dashboard/` · `stats/` · `transactions/` · `advisor/` · `planning/` ·
-  `accounts/` · `settings/` — доменні блоки відповідних екранів.
-- `src/store/` (RTK Query), `src/lib/` (`errors`, `format`, `brands`, `markdown`, `toast`),
-  `src/i18n/`.
-- `migrations/*` (0001→0054) · `wrangler.jsonc` · `.dev.vars` (локальні секрети, у .gitignore).
-- `src/styles/*` — 21 доменний файл (`advisor.css` — від 2026-08-27, шов C8:
-  `domains-a.css` знову вперлась у стелю, а виняток рости не може; від 2026-09-10 туди ж переїхала
-  «Індекс здоровʼя» — `settings.css` уперлась у свої 700, а розміщення картки
-  (`.advisor-state > .health-card`) і так оголошене саме там); `src/index.css` — ЛИШЕ імпорти (лінт C8), і порядок імпортів У НЬОМУ — це каскад:
-  умовне правило (`@media`/`@container`) мусить стояти нижче безумовного, інакше воно мовчки
-  не працює (§COND-ORDER, лінт C11 — 13 таких на день написання, 4 ламали екран). Токени —
-  `styles/tokens.css`. `analytics.css` — шов від 2026-08-21: `domains-a.css` уперлась у стелю, а
-  виняток рости не може, тож нові блоки Статистики їдуть туди. **`landing.css` (2026-08-26) —
-  ЄДИНИЙ файл, де дозволена маркетингова ритміка** (full-bleed смуга, велетенський заголовок,
-  інвертована панель): це єдиний екран, який людина бачить ДО продукту. Жив у `topbar.css`, який
-  володіє хромом ЗАЛОГІНЕНОГО застосунку й до лендінгу стосунку не має.
-- **`shared/api/*`** (2026-08-07) — ЄДИНЕ оголошення форми КОЖНОЇ відповіді API; файли дзеркалять
-  `worker/routes/api/*`. Клієнт (`src/store/api.ts`) їх імпортує й ре-експортує і **власних типів
-  відповідей не оголошує**; воркер анотує ними свої ПОВЕРНЕННЯ (`satisfies`, а `repo/` повертає
-  прямо їх). Доти клієнт руками описував 86 форм «як він вважає, що сервер віддає», воркер —
-  свої inline (26 із них як `Record<string, unknown>`, тобто без обіцянок узагалі), і `tsc` не міг
-  зіставити дві правди: розходження вилазило в проді по одному полю. Тримається лінтом C2/C4.
-  ⚠️ **Новий ендпоінт → його форма їде у `shared/api/`, а не в компонент і не в хендлер.**
-- **`shared/currency.ts`** — the ONE symbol/code table (39 currencies, BOTH directions:
-  `CURRENCY_NUM_BY_LETTERS` is derived by reversing it — the name states the
-  direction because the old one did not, and that cost §TAX-FX a dead path) and the list of currencies the app can roll up
-  INTO (§BASE-CUR). The worker prints signs too, so a second table would disagree with the client
-  exactly where nobody looks.
-  ⚠️ **Це вже ставалось (2026-08-21): копій було ТРИ** — тут (7 валют), `lib/bank/normalize.ts`
-  (39) і приватна шістка в `export.ts`. Чеська покупка експортувалась як «203», а §BANK-PARSE на
-  реімпорті відмовляв невідомій валюті — round-trip губив рядок. Тепер решта ВИВОДИТЬСЯ звідси;
-  нова валюта — один рядок в одному файлі.
-- `shared/types.ts` — форми ТАБЛИЦЬ (`Account`, `Transaction`, `Category`…), `notif-i18n`.
-
-## 🔒 Тверді інваріанти (тримати ЗАВЖДИ)
-
-Це короткий список; повне «чому» — у `docs/CANON.md` та сусідів.
-
-- Гроші — **INTEGER-копійки** скрізь; ділимо на 100 лише в показі.
-- Агрегація по `COALESCE(parent_id, id)` (рол-ап підкатегорій у батька).
-- Кредитний ліміт НІКОЛИ не зливати з власними: власні = `balance − credit_limit`, борг окремо.
-  Формула живе в **`shared/own-funds.ts`** (обидві сторони мусять її слухатись, тож не у воркері)
-  і тримається **лінтом C14** — до нього копій було ШІСТЬ.
-- Валюта відповіді — не константа (§BASE-CUR). Клієнт: `baseSign()`, ніколи літерал `₴`.
-- Календар — київський (§APP_TZ). Жодних `new Date(x).getMonth()` для меж періоду — **лінт C12**
-  ловить це у воркері (клієнт не сканується: там зона рантайму і Є зоною читача).
-- Будь-яка нова аналітика — через `worker/lib/finance/stats.ts`. `.prepare()` — ніколи в
-  `routes/*` і `services/*` (лінт C1, флет-бан); у `lib/` — лише в модулі, що ВОЛОДІЄ цим
-  доменом, а не в тому, який випадково відкритий.
-- Секрети лише у Worker secrets, ніколи в git/на клієнті. Вебхуки — секретний сегмент шляху.
-- Ресурс, що виглядає глобальним, — насправді ВЛАСНИКІВ: гейт `env.IS_OWNER` обовʼязковий.
-- Форма кожної відповіді API оголошена ОДИН раз, у `shared/api/` (лінти C2/C4).
-- `Select` замість native `<select>`. Тема світла/темна рівноправні. Дизайн свідомо НЕ «аішний».
-- **Літеральний роут оголошується ВИЩЕ параметризованого** (`/transactions/frequent` перед
-  `/transactions/:id`): Hono матчить у порядку реєстрації, тож інакше літерал недосяжний (лінт C7).
-- Новий роут поза `/api/*` МУСИТЬ бути в `assets.run_worker_first` — інакше статика Cloudflare
-  віддасть SPA-шелл і воркер не прокинеться (`docs/OPS.md`). **Лінт C13** порівнює одне з одним.
-
-## 🔎 Індекс §-правил — де шукати «чому саме так»
-
-> Кожен § — інваріант, куплений реальним багом. Тут одне речення й адреса; повний розбір — у
-> вказаному файлі. **Порушити § = відтворити той самий баг.**
-
-**Гроші, статистика, канон — `docs/CANON.md`**
-
-| § | Про що |
+| File | When |
 |---|---|
-| §BASE-CUR | у якій валюті застосунок відповідає — це питання ЧИТАЧА, а не константа |
-| §REFUND | повернення — не дохід, а відʼємна витрата своєї категорії |
-| §SPLIT · §COMPENSATION | одна витрата на кілька категорій; одне надходження на кілька витрат |
-| §VOID-PAIR | a purchase and the bank's cancellation of it are one row in the feed (presentation only) |
-| §LEVEL-WINDOW | знаменник рівня — місяці, які покриває ОБЛІК, а не довжина вікна |
-| §BURN-SHAPE | burn каже, яка його частина повторюється, а яка разова |
-| §HEALTH · §HEALTH-INCOME | Індекс здоровʼя наживо; місяць без доходу — теж місяць |
-| §CUR-PLAN · §SUB-MONTH | сума плану лише через `plannedUAH`; місячний тягар — через `monthlyPlannedUAH` |
-| §SUB-DETECT · §RHYTHM | підписку впізнають за РИТМОМ і ціною, а не за точною сумою |
-| §SUB-REVIEW | модель — суддя над списком кандидатів, а не третій детектор; `not` нічого не ховає |
-| §PLAN-LINK · §SUB-FIND · §SUB-ALIAS | план сам знаходить свої списання; шукають по всьому тексту операції |
-| §SUB-DATE · §SUB-PAGE · §PRICE-STEPS | число місяця не пливе; сторінка підписки; коли ціна зрушила |
-| §BUDGET-MEMORY · §BUDGET-ZERO · §BUDGET-FORECAST · §BUDGET-REACH | конверт памʼятає місяць, нуль — це план, прогноз, недосяжна ціль |
-| §BUDGET-PACE | «за поточним темпом» — це про темп цього місяця, а не про рівень категорії |
-| §ENV-PARTS | з чого складається місяць конверта: зобовʼязане / ритмічне / дискреційне — і підлога, нижче якої ліміт недосяжний уже 3-го числа |
-| §CAT-PAGE · §CAT-PARTS · §CAT-SUBS · §CATEGORY-PAGE | сторінка категорії: з чого складається, що в ній підписки |
-| §CAT-SHAPE | форма категорії (вагомість, коли йдуть гроші, кінець місяця) — і відмова відповідати без вибірки |
-| §MONTH-VIEW · §MONTH-STACK · §SHAPE | гортання по місяцях; форма періоду, а не розмір |
-| §CASH-PROJ | прогноз потоку стоїть на розкладі й календарній формі, не на середньому |
-| §SUBS-CAT | «Підписки» — властивість операції, а не категорія (міграція 0047) |
-| §WEEKDAY · §HABITS · §FX-COST · §CADENCE | дні тижня, що зʼявилось/замовкло, ціна конвертації, чи дельта осмислена |
-| §GOAL-PACE · §GOAL-CHART · §GOAL-CUR · §EVENT-GOAL · §INCOME-PLAN | цілі, їхній графік, ВЛАСНА валюта цілі, звʼязок з подією, розклад доходу |
-| §SPEND-PROFILE · §MOMENTUM · §INCOME-SPLIT · §FLOOR | `/insights/*`: тихі дні й концентрація, стійкий тренд категорії, дохід у розрізі вагомості, вартість «просто жити» |
-| §APP_TZ | календар рахується в Києві, не в UTC — і в JS, і в SQL |
-| §RULES-UI · §WHY-CATEGORY · §SIMILAR · §FK-GUARD | правила категоризації, пояснення, «схожі так само» |
-| §A1 · §A1-WRITE | шар фактів — єдине місце, де факт рухає число |
-| §SEARCH-VEC | семантичний пошук: текст не покидає Cloudflare, точний збіг ЗАВЖДИ виграє, індекс — викидний (`docs/PERIMETER.md`) |
+| `CLAUDE.md` | always |
+| `ROADMAP.md` | before taking a task — only what is not done |
+| `docs/CANON.md` | **before any number about money** |
+| `DESIGN.md` | **before any UI/UX work** |
+| `README.md` · `SECURITY.md` · `CONTRIBUTING.md` · `AGENTS.md` | public face |
 
-**ФОП і податки — `docs/TAX.md`**
+New task/bug → `ROADMAP.md`. Done → delete the card; a new invariant → one line here (or in
+`CANON.md` for money) with its §; a UI decision → the `DESIGN.md` log. Never queue a live check.
 
-| § | Про що |
-|---|---|
-| §TAX-RATES | ставка — ДАНІ з датою; зберігаються лише МЗП і ПМ, решта виводиться |
-| §TAX-BASE | «діловий» — властивість ОПЕРАЦІЇ, успадкована від рахунку; NULL ≠ 0 |
-| §TAX-RESERVE | конверт — точне НАРАХУВАННЯ, і він зменшує вільні гроші, а не подушку |
-| §TAX-FX | база валютного надходження замерзає курсом НБУ на дату зарахування |
-| §TAX-UAH | податок — завжди в гривні, єдиний свідомий виняток із §BASE-CUR |
-| §TAX-LIMIT · §TAX-DUE | річний ліміт із трьома станами; дедлайни й «сплачено» як ЗВʼЯЗОК |
-| §TAX-WATCH | стежимо за офіційним джерелом і даємо посилання — ніколи не переказуємо реквізити |
-| §BIZ-SPLIT | сторінка — це БІЗНЕС, а ФОП — перемикач усередині; податок має на увазі бізнес, не навпаки |
-| §FOP-GATE | поки модуль недороблений, він ВЛАСНИКІВ: гейт на env, пʼять дверей, 404 замість 403 |
+## graphify
 
-**Інжест і банки — `docs/INGEST.md`**
+For codebase questions run `graphify query "<question>"` first (`graphify path "<A>" "<B>"`,
+`graphify explain "<concept>"`); `graphify-out/wiki/index.md` for navigation. After modifying code
+run `graphify update .`.
 
-| § | Про що |
-|---|---|
-| §INGEST-WRITE | вхідну транзакцію пише `upsertCanonicalTx` ОДИН |
-| §STUB-ACC | подія інжесту не втрачається через невідомий рахунок |
-| §BANK-PARSE · §CSV-PREAMBLE | рядки банку читає `normalize.ts`; шапка виписки — не заголовок |
-| §CSV-DEBIT | сума буває однією знаковою колонкою або парою Дебет/Кредит; знак — із колонки |
-| §CSV-STATE | declined / reverted / pending rows of a statement are skipped, not imported |
-| §RENAME-MEMORY | two agreeing manual renames of a bank description name the next one; `name_locked` 0/1/2 |
-| §BANK-FETCH · §BANK-POLL · §BANK-CRED · §BANK-CONN | вибірка й пейсинг від провайдера, полінг, креденшели, зʼєднання |
-| §SHARE-CSV · §STALE-IMPORT | поділитись випискою; рахунок, що годується лише файлом |
-| §TG-CSV | виписку можна кинути в чат боту; превʼю там — діалог, а рахунок не вгадується |
-| §CSV-AI | колонки, яких гадалка не впізнала, пропонує модель — і її відповідь доводиться кодом |
+## Workflow
 
-**AI і сповіщення — `docs/AI.md`**
+1. Take the top card in `ROADMAP.md`; read the files it names and the relevant rules below.
+2. New file → an existing domain folder. **A new resource shared by all users → gate `env.IS_OWNER`.**
+3. Money/statistics only through `worker/lib/finance/stats.ts` and neighbours.
+4. **Green bar before "done":** `npm run check` + `npm run build`.
+5. Deploy and live checks are the OWNER's.
+6. **A check beats an instruction** — if correctness rests on memory, add a deterministic check.
+7. **Public repo, ENGLISH for everything newly written** (comments, `.md`). Never translated: UI
+   strings via `t()`, match keys (`.includes("фоп")`), seeded category names, merchant examples.
+   Replies to the owner in chat stay Ukrainian. Comment WHY (rejected alternative, bug closed,
+   invariant held), not what.
 
-| § | Про що |
-|---|---|
-| §AI-UNIT · §AI-AVGNAME | одиниця й імʼя поля мусять означати те, що дали моделі |
-| §MERCH-QUIET | a merchant the user stopped paying carries no monthly figure — absent, not annotated |
-| §TIME-CTX | застосунок ніколи не називає дату, якої йому не давали |
-| §AI-FEED · §NOVELTY | мова, повтори в часі й у тому ж прогоні |
-| §AI-AUDIT | що змінив AI — записано, і це можна відкотити |
-| §AI-EVAL | вердикт моделі МІРЯЄТЬСЯ (`npm run eval`), а не оцінюється на око; ask-rate і вартість — завжди разом |
-| §ENRICH-GATE | вебхук питає модель про те, що невідомо, а не про те, що без категорії — а НОТАТКА користувача перебиває кожен пропуск (і має власну добову стелю) |
-| §AI-CATCHUP | добовий пакетний прохід по операціях, які застосунок міг розкласти й не розклав |
-| §ADVICE-LOOP | порада має ідентичність і стан; що з неї вийшло — вимірюється з реєстру, не стверджується моделлю |
-| §TX-CHAT · §CHAT-SYNC | розмови живуть на сервері, а не в `localStorage` |
-| §STREAM · §PUSH | відповідь тече до читача; пуш не несе даних |
-| §A6 | alarm у DO рівно один — це планувальник, а не задача |
-| §A6-BATCH | масовий прогін іде пачками й зупиняється лише коли прогрес ЗРОСТАЄ — інакше це вічний будильник |
-| §DIGEST-HOUR | о котрій застосунок говорить — питання ЧИТАЧА: погодинний крон + `notify_hour` у його ж обʼєкті |
-| §JEV-EVAL | a Jev judgment is wired only after it is measured on cases written before the code; a site with no separating line stays on Claude (`docs/JEV.md` §7) |
-| §PLAN-LATE | запланований платіж — новина лише ПІСЛЯ своєї дати (відстрочка 3 дні), і модель не може сказати це раніше |
+## Stack
 
-**Безпека й ідентичність — `docs/PERIMETER.md`**
+One **Cloudflare Worker (Hono) + a Durable Object per user (SQLite) + D1 `directory` + R2 +
+Vectorize**. Monobank (webhook + backfill), CSV import, Privat ФОП polling. React 19 + RTK Query +
+React Router 7 + Recharts, Vite + PWA. AI: **Haiku 4.5** bulk, **Sonnet 5** user-facing (and enrich
+when the user wrote a note); **Jev (TypeSafe)** first for judgments, owner-only. Telegram bot + Mini
+App. UI uk/en.
 
-| § | Про що |
-|---|---|
-| §REVOKE | сесію можна відкликати (`token_version`), перевірка підпису — лише половина |
-| §D1 · §TG-OFF · §TG-ROUTE · §TG-SURFACE · §TG-MINIAPP | Telegram: персональний адресат, відвʼязка, маршрутизація, вхід |
-| §MCP · §MCP-OAUTH | bearer-токен і власний authorization server для конектора |
-| §QUICK-ADD | a fourth, write-only key for iPhone shortcuts: one method, one path, its own generation |
-| §BACKUP | нічні бекапи в R2; відновлення — єдина операція, що навмисно стирає дані |
-| §TAX-OUT | два вихідні виклики ФОП-модуля: курс НБУ (валюта+дата, більше нічого) і сторінка, яку НАЗВАВ користувач — `isWatchableUrl()` двічі, у т.ч. після редіректів |
+Scripts: `dev` · `build` · `check` · `deploy` · `db:migrate:local|remote` · `db:dir:migrate:*` ·
+`db:seed:local` · `eval` (paid, outside `check`; `-- --dry` free).
+⚠️ `worker-configuration.d.ts` is generated by `wrangler types` (first step of build/check) and
+types each `vars` entry as its LITERAL value — so `env.ts` does `Omit<Cloudflare.Env, "DB" |
+"SIGNUP" | "AI_JUDGE">` and declares them wider. A new switchable var needs the same.
+⚠️ Check locally with `npm run dev` (Vite), never `wrangler dev` (stale config). CSP is not sent on
+localhost, so CSP bugs reproduce only on another host.
 
-**Клієнт — `docs/UI.md`** · §SET-FLOW (потік Налаштувань), §CHART-REF (опорна лінія на графіку),
-C15 (змінна `var(--x)`, якої ніхто не оголосив, вбиває всю декларацію — лінт `check-css-vars.mjs`),
-§SIGN-FOLLOWS-DATA (знак валюти — з даних блока, а не з фільтра сторінки),
-§COND-ORDER (умовне правило мусить стояти НИЖЧЕ безумовного — `@media` не додає специфічності; лінт C11)
-**Мова — `docs/I18N.md`** · §LANG, §LANG-ARCH, §I18N-DYNKEY
+## Code map
 
-## 🚨 Обробка помилок (ЄДИНІ правила, 2026-07-20)
-Введено після регресії, де вся Статистика мовчки порожніла, а AI-чат казав лише `[object Object]`.
-Три шари, кожен — обовʼязковий:
-- **Сервер:** `app.onError` (`worker/index.ts`) віддає для `/api`+`/ingest` JSON `{error, detail}` і логує стек.
-  Без нього неспійманий throw давав порожній 500 `text/plain` — клієнту не було що показати.
-  Ендпоінти й далі можуть повертати свій `{error}` — форма та сама.
-  ⚠️ Since 2026-09-17 the RAW cause of an uncaught 500 goes to the owner only
-  (`lib/platform/error-body.ts`): registration is open, and a raw message can carry SQL and schema
-  names. Everyone else gets `internal_error` + `ref <id>`, and the same ref is in the log line.
-  A handler's own deliberate `{error}` (quota, missing key, AI failure) is unaffected.
-- **Числовий параметр із URL — лише `numParam()`** (`routes/api/_shared.ts`, 2026-08-21).
-  `Number(x ?? d)` НЕ рятує від `NaN`: `??` ловить лише null/undefined, а `Number("abc")` — це
-  значення, тож фолбек не спрацьовує і NaN їде в дату (виняток) або в `.bind()` (мовчазний нуль).
-  Пʼять ендпоінтів на цьому ламались: два віддавали 500, три — `{from: null, spend: 0}`, що на
-  екрані читається як «нічого не витрачено». Затискає, а не відхиляє: застаріле посилання має
-  показати дефолт, а не помилку. Тримається `bad-input.test.ts` (пінить КЛАС, не список).
-- **Клієнт, текст помилки — ЛИШЕ `errText(e)`** (`src/lib/errors.ts`). **Ніколи `String(e)`**: RTK Query
-  відхиляє проміс простим обʼєктом `{status, data}`, тож `String(e)` = `"[object Object]"` — рівно нуль
-  інформації. `errText` розгортає тіло `{error}` → статус → `Error.message`. Є ще `errStatus(e)` для гілок за кодом.
-- **Клієнт, видимість:** (а) `apiErrorMiddleware` (`src/store/errorMiddleware.ts`) — toast на БУДЬ-якому
-  впалому запиті (дедуп 8с на ендпоінт, 401 мовчить бо є редірект на вхід); (б) `<ErrorNote error={…}
-  what="…" onRetry={refetch} />` — інлайн там, де сторінка інакше показала б порожнечу.
-  **Правило:** сторінка з `data?.x ?? []` МУСИТЬ мати гілку помилки — порожнеча й збій виглядають по-різному.
-- **AI-гілки не глушити:** `catch` навколо AI-виклику показує `errText(e)`, а не «Спробуй ще раз» —
-  інакше ліміт/ключ/збій моделі не діагностуються.
+- `worker/index.ts` — auth, security headers, routing into the DO, hourly cron.
+  `worker/user-app.ts` runs INSIDE the DO; `worker/do/*` — `UserDO`, migrations embed.
+- `worker/routes/*` — transport only. `routes/api/<first-path-segment>.ts` — one file owns a whole
+  prefix; `index.ts` only mounts. ≤ 400 lines per file.
+- `worker/services/*` — multi-table scenarios; a service NAMES an error, the route words it via `st()`.
+- `worker/repo/*` — data access. `lib/` modules may own their domain query.
+- `worker/lib/finance/` — the canon (`stats.ts`, `time.ts`, `money.ts`, `levels.ts`, budgets,
+  subscriptions, goals, tax…). `lib/ai/` — `ai.ts` is transport ONLY, `json.ts` is the provider
+  seam, one file per AI feature (**never add a call to `ai.ts`**), `judge*.ts` for Jev.
+  `lib/platform/` — auth, directory, secrets, demo, quotas, backup, oauth, i18n. `lib/bank/` —
+  normalisation, providers, polling. `lib/messaging/` — `notify` (what), `digest` (when), `deliver`,
+  one `drafts-*.ts` per class of news.
+- `shared/api/*` — **the ONE declaration of every API response shape** (client imports it, worker
+  `satisfies` it). `shared/currency.ts` — the one currency table. `shared/own-funds.ts`.
+- `src/pages/*` — one per route; `Stats.tsx` and `/business` are shells with one shared request
+  passed to tab components. `src/components/ui/` has no queries. `src/styles/*` — domain files;
+  `src/index.css` is only `@import`s and **their order is the cascade**.
 
-## ➡️ Що далі
+## Hard invariants
 
-Закриті фази: платформа (2026-07-26), структурний рефактор ARCH (2026-08-07), банківська
-(2026-08-13), AI 4.0 (2026-07-20) — журнали в `HISTORY.md`.
-**Жива черга — `ROADMAP.md`.** Перед деплоєм: `npm run check` + `npm run build`, міграції на
-remote (`docs/OPS.md`).
+- Money is INTEGER minor units; divide by 100 only for display. Aggregate by `COALESCE(parent_id, id)`.
+- Own funds = `balance − credit_limit` (only in `shared/own-funds.ts`), debt separately.
+- Answer currency is the reader's (§BASE-CUR): client uses `baseSign()`, never a literal `₴`.
+- Calendar is Kyiv (§APP_TZ): no `new Date(x).getMonth()` for period bounds.
+- No `.prepare()` in `routes/*` / `services/*`; **no second definition of the same number.**
+- A resource that looks global (`MONO_TOKEN`, `ANTHROPIC_API_KEY`, `TG_CHAT_ID`, `JEV_API_KEY`…)
+  is the OWNER's — `env.IS_OWNER` gate; its UI controls disappear for others too.
+- Secrets only in Worker secrets. Every API shape declared once in `shared/api/`.
+- A literal route is declared ABOVE a parameterised one. A route outside `/api/*` must be in
+  `assets.run_worker_first`, else the SPA shell answers.
+- `Select`, not native `<select>`. Light and dark themes are equals.
+
+## Checks (`npm run check`)
+
+C1 no SQL in routes/services · C2/C4 API shapes only in `shared/api/` · C3 file line ceilings
+(exceptions only shrink — extract, never raise) · C5 golden analytics · C6 golden DB state after
+writes · C7 route order · C8 `index.css` imports only · C9 every class has a rule and vice versa ·
+C10 one conversion target, no `₴` literals · C11 no `@media` rule killed by a later plain rule ·
+C12 no UTC date parts in the worker · C13 worker-first list · C14 own-funds formula · C15 no
+undefined `var(--x)`. Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
+`gen-migrations --check` (regenerate the DO embed after touching `migrations/`). Re-record a golden
+(`UPDATE_GOLDEN=1`) only for a deliberate, explained change.
+
+## Rules by domain
+
+**Money** — all in `docs/CANON.md`.
+
+**AI**
+- Financial context only from `collectFinanceSnapshot`, so chat = advisor = screens.
+- Any AI number shown to a person passes `numbersAreGrounded`; dates pass `timeClaimsAreGrounded`
+  (§TIME-CTX — the app never states a date it wasn't given). A merchant silent > 45 days has no
+  monthly figure (§MERCH-QUIET). The unit and currency are named only by `moneyUnitDirective` (§AI-UNIT).
+- §ENRICH-GATE: the webhook asks the model only about what is unknown — `skip` (own-money moves,
+  obvious MCCs), `carry` (copy a known merchant's verdict), `ask`. A user note beats every skip
+  (capped 40/day).
+- §AI-CATCHUP: a daily batch pass over rows the app could categorise; «don't know» is a valid answer.
+- §AI-AUDIT: every AI field change is logged in `ai_changes` and revertible (refused if the field
+  changed since).
+- §CHAT-SYNC / §TX-CHAT: conversations live on the server; the server writes the assistant turn.
+- §STREAM: streaming lives in the transport (NDJSON to the client). §PUSH: web push carries no data.
+- §AI-FEED / §NOVELTY / §ADVICE-LOOP: repetition is cured by an explicit list of what was already
+  said; advice has identity (normalised title) and its outcome is measured, not claimed.
+- §DIGEST-HOUR: one hourly cron; each user's `notify_hour` (default 20:00 Kyiv) decides. §PLAN-LATE:
+  a scheduled payment is news only 3 days AFTER its date, and «not linked» ≠ «not paid».
+- New notification kind = `NotifKind` + `DEFAULT_PREFS` + template in `shared/notif-i18n.ts` + label.
+- §A6: one DO alarm = a scheduler; only `armAlarm` sets it. §A6-BATCH: a mass run stops unless
+  `progress_done` strictly grows.
+- Truncation at `max_tokens` is an error even if JSON parsed; a schema in a prompt is a request —
+  validate and re-ask once.
+- §AI-EVAL: `npm run eval` measures the model (accuracy, ask rate and cost together); never
+  re-record the baseline to go green.
+
+**Jev** — `AI_JUDGE = "jev"`, owner key only. Enrich, §SUB-REVIEW, §F2, §AI-CATCHUP and §CSV-AI ask
+Jev first and fall back to Claude when it is off, down or below its line; everything generative
+stays on Claude. Measured result: on held-out cases the Jev → Haiku cascade (Jev files only at root
+confidence ≥ 0.8) matches Haiku's accuracy at about a fifth of the cost. §JEV-EVAL: a judgment is
+wired only after measuring on cases written BEFORE the code; the search rerank had no separating
+line and is not wired. Proposals (`ai_importance`, `ai_business`) are only offered — a person's
+click writes the real column. The amount never comes from a model.
+
+**Ingest and banks**
+- §INGEST-WRITE: every bank row is written by `upsertCanonicalTx` alone; a feed overwrites, a file
+  re-import does not. §STUB-ACC: an unknown account gets a stub row, healed by the next sync.
+- §BANK-PARSE: bank strings are parsed only in `lib/bank/normalize.ts`; a zone-less time is Kyiv;
+  an unknown currency is `null`, never 980.
+- CSV: §CSV-PREAMBLE (find the header row), §CSV-DEBIT (sign from the Debit/Credit column),
+  §CSV-STATE (skip declined/pending), §CSV-AI (model names columns only, its answer is proven on
+  sample rows and shown for confirmation). The target account is never guessed.
+- §RENAME-MEMORY: two agreeing manual renames name the next row; `name_locked` 0/1/2.
+- §BANK-FETCH / §BANK-POLL / §BANK-CRED / §BANK-CONN: pacing belongs to the provider; one credential
+  resolver; a new provider has no deployment fallback.
+- Privat: no personal-card API (CSV only); the ФОП account works via AutoClient polling but has
+  never touched the live API. Other banks = one aggregator later (Teller → SimpleFIN → Enable Banking).
+
+**Security and identity**
+- Accounts are created only through Google (open signup, `vars.SIGNUP` kill switch, 50/day).
+  Telegram Mini App, the MCP token and the quick-add token only sign into an existing account.
+- §REVOKE: `token_version` in the session; «sign out everywhere» kills sessions, MCP and quick-add
+  (≤ 60 s cache).
+- §MCP / §MCP-OAUTH: read-only MCP server with its own OAuth 2.1 server; tools checked against
+  `financeReadTools()`. §QUICK-ADD: write-only phone token, one method and path.
+- Telegram (§D1 / §TG-ROUTE / §TG-OFF / §TG-MINIAPP): `tg_links` is the only authority; linking is by
+  signed deep link in a private chat; an empty `tg_chat_id` means «unlinked».
+- Data: finance in the user's DO; user keys AES-GCM in the same DO; `directory` holds identity only.
+  §BACKUP: nightly dumps to R2 (14 days); restore is the only intentional erase.
+- Outbound data: §SEARCH-VEC text stays inside Cloudflare, off by default; §TAX-OUT NBU gets only a
+  currency + date, watched URLs are checked by `isWatchableUrl()` before and after redirects; Jev
+  receives the owner's transaction text.
+- Uncaught 500s show the raw cause to the owner only.
+
+**Business and ФОП** (owner-only while unfinished — §FOP-GATE: `fopAvailable(env)`, 404 elsewhere)
+- §BIZ-SPLIT: `/business` is the business; ФОП is a switch inside it that implies `business`. A
+  disabled module never produces a confident zero.
+- §TAX-BASE: business status is a property of the OPERATION inherited from the account:
+  `COALESCE(t.is_business, a.is_business, 0)`.
+- §TAX-RESERVE: the reserve is an exact accrual and reduces FREE money only, never cushion/runway.
+- §TAX-UAH: tax is always shown in hryvnia. §TAX-FX: foreign income frozen at the NBU rate on the
+  credit date (`nbu_rates`). §TAX-RATES: only МЗП and ПМ are stored, dated; the rest is derived.
+- §TAX-LIMIT: within / will cross ~date / crossed. §TAX-DUE: obligations are generated; «paid» is a
+  link to an operation. §TAX-WATCH: we watch the official page and show a link — never restate a
+  requisite.
+
+**Language** — the answer language comes from the request (`x-mt-locale` on every request, raw
+`fetch` included); `resolveLocale(env)` is the only resolver (§LANG, §LANG-ARCH). Worker strings via
+`st()`, category names via `catNameSql` in every layer, prompts in English with one language
+directive. Never `new Intl.*` — use `dateFmt()` / `numFmt()`. A runtime-built translation key must
+be declared in `DYNAMIC_KEYS` (§I18N-DYNKEY).
+
+**Client** — see `DESIGN.md` (rules, layout, charts, CSS architecture).
+
+## Deploy (the owner's routine)
+
+Pending migrations first (`npm run db:migrate:remote`, `npm run db:dir:migrate:remote`, backup
+before), then `npm run deploy`. Semantic search needs the Vectorize index
+(`wrangler vectorize create money-track-tx --dimensions=1024 --metric=cosine`). Secrets via
+`wrangler secret put`; never rotate `SECRETS_MASTER_KEY` or the VAPID keys; the demo needs its own
+`DEMO_ANTHROPIC_KEY`. The service worker never uses `navigateFallback`.
+
+## Error handling
+
+- Server: `app.onError` returns JSON `{error, detail}`. Numeric URL params only via `numParam()`.
+- Client: error text only via `errText(e)`, never `String(e)`. `apiErrorMiddleware` toasts failures;
+  `<ErrorNote>` where a page would otherwise look empty — **a page with `data?.x ?? []` must have an
+  error branch**. Never mute AI errors.

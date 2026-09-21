@@ -1,7 +1,7 @@
 # `worker/repo` — the only layer that talks to the database
 
-Every `.prepare()` in the request path belongs here. `scripts/check-repo-layer.mjs` enforces it
-for `worker/routes/**`, and `npm run check` runs that script.
+Data access for the request path. `scripts/check-repo-layer.mjs` (C1) bans `.prepare()` in
+`worker/routes/**` and `worker/services/**`.
 
 ## Why this layer exists
 
@@ -51,8 +51,7 @@ repo/       SQL, and nothing else
 - **Canonical money SQL is still owned by `lib/finance/stats.ts`.** Repo functions compose
   `STATS_JOINS` / `SPEND_WHERE` / `amountSum()`; they never restate what those mean.
 
-## Migration status
+## Status
 
-`api.ts` began with 179 inline queries. The budget in `scripts/check-repo-layer.mjs` is a
-ratchet: it may never rise, and when the real count drops the budget must be lowered to match or
-the build fails. That keeps a stale allowance from quietly permitting new debt.
+C1 is a flat ban: no `.prepare()` in `routes/` or `services/`. `lib/` modules that own a domain
+question may keep their own queries — the rule that matters is no second definition of a number.

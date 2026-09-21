@@ -41,9 +41,9 @@ These are deliberate trade-offs, documented so you don't spend time reporting th
 
 - **Session revocation takes up to ~60 seconds** to propagate. Access checks are cached per isolate
   to keep a database read off the hot path.
-- **Error responses include the underlying cause.** Without it, a failing model call, an expired
-  key, or a rate limit is undiagnosable. If this project ever serves users beyond a trusted circle,
-  the detail should move behind an owner flag.
+- **Uncaught errors show their raw cause to the owner only**; everyone else gets `internal_error`
+  plus a reference id that also appears in the log. A handler's own deliberate error message
+  (quota, missing key, AI failure) stays descriptive, because otherwise it is undiagnosable.
 - **Rate limiting is per-isolate**, not global — the counter window lives in isolate memory. A WAF
   rule in front of `/api/*` is the appropriate complement for a real deployment.
 - **Backups are row copies, not point-in-time recovery.** A nightly job writes each account's full
@@ -55,6 +55,6 @@ These are deliberate trade-offs, documented so you don't spend time reporting th
 
 ## If you self-host
 
-Read `docs/OPS.md` before deploying. In particular: set a **separate** AI API key for the demo
+Read the Deploy section of `CLAUDE.md` before deploying. In particular: set a **separate** AI API key for the demo
 sandbox with its own provider-side spend limit, never reuse the owner key, and never rotate
 `SECRETS_MASTER_KEY` — doing so makes every stored user credential permanently unreadable.

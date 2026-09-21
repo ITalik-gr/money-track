@@ -95,7 +95,7 @@ for (const f of present) {
   if (n > cap) {
     problems.push(
       `${DIR}/${f}: ${n} lines, ${EXCEPTIONS[f] ? `exception allows ${cap}` : `cap is ${MAX_LINES}`}.\n` +
-      `    An exception may never rise. Split the part instead — see STYLES.md.`);
+      `    An exception may never rise. Split the part instead — see DESIGN.md §8.`);
   } else if (EXCEPTIONS[f] && n < cap - SLACK) {
     // The other half of the ratchet, and the half that was only ever prose. A split BUYS the
     // smaller cap; leaving the old one hands the next person room they did not earn.

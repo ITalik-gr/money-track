@@ -7,7 +7,7 @@ this pins a VERDICT — what the model concluded about a transaction it had neve
     npm run eval -- --dry   # gate only: no network, no cost
     npm run eval -- --group subs --concurrency 2
     npm run eval -- --record   # write baseline.json (deliberate, reviewed changes only)
-    npm run eval -- --judge jev   # enrichment answered by Jev (docs/JEV.md); own baseline.jev.json
+    npm run eval -- --judge jev   # enrichment answered by Jev; own baseline.jev.json
     npm run eval -- --judge jev --claude   # …and let the rows Jev hands on reach Haiku (costs money)
 
 Without `--claude`, a Jev run never spends on Anthropic: rows Jev hands to the Haiku ladder are
@@ -61,14 +61,14 @@ An expectation nobody wrote is not scored. A case that declares only `gate` is a
    «Підписки» had been retired by migration 0047 (§SUBS-CAT) and the model knew it. Check the
    migrations before blaming the model.
 
-## The groups (131 cases, 2026-09-18)
+## The groups
 
 `grocery` `cafe` `transport` `health` `subs` `utility` `transfer` `income` `note` `fx` `tricky`
 `carry` — and two added by audit A4:
 
 - **`fop`** — the ФОП slice: the rails a sole trader is actually paid through (Payoneer, Deel, an
   invoice-worded UAH transfer), the platform's cut, the bank's service fee, the work tools that
-  bill on a schedule, and the tax payments themselves. It exists because `docs/TAX.md` made
+  bill on a schedule, and the tax payments themselves. It exists because the tax module made
   «business income» a property of an operation, and nothing measured whether the model can see one.
 - **`csv`** — the import path, which has **no MCC at all** (§CSV-PREAMBLE). Two thirds of the
   model's difficulty lives here: the same chain spelled Latin and Cyrillic, a multimarket that

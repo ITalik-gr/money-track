@@ -31,8 +31,7 @@ mobile app is a URL and a consent screen, with nothing to paste and nothing stor
 </tr>
 </table>
 
-<sup>Screenshots are from the live demo — the same seeded dataset anyone gets at `/demo`.
-These are 2000px copies; the landing page serves smaller WebP ones from `public/shots/`.</sup>
+<sup>Screenshots are from the live demo — the same seeded dataset anyone gets at `/demo`.</sup>
 
 ---
 
@@ -164,19 +163,9 @@ Worth a look:
   there is no `WHERE user_id` to forget — and an access token is additionally bound to this server's
   canonical URI, so one leaked signing key cannot make two deployments interchangeable.
 
-- **One kill switch.** The personal token and every OAuth grant share one generation number, so
-  "revoke access" and "sign out everywhere" both end all of it — access tokens by signature, refresh
-  tokens by deletion. A revoke that only half-works would be worse than no button.
-
-- **One unit across the whole surface.** The internal snapshot carries money in two units at once
-  (minor units at the top level, whole units in the AI context object); only the consistent half
-  crosses the wire, and every answer states its currency as *data* rather than leaving it to a field
-  name. A model handed a general instruction and a specific contradicting field believes the field.
-
-`worker/test/oauth.test.ts` is 30 scenarios and almost all of them are refusals — a forged redirect
-URI, a replayed authorization code, a `plain`-PKCE downgrade, a refresh token used after rotation.
-A working connector proves none of that: the strict version and the wide-open version behave
-identically while everything is going right.
+Revoking access or signing out everywhere ends the personal token and every OAuth grant at once.
+`worker/test/oauth.test.ts` is 30 scenarios, almost all of them refusals — a forged redirect URI, a
+replayed code, a `plain`-PKCE downgrade, a refresh token used after rotation.
 
 ---
 
@@ -208,17 +197,7 @@ quietly.** The rule throughout: *a check beats an instruction.*
 
 - **Checks that force a decision, not just catch a bug.** The file-size check paid for itself the
   hour it landed: a new endpoint pushed a file over its cap, and instead of raising the number the
-  net-worth reconstruction moved to where it belonged. That is the point of all ten of them — the
-  rule stays true without anyone having to re-read the file to confirm it.
-
-- **A green local run is not a green production run.** The OAuth consent screen shipped working —
-  registration, consent, token exchange, refresh and revocation all verified end to end against a
-  local server. In production the "Allow" button did nothing: the app's own
-  `form-action 'self'` blocked its own form. It could not reproduce locally *by construction*,
-  because the security-header middleware strips CSP on `localhost` so the dev server can run at
-  all. The lesson wasn't "test more" — it was that the local environment differs from production in
-  a way that is written down in one line of middleware, and any check that lives on the far side of
-  that line has to be run on a hostname that isn't `localhost`.
+  net-worth reconstruction moved to where it belonged. Fifteen such checks run in `npm run check`.
 
 - **Measuring the model, not eyeballing it.** <a id="measuring-the-model-not-eyeballing-it"></a>
   Every number is pinned by a test; until recently no test asked whether the *model* was right.
@@ -240,11 +219,8 @@ quietly.** The rule throughout: *a check beats an instruction.*
 - **Typed i18n keys.** A translation key missing from the source dictionary fails `tsc`, not the
   user's screen.
 
-- **Working documents, not artifacts.** `CLAUDE.md` (entry point + an index of every rule),
-  `docs/` (the reasoning behind each one), `DESIGN.md` (design system + decision log),
-  `ARCHITECTURE.md` (the layers and what each check buys), `STYLES.md`, `BANKS.md` and
-  `ROADMAP.md` (the live queue) are how the work is actually planned and
-  kept coherent — each rule in them is written next to the failure that bought it.
+- **Working documents.** `CLAUDE.md` (entry point + rule index), `docs/` (the reasoning behind each
+  rule), `DESIGN.md` and `ROADMAP.md` (the live queue).
 
 ---
 
@@ -285,26 +261,21 @@ npm run dev                        # Vite dev server
 **Green bar before "done":**
 
 ```bash
-npm run check      # types + 10 checks + 702 tests  (see below)
+npm run check      # types + 15 checks + the test suite
 npm run build      # production build
 ```
 
-`npm run check` runs, in order: generated Worker types · `tsc` (app + worker) · the SQL lint ·
-i18n parity · **C1** no SQL outside `repo/` · **C3** a line ceiling per file · **C7** no route
-shadowed by an earlier parameterised one · **C2/C4** every API response shape declared exactly
-once · **C8/C9** the stylesheet stays split and every class has a rule · **C10** one conversion
-target for the display currency · migration-embed freshness · the test suite (**C5** golden
-analytics responses, **C6** golden database state after every write).
+The checks are listed in `CLAUDE.md`.
 
 **Deploy:** `npm run deploy` (needs `wrangler login`, secrets set as Worker secrets, and migrations
-applied to remote D1). See `docs/OPS.md` for the exact checklist.
+applied to remote D1). See the Deploy section of `CLAUDE.md`.
 
 ---
 
 ## Project layout
 
 Four layers, and the boundary between them is enforced by a linter rather than by convention —
-see `ARCHITECTURE.md`.
+see `CLAUDE.md`.
 
 ```
 worker/
@@ -312,7 +283,7 @@ worker/
   user-app.ts         Hono app that runs INSIDE each user's Durable Object
   do/UserDO.ts        the per-user Durable Object (+ demo seeding, backfill alarm)
   routes/             transport only: parse, validate, pick a status code   (no SQL — check C1)
-  routes/api/         18 files, one per first path segment — the file OWNS the whole prefix
+  routes/api/         one file per first path segment — the file OWNS the whole prefix
   routes/mcp.ts       the MCP server (JSON-RPC), running inside the user's DO
   routes/oauth.ts     OAuth 2.1: registration, consent, tokens
   routes/wellknown.ts the two discovery documents (RFC 9728 / RFC 8414)
@@ -329,9 +300,9 @@ worker/
   demo/dataset.json   committed demo snapshot (generated by scripts/seed-demo.mjs)
 shared/api/           every API response shape, declared ONCE and imported by both sides
 src/                  React app (pages/, components/, store/, lib/, i18n/)
-migrations/           D1 schema (finance) — 45 migrations
+migrations/           D1 schema (finance)
 migrations-directory/ D1 schema (directory) — identity only: users, demo counters, shared rates,
-                      Telegram links, OAuth clients/codes/grants (10 migrations; no money here)
+                      Telegram links, OAuth clients/codes/grants (no money here)
 scripts/              the checks `npm run check` runs (see below), seed-demo, migration embed
 ```
 
@@ -350,6 +321,3 @@ single-user app; later phases turned it into an isolated multi-user platform wit
 a bilingual UI, then opened the data to Claude over MCP. Sign-up is open — one Google click, no
 invite.
 
-An MCP surface for other assistants (ChatGPT / OpenAI's connector flow) is on the roadmap; the
-authorization server and the tool layer are already generic, so it is mostly a matter of matching a
-second client's discovery expectations.
