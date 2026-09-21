@@ -1,0 +1,20 @@
+{
+  "at": "2026-09-21T18:54:11.968Z",
+  "report": {
+    "subs · jev": "right 95.0% (19/20) · unsure 1 · WRONG 0",
+    "transfers · jev": "answers 11/12, right 100.0% (11/11)",
+    "csv · jev": "files fully right 85.7% (6/7)",
+    "search · jev": "right 80.0% (16/20) · shown-but-wrong 2 · hidden-but-right 2"
+  },
+  "misses": [
+    "[csv/jev] comment-column: description wanted 1 got null",
+    "[search/jev] «коли я купував запчастину до велосипеда» → Велосипедна майстерня «Спиці» · Спорт і фітнес · 850 ₴ · 2026-06-12: wanted shown",
+    "[search/jev] «коли я купував запчастину до велосипеда» → Фора · Продукти · 349 ₴ · 2026-09-21: wanted hidden",
+    "[search/jev] «ліки від застуди» → Аптека Подорожник · Здоровʼя · 312 ₴ · 2026-02-14: wanted shown",
+    "[search/jev] «хостинг для сайту» → Claude · Софт і хмара · 1 076 ₴ · 2026-09-19: wanted hidden"
+  ],
+  "cost": {
+    "jev_in": 70094,
+    "claude_calls": 0
+  }
+}

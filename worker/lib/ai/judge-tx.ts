@@ -16,7 +16,7 @@
 import type { Env } from "../../env.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import type { EnrichResult } from "./enrich.ts";
-import { judge, judgeAvailable, type JudgeQuestion, type JudgeUsage, type Rubric } from "./judge.ts";
+import { judge, judgeOn, type JudgeAnswer, type JudgeQuestion, type JudgeUsage, type Rubric } from "./judge.ts";
 import { CAT_EN } from "../finance/categories-i18n.ts";
 import { categoryGuide } from "./judge-guide.ts";
 
@@ -106,7 +106,7 @@ type Tx = Parameters<typeof import("./enrich.ts").enrichTransaction>[1];
 type Option = { id: number; guide: Rubric | null };
 
 /** A category's criterion: the guide's text, plus the raw descriptions it files there. */
-function criterion(id: number, extraExamples: string[] = []): Rubric | null {
+export function criterion(id: number, extraExamples: string[] = []): Rubric | null {
   const g = categoryGuide(id);
   if (!g) return null;
   const examples = [...g.examples, ...extraExamples];
@@ -114,7 +114,7 @@ function criterion(id: number, extraExamples: string[] = []): Rubric | null {
 }
 
 /** Roots offered for this sign, as option-key → id, and every seed category's parent. */
-async function options(env: Env, income: boolean): Promise<{ roots: Map<string, Option>; children: Map<number, { id: number; name: string }[]> }> {
+export async function options(env: Env, income: boolean): Promise<{ roots: Map<string, Option>; children: Map<number, { id: number; name: string }[]> }> {
   const rows = await env.DB.prepare(
     "SELECT id, name, parent_id, is_income FROM categories ORDER BY id",
   ).all<{ id: number; name: string; parent_id: number | null; is_income: number }>();
@@ -194,7 +194,7 @@ export async function judgeTransaction(
   env: Env,
   tx: Tx,
 ): Promise<{ result: EnrichResult; usage: AnthropicUsage } | null> {
-  if (env.ENRICH_JUDGE !== "jev" || !judgeAvailable(env)) return null;
+  if (!judgeOn(env)) return null;
   try {
     const income = tx.amount > 0;
     const { roots, children } = await options(env, income);
@@ -232,8 +232,6 @@ export async function judgeTransaction(
       recurring: RECURRING,
       business: BUSINESS,
     };
-    // Importance is a question about SPENDING: an incoming payment has no «how necessary».
-    if (!income) questions.importance = IMPORTANCE;
     if (spans.length) {
       questions.brand = {
         type: "choice",
@@ -242,7 +240,7 @@ export async function judgeTransaction(
       };
     }
     const first = await judge(env, state, questions);
-    const { root_category: rootA, kind: kindA, recurring: recA, brand: brandA, business: bizA, importance: impA } = first.answers;
+    const { root_category: rootA, kind: kindA, recurring: recA, brand: brandA, business: bizA } = first.answers;
     if (rootA.type !== "choice" || kindA.type !== "choice" || recA.type !== "noul") throw new Error("answer of the wrong type");
     let usage = first.usage;
 
@@ -265,26 +263,37 @@ export async function judgeTransaction(
       return null;
     }
 
-    // Round 2 — the leaf, over the chosen root's children. Asked only when there are any.
+    // Round 2 — what needs the ROOT to be known: the leaf (its options are the root's children)
+    // and importance. Importance was asked in round 1 until §7.4 measured it both ways: blind to
+    // the category it read Novus and Fora as «discretionary» (86%); told «this is Groceries» it
+    // is a different, easier question. Spending only — income has no «how necessary», and own
+    // money moving is neither.
     let category = ownMoney ? TRANSFER_ROOT : root;
     const kids = category != null && !ownMoney ? children.get(category) ?? [] : [];
+    const general = `${rootA.choice} (none of the specific ones)`;
+    const round2: Record<string, JudgeQuestion> = {};
     if (kids.length) {
-      const general = `${rootA.choice} (none of the specific ones)`;
-      const second = await judge(env, state, {
-        leaf: {
-          type: "choice",
-          instructions: `This operation is «${rootA.choice}». Which subcategory fits it best?`,
-          criteria: {
-            ...Object.fromEntries(kids.map((k) => [k.name, criterion(k.id)])),
-            [general]: "It belongs to the category, but none of the subcategories describes it",
-          },
+      round2.leaf = {
+        type: "choice",
+        instructions: `This operation is «${rootA.choice}». Which subcategory fits it best?`,
+        criteria: {
+          ...Object.fromEntries(kids.map((k) => [k.name, criterion(k.id)])),
+          [general]: "It belongs to the category, but none of the subcategories describes it",
         },
-      });
+      };
+    }
+    if (!income && !ownMoney) {
+      round2.importance = { ...IMPORTANCE, instructions: { category: rootA.choice, question: IMPORTANCE.instructions } };
+    }
+    let impA: JudgeAnswer | undefined;
+    if (Object.keys(round2).length) {
+      const second = await judge(env, state, round2);
       usage = addUsage(usage, second.usage);
       const leafA = second.answers.leaf;
-      if (leafA.type === "choice" && leafA.choice !== general && (leafA.probabilities[leafA.choice] ?? 0) >= LEAF_AT) {
+      if (leafA?.type === "choice" && leafA.choice !== general && (leafA.probabilities[leafA.choice] ?? 0) >= LEAF_AT) {
         category = kids.find((k) => k.name === leafA.choice)?.id ?? category;
       }
+      impA = second.answers.importance;
     }
 
     const brand = brandA?.type === "choice" && brandA.choice !== NO_BRAND ? displayName(brandA.choice) : "";

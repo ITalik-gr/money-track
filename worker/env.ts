@@ -13,7 +13,7 @@ import type { AppDb } from "./lib/platform/db-shim.ts";
 // no code change — so the code has to accept BOTH values, and inheriting a one-value type would
 // make the kill-switch un-flippable without a compile error. Widening it here is the accurate
 // statement: the config knows what it is set to, the code knows what it may be set to.
-export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
+export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP" | "AI_JUDGE"> {
   DB: AppDb;
   MONO_TOKEN: string;
   ANTHROPIC_API_KEY: string;
@@ -60,11 +60,13 @@ export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
    */
   JEV_API_KEY: string;
   /**
-   * Which ladder answers enrichment: `"jev"` routes it through `judge-tx.ts`, anything else (the
-   * default) keeps Haiku. A flag rather than a switch-over, because phase 1 exists to MEASURE the
-   * two side by side, and the Haiku path must stay alive as the fallback either way.
+   * Which judge answers the questions that are judgments (docs/JEV.md): `"jev"` routes enrich,
+   * §SUB-REVIEW, §F2, §AI-CATCHUP, §CSV-AI and the search rerank through TypeSafe, anything else
+   * keeps the Claude ladder. A flag rather than a switch-over: Claude stays the fallback either way.
+   * Omitted from the generated type above for the same reason as `SIGNUP` — `wrangler types` emits
+   * the literal currently set in `wrangler.jsonc`, and the switch has to accept both values.
    */
-  ENRICH_JUDGE?: "jev" | "haiku";
+  AI_JUDGE?: "jev" | "haiku";
   /**
    * VAPID keypair for Web Push (§PUSH). Deployment secrets, generated once by
    * `node scripts/gen-vapid.mjs` — see `lib/messaging/webpush.ts`.

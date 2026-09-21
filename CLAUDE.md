@@ -10,8 +10,8 @@
 > банківська фаза закриті. Реєстрація ВІДКРИТА і тільки через Google; Telegram і MCP-токен —
 > ДРУГИЙ і ТРЕТІЙ ключі до наявного акаунта, створити ним акаунт не можна. The fourth key is the
 > write-only phone token (§QUICK-ADD).
-> Міграції: `finance` до **0054**, `directory` до **0011**. Тестів — **1088**. Лінти — **C1–C15**.
-> Оновлено 2026-09-20.
+> Міграції: `finance` до **0054**, `directory` до **0011**. Тестів — **1095**. Лінти — **C1–C15**.
+> Оновлено 2026-09-21.
 
 ## 📁 Карта документів — що де лежить
 
@@ -93,7 +93,7 @@ Rules:
      `routes/*` і `services/*` він ЗАБОРОНЕНИЙ повністю (лінт C1). Жодного SQL у компонентах.
 
 ## Стек
-PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook + бекфіл). React 19 + Redux Toolkit + React Router 7 + Recharts, Vite + vite-plugin-pwa, `@cloudflare/vite-plugin`. AI = гібрид **Haiku 4.5** (масово: enrich/OCR/parse/insight/batch) / **Sonnet 5** (розумний user-facing: порадник, репорти, txChat, бюджет-план, рев'ю). **Виняток (2026-07-14):** enrich бере Sonnet, коли користувач САМ описав операцію нотаткою (`user_note` непорожній) — розпізнання поважає пояснення (не плутає «вивів зарплату» з «Подарунком»); авто-enrich без нотатки лишається на Haiku. Telegram-бот (каркас). Мова UI — українська. Шрифти: Geist Sans (герой-суми) / Geist Mono (колонки, `tabular-nums`).
+PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook + бекфіл). React 19 + Redux Toolkit + React Router 7 + Recharts, Vite + vite-plugin-pwa, `@cloudflare/vite-plugin`. AI = гібрид **Haiku 4.5** (масово: enrich/OCR/parse/insight/batch) / **Sonnet 5** (розумний user-facing: порадник, репорти, txChat, бюджет-план, рев'ю). **Виняток (2026-07-14):** enrich бере Sonnet, коли користувач САМ описав операцію нотаткою (`user_note` непорожній) — розпізнання поважає пояснення (не плутає «вивів зарплату» з «Подарунком»); авто-enrich без нотатки лишається на Haiku. **Judgments go to Jev first (2026-09-21, `docs/JEV.md`):** with `AI_JUDGE = "jev"` (on, owner-only — the TypeSafe key is the owner's) enrich, §SUB-REVIEW, §F2, §AI-CATCHUP and §CSV-AI ask Jev and fall back to Claude when it is off, down or unsure; everything generative stays on Claude. Telegram-бот (каркас). Мова UI — українська. Шрифти: Geist Sans (герой-суми) / Geist Mono (колонки, `tabular-nums`).
 
 ### Скрипти
 `npm run dev` · `npm run build` (types + tsc -b + vite build) · `npm run check` (types + tsc + лінти + тести) · `npm run deploy` (build + wrangler deploy) · `npm run db:migrate:local` / `:remote` · `npm run db:seed:local` · **`npm run eval`** (§AI-EVAL — точність і вартість моделі; ПОЗА `check`, бо платний і недетермінований; `-- --dry` безкоштовно міряє лише гейт).
@@ -162,9 +162,11 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   ХТО взагалі вартий виклику: пропустити рух власних коштів і очевидні MCC, скопіювати вердикт
   уже відомого мерчанта, спитати лише про нове; поза `enrich.ts`, бо той під стелею C3) ·
   **`judge.ts` + `judge-tx.ts` + `judge-guide.ts`** (docs/JEV.md) — the only file that POSTs to
-  TypeSafe, the Jev question set for enrich (root → leaf rounds, span-selected name, cascade to
-  Haiku below root p 0.8), and the category guide parsed out of `CACHE_GUIDE` (ONE guide for both
-  judges); NOT behind the `json.ts` seam; flag `ENRICH_JUDGE=jev`, owner-only ·
+  TypeSafe, the Jev question set for enrich (root → leaf + importance rounds, span-selected name,
+  cascade to Haiku below root p 0.8), and the category guide parsed out of `CACHE_GUIDE` (ONE guide
+  for both judges); NOT behind the `json.ts` seam; `judgeOn(env)` is the one switch ·
+  **`judge-subs` / `judge-spend` / `judge-columns`** — phase 4, one file per call site (§SUB-REVIEW,
+  §F2 + §AI-CATCHUP, §CSV-AI), each null → the Claude path · `judge-search.ts` — measured, NOT wired ·
   `advisor`, `enrich`, `insight`,
   `report`, `receipt`, **`advice-actions.ts`** (§ADVICE-LOOP — реєстр «що радили / що з цього
   вийшло»; єдиний писар `app_state.advisor_suggestions`) · **`advice-fallback.ts`** (детермінована
@@ -367,6 +369,7 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
 | §A6 | alarm у DO рівно один — це планувальник, а не задача |
 | §A6-BATCH | масовий прогін іде пачками й зупиняється лише коли прогрес ЗРОСТАЄ — інакше це вічний будильник |
 | §DIGEST-HOUR | о котрій застосунок говорить — питання ЧИТАЧА: погодинний крон + `notify_hour` у його ж обʼєкті |
+| §JEV-EVAL | a Jev judgment is wired only after it is measured on cases written before the code; a site with no separating line stays on Claude (`docs/JEV.md` §7) |
 | §PLAN-LATE | запланований платіж — новина лише ПІСЛЯ своєї дати (відстрочка 3 дні), і модель не може сказати це раніше |
 
 **Безпека й ідентичність — `docs/PERIMETER.md`**

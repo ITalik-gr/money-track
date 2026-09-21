@@ -197,6 +197,7 @@ export async function byId(
     `SELECT t.*, ${catNameSql(locale, "c.name")} AS category_name, c.color AS category_color, c.icon AS category_icon,
             ${catNameSql(locale, "rc.name")} AS real_category_name, rc.color AS real_category_color,
             a.title AS account_title, a.type AS account_type, a.is_business AS account_business,
+            COALESCE(c.importance, (SELECT p.importance FROM categories p WHERE p.id = c.parent_id)) AS category_importance,
             e.name AS event_name, e.color AS event_color,
             p.title AS planned_title,
             ap.title AS pair_account_title, json_extract(t.raw_json, '$.description') AS bank_description

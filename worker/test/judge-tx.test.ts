@@ -23,7 +23,7 @@ import type { Env } from "../env.ts";
 const TX = { merchant: "UKLON", comment: null, mcc: null, amount: -15400, currency_code: 980 };
 
 function env(over: Partial<Env> = {}): Env {
-  return { DB: migratedDb(), USER_ID: "u1", IS_OWNER: true, JEV_API_KEY: "k", ENRICH_JUDGE: "jev", ...over } as unknown as Env;
+  return { DB: migratedDb(), USER_ID: "u1", IS_OWNER: true, JEV_API_KEY: "k", AI_JUDGE: "jev", ...over } as unknown as Env;
 }
 
 type Probs = Record<string, number>;
@@ -63,7 +63,7 @@ function stub(
 test("the flag off, a non-owner or a demo never reaches TypeSafe", async () => {
   const s = stub({ Transport: 1 }, { expense: 1 }, 0);
   try {
-    assert.equal(await judgeTransaction(env({ ENRICH_JUDGE: undefined }), TX), null);
+    assert.equal(await judgeTransaction(env({ AI_JUDGE: undefined }), TX), null);
     // A deployment-wide key applied to every user is the defect `userCredentials` was fixed for.
     assert.equal(await judgeTransaction(env({ IS_OWNER: false }), TX), null);
     // demo.ts caps spend in Anthropic dollars and knows nothing about a second provider.
@@ -155,7 +155,7 @@ test("the leaf is filed only above its line; below it the root is", async () => 
   let s = stub({ Transport: 1 }, { expense: 1 }, 0, { leaf: { Taxi: LEAF_AT + 0.1, Fuel: 1 - (LEAF_AT + 0.1) } });
   try {
     assert.equal((await judgeTransaction(env(), TX))?.result.category_id, 35);
-    assert.deepEqual(s.asked[1], ["leaf"], "the second request asks the leaf alone");
+    assert.deepEqual(s.asked[1], ["leaf", "importance"], "round 2 is what needs the root: the leaf and importance");
   } finally { s.restore(); }
   s = stub({ Transport: 1 }, { expense: 1 }, 0, { leaf: { Taxi: LEAF_AT - 0.1, Fuel: 1 - (LEAF_AT - 0.1) } });
   try {
@@ -163,11 +163,16 @@ test("the leaf is filed only above its line; below it the root is", async () => 
   } finally { s.restore(); }
 });
 
-test("a root with no children costs no second request", async () => {
-  const s = stub({ Electronics: 1 }, { expense: 1 }, 0);
+test("a root with no children pays round 2 only for importance — and income not at all", async () => {
+  let s = stub({ Electronics: 1 }, { expense: 1 }, 0);
   try {
     assert.equal((await judgeTransaction(env(), { ...TX, merchant: "ROZETKA" }))?.result.category_id, 9);
-    assert.equal(s.calls, 1);
+    assert.deepEqual(s.asked[1], ["importance"]);
+  } finally { s.restore(); }
+  s = stub({ Freelance: 1 }, { income: 1 }, 0);
+  try {
+    await judgeTransaction(env(), { ...TX, amount: 500000, merchant: "UPWORK" });
+    assert.equal(s.calls, 1, "income has no leaf here and no «how necessary»");
   } finally { s.restore(); }
 });
 
@@ -200,7 +205,9 @@ test("phase 3: importance and business come back as PROPOSALS, in the canon's ow
     const r = await judgeTransaction(env(), TX);
     assert.equal(r?.result.importance, "essential");
     assert.equal(r?.result.business, 0.93, "the raw probability, so the screen's line can move");
-    assert.ok(s.asked[0].includes("importance") && s.asked[0].includes("business"));
+    assert.ok(s.asked[0].includes("business"));
+    // §7.4: importance is asked where the root is KNOWN (86% → 97% on the eval).
+    assert.ok(!s.asked[0].includes("importance") && s.asked[1].includes("importance"));
   } finally { s.restore(); }
 });
 
@@ -208,7 +215,7 @@ test("phase 3: an incoming payment is not asked «how necessary», and own money
   let s = stub({ Freelance: 1 }, { income: 1 }, 0);
   try {
     const r = await judgeTransaction(env(), { ...TX, amount: 500000, merchant: "UPWORK" });
-    assert.ok(!s.asked[0].includes("importance"));
+    assert.ok(!s.asked.flat().includes("importance"));
     assert.equal(r?.result.importance, undefined);
   } finally { s.restore(); }
   s = stub({ "Transfers & withdrawals": 0.9, Other: 0.1 }, { transfer: 0.95, expense: 0.05 }, 0, { business: 0.9 });

@@ -42,7 +42,10 @@ These are 2000px copies; the landing page serves smaller WebP ones from `public/
   receipt photo, or a typed line. A `BankProvider` abstraction normalizes
   sign/currency/minor-units in exactly one place per bank, and one writer handles every ingest path.
 - **Deterministic categorization** (AI is the *last* resort): learned merchant alias → active
-  subscription match → merchant consensus → MCC/text rules → AI enrichment.
+  subscription match → merchant consensus → MCC/text rules → AI enrichment. The AI step can be a
+  *judgment model* ([TypeSafe Jev](https://docs.typesafe.ai)) that returns a typed answer with a
+  probability: it files what it is sure of and hands the rest to Claude. Currently enabled on the
+  owner's own ledger only — see [below](#measuring-the-model-not-eyeballing-it).
 - **Analytics** that are correct by construction: multi-currency roll-up into whichever base
   currency the reader picked, sub-category roll-up, splits, refunds, reimbursements, transfers
   between your own accounts, cash reclassified by real category — all funneled through one
@@ -91,6 +94,7 @@ flowchart TB
     end
 
     Anthropic["Anthropic API<br/>Haiku / Sonnet"]
+    TypeSafe["TypeSafe Jev<br/>judgments (owner only)"]
     Mono["Monobank"]
     Claude["Claude Desktop · claude.ai · Claude Code<br/>(MCP client)"]
 
@@ -101,6 +105,7 @@ flowchart TB
     UserApp --> Shim --> Canon
     UserApp --> R2
     UserApp -->|"grounded snapshot"| Anthropic
+    UserApp -->|"one operation · typed questions"| TypeSafe
     Router -->|"login · grants"| Directory
     Mono -->|"signed webhook"| Router
     Router -->|"forward"| UserApp
@@ -215,6 +220,19 @@ quietly.** The rule throughout: *a check beats an instruction.*
   a way that is written down in one line of middleware, and any check that lives on the far side of
   that line has to be run on a hostname that isn't `localhost`.
 
+- **Measuring the model, not eyeballing it.** <a id="measuring-the-model-not-eyeballing-it"></a>
+  Every number is pinned by a test; until recently no test asked whether the *model* was right.
+  `npm run eval` now runs the production categorization ladder over 168 raw bank descriptions and
+  reports root/leaf accuracy, subscription detection, ask rate and cost together; a second harness
+  covers subscription review, transfer purposes and CSV column mapping. The lesson it paid for
+  immediately: a judgment model tuned against that dataset scored 98.9% — and **72%** on 36 new
+  merchants written afterwards and never tuned on. The cause was a hand-condensed copy of the
+  category guide that had lost its brand lists (a second definition of the same thing, again).
+  With one shared guide and a *cascade* — the judge files only above a confidence line measured
+  on the data, everything below goes to Claude — it matches Claude on accuracy at roughly a fifth
+  of the cost. One site (a search rerank) was measured, found to have no separating line, and
+  deliberately left unwired.
+
 - **A fact-confirmation gate.** The AI can *propose* that a real-world change should move your
   forecast, but the number it proposes is derived deterministically from your history, and it only
   affects the math after **you** confirm it — never silently.
@@ -237,7 +255,7 @@ quietly.** The rule throughout: *a check beats an instruction.*
 | Runtime | Cloudflare **Workers** + **Durable Objects** (SQLite) + **D1** + **R2** |
 | Server | **Hono**, TypeScript |
 | Frontend | **React 19**, Redux Toolkit (RTK Query), React Router 7, **Recharts**, Vite, `vite-plugin-pwa` |
-| AI | **Anthropic** — hybrid **Haiku 4.5** (bulk: enrich/OCR/parse/insight) / **Sonnet** (user-facing: advisor/reports/chat) |
+| AI | **Anthropic** — hybrid **Haiku 4.5** (bulk: enrich/OCR/parse/insight) / **Sonnet** (user-facing: advisor/reports/chat); **TypeSafe Jev** for judgments (categorization, subscription review, CSV columns) with Claude as the fallback — owner-only for now |
 | Bank | Monobank (webhook + backfill), CSV import; provider abstraction |
 | Auth | Google OAuth (open signup, with a daily ceiling), revocable HMAC-signed session cookie; Telegram Mini App as a second key |
 | MCP | Streamable HTTP MCP server + an OAuth 2.1 authorization server (DCR · PKCE S256 · resource indicators · rotating refresh) |

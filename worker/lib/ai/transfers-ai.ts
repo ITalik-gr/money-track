@@ -17,6 +17,25 @@ import type { Env } from "../../env.ts";
 import { proposeTransferCategory, TRANSFER_CAT, type TxRow } from "./enrich.ts";
 import { MODEL_SMART } from "./models.ts";
 import { logUsage } from "./cost.ts";
+import { judgeRealCategory } from "./judge-spend.ts";
+import { ROOT_CASCADE_AT } from "./judge-tx.ts";
+
+/**
+ * docs/JEV.md phase 4 — Jev answers first; below its line (or off, or down) Claude does, exactly
+ * as before. The line is enrich's cascade line: the same judgment over the same categories.
+ *
+ * Only a CONFIDENT Jev answer is used, so it is always `confidence: "high"` — a low one never
+ * reaches the review screen as Jev's; Claude's own «low» keeps meaning what it meant.
+ */
+async function propose(
+  env: Env, input: Parameters<typeof proposeTransferCategory>[1], model?: string,
+): Promise<{ real_category_id: number | null; note: string | null; confidence: "high" | "low" }> {
+  const j = await judgeRealCategory(env, input);
+  if (j && j.p >= ROOT_CASCADE_AT) return { real_category_id: j.category_id, note: null, confidence: "high" };
+  const { result, usage } = await proposeTransferCategory(env, input, model);
+  logUsage("transfer-cat", usage);
+  return result;
+}
 
 // §F2 крок 2 --------------------------------------------------------------------
 
@@ -60,11 +79,10 @@ export async function categorizeTransferOne(env: Env, tx: TxRow): Promise<void> 
 
   // 2. Інакше — AI. Реальну категорію не змішуємо з category_id (лишається бакет 13).
   const history = await realCategoryHistory(env, tx);
-  const { result, usage } = await proposeTransferCategory(env, {
+  const result = await propose(env, {
     merchant: tx.merchant, comment: tx.comment, mcc: tx.mcc,
     amount: tx.amount, currency_code: tx.currency_code, history,
   });
-  logUsage("transfer-cat", usage);
 
   await env.DB.prepare("UPDATE transactions SET real_category_id = ? WHERE id = ?")
     .bind(result.real_category_id ?? null, tx.id).run();
@@ -130,11 +148,10 @@ async function reviewTransferOne(env: Env, tx: TxRow, hint?: string | null): Pro
 
   const history = await realCategoryHistory(env, tx);
   // Рев'ю — user-facing, тож розумніша модель (Sonnet 5).
-  const { result, usage } = await proposeTransferCategory(env, {
+  const result = await propose(env, {
     merchant: tx.merchant, comment: tx.comment, mcc: tx.mcc,
     amount: tx.amount, currency_code: tx.currency_code, history, hint: hint ?? null,
   }, MODEL_SMART);
-  logUsage("transfer-cat", usage);
   await env.DB.prepare("UPDATE transactions SET real_category_id = ? WHERE id = ?")
     .bind(result.real_category_id ?? null, tx.id).run();
 

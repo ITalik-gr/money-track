@@ -1,28 +1,28 @@
 {
-  "at": "2026-09-21T18:36:32.532Z",
+  "at": "2026-09-21T18:58:10.083Z",
   "dry": false,
   "judge": "jev",
-  "seconds": 15.7,
+  "seconds": 19.3,
   "tally": {
     "gate": {
-      "ok": 119,
-      "n": 119
-    },
-    "root": {
       "ok": 118,
       "n": 118
     },
+    "root": {
+      "ok": 117,
+      "n": 117
+    },
     "importance": {
-      "ok": 31,
+      "ok": 35,
       "n": 36
     },
     "business": {
-      "ok": 17,
+      "ok": 18,
       "n": 19
     },
     "recurring": {
-      "ok": 39,
-      "n": 41
+      "ok": 38,
+      "n": 40
     },
     "exact": {
       "ok": 12,
@@ -34,39 +34,115 @@
     }
   },
   "meter": {
-    "calls": 183,
-    "in": 445552,
-    "out": 48613,
+    "calls": 239,
+    "in": 466001,
+    "out": 48675,
     "cache_read": 0,
     "cache_write": 0,
-    "usd": 0.018713184000000008,
+    "usd": 0.019572041999999998,
     "byModel": {
-      "jev-latest": 183
+      "jev-latest": 239
     },
     "uncached": [
       {
         "model": "jev-latest",
-        "in": 3243
+        "in": 3191
       },
       {
         "model": "jev-latest",
-        "in": 3327
+        "in": 3127
       },
       {
         "model": "jev-latest",
-        "in": 3250
+        "in": 3204
       },
       {
         "model": "jev-latest",
-        "in": 3314
+        "in": 3120
       },
       {
         "model": "jev-latest",
-        "in": 3345
+        "in": 3222
       },
       {
         "model": "jev-latest",
-        "in": 3231
+        "in": 3106
+      },
+      {
+        "model": "jev-latest",
+        "in": 3108
+      },
+      {
+        "model": "jev-latest",
+        "in": 3138
+      },
+      {
+        "model": "jev-latest",
+        "in": 3216
+      },
+      {
+        "model": "jev-latest",
+        "in": 3126
+      },
+      {
+        "model": "jev-latest",
+        "in": 3138
+      },
+      {
+        "model": "jev-latest",
+        "in": 3170
+      },
+      {
+        "model": "jev-latest",
+        "in": 3155
+      },
+      {
+        "model": "jev-latest",
+        "in": 3144
+      },
+      {
+        "model": "jev-latest",
+        "in": 3169
+      },
+      {
+        "model": "jev-latest",
+        "in": 3140
+      },
+      {
+        "model": "jev-latest",
+        "in": 3164
+      },
+      {
+        "model": "jev-latest",
+        "in": 3146
+      },
+      {
+        "model": "jev-latest",
+        "in": 3106
+      },
+      {
+        "model": "jev-latest",
+        "in": 3146
+      },
+      {
+        "model": "jev-latest",
+        "in": 3158
+      },
+      {
+        "model": "jev-latest",
+        "in": 3129
+      },
+      {
+        "model": "jev-latest",
+        "in": 3158
+      },
+      {
+        "model": "jev-latest",
+        "in": 3129
+      },
+      {
+        "model": "jev-latest",
+        "in": 3146
       },
       {
         "model": "jev-latest",
@@ -74,11 +150,79 @@
       },
       {
         "model": "jev-latest",
-        "in": 3261
+        "in": 3126
       },
       {
         "model": "jev-latest",
-        "in": 3261
+        "in": 3149
+      },
+      {
+        "model": "jev-latest",
+        "in": 3150
+      },
+      {
+        "model": "jev-latest",
+        "in": 3162
+      },
+      {
+        "model": "jev-latest",
+        "in": 3158
+      },
+      {
+        "model": "jev-latest",
+        "in": 3109
+      },
+      {
+        "model": "jev-latest",
+        "in": 3108
+      },
+      {
+        "model": "jev-latest",
+        "in": 3139
+      },
+      {
+        "model": "jev-latest",
+        "in": 3138
+      },
+      {
+        "model": "jev-latest",
+        "in": 3157
+      },
+      {
+        "model": "jev-latest",
+        "in": 3137
+      },
+      {
+        "model": "jev-latest",
+        "in": 3196
+      },
+      {
+        "model": "jev-latest",
+        "in": 3212
+      },
+      {
+        "model": "jev-latest",
+        "in": 3135
+      },
+      {
+        "model": "jev-latest",
+        "in": 3171
+      },
+      {
+        "model": "jev-latest",
+        "in": 3215
+      },
+      {
+        "model": "jev-latest",
+        "in": 3131
+      },
+      {
+        "model": "jev-latest",
+        "in": 3132
+      },
+      {
+        "model": "jev-latest",
+        "in": 3203
       },
       {
         "model": "jev-latest",
@@ -86,11 +230,23 @@
       },
       {
         "model": "jev-latest",
-        "in": 3339
+        "in": 3250
       },
       {
         "model": "jev-latest",
-        "in": 3293
+        "in": 3254
+      },
+      {
+        "model": "jev-latest",
+        "in": 3242
+      },
+      {
+        "model": "jev-latest",
+        "in": 3195
+      },
+      {
+        "model": "jev-latest",
+        "in": 3426
       },
       {
         "model": "jev-latest",
@@ -98,435 +254,279 @@
       },
       {
         "model": "jev-latest",
-        "in": 3267
+        "in": 3149
       },
       {
         "model": "jev-latest",
-        "in": 3292
+        "in": 3176
       },
       {
         "model": "jev-latest",
-        "in": 3263
+        "in": 3121
       },
       {
         "model": "jev-latest",
-        "in": 3229
+        "in": 3146
       },
       {
         "model": "jev-latest",
-        "in": 3269
+        "in": 3134
       },
       {
         "model": "jev-latest",
-        "in": 3287
+        "in": 3127
       },
       {
         "model": "jev-latest",
-        "in": 3269
+        "in": 3129
       },
       {
         "model": "jev-latest",
-        "in": 3281
+        "in": 3122
       },
       {
         "model": "jev-latest",
-        "in": 3252
+        "in": 3123
       },
       {
         "model": "jev-latest",
-        "in": 3281
+        "in": 3150
       },
       {
         "model": "jev-latest",
-        "in": 3252
+        "in": 3119
       },
       {
         "model": "jev-latest",
-        "in": 3269
+        "in": 3131
       },
       {
         "model": "jev-latest",
-        "in": 3352
+        "in": 3125
       },
       {
         "model": "jev-latest",
-        "in": 3272
+        "in": 3210
       },
       {
         "model": "jev-latest",
-        "in": 3273
+        "in": 3131
       },
       {
         "model": "jev-latest",
-        "in": 3249
+        "in": 3141
       },
       {
         "model": "jev-latest",
-        "in": 3285
+        "in": 3123
       },
       {
         "model": "jev-latest",
-        "in": 3231
+        "in": 3109
       },
       {
         "model": "jev-latest",
-        "in": 3281
+        "in": 3113
       },
       {
         "model": "jev-latest",
-        "in": 3232
+        "in": 3129
       },
       {
         "model": "jev-latest",
-        "in": 3262
+        "in": 3165
       },
       {
         "model": "jev-latest",
-        "in": 3261
+        "in": 3131
       },
       {
         "model": "jev-latest",
-        "in": 3260
+        "in": 3185
       },
       {
         "model": "jev-latest",
-        "in": 3319
+        "in": 3209
       },
       {
         "model": "jev-latest",
-        "in": 3280
+        "in": 3160
       },
       {
         "model": "jev-latest",
-        "in": 3294
+        "in": 3106
       },
       {
         "model": "jev-latest",
-        "in": 3335
+        "in": 3125
       },
       {
         "model": "jev-latest",
-        "in": 3258
+        "in": 3173
       },
       {
         "model": "jev-latest",
-        "in": 3338
+        "in": 3186
       },
       {
         "model": "jev-latest",
-        "in": 3254
+        "in": 3155
       },
       {
         "model": "jev-latest",
-        "in": 3255
+        "in": 3137
       },
       {
         "model": "jev-latest",
-        "in": 3326
+        "in": 3174
       },
       {
         "model": "jev-latest",
-        "in": 3372
+        "in": 3159
       },
       {
         "model": "jev-latest",
-        "in": 3377
+        "in": 3174
       },
       {
         "model": "jev-latest",
-        "in": 3373
+        "in": 3140
       },
       {
         "model": "jev-latest",
-        "in": 3365
+        "in": 3158
       },
       {
         "model": "jev-latest",
-        "in": 3318
+        "in": 3183
       },
       {
         "model": "jev-latest",
-        "in": 3549
+        "in": 3140
       },
       {
         "model": "jev-latest",
-        "in": 3272
+        "in": 3157
       },
       {
         "model": "jev-latest",
-        "in": 3401
+        "in": 3151
       },
       {
         "model": "jev-latest",
-        "in": 3299
+        "in": 3126
       },
       {
         "model": "jev-latest",
-        "in": 3244
+        "in": 3151
       },
       {
         "model": "jev-latest",
-        "in": 3252
+        "in": 3154
       },
       {
         "model": "jev-latest",
-        "in": 3269
+        "in": 3125
       },
       {
         "model": "jev-latest",
-        "in": 3257
+        "in": 3145
       },
       {
         "model": "jev-latest",
-        "in": 3245
+        "in": 3131
       },
       {
         "model": "jev-latest",
-        "in": 3250
+        "in": 3156
       },
       {
         "model": "jev-latest",
-        "in": 3246
+        "in": 3126
       },
       {
         "model": "jev-latest",
-        "in": 3242
+        "in": 3119
       },
       {
         "model": "jev-latest",
-        "in": 3273
+        "in": 3128
       },
       {
         "model": "jev-latest",
-        "in": 3254
+        "in": 3119
       },
       {
         "model": "jev-latest",
-        "in": 3248
+        "in": 3150
       },
       {
         "model": "jev-latest",
-        "in": 3264
+        "in": 3123
       },
       {
         "model": "jev-latest",
-        "in": 3333
+        "in": 3120
       },
       {
         "model": "jev-latest",
-        "in": 3254
+        "in": 3121
       },
       {
         "model": "jev-latest",
-        "in": 3232
+        "in": 3126
       },
       {
         "model": "jev-latest",
-        "in": 3246
+        "in": 3113
       },
       {
         "model": "jev-latest",
-        "in": 3236
+        "in": 3121
       },
       {
         "model": "jev-latest",
-        "in": 3252
+        "in": 3132
       },
       {
         "model": "jev-latest",
-        "in": 3288
+        "in": 3197
       },
       {
         "model": "jev-latest",
-        "in": 3308
+        "in": 3204
       },
       {
         "model": "jev-latest",
-        "in": 3254
+        "in": 3205
       },
       {
         "model": "jev-latest",
-        "in": 3332
+        "in": 3118
       },
       {
         "model": "jev-latest",
-        "in": 3283
+        "in": 3162
       },
       {
         "model": "jev-latest",
-        "in": 3229
+        "in": 3122
       },
       {
         "model": "jev-latest",
-        "in": 3296
+        "in": 3104
       },
       {
         "model": "jev-latest",
-        "in": 3248
+        "in": 3147
       },
       {
         "model": "jev-latest",
-        "in": 3309
+        "in": 3178
       },
       {
         "model": "jev-latest",
-        "in": 3260
-      },
-      {
-        "model": "jev-latest",
-        "in": 3278
-      },
-      {
-        "model": "jev-latest",
-        "in": 3297
-      },
-      {
-        "model": "jev-latest",
-        "in": 3297
-      },
-      {
-        "model": "jev-latest",
-        "in": 3282
-      },
-      {
-        "model": "jev-latest",
-        "in": 3263
-      },
-      {
-        "model": "jev-latest",
-        "in": 3281
-      },
-      {
-        "model": "jev-latest",
-        "in": 3306
-      },
-      {
-        "model": "jev-latest",
-        "in": 3280
-      },
-      {
-        "model": "jev-latest",
-        "in": 3263
-      },
-      {
-        "model": "jev-latest",
-        "in": 3274
-      },
-      {
-        "model": "jev-latest",
-        "in": 3249
-      },
-      {
-        "model": "jev-latest",
-        "in": 3248
-      },
-      {
-        "model": "jev-latest",
-        "in": 3274
-      },
-      {
-        "model": "jev-latest",
-        "in": 3277
-      },
-      {
-        "model": "jev-latest",
-        "in": 3268
-      },
-      {
-        "model": "jev-latest",
-        "in": 3279
-      },
-      {
-        "model": "jev-latest",
-        "in": 3254
-      },
-      {
-        "model": "jev-latest",
-        "in": 3249
-      },
-      {
-        "model": "jev-latest",
-        "in": 3242
-      },
-      {
-        "model": "jev-latest",
-        "in": 3251
-      },
-      {
-        "model": "jev-latest",
-        "in": 3242
-      },
-      {
-        "model": "jev-latest",
-        "in": 3273
-      },
-      {
-        "model": "jev-latest",
-        "in": 3246
-      },
-      {
-        "model": "jev-latest",
-        "in": 3243
-      },
-      {
-        "model": "jev-latest",
-        "in": 3249
-      },
-      {
-        "model": "jev-latest",
-        "in": 3244
-      },
-      {
-        "model": "jev-latest",
-        "in": 3236
-      },
-      {
-        "model": "jev-latest",
-        "in": 3244
-      },
-      {
-        "model": "jev-latest",
-        "in": 3320
-      },
-      {
-        "model": "jev-latest",
-        "in": 3255
-      },
-      {
-        "model": "jev-latest",
-        "in": 3327
-      },
-      {
-        "model": "jev-latest",
-        "in": 3328
-      },
-      {
-        "model": "jev-latest",
-        "in": 3241
-      },
-      {
-        "model": "jev-latest",
-        "in": 3285
-      },
-      {
-        "model": "jev-latest",
-        "in": 3227
-      },
-      {
-        "model": "jev-latest",
-        "in": 3245
-      },
-      {
-        "model": "jev-latest",
-        "in": 3270
-      },
-      {
-        "model": "jev-latest",
-        "in": 3250
-      },
-      {
-        "model": "jev-latest",
-        "in": 3301
+        "in": 3127
       }
     ]
   },
@@ -675,7 +675,7 @@
       "category": 30,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.26,
+      "business_p": 0.22,
       "checks": [
         {
           "kind": "gate",
@@ -713,8 +713,8 @@
       "root": 1,
       "category": 30,
       "recurring": 0,
-      "importance": "discretionary",
-      "business_p": 0.21,
+      "importance": "essential",
+      "business_p": 0.22,
       "checks": [
         {
           "kind": "gate",
@@ -731,8 +731,8 @@
         {
           "kind": "importance",
           "want": "essential",
-          "got": "discretionary",
-          "ok": false
+          "got": "essential",
+          "ok": true
         }
       ],
       "error": null,
@@ -828,7 +828,7 @@
       "category": 34,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.36,
+      "business_p": 0.34,
       "checks": [
         {
           "kind": "gate",
@@ -867,7 +867,7 @@
       "category": 34,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.1,
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -900,7 +900,7 @@
       "category": 32,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.12,
+      "business_p": 0.11,
       "checks": [
         {
           "kind": "gate",
@@ -1068,7 +1068,7 @@
       "category": 35,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.18,
+      "business_p": 0.19,
       "checks": [
         {
           "kind": "gate",
@@ -1236,7 +1236,7 @@
       "category": 42,
       "recurring": 1,
       "importance": "discretionary",
-      "business_p": 0.51,
+      "business_p": 0.48,
       "checks": [
         {
           "kind": "gate",
@@ -1265,8 +1265,8 @@
         {
           "kind": "business",
           "want": 0,
-          "got": 1,
-          "ok": false
+          "got": 0,
+          "ok": true
         }
       ],
       "error": null,
@@ -1447,34 +1447,15 @@
       "id": "figma",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "Figma",
-      "root": 43,
-      "category": 43,
-      "recurring": 1,
-      "importance": "discretionary",
-      "business_p": 0.57,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        },
-        {
-          "kind": "root",
-          "want": 43,
-          "got": 43,
-          "ok": true
-        },
-        {
-          "kind": "recurring",
-          "want": 1,
-          "got": 1,
-          "ok": true
-        }
-      ],
+      "merchant": "FIGMA MONTHLY",
+      "root": 9,
+      "category": 9,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
       "error": null,
-      "deferred": false
+      "deferred": true
     },
     {
       "id": "megogo",
@@ -1734,7 +1715,7 @@
       "category": 7,
       "recurring": 1,
       "importance": "essential",
-      "business_p": 0.15,
+      "business_p": 0.14,
       "checks": [
         {
           "kind": "gate",
@@ -1926,7 +1907,7 @@
       "id": "freelance-usd",
       "group": "income",
       "verdict": "ask",
-      "merchant": "Upwork Escrow",
+      "merchant": "Upwork Escrow INC",
       "root": 16,
       "category": 16,
       "recurring": 0,
@@ -1958,7 +1939,7 @@
       "category": 45,
       "recurring": 0,
       "importance": null,
-      "business_p": 0.21,
+      "business_p": 0.19,
       "checks": [
         {
           "kind": "gate",
@@ -2039,7 +2020,7 @@
       "category": 44,
       "recurring": 0,
       "importance": null,
-      "business_p": 0.52,
+      "business_p": 0.54,
       "checks": [
         {
           "kind": "gate",
@@ -2066,7 +2047,7 @@
       "category": 15,
       "recurring": 0,
       "importance": null,
-      "business_p": 0.25,
+      "business_p": 0.26,
       "checks": [
         {
           "kind": "gate",
@@ -2126,7 +2107,7 @@
       "category": 14,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.73,
+      "business_p": 0.75,
       "checks": [
         {
           "kind": "gate",
@@ -2222,7 +2203,7 @@
       "root": 14,
       "category": 14,
       "recurring": 0,
-      "importance": "essential",
+      "importance": "discretionary",
       "business_p": 0.14,
       "checks": [
         {
@@ -2250,7 +2231,7 @@
       "category": 14,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.13,
+      "business_p": 0.15,
       "checks": [
         {
           "kind": "gate",
@@ -2276,7 +2257,7 @@
       "root": 8,
       "category": 8,
       "recurring": 0,
-      "importance": "essential",
+      "importance": "discretionary",
       "business_p": 0.12,
       "checks": [
         {
@@ -2418,7 +2399,7 @@
       "category": 26,
       "recurring": 1,
       "importance": "essential",
-      "business_p": 0.6,
+      "business_p": 0.61,
       "checks": [
         {
           "kind": "gate",
@@ -2450,8 +2431,8 @@
       "root": 21,
       "category": 21,
       "recurring": 0,
-      "importance": "essential",
-      "business_p": 0.24,
+      "importance": "discretionary",
+      "business_p": 0.25,
       "checks": [
         {
           "kind": "gate",
@@ -2498,7 +2479,7 @@
       "category": 38,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.1,
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -2629,7 +2610,7 @@
       "id": "fop-payoneer",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "Payoneer",
+      "merchant": "Payoneer INC",
       "root": 16,
       "category": 16,
       "recurring": 0,
@@ -2667,7 +2648,7 @@
       "category": 16,
       "recurring": 0,
       "importance": null,
-      "business_p": 0.94,
+      "business_p": 0.93,
       "checks": [
         {
           "kind": "gate",
@@ -2727,7 +2708,7 @@
       "category": 16,
       "recurring": 0,
       "importance": null,
-      "business_p": 0.97,
+      "business_p": 0.98,
       "checks": [
         {
           "kind": "gate",
@@ -2787,7 +2768,7 @@
       "category": 14,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.94,
+      "business_p": 0.95,
       "checks": [
         {
           "kind": "gate",
@@ -2828,7 +2809,7 @@
       "category": 43,
       "recurring": 1,
       "importance": "essential",
-      "business_p": 0.91,
+      "business_p": 0.89,
       "checks": [
         {
           "kind": "gate",
@@ -2894,7 +2875,7 @@
       "category": 43,
       "recurring": 1,
       "importance": "discretionary",
-      "business_p": 0.88,
+      "business_p": 0.87,
       "checks": [
         {
           "kind": "gate",
@@ -2960,7 +2941,7 @@
       "category": 26,
       "recurring": 1,
       "importance": "essential",
-      "business_p": 0.95,
+      "business_p": 0.94,
       "checks": [
         {
           "kind": "gate",
@@ -2993,7 +2974,7 @@
       "category": 30,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.09,
+      "business_p": 0.08,
       "checks": [
         {
           "kind": "gate",
@@ -3026,7 +3007,7 @@
       "category": 30,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.47,
+      "business_p": 0.46,
       "checks": [
         {
           "kind": "gate",
@@ -3086,7 +3067,7 @@
       "category": 30,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.06,
+      "business_p": 0.07,
       "checks": [
         {
           "kind": "gate",
@@ -3113,7 +3094,7 @@
       "category": 30,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.14,
+      "business_p": 0.15,
       "checks": [
         {
           "kind": "gate",
@@ -3160,8 +3141,8 @@
       "root": 9,
       "category": 9,
       "recurring": 0,
-      "importance": "discretionary",
-      "business_p": 0.31,
+      "importance": "optional",
+      "business_p": 0.32,
       "checks": [
         {
           "kind": "gate",
@@ -3188,7 +3169,7 @@
       "category": 9,
       "recurring": 0,
       "importance": "optional",
-      "business_p": 0.18,
+      "business_p": 0.19,
       "checks": [
         {
           "kind": "gate",
@@ -3229,7 +3210,7 @@
       "category": 5,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.22,
+      "business_p": 0.21,
       "checks": [
         {
           "kind": "gate",
@@ -3275,9 +3256,9 @@
       "merchant": "Kyivstar",
       "root": 7,
       "category": 7,
-      "recurring": 1,
+      "recurring": 0,
       "importance": "essential",
-      "business_p": 0.11,
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -3309,7 +3290,7 @@
       "root": 7,
       "category": 7,
       "recurring": 1,
-      "importance": "discretionary",
+      "importance": "essential",
       "business_p": 0.1,
       "checks": [
         {
@@ -3333,8 +3314,8 @@
         {
           "kind": "importance",
           "want": "essential",
-          "got": "discretionary",
-          "ok": false
+          "got": "essential",
+          "ok": true
         }
       ],
       "error": null,
@@ -3349,7 +3330,7 @@
       "category": 7,
       "recurring": 1,
       "importance": "essential",
-      "business_p": 0.09,
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -3388,7 +3369,7 @@
       "category": 7,
       "recurring": 1,
       "importance": "essential",
-      "business_p": 0.1,
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -3460,7 +3441,7 @@
       "category": 21,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.17,
+      "business_p": 0.14,
       "checks": [
         {
           "kind": "gate",
@@ -3528,7 +3509,7 @@
       "category": 10,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.19,
+      "business_p": 0.2,
       "checks": [
         {
           "kind": "gate",
@@ -3555,7 +3536,7 @@
       "category": 8,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.69,
+      "business_p": 0.71,
       "checks": [
         {
           "kind": "gate",
@@ -3718,7 +3699,7 @@
       "category": 35,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.19,
+      "business_p": 0.18,
       "checks": [
         {
           "kind": "gate",
@@ -3745,7 +3726,7 @@
       "category": 43,
       "recurring": 1,
       "importance": "discretionary",
-      "business_p": 0.66,
+      "business_p": 0.64,
       "checks": [
         {
           "kind": "gate",
@@ -3772,7 +3753,7 @@
       "category": 43,
       "recurring": 1,
       "importance": "discretionary",
-      "business_p": 0.22,
+      "business_p": 0.2,
       "checks": [
         {
           "kind": "gate",
@@ -3867,7 +3848,7 @@
       "category": 43,
       "recurring": 1,
       "importance": "discretionary",
-      "business_p": 0.57,
+      "business_p": 0.55,
       "checks": [
         {
           "kind": "gate",
@@ -3935,7 +3916,7 @@
       "category": 2,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.08,
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -3961,7 +3942,7 @@
       "root": 3,
       "category": 3,
       "recurring": 0,
-      "importance": "discretionary",
+      "importance": "essential",
       "business_p": 0.12,
       "checks": [
         {
@@ -4193,7 +4174,7 @@
       "category": 36,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.19,
+      "business_p": 0.18,
       "checks": [
         {
           "kind": "root",
@@ -4226,7 +4207,7 @@
       "category": 36,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.31,
+      "business_p": 0.29,
       "checks": [
         {
           "kind": "root",
@@ -4358,7 +4339,7 @@
       "category": 41,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.3,
+      "business_p": 0.29,
       "checks": [
         {
           "kind": "root",
@@ -4410,7 +4391,7 @@
       "root": 2,
       "category": 34,
       "recurring": 0,
-      "importance": "optional",
+      "importance": "discretionary",
       "business_p": 0.32,
       "checks": [
         {
@@ -4428,8 +4409,8 @@
         {
           "kind": "importance",
           "want": "discretionary",
-          "got": "optional",
-          "ok": false
+          "got": "discretionary",
+          "ok": true
         },
         {
           "kind": "name",
@@ -4561,7 +4542,7 @@
       "category": 39,
       "recurring": 0,
       "importance": "optional",
-      "business_p": 0.08,
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "root",
@@ -4651,7 +4632,7 @@
       "category": 7,
       "recurring": 1,
       "importance": "essential",
-      "business_p": 0.21,
+      "business_p": 0.23,
       "checks": [
         {
           "kind": "root",
@@ -4689,7 +4670,7 @@
       "root": 7,
       "category": 7,
       "recurring": 0,
-      "importance": "discretionary",
+      "importance": "essential",
       "business_p": 0.25,
       "checks": [
         {
@@ -4707,8 +4688,8 @@
         {
           "kind": "importance",
           "want": "essential",
-          "got": "discretionary",
-          "ok": false
+          "got": "essential",
+          "ok": true
         },
         {
           "kind": "name",
@@ -4757,7 +4738,7 @@
       "category": 10,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.23,
+      "business_p": 0.24,
       "checks": [
         {
           "kind": "root",
@@ -4844,7 +4825,7 @@
       "category": 11,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.16,
+      "business_p": 0.17,
       "checks": [
         {
           "kind": "root",
@@ -4885,7 +4866,7 @@
       "category": 19,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.37,
+      "business_p": 0.35,
       "checks": [
         {
           "kind": "root",
@@ -4912,7 +4893,7 @@
       "category": 20,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.58,
+      "business_p": 0.61,
       "checks": [
         {
           "kind": "root",
@@ -4959,7 +4940,7 @@
       "category": 22,
       "recurring": 0,
       "importance": "discretionary",
-      "business_p": 0.41,
+      "business_p": 0.44,
       "checks": [
         {
           "kind": "root",
@@ -4997,7 +4978,7 @@
       "root": 23,
       "category": 23,
       "recurring": 0,
-      "importance": "discretionary",
+      "importance": "optional",
       "business_p": 0.18,
       "checks": [
         {
@@ -5058,7 +5039,7 @@
       "category": 43,
       "recurring": 1,
       "importance": "discretionary",
-      "business_p": 0.68,
+      "business_p": 0.69,
       "checks": [
         {
           "kind": "root",
@@ -5091,7 +5072,7 @@
       "category": 43,
       "recurring": 1,
       "importance": "discretionary",
-      "business_p": 0.32,
+      "business_p": 0.31,
       "checks": [
         {
           "kind": "root",
@@ -5163,7 +5144,7 @@
       "category": 30,
       "recurring": 0,
       "importance": "essential",
-      "business_p": 0.16,
+      "business_p": 0.15,
       "checks": [
         {
           "kind": "root",
@@ -5243,7 +5224,7 @@
       "category": 17,
       "recurring": 0,
       "importance": null,
-      "business_p": 0.08,
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "root",

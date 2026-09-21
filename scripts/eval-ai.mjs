@@ -38,7 +38,7 @@
  *   node scripts/eval-ai.mjs --judge jev      # the same ladder with enrichment answered by Jev (docs/JEV.md)
  *   node scripts/eval-ai.mjs --judge jev --claude   # …and let fallbacks / §F2 step 2 reach Claude
  *
- * `--judge jev` is not a second harness: it flips `ENRICH_JUDGE` on the env the production code
+ * `--judge jev` is not a second harness: it flips `AI_JUDGE` on the env the production code
  * reads, so the gate, the carry and `applyEnrichment` are the same code on both runs and only the
  * judge differs. Its result and baseline go to their own files — comparing a Jev run against the
  * Haiku baseline would report every row Jev files differently as a «regression».
@@ -174,7 +174,7 @@ async function runCase(c, key) {
     IS_OWNER: "1",
     ANTHROPIC_API_KEY: DRY || !WITH_CLAUDE ? "" : key,
     JEV_API_KEY: DRY ? "" : jevKey ?? "",
-    ENRICH_JUDGE: JUDGE,
+    AI_JUDGE: JUDGE,
   };
   db.raw.prepare("INSERT INTO accounts (id, type, title, currency_code, balance) VALUES ('acc', 'black', 'Eval', 980, 0)").run();
   // The user's own description of themselves — the only way «is this work money?» has an answer.

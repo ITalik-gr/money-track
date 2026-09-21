@@ -31,6 +31,7 @@ import type { AnthropicUsage } from "./cost.ts";
 import { logUsage } from "./cost.ts";
 import { parseAmountMinor, parseStatementDate } from "../bank/normalize.ts";
 import type { AnthropicContentBlock } from "./ai.ts";
+import { judgeColumns } from "./judge-columns.ts";
 
 /** Column indices into the header row, plus which row the model believes the header is. */
 export interface StatementMapping {
@@ -86,6 +87,14 @@ export async function mapStatementColumns(
   const sample = rows.slice(0, SAMPLE_ROWS);
   if (!sample.length) return null;
   const width = Math.max(...sample.map((r) => r.length));
+
+  // docs/JEV.md phase 4: Jev proposes first. Its mapping faces the SAME two checks as Claude's
+  // below; one that fails them is dropped and Claude is asked, so Jev can only ever save a call.
+  // Usage is zero here because `judge()` already booked Jev's own cost.
+  const jev = await judgeColumns(env, sample, width);
+  if (jev && withinBounds(jev, width) && mappingParsesSample(sample, jev)) {
+    return { mapping: jev, usage: { input_tokens: 0, output_tokens: 0 } };
+  }
 
   const system: AnthropicContentBlock[] = [{
     type: "text",

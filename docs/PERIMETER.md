@@ -435,11 +435,15 @@ the ordinary way past a check made only at insert time. Held by `tax-watch.test.
 
 ## Jev (TypeSafe) — a third place operation text can go (2026-09-21)
 
-With `ENRICH_JUDGE=jev`, enrichment sends the same payload it sends Anthropic (raw description,
-bank comment, MCC, amount, the user's note, profile, merchant history, related subscription names)
-to `api.typesafe.ai` instead. `JEV_API_KEY` is deployment-wide, so `judgeAvailable()`
-(`lib/ai/judge.ts`) admits the OWNER only and never a demo — the same rule `userCredentials`
-applies to the Anthropic fallback. Opening it to other users is `docs/JEV.md §10`, not a flag flip.
+With `AI_JUDGE=jev` (on in `wrangler.jsonc` since 2026-09-21), the owner's ledger reaches
+`api.typesafe.ai` from five places: enrichment (raw description, bank comment, MCC, amount, the
+user's note, profile, merchant history, related subscription names), §F2 and §AI-CATCHUP (the same
+fields of transfer / unfiled rows), §SUB-REVIEW (a merchant NAME plus its charge rhythm — count,
+months, interval, one amount) and §CSV-AI (the first 15 rows of an uploaded statement — the same
+sample Anthropic is shown). `JEV_API_KEY` is the OWNER's key, so `judgeAvailable()`
+(`lib/ai/judge.ts`) admits the owner only and never a demo — the same rule `userCredentials` applies
+to the Anthropic fallback. Opening it to other users is a per-user key (`docs/JEV.md §10`), not a
+flag flip. The search rerank is NOT wired, so a search query never leaves Cloudflare.
 
 ## Дані й безпека — правила з реальних багів
 

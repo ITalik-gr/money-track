@@ -75,6 +75,8 @@ export interface TxDetail extends TxRow {
   /** docs/JEV.md phase 3 — PROPOSALS only (migration 0054); nothing computes from them. */
   ai_business?: number | null;
   ai_importance?: "essential" | "discretionary" | "optional" | null;
+  /** The importance the CATEGORY gives this row (leaf, else its parent) — what a proposal is compared to. */
+  category_importance?: string | null;
   receipt: ReceiptRow | null;
   tags: TagRow[];
 }

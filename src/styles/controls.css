@@ -325,3 +325,15 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .empty-card .btn { margin-top: var(--sp-1); }
 
 /* ===== DASHBOARD REDESIGN (DeliFin-напрямок, DESIGN.md §3) ================= */
+
+/* A Jev proposal (docs/JEV.md): a sentence plus the ONE button that would apply it, placed beside
+   the control it would move and never applied on its own. One class for every proposal — the
+   business switch and the importance picker — because the same thing must look the same. */
+.judge-suggest {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}

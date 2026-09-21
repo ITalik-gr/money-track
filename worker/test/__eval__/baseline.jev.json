@@ -41,7 +41,7 @@
       "verdict": "ask",
       "root": 1,
       "recurring": 0,
-      "pass": false
+      "pass": true
     },
     "aromakava": {
       "verdict": "skip",
@@ -149,7 +149,7 @@
       "verdict": "ask",
       "root": 6,
       "recurring": 1,
-      "pass": false
+      "pass": true
     },
     "spotify": {
       "verdict": "ask",
@@ -183,8 +183,8 @@
     },
     "figma": {
       "verdict": "ask",
-      "root": 43,
-      "recurring": 1,
+      "root": 9,
+      "recurring": null,
       "pass": true
     },
     "megogo": {
@@ -586,14 +586,14 @@
     "csv-kyivstar": {
       "verdict": "ask",
       "root": 7,
-      "recurring": 1,
+      "recurring": 0,
       "pass": true
     },
     "csv-vodafone": {
       "verdict": "ask",
       "root": 7,
       "recurring": 1,
-      "pass": false
+      "pass": true
     },
     "csv-vodokanal": {
       "verdict": "ask",
@@ -839,7 +839,7 @@
       "verdict": "ask",
       "root": 2,
       "recurring": 0,
-      "pass": false
+      "pass": true
     },
     "ho-coffeelike": {
       "verdict": "ask",

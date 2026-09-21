@@ -33,7 +33,7 @@ export interface JudgeUsage { input_tokens: number; output_tokens: number }
 /**
  * Whether judgments are available on THIS request.
  *
- * Owner-only while `docs/JEV.md §10` («whose key») is open: `JEV_API_KEY` is a deployment-wide
+ * Owner-only because `JEV_API_KEY` is the OWNER's key (`docs/JEV.md §10`, decided 2026-09-21): a deployment-wide
  * secret, and a deployment-wide secret applied to every user is exactly the defect `UserDO`'s
  * `userCredentials` was fixed for (strangers' ledgers billed to — and sent under — the owner's
  * account). A demo never reaches it at all: `demo.ts` caps spend in Anthropic dollars and knows
@@ -41,6 +41,14 @@ export interface JudgeUsage { input_tokens: number; output_tokens: number }
  */
 export function judgeAvailable(env: Env): boolean {
   return !!env.JEV_API_KEY && !!env.IS_OWNER && !isDemoEnv(env);
+}
+
+/**
+ * Whether THIS request should ask Jev at all: the switch is on (`AI_JUDGE`) AND the judge is
+ * available to this user. Every call site asks this one function, so turning Jev off is one var.
+ */
+export function judgeOn(env: Env): boolean {
+  return env.AI_JUDGE === "jev" && judgeAvailable(env);
 }
 
 /**

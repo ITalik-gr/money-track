@@ -1,7 +1,8 @@
 # JEV.md — every transaction understood by itself
 
-> **Status: phases 1–3 BUILT and MEASURED (2026-09-21), behind a flag that is off in production.**
-> Results in §7.1–7.3. Phase 4 is still a plan. Written 2026-09-21 on the owner's brief: «щоб jav всі
+> **Status: phases 1–4 BUILT and MEASURED (2026-09-21).** `AI_JUDGE = "jev"` in `wrangler.jsonc`
+> turns it on; it reaches the OWNER only (the key is the owner's, §10). Results in §7.1–7.4; the
+> search rerank was measured and deliberately NOT wired (§7.4). Written 2026-09-21 on the owner's brief: «щоб jav всі
 > транзакції дивився, і автоматично сам розумів що це, скільки, нащо, чи підписка чи ні».
 >
 > What it replaces is not Haiku. It replaces **asking a text model to do a job that is not text.**
@@ -153,6 +154,14 @@ generative. Receipt OCR needs vision; Jev is text only.
   multi-provider AI is about swapping Anthropic and is unrelated to this.
 - **`worker/lib/ai/judge-tx.ts`** — the question set of §3 and the confidence rule. Its own file
   because `enrich.ts` is at 393 of 400 lines (C3) and cannot take it.
+- **`judge-guide.ts`** — the category guide, PARSED out of Haiku's `CACHE_GUIDE`, so both judges
+  read one definition of every category (§7.2).
+- **Phase 4, one file per site:** `judge-subs.ts` (§SUB-REVIEW) · `judge-spend.ts` (§F2 real
+  category + §AI-CATCHUP) · `judge-columns.ts` (§CSV-AI) · `judge-search.ts` (measured, NOT wired).
+  Each returns null when Jev is off, down or unsure, and its caller then runs the Claude path
+  exactly as before — no call site lost its fallback.
+- **The switch:** `judgeOn(env)` in `judge.ts` = `AI_JUDGE === "jev"` AND `judgeAvailable` (key +
+  owner + not a demo). Every site asks that one function.
 - **`cost.ts`** — a second price basis. `AnthropicUsage` does not describe input-only, output-free
   billing, and a Jev call logged through the Anthropic table would report a made-up cost.
 - **`demo.ts`** — `demoClamp` knows Anthropic models only. A demo either gets its own Jev ceiling
@@ -164,7 +173,13 @@ generative. Receipt OCR needs vision; Jev is text only.
 
 ---
 
-## 7. How this gets decided — measurement, not opinion
+## 7. How this gets decided — measurement, not opinion (§JEV-EVAL)
+
+> **§JEV-EVAL.** A Jev judgment is wired into a call site only after it is measured on cases written
+> BEFORE the code, against the Claude path it replaces — `npm run eval -- --judge jev` for enrich,
+> `node scripts/eval-sites.mjs` for the rest. Both run without spending on Claude unless `--claude`
+> is passed. A line (cascade, leaf, subscription, business) is set from a measured gap, never guessed,
+> and a site where no line separates the two sides is NOT wired (the search rerank, §7.4).
 
 **`npm run eval` already exists and already reports exactly the right numbers** (§AI-EVAL): root
 accuracy, exact accuracy, recurring accuracy, gate accuracy, ask rate and cost — the last two
@@ -216,7 +231,7 @@ so 98.9% is an in-sample number. The Haiku prompt has had months of the same tre
 comparison is fair in kind — but the next honest step is new cases that neither branch was tuned on.
 
 **Where it lives:** `worker/lib/ai/judge.ts` (transport, owner-only gate), `judge-tx.ts` (the
-questions and reconciliation), `ENRICH_JUDGE=jev` + `JEV_API_KEY` on the env,
+questions and reconciliation), `AI_JUDGE=jev` + `JEV_API_KEY` on the env,
 `npm run eval -- --judge jev` (writes `baseline.jev.json` / `last-run.jev.json`, never the Haiku
 files). Pinned without network by `worker/test/judge-tx.test.ts`.
 
@@ -304,6 +319,39 @@ where accepting would change what the account already says.
 importance in the second round, where the ROOT is known — a question that knows «this is
 Groceries» is a different question, not a reworded one.
 
+### 7.4 Phase 4 result — the other call sites (2026-09-21)
+
+A separate harness, `scripts/eval-sites.mjs`, over `worker/test/__eval__/sites.json` — 20
+merchants, 12 transfers, 20 search pairs, 7 statement files, **written before any phase-4 code**.
+Jev alone costs ≈ $0.003 a run; Claude was run ONCE for comparison (`--claude`).
+
+| Site | Jev | Claude (same cases) | Decision |
+|---|---|---|---|
+| §SUB-REVIEW «bill or shop» | 19–20/20 right, **0 wrong**, 0–1 unsure | 19/20, 0 wrong, 1 unsure | wired |
+| §F2 real category of a transfer | answers 11/12 (≥ 0.8), **11/11 right** | 10/12 | wired, Claude below the line |
+| §CSV-AI column mapping | 6–7/7 files fully right | 6/7 (took a split debit column as «amount») | wired, same proof as Claude |
+| §AI-CATCHUP | the enrich + §F2 judgments above, per row | — | wired, «unsure» stays a gap |
+| §SEARCH-VEC rerank | 16–17/20, and **no line separates** | — (baseline is the cosine floor) | **NOT wired** |
+
+What moved while measuring, said plainly:
+- **Subscription lines.** The pre-set 0.7 / 0.3 called five real bills «unsure». Every real bill
+  came back ≥ 0.52 and every shop ≤ 0.43 over two runs, so the lines are 0.5 / 0.4. That makes the
+  subscription half of `sites.json` in-sample for the THRESHOLD, and the gap is thin — new
+  merchants go into the set before the lines move again.
+- **A leak, caught and removed.** The `utility` rubric named «EasyPay», which is also a case. With
+  it removed EasyPay still comes back a bill (0.66), now typed «unclear».
+- **The reason a person reads is ours.** Claude wrote a sentence; Jev picks a merchant TYPE and the
+  screen shows that type's translated label (`i18n-judge.ts`). Nothing a merchant name smuggles in
+  can reach the screen.
+- **Search.** «Фора» came back 0.59 for «коли я купував запчастину до велосипеда» and the bicycle
+  workshop 0.46: that is not a threshold problem, it is the judgment being unreliable here. The
+  cosine floor stays; `judge-search.ts` stays only so a newer Jev is re-measured with one command.
+
+**And importance, restructured (phase-3 follow-up).** Asking importance in ROUND 2, where the root
+is known («this is Groceries»), moved it from 86% to **97%** (35–36/36–37) for ~5% more requests.
+At 97% it is now offered on the operation page too, beside the importance picker, only where it
+differs from what the category says, and only INTO the form — saving is still the person's click.
+
 ---
 
 ## 8. Known jaggedness, and what each one costs here
@@ -334,14 +382,16 @@ phase 3's first measurement.
 **Phase 3 — the new columns.** ✅ Done (§7.3): `ai_importance` + `ai_business` as proposals; the
 business one is offered on the operation page; the skip list measured and kept.
 
-**Phase 4 — the other call sites.** §SUB-REVIEW, §F2, §AI-CATCHUP, §CSV-AI, then the search rerank.
+**Phase 4 — the other call sites.** ✅ Done (§7.4): §SUB-REVIEW, §F2, §AI-CATCHUP and §CSV-AI
+wired with Claude as the fallback; the search rerank measured and NOT wired.
 
 ---
 
-## 10. Open, and the owner's call
+## 10. The owner's calls
 
-- **Whose key.** Deployment-wide (the owner's, like `ANTHROPIC_API_KEY`) or per user? Enrich runs
-  from a webhook for everybody, so this decides who pays for a stranger's ledger.
+- **Whose key — DECIDED 2026-09-21: the owner's, for now.** `JEV_API_KEY` is a Worker secret and
+  `judgeAvailable` admits the owner only. Opening it to other users is a per-user key (the
+  `user_secrets` path Anthropic keys already take) — a change of code, not of a flag.
 - **Availability.** TypeSafe's own docs say rate limits «are adjusting dynamically» under demand.
   The webhook path must degrade to the Haiku ladder rather than lose the verdict — which argues
   for keeping the Haiku path alive behind the flag rather than deleting it after phase 2.

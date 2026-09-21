@@ -55,6 +55,7 @@ export async function resolveLocale(env: Env): Promise<ServerLocale> {
  */
 import { TG } from "./i18n-tg.ts";
 import { CONSENT } from "./i18n-consent.ts";
+import { JUDGE } from "./i18n-judge.ts";
 
 const S = {
   // The `csv*` family lives in its own file (C3, 2026-09-18) — column headings for a spreadsheet
@@ -62,6 +63,7 @@ const S = {
   ...CSV_STRINGS,
   ...TG,
   ...CONSENT,
+  ...JUDGE,
   // ---- fallback labels for missing data ------------------------------------
   // These end up as chart legends and list rows, not as prose. Kept short for that reason.
   uncategorized: { uk: "без категорії", en: "uncategorized" },

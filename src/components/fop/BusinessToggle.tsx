@@ -71,7 +71,7 @@ export function BusinessToggle({ txId, value, proposal, accountBusiness }: {
         ))}
       </div>
       {suggest !== null && (
-        <span className="fop-tx-suggest">
+        <span className="judge-suggest">
           {t(suggest === 1 ? "fop.tx.suggestWork" : "fop.tx.suggestPersonal")}
           <button className="btn ghost" disabled={isLoading} onClick={() => set(suggest)}>
             {t(suggest === 1 ? "fop.tx.acceptWork" : "fop.tx.acceptPersonal")}

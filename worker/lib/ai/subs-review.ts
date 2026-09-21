@@ -45,6 +45,7 @@ import { callHaikuJson } from "./json.ts";
 import { buildSystemPrefix, replyLangDirective } from "./prompt.ts";
 import { MODEL_FAST } from "./models.ts";
 import { logUsage } from "./cost.ts";
+import { judgeSubs } from "./judge-subs.ts";
 import { coreToken } from "../finance/merchants.ts";
 import { recurringCandidates, nearMissCandidates } from "../finance/recurring.ts";
 import * as planningRepo from "../../repo/planning.ts";
@@ -128,7 +129,7 @@ export function needingReview(
  * to re-derive a rhythm that `chargeRhythm` already defines, which is how a fourth definition of
  * "how often" gets born.
  */
-async function askBatch(env: Env, rows: RecurringCandidate[]): Promise<ModelVerdict[]> {
+export async function askBatch(env: Env, rows: RecurringCandidate[]): Promise<ModelVerdict[]> {
   const system = await buildSystemPrefix(
     env,
     "you are reviewing a list of merchants that a rule-based detector thinks MIGHT be recurring " +
@@ -192,7 +193,8 @@ export async function runSubsReview(env: Env, now = Math.floor(Date.now() / 1000
   const todo = needingReview(candidates, stored, now).slice(0, BATCH);
   if (!todo.length) return { asked: 0, decided: 0, unsure: 0 };
 
-  const verdicts = await askBatch(env, todo);
+  // docs/JEV.md phase 4: Jev first when it is on; any failure hands the WHOLE batch to Claude.
+  const verdicts: ModelVerdict[] = (await judgeSubs(env, todo)) ?? await askBatch(env, todo);
   const byMerchant = new Map(todo.map((c) => [c.merchant.toLowerCase(), c]));
 
   let decided = 0, unsure = 0;

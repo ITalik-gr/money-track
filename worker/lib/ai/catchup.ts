@@ -44,6 +44,7 @@ import { logUsage } from "./cost.ts";
 import { txHaystack } from "../finance/plan-match.ts";
 import { TRANSFER_CAT } from "./enrich.ts";
 import { logChange } from "../../repo/ai-changes.ts";
+import { judgeCatchup } from "./judge-spend.ts";
 
 /** How many operations one pass may look at. */
 const BATCH = 25;
@@ -158,7 +159,11 @@ export async function runCatchup(env: Env, now = Math.floor(Date.now() / 1000)):
   const rows = await catchupCandidates(env, now);
   if (!rows.length) return { looked: 0, filled: 0, unsure: 0 };
 
-  const { verdicts } = await askBatch(env, rows);
+  // docs/JEV.md phase 4: Jev first, one judgment per row — below its line a row stays a gap, which
+  // is exactly this pass's rule. Off (or no key) → the one Claude batch, as before.
+  const verdicts = (await judgeCatchup(env, rows.map((r) => ({
+    ...r, text: txHaystack(r).replace(/\s+/g, " ").trim().slice(0, 300),
+  })))) ?? (await askBatch(env, rows)).verdicts;
   const byId = new Map(rows.map((r) => [r.id, r]));
 
   // §FK-GUARD: every category id the model returns is validated before it reaches a write. The id

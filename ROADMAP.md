@@ -100,14 +100,15 @@
 
 ## 🔨 Збірка (самодостатнє — не чекає власника)
 
-### Jev (TypeSafe) — phase 4: the other call sites
-Phases 1–3 measured (`docs/JEV.md §7.1–7.3`). The flag is OFF in production.
-**Owner first:** whose key (`§10`); to try it: `wrangler secret put JEV_API_KEY` + `ENRICH_JUDGE=jev`.
-**Steps (§5 order):** §SUB-REVIEW («bill or shop» — `unsure` becomes a probability) · §F2
-`transfers-ai` · §AI-CATCHUP · §CSV-AI column mapping · the §SEARCH-VEC rerank.
-Also: ask `importance` in round 2 where the root is known (86% today, stored only); `known_plan`
-for charges whose name differs from the plan's («X Corp.» vs «Twitter») — the Київстар/EasyPay
-case was NOT that (it was a code bug, fixed 2026-09-21), so build it only with a case that needs it.
+### Jev (TypeSafe) — what is left after phase 4
+Phases 1–4 are built and measured (`docs/JEV.md §7`); `AI_JUDGE = "jev"` is on, owner-only.
+- **More held-out cases before any line moves.** The §SUB-REVIEW lines (0.5 / 0.4) sit in a 0.1-wide
+  gap measured on 20 merchants. Add merchants to `worker/test/__eval__/sites.json` FIRST.
+- **Search rerank — re-measure on a newer Jev** (`node scripts/eval-sites.mjs --site search`); wire it
+  into `appendSemantic` only when a line separates «shown» from «hidden» (§7.4).
+- **Other users** — a per-user TypeSafe key through `user_secrets`, like the Anthropic one (§10).
+- **`known_plan`** — only with a real case whose bank name differs from the plan's («X Corp.» vs
+  «Twitter»). The Київстар/EasyPay report was a code bug, not this.
 
 ### SQLite `LOWER() LIKE` with Cyrillic — two more sites
 SQLite folds case for ASCII only, so `LOWER(x) LIKE '%київстар%'` misses «Київстар». Fixed in

@@ -455,6 +455,15 @@ export function TxDetail() {
                       );
                     })}
                   </div>
+                  {/* docs/JEV.md — Jev's per-row proposal, only where it DIFFERS from what the
+                      category already says (otherwise the button would change nothing), and only
+                      into the form: saving it is still the person's click. */}
+                  {importance == null && tx.ai_importance && tx.ai_importance !== (tx.category_importance ?? "discretionary") && (
+                    <span className="judge-suggest">
+                      {t("tx.impSuggest", { level: t(IMPORTANCE_META[tx.ai_importance].labelKey) })}
+                      <button type="button" className="btn ghost" onClick={() => setImportance(tx.ai_importance!)}>{t("tx.impSuggestTake")}</button>
+                    </span>
+                  )}
                 </div>
               )}
 

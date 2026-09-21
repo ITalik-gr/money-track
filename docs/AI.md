@@ -8,6 +8,12 @@
 
 ## Модель і вартість
 - Ціни за MTok: **Haiku $1/$5, Sonnet $3/$15, Opus 4.8 $5/$25.** Cache read ≈0.1× input, write ≈1.25–2×.
+- **Judgments go to Jev first (2026-09-21, `docs/JEV.md`).** With `AI_JUDGE=jev` the questions
+  that are JUDGMENTS rather than text — enrich, §SUB-REVIEW, §F2, §AI-CATCHUP, §CSV-AI — ask
+  TypeSafe's Jev ($0.042/M input, output free) and fall back to the Claude path below whenever Jev
+  is off, down or under its measured line. Owner-only while the key is the owner's. Everything
+  GENERATIVE (advisor, reports, chat, budget plan, feed observations, OCR) stays on Claude.
+  Measured by `npm run eval -- --judge jev` and `scripts/eval-sites.mjs` (§JEV-EVAL).
 - **§AI-EVAL — the model is MEASURED, not judged by impression** (`scripts/eval-ai.mjs`,
   `worker/test/__eval__/`, 2026-09-18). 953 tests pin every number this app computes and, until
   this one, not a single one asked whether the MODEL was right: every prompt edit, model swap and
