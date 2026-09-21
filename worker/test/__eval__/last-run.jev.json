@@ -1,0 +1,3184 @@
+{
+  "at": "2026-09-21T18:02:23.254Z",
+  "dry": false,
+  "judge": "jev",
+  "seconds": 10.2,
+  "tally": {
+    "gate": {
+      "ok": 132,
+      "n": 132
+    },
+    "root": {
+      "ok": 92,
+      "n": 93
+    },
+    "recurring": {
+      "ok": 35,
+      "n": 36
+    }
+  },
+  "meter": {
+    "calls": 99,
+    "in": 152272,
+    "out": 24018,
+    "cache_read": 0,
+    "cache_write": 0,
+    "usd": 0.006395424000000001,
+    "byModel": {
+      "jev-latest": 99
+    },
+    "uncached": []
+  },
+  "results": [
+    {
+      "id": "atb-supermarket",
+      "group": "grocery",
+      "verdict": "skip",
+      "merchant": "ATB 1234 KYIV",
+      "root": 1,
+      "category": 1,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "silpo-latin",
+      "group": "grocery",
+      "verdict": "skip",
+      "merchant": "SILPO 305 KYIV UA",
+      "root": 1,
+      "category": 1,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "varus",
+      "group": "grocery",
+      "verdict": "skip",
+      "merchant": "VARUS 78 DNIPRO",
+      "root": 1,
+      "category": 1,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "market-stall",
+      "group": "grocery",
+      "verdict": "skip",
+      "merchant": "RYNOK PRYVOZ",
+      "root": 1,
+      "category": 1,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "bakery",
+      "group": "grocery",
+      "verdict": "skip",
+      "merchant": "PEKARNYA KHLIB",
+      "root": 1,
+      "category": 1,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "grocery-no-mcc",
+      "group": "grocery",
+      "verdict": "ask",
+      "merchant": "Сільпо",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "novus-no-mcc",
+      "group": "grocery",
+      "verdict": "ask",
+      "merchant": "NOVUS SKYMALL",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "aromakava",
+      "group": "cafe",
+      "verdict": "skip",
+      "merchant": "AROMAKAVA KYIV",
+      "root": 2,
+      "category": 2,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "mcdonalds",
+      "group": "cafe",
+      "verdict": "skip",
+      "merchant": "MCDONALDS 023",
+      "root": 2,
+      "category": 2,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "puzata-hata",
+      "group": "cafe",
+      "verdict": "skip",
+      "merchant": "PUZATA HATA",
+      "root": 2,
+      "category": 2,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "glovo",
+      "group": "cafe",
+      "verdict": "ask",
+      "merchant": "GLOVO KYIV",
+      "root": 2,
+      "category": 2,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "bolt-food",
+      "group": "cafe",
+      "verdict": "ask",
+      "merchant": "BOLT FOOD",
+      "root": 2,
+      "category": 2,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "lviv-coffee",
+      "group": "cafe",
+      "verdict": "ask",
+      "merchant": "Львівська майстерня кави",
+      "root": 2,
+      "category": 2,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "uber-ride",
+      "group": "transport",
+      "verdict": "skip",
+      "merchant": "UBER TRIP",
+      "root": 3,
+      "category": 3,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "bolt-ride",
+      "group": "transport",
+      "verdict": "skip",
+      "merchant": "BOLT.EU/O/2509",
+      "root": 3,
+      "category": 3,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "wog-fuel",
+      "group": "transport",
+      "verdict": "skip",
+      "merchant": "WOG 102",
+      "root": 3,
+      "category": 3,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "okko-fuel",
+      "group": "transport",
+      "verdict": "skip",
+      "merchant": "OKKO KYIV",
+      "root": 3,
+      "category": 3,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "metro-ticket",
+      "group": "transport",
+      "verdict": "skip",
+      "merchant": "KYIV METRO",
+      "root": 3,
+      "category": 3,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "uklon-no-mcc",
+      "group": "transport",
+      "verdict": "ask",
+      "merchant": "UKLON",
+      "root": 3,
+      "category": 3,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "blablacar",
+      "group": "transport",
+      "verdict": "ask",
+      "merchant": "BLABLACAR",
+      "root": 3,
+      "category": 3,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "apteka",
+      "group": "health",
+      "verdict": "skip",
+      "merchant": "APTEKA ANC 12",
+      "root": 4,
+      "category": 4,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "podorozhnyk",
+      "group": "health",
+      "verdict": "skip",
+      "merchant": "Аптека Подорожник",
+      "root": 4,
+      "category": 4,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dobrobut-clinic",
+      "group": "health",
+      "verdict": "ask",
+      "merchant": "DOBROBUT MEDICAL",
+      "root": 4,
+      "category": 4,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "dental",
+      "group": "health",
+      "verdict": "ask",
+      "merchant": "STOMATOLOGIYA LUMI",
+      "root": 4,
+      "category": 4,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "netflix",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "NETFLIX.COM",
+      "root": 6,
+      "category": 6,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "spotify",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "SPOTIFY P1A2B3C4D",
+      "root": 6,
+      "category": 6,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "youtube-premium",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "GOOGLE *YOUTUBE PREMIUM",
+      "root": 6,
+      "category": 6,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "google-one",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "GOOGLE *GOOGLE ONE",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 43,
+          "got": 43,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "icloud",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "APPLE.COM/BILL",
+      "root": 6,
+      "category": 6,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "chatgpt",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "OPENAI *CHATGPT SUBSCR",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 43,
+          "got": 43,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "figma",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "FIGMA MONTHLY",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 43,
+          "got": 43,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "megogo",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "MEGOGO",
+      "root": 6,
+      "category": 6,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "steam-game",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "STEAMGAMES.COM 4259",
+      "root": 6,
+      "category": 6,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 0,
+          "got": 0,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "app-store-oneoff",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "APPLE.COM/BILL",
+      "root": 6,
+      "category": 6,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 0,
+          "got": 1,
+          "ok": false
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "gym",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "SPORTLIFE ABONEMENT",
+      "root": 22,
+      "category": 22,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 22,
+          "got": 22,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "kyivstar",
+      "group": "utility",
+      "verdict": "ask",
+      "merchant": "KYIVSTAR POPOVNENNYA",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "lifecell",
+      "group": "utility",
+      "verdict": "ask",
+      "merchant": "LIFECELL",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "yasno",
+      "group": "utility",
+      "verdict": "ask",
+      "merchant": "YASNO ELEKTROENERGIYA",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "osbb",
+      "group": "utility",
+      "verdict": "ask",
+      "merchant": "OSBB KVARTPLATA",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "internet-volia",
+      "group": "utility",
+      "verdict": "ask",
+      "merchant": "VOLIA INTERNET",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "atm-withdrawal",
+      "group": "transfer",
+      "verdict": "skip",
+      "merchant": "ATM 4829 KYIV",
+      "root": 13,
+      "category": 13,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "own-card-transfer",
+      "group": "transfer",
+      "verdict": "skip",
+      "merchant": "Переказ на власну картку",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "jar-topup",
+      "group": "transfer",
+      "verdict": "skip",
+      "merchant": "Поповнення банки",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "roundup",
+      "group": "transfer",
+      "verdict": "skip",
+      "merchant": "Округлення решти",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "p2p-out-plain",
+      "group": "transfer",
+      "verdict": "skip",
+      "merchant": "На картку 51**8842",
+      "root": 13,
+      "category": 13,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "salary",
+      "group": "income",
+      "verdict": "ask",
+      "merchant": "Зарахування зарплати",
+      "root": 15,
+      "category": 15,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 15,
+          "got": 15,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "freelance-usd",
+      "group": "income",
+      "verdict": "ask",
+      "merchant": "UPWORK ESCROW INC",
+      "root": 16,
+      "category": 16,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 16,
+          "got": 16,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "cashback",
+      "group": "income",
+      "verdict": "ask",
+      "merchant": "Кешбек за місяць",
+      "root": 45,
+      "category": 45,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 45,
+          "got": 45,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "deposit-interest",
+      "group": "income",
+      "verdict": "ask",
+      "merchant": "Нараховані проценти",
+      "root": 46,
+      "category": 46,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 46,
+          "got": 46,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "p2p-in-gift",
+      "group": "income",
+      "verdict": "skip",
+      "merchant": "Від Марія К.",
+      "root": 13,
+      "category": 13,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 13,
+          "got": 13,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "olx-sale",
+      "group": "income",
+      "verdict": "ask",
+      "merchant": "OLX DOSTAVKA vyplata",
+      "root": 44,
+      "category": 44,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 44,
+          "got": 44,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-says-salary",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "Від Ihor P.",
+      "root": 15,
+      "category": 15,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 15,
+          "got": 15,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-says-gift",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "ROZETKA",
+      "root": 23,
+      "category": 23,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 23,
+          "got": 23,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-says-work",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "NOVA POSHTA",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-says-leisure",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "SILPO 305",
+      "root": 6,
+      "category": 6,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "amazon-usd",
+      "group": "fx",
+      "verdict": "ask",
+      "merchant": "AMAZON.COM*2K4LM",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "booking-eur",
+      "group": "fx",
+      "verdict": "ask",
+      "merchant": "BOOKING.COM AMSTERDAM",
+      "root": 11,
+      "category": 11,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 11,
+          "got": 11,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "aliexpress",
+      "group": "fx",
+      "verdict": "ask",
+      "merchant": "ALIEXPRESS",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "nova-poshta",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "NOVA POSHTA 1245",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 14,
+          "got": 14,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "ukrposhta",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "UKRPOSHTA",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 14,
+          "got": 14,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "epicentr",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "EPICENTR K",
+      "root": 8,
+      "category": 8,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 8,
+          "got": 8,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "rozetka-electronics",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "ROZETKA.UA",
+      "root": 9,
+      "category": 9,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 9,
+          "got": 9,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "sinsay-clothes",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "SINSAY 214",
+      "root": 5,
+      "category": 5,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 5,
+          "got": 5,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "eva-beauty",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "EVA 108 KYIV",
+      "root": 10,
+      "category": 10,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 10,
+          "got": 10,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "tax-single",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "Єдиний податок 5%",
+      "root": 24,
+      "category": 24,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 24,
+          "got": 24,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "esv",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "ЄСВ за квартал",
+      "root": 24,
+      "category": 24,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 24,
+          "got": 24,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "vet",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "VETKLINIKA LAPA",
+      "root": 21,
+      "category": 21,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 21,
+          "got": 21,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "kids-school",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "SADOCHOK OPLATA",
+      "root": 19,
+      "category": 19,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "cinema",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "PLANETA KINO",
+      "root": 6,
+      "category": 6,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "books",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "KNYGARNYA YE",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "carry-known-merchant",
+      "group": "carry",
+      "verdict": "carry",
+      "merchant": "NETFLIX.COM",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "carry",
+          "got": "carry",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "carry-not-recurring",
+      "group": "carry",
+      "verdict": "carry",
+      "merchant": "SILPO 305 KYIV UA",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "carry",
+          "got": "carry",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 0,
+          "got": 0,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "no-carry-from-skipped",
+      "group": "carry",
+      "verdict": "ask",
+      "merchant": "ZOOMAGAZIN LAPKY",
+      "root": 6,
+      "category": 6,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "already-enriched",
+      "group": "carry",
+      "verdict": "skip",
+      "merchant": "WOG 102",
+      "root": 3,
+      "category": 3,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-payoneer",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "PAYONEER INC",
+      "root": 16,
+      "category": 16,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 16,
+          "got": 16,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-deel",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "DEEL PAYROLL",
+      "root": 16,
+      "category": 16,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-invoice-uah",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "Оплата за послуги згідно рахунку №14",
+      "root": 16,
+      "category": 16,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 16,
+          "got": 16,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-client-quiet",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "ТОВ РОМАШКА оплата за розробку",
+      "root": 16,
+      "category": 16,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 16,
+          "got": 16,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-upwork-fee",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "UPWORK -FEE",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-bank-fee",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "Комісія за РКО",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-jetbrains",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "JETBRAINS AMERICAS INC",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-hetzner",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "HETZNER ONLINE GMBH",
+      "root": 9,
+      "category": 9,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-cloudflare",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "CLOUDFLARE HTTPSCLOUDFLA",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-namecheap",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "NAMECHEAP.COM",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-vz",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "Військовий збір 1% за III квартал",
+      "root": 24,
+      "category": 24,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 24,
+          "got": 24,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "fop-esv-quarter",
+      "group": "fop",
+      "verdict": "ask",
+      "merchant": "Сплата ЄСВ 1902,34",
+      "root": 24,
+      "category": 24,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 24,
+          "got": 24,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-auchan",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "AUCHAN CITY KYIV",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-metro",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "METRO Cash and Carry",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-fora",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "FORA 0412",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-ashan-cyrillic",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "Ашан Петрівка",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-aurora",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "AVRORA MULTIMARKET",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-jysk",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "JYSK UKRAINE",
+      "root": 8,
+      "category": 8,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 8,
+          "got": 8,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-foxtrot",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "FOXTROT 21",
+      "root": 9,
+      "category": 9,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 9,
+          "got": 9,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-allo",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "ALLO UKRAINE",
+      "root": 9,
+      "category": 9,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 9,
+          "got": 9,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-kasta",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "KASTA.UA",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 5,
+          "got": 14,
+          "ok": false
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-intertop",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "INTERTOP 044",
+      "root": 5,
+      "category": 5,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 5,
+          "got": 5,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-uz-ticket",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "UZ Ticket Kyiv-Lviv",
+      "root": 11,
+      "category": 11,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-kyivstar",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "KYIVSTAR popovnennya",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-vodafone",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "VODAFONE UA",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-vodokanal",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "Київводоканал за серпень",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-zhek",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "ОСББ внесок",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-sport-gym",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "SPORTLIFE abonement",
+      "root": 22,
+      "category": 22,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 22,
+          "got": 22,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-zoo",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "MASTERZOO 12",
+      "root": 21,
+      "category": 21,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 21,
+          "got": 21,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-optika",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "LUXOPTICA",
+      "root": 4,
+      "category": 4,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-knyharnya",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "BOOK24 zamovlennya",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "csv-barber",
+      "group": "csv",
+      "verdict": "ask",
+      "merchant": "BARBERSHOP FIRMA",
+      "root": 10,
+      "category": 10,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 10,
+          "got": 10,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-contradicts-mcc",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "EPICENTR K",
+      "root": 8,
+      "category": 8,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 8,
+          "got": 8,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-says-medicine",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "ATB 1234 KYIV",
+      "root": 4,
+      "category": 4,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-blank-on-obvious",
+      "group": "note",
+      "verdict": "skip",
+      "merchant": "SILPO 305 KYIV UA",
+      "root": 1,
+      "category": 1,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-english",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "GLOVO KYIV",
+      "root": 2,
+      "category": 2,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-repaid-debt",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "Від Oleh S.",
+      "root": 18,
+      "category": 18,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-split-later",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "SILPO 305 KYIV UA",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-gift-for-self",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "ROZETKA.UA",
+      "root": 9,
+      "category": 9,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "note-empty-string",
+      "group": "note",
+      "verdict": "ask",
+      "merchant": "UKLON",
+      "root": 3,
+      "category": 3,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-figma",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "FIGMA MONTHLY",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-openai",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "OPENAI CHATGPT SUBSCR",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-icloud",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "APPLE.COM/BILL ICLOUD",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-google-one",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "GOOGLE *GOOGLE ONE",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-megogo",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "MEGOGO.NET",
+      "root": 6,
+      "category": 6,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-annual-domain",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "GODADDY.COM RENEWAL",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-insurance",
+      "group": "subs",
+      "verdict": "ask",
+      "merchant": "ARX strahuvannya OSCPV",
+      "root": 14,
+      "category": 14,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "subs-cancelled-once",
+      "group": "subs",
+      "verdict": "carry",
+      "merchant": "NETFLIX.COM",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "carry",
+          "got": "carry",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "gate-catering-5811",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "KETERING NA PODIYU",
+      "root": 2,
+      "category": 2,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "gate-parking-7523",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "PARKOVKA TRC",
+      "root": 3,
+      "category": 3,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "gate-unseeded-mcc",
+      "group": "tricky",
+      "verdict": "ask",
+      "merchant": "KVITY NA PODARUNOK",
+      "root": 23,
+      "category": 23,
+      "recurring": 0,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "ask",
+          "got": "ask",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 23,
+          "got": 23,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "gate-atm-6011",
+      "group": "tricky",
+      "verdict": "skip",
+      "merchant": "Знято в банкоматі",
+      "root": 13,
+      "category": 13,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 13,
+          "got": 13,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "gate-enriched-already",
+      "group": "carry",
+      "verdict": "skip",
+      "merchant": "SPOTIFY P1A2B3C4D",
+      "root": 6,
+      "category": 6,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "carry-desc-not-merchant",
+      "group": "carry",
+      "verdict": "carry",
+      "merchant": "HETZNER ONLINE GMBH",
+      "root": 9,
+      "category": 9,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "carry",
+          "got": "carry",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "carry-ignores-amount",
+      "group": "carry",
+      "verdict": "carry",
+      "merchant": "NETFLIX.COM",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "carry",
+          "got": "carry",
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "transfer-iban-out",
+      "group": "transfer",
+      "verdict": "skip",
+      "merchant": "Переказ на власний рахунок IBAN UA21",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "transfer-crypto-p2p",
+      "group": "transfer",
+      "verdict": "skip",
+      "merchant": "BINANCE P2P vyvid",
+      "root": 13,
+      "category": 13,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 13,
+          "got": 13,
+          "ok": true
+        }
+      ],
+      "error": null
+    },
+    {
+      "id": "transfer-fx-exchange",
+      "group": "fx",
+      "verdict": "skip",
+      "merchant": "Обмін валюти USD/UAH",
+      "root": 13,
+      "category": 13,
+      "recurring": null,
+      "checks": [
+        {
+          "kind": "gate",
+          "want": "skip",
+          "got": "skip",
+          "ok": true
+        },
+        {
+          "kind": "root",
+          "want": 13,
+          "got": 13,
+          "ok": true
+        }
+      ],
+      "error": null
+    }
+  ]
+}

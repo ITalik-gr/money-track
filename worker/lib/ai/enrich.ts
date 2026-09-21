@@ -9,6 +9,7 @@ import { callHaikuJson } from "./json.ts";
 import { buildSystemPrefix, langNoteDirective } from "./prompt.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import { logUsage } from "./cost.ts";
+import { judgeTransaction } from "./judge-tx.ts";
 
 // Enrich a single transaction from its raw bank fields — understand what it actually
 // is, pick a category, flag transfers/withdrawals, suggest secondary tags. Reuses the
@@ -32,6 +33,8 @@ export async function enrichTransaction(
     subscriptions?: string | null;
   },
 ): Promise<{ result: EnrichResult; usage: AnthropicUsage }> {
+  const judged = await judgeTransaction(env, tx); // docs/JEV.md phase 1; null = the Haiku ladder
+  if (judged) return judged;
   const system = await buildSystemPrefix(
     env,
     "work out what a bank transaction actually is from its raw fields and return JSON " +

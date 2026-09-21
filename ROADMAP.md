@@ -100,6 +100,21 @@
 
 ## 🔨 Збірка (самодостатнє — не чекає власника)
 
+### Jev (TypeSafe) — phase 2: the full row
+Phase 1 is done and measured (`docs/JEV.md §7.1`): Jev 98.9% root / 97.2% recurring at ~$0.05 per
+1 000 rows vs Haiku 97.8% / 97.2% at ~$1.96. The flag is OFF in production.
+**Owner decisions first (`docs/JEV.md §10`):** (1) whose key — deployment-wide (today: owner-only
+gate in `judge.ts`) or per user; (2) `wrangler secret put JEV_API_KEY` + `ENRICH_JUDGE=jev` to turn it
+on for the owner's own ledger.
+**Steps:**
+1. New eval cases the criteria were NOT tuned on (§7.1 caveat) — 20+ merchants across roots.
+2. `leaf_category` as a second round over the chosen root's children; confidence rule (§3) —
+   below the threshold, file the root. Measure `exact`, which needs `expect.category` in cases.
+3. `clean_name` as span selection (`brand_span`), `known_plan` over declared plans.
+4. Re-measure; then decide how far §ENRICH-GATE's skip list can shrink.
+**Done when:** the phase-2 row of the §7.1 table exists, still with no user-visible effect.
+
+
 ---
 
 ## 📌 Беклог (з відомим корінням, без дати)

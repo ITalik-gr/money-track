@@ -433,6 +433,14 @@ refuses a host with no dot (`localhost`, a container name) and refuses the reser
 to `res.url` after the redirects** — the hop is the remote host's choice, not the user's, and it is
 the ordinary way past a check made only at insert time. Held by `tax-watch.test.ts`.
 
+## Jev (TypeSafe) — a third place operation text can go (2026-09-21)
+
+With `ENRICH_JUDGE=jev`, enrichment sends the same payload it sends Anthropic (raw description,
+bank comment, MCC, amount, the user's note, profile, merchant history, related subscription names)
+to `api.typesafe.ai` instead. `JEV_API_KEY` is deployment-wide, so `judgeAvailable()`
+(`lib/ai/judge.ts`) admits the OWNER only and never a demo — the same rule `userCredentials`
+applies to the Anthropic fallback. Opening it to other users is `docs/JEV.md §10`, not a flag flip.
+
 ## Дані й безпека — правила з реальних багів
 
 - **Ресурс, що виглядає глобальним (`TG_CHAT_ID`, `MONO_TOKEN`, `ANTHROPIC_API_KEY`,

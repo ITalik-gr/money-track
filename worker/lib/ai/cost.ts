@@ -10,7 +10,7 @@
 import type { Env } from "../../env.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { demoRecordSpend } from "../platform/demo.ts";
-import { MODEL_FAST, MODEL_SMART, MODEL_OPUS } from "./models.ts";
+import { MODEL_FAST, MODEL_SMART, MODEL_OPUS, JEV_MODEL } from "./models.ts";
 import { localYm, localYmd } from "../finance/time.ts";
 
 
@@ -45,6 +45,10 @@ const PRICES: Record<string, { in: number; out: number }> = {
   [MODEL_FAST]: { in: 1.0, out: 5.0 },   // Haiku 4.5
   [MODEL_SMART]: { in: 3.0, out: 15.0 }, // Sonnet 5 (стікер; до 31.08.2026 діє вступна)
   [MODEL_OPUS]: { in: 5.0, out: 25.0 },  // Opus 4.8
+  // TypeSafe Jev (docs/JEV.md §1): input-only billing, output is free. Without its own row the
+  // `PRICES[MODEL_FAST]` fallback below would price a judgment as a Haiku call — ~25× the input
+  // rate plus $5/M for "output" that is not billed at all.
+  [JEV_MODEL]: { in: 0.042, out: 0 },
 };
 
 // Sonnet 5: ВСТУПНА ціна $2/$10 за MTok діє ДО 2026-08-31 включно (тобто до 01.09.2026 UTC),

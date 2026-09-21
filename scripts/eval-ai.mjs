@@ -35,6 +35,12 @@
  *   node scripts/eval-ai.mjs --case netflix   # one case
  *   node scripts/eval-ai.mjs --dry            # gate only: no network, no cost, still scores the gate
  *   node scripts/eval-ai.mjs --record         # write the baseline (deliberate, reviewed changes only)
+ *   node scripts/eval-ai.mjs --judge jev      # the same ladder with enrichment answered by Jev (docs/JEV.md)
+ *
+ * `--judge jev` is not a second harness: it flips `ENRICH_JUDGE` on the env the production code
+ * reads, so the gate, the carry and `applyEnrichment` are the same code on both runs and only the
+ * judge differs. Its result and baseline go to their own files — comparing a Jev run against the
+ * Haiku baseline would report every row Jev files differently as a «regression».
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -45,10 +51,10 @@ import { categorize } from "../worker/lib/finance/categorize.ts";
 import { gateRow, enrichVerdict, applyCarry } from "../worker/lib/ai/enrich-gate.ts";
 import { enrichOne } from "../worker/lib/ai/enrich.ts";
 import { callCostUsd } from "../worker/lib/ai/cost.ts";
+import { JEV_MODEL } from "../worker/lib/ai/models.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const EVAL_DIR = join(HERE, "..", "worker", "test", "__eval__");
-const BASELINE = join(EVAL_DIR, "baseline.json");
 
 // ─── arguments ──────────────────────────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
@@ -63,6 +69,13 @@ const LIMIT = Number(value("limit", 0)) || 0;
 const CONCURRENCY = Number(value("concurrency", 4)) || 4;
 const DRY = flag("dry");
 const RECORD = flag("record");
+const JUDGE = value("judge", "haiku");
+if (JUDGE !== "haiku" && JUDGE !== "jev") {
+  console.error(`--judge must be haiku or jev, got ${JUDGE}`);
+  process.exit(1);
+}
+// Suffix for the per-judge result files; the Haiku ones keep their historical names.
+const SUFFIX = JUDGE === "haiku" ? "" : `.${JUDGE}`;
 
 // ─── the key ────────────────────────────────────────────────────────────────────────────────────
 /**
@@ -70,12 +83,13 @@ const RECORD = flag("record");
  * an argument (a shell history is not a secret store), which is the same rule the deploy docs
  * state for every other secret.
  */
-function apiKey() {
-  if (process.env.ANTHROPIC_API_KEY) return process.env.ANTHROPIC_API_KEY;
+function devVar(name) {
+  if (process.env[name]) return process.env[name];
   const f = join(HERE, "..", ".dev.vars");
   if (!existsSync(f)) return null;
+  const re = new RegExp(`^\\s*${name}\\s*=\\s*"?([^"\\n]+)"?\\s*$`);
   for (const line of readFileSync(f, "utf8").split("\n")) {
-    const m = /^\s*ANTHROPIC_API_KEY\s*=\s*"?([^"\n]+)"?\s*$/.exec(line);
+    const m = re.exec(line);
     if (m) return m[1].trim();
   }
   return null;
@@ -97,12 +111,15 @@ function meterFetch() {
     const res = await real(...args);
     try {
       const url = String(args[0]?.url ?? args[0]);
-      if (!url.includes("anthropic.com")) return res;
+      const jev = url.includes("typesafe.ai");
+      if (!url.includes("anthropic.com") && !jev) return res;
       const clone = res.clone();
       const body = await clone.json();
       const u = body?.usage;
       if (!u) return res;
-      const model = body?.model ?? "unknown";
+      // TypeSafe answers with the resolved version («jev-1.13.0»); the price table is keyed on the
+      // alias the request used. Pricing it under the response id would fall back to Haiku's row.
+      const model = jev ? JEV_MODEL : body?.model ?? "unknown";
       const usage = {
         input_tokens: u.input_tokens ?? 0,
         output_tokens: u.output_tokens ?? 0,
@@ -150,6 +167,8 @@ async function runCase(c, key) {
     USER_ID: "eval",
     IS_OWNER: "1",
     ANTHROPIC_API_KEY: DRY ? "" : key,
+    JEV_API_KEY: DRY ? "" : jevKey ?? "",
+    ENRICH_JUDGE: JUDGE,
   };
   db.raw.prepare("INSERT INTO accounts (id, type, title, currency_code, balance) VALUES ('acc', 'black', 'Eval', 980, 0)").run();
 
@@ -240,9 +259,18 @@ if (ONLY_GROUP) selected = selected.filter((c) => c.group === ONLY_GROUP);
 if (ONLY_CASE) selected = selected.filter((c) => c.id === ONLY_CASE);
 if (LIMIT) selected = selected.slice(0, LIMIT);
 
-const key = apiKey();
+const BASELINE = join(EVAL_DIR, `baseline${SUFFIX}.json`);
+// The Anthropic key is needed on the Jev run too: a row the judge cannot answer falls back to the
+// Haiku ladder (that fallback is production behaviour, so the eval keeps it), and §F2 step 2 still
+// runs on Haiku after a row lands in the transfer bucket.
+const key = devVar("ANTHROPIC_API_KEY");
+const jevKey = JUDGE === "jev" ? devVar("JEV_API_KEY") : null;
 if (!key && !DRY) {
   console.error("No ANTHROPIC_API_KEY (env or .dev.vars). Run with --dry to score the gate alone.");
+  process.exit(1);
+}
+if (JUDGE === "jev" && !jevKey && !DRY) {
+  console.error("No JEV_API_KEY (env or .dev.vars).");
   process.exit(1);
 }
 if (!DRY) meterFetch();
@@ -278,7 +306,7 @@ for (const r of results) {
 const pct = (t) => (t.n ? `${((t.ok / t.n) * 100).toFixed(1)}% (${t.ok}/${t.n})` : "—");
 const asked = results.filter((r) => r.got.verdict === "ask").length;
 
-console.log(`\n=== AI eval — ${results.length} cases in ${seconds}s ===\n`);
+console.log(`\n=== AI eval (${JUDGE}) — ${results.length} cases in ${seconds}s ===\n`);
 for (const kind of ["gate", "root", "exact", "recurring", "transfer"]) {
   if (tally[kind]) console.log(`  ${kind.padEnd(10)} ${pct(tally[kind])}`);
 }
@@ -340,8 +368,8 @@ const current = Object.fromEntries(results.map((r) => [r.c.id, {
 
 // The full run, on disk. A run costs real money, so losing its detail to a scrolled-off terminal
 // would mean paying twice to answer the same question.
-writeFileSync(join(EVAL_DIR, "last-run.json"), `${JSON.stringify({
-  at: new Date().toISOString(), dry: DRY, seconds: Number(seconds), tally, meter,
+writeFileSync(join(EVAL_DIR, `last-run${SUFFIX}.json`), `${JSON.stringify({
+  at: new Date().toISOString(), dry: DRY, judge: JUDGE, seconds: Number(seconds), tally, meter,
   results: results.map((r) => ({ id: r.c.id, group: r.c.group, verdict: r.got.verdict,
     merchant: r.got.after?.merchant ?? null, root: r.got.after?.root ?? null,
     category: r.got.after?.category_id ?? null, recurring: r.got.after?.ai_recurring ?? null,

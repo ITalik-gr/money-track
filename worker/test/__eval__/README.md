@@ -7,6 +7,7 @@ this pins a VERDICT — what the model concluded about a transaction it had neve
     npm run eval -- --dry   # gate only: no network, no cost
     npm run eval -- --group subs --concurrency 2
     npm run eval -- --record   # write baseline.json (deliberate, reviewed changes only)
+    npm run eval -- --judge jev   # enrichment answered by Jev (docs/JEV.md); own baseline.jev.json
 
 The run needs `ANTHROPIC_API_KEY` in `.dev.vars` or the environment. It is NOT part of
 `npm run check`: it costs money and it is not deterministic, so it is a tool you reach for

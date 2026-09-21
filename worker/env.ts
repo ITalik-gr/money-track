@@ -53,6 +53,19 @@ export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP"> {
   // unset, demo AI falls back to the regular key (still capped + forced to Haiku).
   DEMO_ANTHROPIC_KEY?: string;
   /**
+   * TypeSafe key for Jev judgments (docs/JEV.md). Deployment-wide and therefore OWNER-ONLY
+   * (`judgeAvailable` in `lib/ai/judge.ts`) until §10 «whose key» is decided.
+   * Declared as a plain `string` like `ANTHROPIC_API_KEY`: `wrangler types` reads `.dev.vars` and
+   * emits it that way, and an optional here would not extend it. Unset still arrives as falsy.
+   */
+  JEV_API_KEY: string;
+  /**
+   * Which ladder answers enrichment: `"jev"` routes it through `judge-tx.ts`, anything else (the
+   * default) keeps Haiku. A flag rather than a switch-over, because phase 1 exists to MEASURE the
+   * two side by side, and the Haiku path must stay alive as the fallback either way.
+   */
+  ENRICH_JUDGE?: "jev" | "haiku";
+  /**
    * VAPID keypair for Web Push (§PUSH). Deployment secrets, generated once by
    * `node scripts/gen-vapid.mjs` — see `lib/messaging/webpush.ts`.
    *

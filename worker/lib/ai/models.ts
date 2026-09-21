@@ -12,6 +12,9 @@ import { isDemoEnv } from "../platform/demo.ts";
 export const MODEL_FAST = "claude-haiku-4-5";
 export const MODEL_SMART = "claude-sonnet-5";
 export const MODEL_OPUS = "claude-opus-4-8";
+// Not a Claude model: TypeSafe's judgment model (docs/JEV.md). It lives in this table only so
+// `cost.ts` can price it; nothing routes a TASK to it through `getTaskModel`.
+export const JEV_MODEL = "jev-latest";
 
 // Моделі окремо НА ЗАДАЧУ (рішення 2026-07-11). Кожна user-facing задача має свій ключ
 // app_state.ai_model_<task> зі значенням-токеном (haiku|sonnet|opus). Дефолти нижче:

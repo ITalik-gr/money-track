@@ -1,0 +1,797 @@
+{
+  "recorded": "2026-09-21",
+  "cases": {
+    "atb-supermarket": {
+      "verdict": "skip",
+      "root": 1,
+      "recurring": null,
+      "pass": true
+    },
+    "silpo-latin": {
+      "verdict": "skip",
+      "root": 1,
+      "recurring": null,
+      "pass": true
+    },
+    "varus": {
+      "verdict": "skip",
+      "root": 1,
+      "recurring": null,
+      "pass": true
+    },
+    "market-stall": {
+      "verdict": "skip",
+      "root": 1,
+      "recurring": null,
+      "pass": true
+    },
+    "bakery": {
+      "verdict": "skip",
+      "root": 1,
+      "recurring": null,
+      "pass": true
+    },
+    "grocery-no-mcc": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "novus-no-mcc": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "aromakava": {
+      "verdict": "skip",
+      "root": 2,
+      "recurring": null,
+      "pass": true
+    },
+    "mcdonalds": {
+      "verdict": "skip",
+      "root": 2,
+      "recurring": null,
+      "pass": true
+    },
+    "puzata-hata": {
+      "verdict": "skip",
+      "root": 2,
+      "recurring": null,
+      "pass": true
+    },
+    "glovo": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": true
+    },
+    "bolt-food": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": true
+    },
+    "lviv-coffee": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": true
+    },
+    "uber-ride": {
+      "verdict": "skip",
+      "root": 3,
+      "recurring": null,
+      "pass": true
+    },
+    "bolt-ride": {
+      "verdict": "skip",
+      "root": 3,
+      "recurring": null,
+      "pass": true
+    },
+    "wog-fuel": {
+      "verdict": "skip",
+      "root": 3,
+      "recurring": null,
+      "pass": true
+    },
+    "okko-fuel": {
+      "verdict": "skip",
+      "root": 3,
+      "recurring": null,
+      "pass": true
+    },
+    "metro-ticket": {
+      "verdict": "skip",
+      "root": 3,
+      "recurring": null,
+      "pass": true
+    },
+    "uklon-no-mcc": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": true
+    },
+    "blablacar": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": true
+    },
+    "apteka": {
+      "verdict": "skip",
+      "root": 4,
+      "recurring": null,
+      "pass": true
+    },
+    "podorozhnyk": {
+      "verdict": "skip",
+      "root": 4,
+      "recurring": null,
+      "pass": true
+    },
+    "dobrobut-clinic": {
+      "verdict": "ask",
+      "root": 4,
+      "recurring": 0,
+      "pass": true
+    },
+    "dental": {
+      "verdict": "ask",
+      "root": 4,
+      "recurring": 0,
+      "pass": true
+    },
+    "netflix": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": true
+    },
+    "spotify": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": true
+    },
+    "youtube-premium": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": true
+    },
+    "google-one": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "icloud": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": true
+    },
+    "chatgpt": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "figma": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "megogo": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": true
+    },
+    "steam-game": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 0,
+      "pass": true
+    },
+    "app-store-oneoff": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": false
+    },
+    "gym": {
+      "verdict": "ask",
+      "root": 22,
+      "recurring": 1,
+      "pass": true
+    },
+    "kyivstar": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "lifecell": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "yasno": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "osbb": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "internet-volia": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "atm-withdrawal": {
+      "verdict": "skip",
+      "root": 13,
+      "recurring": null,
+      "pass": true
+    },
+    "own-card-transfer": {
+      "verdict": "skip",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "jar-topup": {
+      "verdict": "skip",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "roundup": {
+      "verdict": "skip",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "p2p-out-plain": {
+      "verdict": "skip",
+      "root": 13,
+      "recurring": null,
+      "pass": true
+    },
+    "salary": {
+      "verdict": "ask",
+      "root": 15,
+      "recurring": 0,
+      "pass": true
+    },
+    "freelance-usd": {
+      "verdict": "ask",
+      "root": 16,
+      "recurring": 0,
+      "pass": true
+    },
+    "cashback": {
+      "verdict": "ask",
+      "root": 45,
+      "recurring": 0,
+      "pass": true
+    },
+    "deposit-interest": {
+      "verdict": "ask",
+      "root": 46,
+      "recurring": 0,
+      "pass": true
+    },
+    "p2p-in-gift": {
+      "verdict": "skip",
+      "root": 13,
+      "recurring": null,
+      "pass": true
+    },
+    "olx-sale": {
+      "verdict": "ask",
+      "root": 44,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-says-salary": {
+      "verdict": "ask",
+      "root": 15,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-says-gift": {
+      "verdict": "ask",
+      "root": 23,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-says-work": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-says-leisure": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 0,
+      "pass": true
+    },
+    "amazon-usd": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "booking-eur": {
+      "verdict": "ask",
+      "root": 11,
+      "recurring": 0,
+      "pass": true
+    },
+    "aliexpress": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "nova-poshta": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "ukrposhta": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "epicentr": {
+      "verdict": "ask",
+      "root": 8,
+      "recurring": 0,
+      "pass": true
+    },
+    "rozetka-electronics": {
+      "verdict": "ask",
+      "root": 9,
+      "recurring": 0,
+      "pass": true
+    },
+    "sinsay-clothes": {
+      "verdict": "ask",
+      "root": 5,
+      "recurring": 0,
+      "pass": true
+    },
+    "eva-beauty": {
+      "verdict": "ask",
+      "root": 10,
+      "recurring": 0,
+      "pass": true
+    },
+    "tax-single": {
+      "verdict": "ask",
+      "root": 24,
+      "recurring": 0,
+      "pass": true
+    },
+    "esv": {
+      "verdict": "ask",
+      "root": 24,
+      "recurring": 1,
+      "pass": true
+    },
+    "vet": {
+      "verdict": "ask",
+      "root": 21,
+      "recurring": 0,
+      "pass": true
+    },
+    "kids-school": {
+      "verdict": "ask",
+      "root": 19,
+      "recurring": 0,
+      "pass": true
+    },
+    "cinema": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 0,
+      "pass": true
+    },
+    "books": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "carry-known-merchant": {
+      "verdict": "carry",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "carry-not-recurring": {
+      "verdict": "carry",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "no-carry-from-skipped": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 0,
+      "pass": true
+    },
+    "already-enriched": {
+      "verdict": "skip",
+      "root": 3,
+      "recurring": null,
+      "pass": true
+    },
+    "fop-payoneer": {
+      "verdict": "ask",
+      "root": 16,
+      "recurring": 0,
+      "pass": true
+    },
+    "fop-deel": {
+      "verdict": "ask",
+      "root": 16,
+      "recurring": 0,
+      "pass": true
+    },
+    "fop-invoice-uah": {
+      "verdict": "ask",
+      "root": 16,
+      "recurring": 0,
+      "pass": true
+    },
+    "fop-client-quiet": {
+      "verdict": "ask",
+      "root": 16,
+      "recurring": 0,
+      "pass": true
+    },
+    "fop-upwork-fee": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "fop-bank-fee": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "fop-jetbrains": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "fop-hetzner": {
+      "verdict": "ask",
+      "root": 9,
+      "recurring": 1,
+      "pass": true
+    },
+    "fop-cloudflare": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "fop-namecheap": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "fop-vz": {
+      "verdict": "ask",
+      "root": 24,
+      "recurring": 1,
+      "pass": true
+    },
+    "fop-esv-quarter": {
+      "verdict": "ask",
+      "root": 24,
+      "recurring": 1,
+      "pass": true
+    },
+    "csv-auchan": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-metro": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-fora": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-ashan-cyrillic": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-aurora": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-jysk": {
+      "verdict": "ask",
+      "root": 8,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-foxtrot": {
+      "verdict": "ask",
+      "root": 9,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-allo": {
+      "verdict": "ask",
+      "root": 9,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-kasta": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": false
+    },
+    "csv-intertop": {
+      "verdict": "ask",
+      "root": 5,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-uz-ticket": {
+      "verdict": "ask",
+      "root": 11,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-kyivstar": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "csv-vodafone": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "csv-vodokanal": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "csv-zhek": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "csv-sport-gym": {
+      "verdict": "ask",
+      "root": 22,
+      "recurring": 1,
+      "pass": true
+    },
+    "csv-zoo": {
+      "verdict": "ask",
+      "root": 21,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-optika": {
+      "verdict": "ask",
+      "root": 4,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-knyharnya": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": true
+    },
+    "csv-barber": {
+      "verdict": "ask",
+      "root": 10,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-contradicts-mcc": {
+      "verdict": "ask",
+      "root": 8,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-says-medicine": {
+      "verdict": "ask",
+      "root": 4,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-blank-on-obvious": {
+      "verdict": "skip",
+      "root": 1,
+      "recurring": null,
+      "pass": true
+    },
+    "note-english": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-repaid-debt": {
+      "verdict": "ask",
+      "root": 18,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-split-later": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-gift-for-self": {
+      "verdict": "ask",
+      "root": 9,
+      "recurring": 0,
+      "pass": true
+    },
+    "note-empty-string": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": true
+    },
+    "subs-figma": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "subs-openai": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "subs-icloud": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "subs-google-one": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "subs-megogo": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": true
+    },
+    "subs-annual-domain": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "subs-insurance": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 1,
+      "pass": true
+    },
+    "subs-cancelled-once": {
+      "verdict": "carry",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "gate-catering-5811": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": true
+    },
+    "gate-parking-7523": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": true
+    },
+    "gate-unseeded-mcc": {
+      "verdict": "ask",
+      "root": 23,
+      "recurring": 0,
+      "pass": true
+    },
+    "gate-atm-6011": {
+      "verdict": "skip",
+      "root": 13,
+      "recurring": null,
+      "pass": true
+    },
+    "gate-enriched-already": {
+      "verdict": "skip",
+      "root": 6,
+      "recurring": null,
+      "pass": true
+    },
+    "carry-desc-not-merchant": {
+      "verdict": "carry",
+      "root": 9,
+      "recurring": 1,
+      "pass": true
+    },
+    "carry-ignores-amount": {
+      "verdict": "carry",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "transfer-iban-out": {
+      "verdict": "skip",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "transfer-crypto-p2p": {
+      "verdict": "skip",
+      "root": 13,
+      "recurring": null,
+      "pass": true
+    },
+    "transfer-fx-exchange": {
+      "verdict": "skip",
+      "root": 13,
+      "recurring": null,
+      "pass": true
+    }
+  }
+}
