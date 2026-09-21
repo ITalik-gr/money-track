@@ -10,7 +10,7 @@
 > банківська фаза закриті. Реєстрація ВІДКРИТА і тільки через Google; Telegram і MCP-токен —
 > ДРУГИЙ і ТРЕТІЙ ключі до наявного акаунта, створити ним акаунт не можна. The fourth key is the
 > write-only phone token (§QUICK-ADD).
-> Міграції: `finance` до **0053**, `directory` до **0011**. Тестів — **1076**. Лінти — **C1–C15**.
+> Міграції: `finance` до **0054**, `directory` до **0011**. Тестів — **1088**. Лінти — **C1–C15**.
 > Оновлено 2026-09-20.
 
 ## 📁 Карта документів — що де лежить
@@ -23,7 +23,7 @@
 | **`docs/CANON.md`** | гроші, статистика, рівні, бюджети, підписки, цілі, категоризація | **перед будь-яким числом про гроші** |
 | **`docs/INGEST.md`** | вебхук, полінг, CSV-імпорт, `bank_connections` | робота з банком чи імпортом |
 | **`docs/AI.md`** | моделі, вартість, промти, grounding, стрім, фонові задачі, сповіщення | будь-який AI-виклик |
-| **`docs/JEV.md`** | Jev (TypeSafe) as the judgment layer: phase 1 measured (§7.1), the rest is a plan | перед роботою над enrich/категоризацією |
+| **`docs/JEV.md`** | Jev (TypeSafe) as the judgment layer: phases 1–3 measured (§7.1–7.3), Jev → Haiku cascade, proposals | перед роботою над enrich/категоризацією |
 | **`docs/PERIMETER.md`** | безпека, ідентичність (Google/TG/MCP), де лежать дані | нова автентифікація, спільний ресурс, аудит |
 | **`docs/TAX.md`** | ФОП: діловий дохід, конверт, ліміт, дедлайни, регуляторний нагляд | будь-що про податки, бізнес-дохід або курс НБУ |
 | **`docs/I18N.md`** | мова відповіді, `t()`, `st()`, назви категорій | новий рядок, який побачить людина |
@@ -161,9 +161,10 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   `tasks.ts` — розмовні виклики без власного фіча-файлу · **`enrich-gate.ts`** (§ENRICH-GATE —
   ХТО взагалі вартий виклику: пропустити рух власних коштів і очевидні MCC, скопіювати вердикт
   уже відомого мерчанта, спитати лише про нове; поза `enrich.ts`, бо той під стелею C3) ·
-  **`judge.ts` + `judge-tx.ts`** (docs/JEV.md) — the only file that POSTs to TypeSafe, and the
-  Jev question set for enrich; a sibling of `ai.ts`, NOT behind the `json.ts` seam; flag
-  `ENRICH_JUDGE=jev`, owner-only, null = fall back to the Haiku ladder ·
+  **`judge.ts` + `judge-tx.ts` + `judge-guide.ts`** (docs/JEV.md) — the only file that POSTs to
+  TypeSafe, the Jev question set for enrich (root → leaf rounds, span-selected name, cascade to
+  Haiku below root p 0.8), and the category guide parsed out of `CACHE_GUIDE` (ONE guide for both
+  judges); NOT behind the `json.ts` seam; flag `ENRICH_JUDGE=jev`, owner-only ·
   `advisor`, `enrich`, `insight`,
   `report`, `receipt`, **`advice-actions.ts`** (§ADVICE-LOOP — реєстр «що радили / що з цього
   вийшло»; єдиний писар `app_state.advisor_suggestions`) · **`advice-fallback.ts`** (детермінована
@@ -228,7 +229,7 @@ PWA на одному **Cloudflare Worker (Hono) + D1 + R2**. Monobank (webhook 
   `accounts/` · `settings/` — доменні блоки відповідних екранів.
 - `src/store/` (RTK Query), `src/lib/` (`errors`, `format`, `brands`, `markdown`, `toast`),
   `src/i18n/`.
-- `migrations/*` (0001→0052) · `wrangler.jsonc` · `.dev.vars` (локальні секрети, у .gitignore).
+- `migrations/*` (0001→0054) · `wrangler.jsonc` · `.dev.vars` (локальні секрети, у .gitignore).
 - `src/styles/*` — 21 доменний файл (`advisor.css` — від 2026-08-27, шов C8:
   `domains-a.css` знову вперлась у стелю, а виняток рости не може; від 2026-09-10 туди ж переїхала
   «Індекс здоровʼя» — `settings.css` уперлась у свої 700, а розміщення картки

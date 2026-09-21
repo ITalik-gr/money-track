@@ -111,10 +111,6 @@ export function amountMatches(txAbsMinor: number, periodAmount: number | null): 
   return Math.abs(txAbsMinor - periodAmount) <= periodAmount * 0.1;
 }
 
-// Перше значуще слово назви — для попереднього SQL-фільтра LIKE (звужує вибірку).
-function firstToken(title: string): string | null {
-  return normalize(title).split(" ").find((w) => w.length >= 3) ?? null;
-}
 
 /**
  * Знайти активну підписку, під яку підпадає операція (валюта + назва + сума). Без AI.
@@ -262,13 +258,13 @@ export interface PlanLinkResult { linked: number; recategorised: number }
 export async function linkPlanHistory(db: AppDb, sub: SubRow): Promise<PlanLinkResult> {
   const out: PlanLinkResult = { linked: 0, recategorised: 0 };
   if (!sub.period_amount) return out;
-  // §SUB-ALIAS: every name the plan is known by, not just its title — and the pre-filter has to
-  // widen with it, or the alias would be tested against rows SQL already threw away.
-  const tokens = [...new Set(planNeedles(sub).map(firstToken).filter((x): x is string => !!x))];
-  if (!tokens.length) return out;
   const since = Math.floor(Date.now() / 1000) - LINK_WINDOW_DAYS * 86400;
-  const like = tokens.map(() => "(LOWER(merchant) LIKE ? OR LOWER(raw_json) LIKE ? OR LOWER(ai_note) LIKE ? OR LOWER(comment) LIKE ?)");
-  const binds = tokens.flatMap((tk) => [`%${tk}%`, `%${tk}%`, `%${tk}%`, `%${tk}%`]);
+  // The pre-filter is the AMOUNT (the same ±10% `amountMatches` applies), not the name. It used to
+  // be `LOWER(merchant) LIKE '%київстар%'`, and SQLite folds case for ASCII only: a Cyrillic plan
+  // title never matched a capitalised Cyrillic merchant, so «Київстар» could not find its own
+  // history (2026-09-21). The name — every alias of it (§SUB-ALIAS) — is tested below in JS, which
+  // lower-cases Cyrillic correctly; the amount window keeps the scan to a handful of rows.
+  const lo = Math.floor(sub.period_amount * 0.9), hi = Math.ceil(sub.period_amount * 1.1);
   // ⚠️ No `hold = 0` (dropped 2026-08-27). Holds are COUNTED everywhere else (canon, `stats.ts`,
   // and `merchantMatches` in `repo/planning.ts` for this very reason): mono overwrites the SAME id
   // on settlement, so there is no double link — while the filter cut the freshest week out, which
@@ -276,8 +272,8 @@ export async function linkPlanHistory(db: AppDb, sub: SubRow): Promise<PlanLinkR
   const rows = await db.prepare(
     `SELECT id, merchant, raw_json, ai_note, comment, amount, category_id, planned_id FROM transactions
      WHERE amount < 0 AND is_transfer = 0 AND currency_code = ? AND time >= ?
-       AND (${like.join(" OR ")})`,
-  ).bind(sub.currency_code, since, ...binds).all<TxLite>();
+       AND -amount BETWEEN ? AND ?`,
+  ).bind(sub.currency_code, since, lo, hi).all<TxLite>();
 
   for (const t of rows.results ?? []) {
     const hay = txHaystack({ merchant: t.merchant, description: descOf(t.raw_json), ai_note: t.ai_note, comment: t.comment });

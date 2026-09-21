@@ -1,7 +1,7 @@
 # JEV.md — every transaction understood by itself
 
-> **Status: phase 1 BUILT and MEASURED (2026-09-21), behind a flag that is off in production.**
-> Results in §7.1. Phases 2–4 are still a plan. Written 2026-09-21 on the owner's brief: «щоб jav всі
+> **Status: phases 1–3 BUILT and MEASURED (2026-09-21), behind a flag that is off in production.**
+> Results in §7.1–7.3. Phase 4 is still a plan. Written 2026-09-21 on the owner's brief: «щоб jav всі
 > транзакції дивився, і автоматично сам розумів що це, скільки, нащо, чи підписка чи ні».
 >
 > What it replaces is not Haiku. It replaces **asking a text model to do a job that is not text.**
@@ -220,6 +220,90 @@ questions and reconciliation), `ENRICH_JUDGE=jev` + `JEV_API_KEY` on the env,
 `npm run eval -- --judge jev` (writes `baseline.jev.json` / `last-run.jev.json`, never the Haiku
 files). Pinned without network by `worker/test/judge-tx.test.ts`.
 
+### 7.2 Phase 2 result — held out, a cascade, the leaf and the name (2026-09-21)
+
+**The phase-1 number did not survive new data.** 36 cases were written BEFORE any phase-2 work
+(`group: "holdout"` in `cases.json`) and never used to tune anything. On them, phase-1 Jev scored
+**72.2% root**; Haiku scored 97.2% root and 100% leaf. Jev filed shops it had never heard of
+(Nova Liniya, Citrus, Prostor, Antoshka) under «Other». The cause was ours, not the model's: the
+phase-1 criteria were a hand-condensed copy of `CACHE_GUIDE` that had dropped its brand lists —
+a second definition of the categories, which is exactly the failure this project keeps a rule
+against. Now `judge-guide.ts` parses the SAME guide Haiku reads, and a test pins that every seed
+category comes out of it with a text. (Several holdout brands are in that shared guide — that is
+knowledge both judges get, not tuning; none of the 36 was added to it.)
+
+What phase 2 built:
+- **The cascade.** Jev files a row only when its root probability is ≥ `ROOT_CASCADE_AT` = 0.8;
+  below, it returns null and the Haiku ladder answers. Measured on a sequential run with no
+  cascade (135 asked rows): every root at ≥ 0.8 was right (99/99 scored); all 6 misses sat
+  between 0.41 and 0.74. At 0.7 one miss slips through (MEGOGO → Utilities at 0.74). Own money
+  moving is exempt — the transfer bucket asks its real question in §F2 step 2 anyway.
+- **The leaf** — a second request over the chosen root's children plus «none of the specific
+  ones», filed at ≥ `LEAF_AT` = 0.6, else the root. Only roots WITH children pay for it.
+- **The name** — Jev SELECTS a span of the raw description that code cut out (numbers never
+  stand alone, code-like tokens are dropped, «CITRUS.UA» also offers «CITRUS»). It cannot invent
+  a spelling; «none of these» keeps the ladder's name.
+- **`known_plan` was not built:** `applyEnrichment` already links a charge to a declared plan
+  deterministically (`matchActiveSubscription`), and it is now handed a clean name to do it with.
+  A judgment would be a second answer to a question code already answers.
+
+All 168 cases, `npm run eval -- --judge jev` (no Claude key — deferred rows are reported, not scored):
+
+| | Haiku ladder | Jev alone (answered rows) | Jev → Haiku cascade |
+|---|---|---|---|
+| rows Jev answers | — | 115 of 135 asked (85%) | same |
+| root | 97.7% (126/129) | **100% (119/119)** | 98.4% (127/129)¹ |
+| leaf (exact) | 100% (13/13) | 92.3% (12/13) | — |
+| recurring | 95.5% (42/44) | 95.0% (38/40) | — |
+| name (holdout) | 81.3% (26/32) | 85.2% (23/27) | — |
+| per 1 000 ingested rows | ~$1.96 | ~$0.10 (incl. leaf rounds) | **~$0.40**² |
+
+¹ Derived, not paid for: the cascade's root misses are exactly Haiku's own misses among the
+deferred rows (`csv-kasta`, `ho-wise`); both were already recorded in Haiku runs.
+² Jev on every asked row + Haiku (~$0.0026 per ask, from its own run) on the ~15% it hands on.
+
+Honest reading: the cascade does not beat Haiku by much on accuracy — it matches it, and costs
+about a fifth. The rows Jev keeps it gets right; the rows it gives away are the ones Haiku was
+going to be needed for. The deferred count moves by ±1 between runs (19–20): Jev is not perfectly
+deterministic at the line.
+
+Remaining misses on Jev-answered rows: `app-store-oneoff` (recurring — Haiku misses it too),
+`ho-lanet` (recurring 0 — an internet provider it does not recognise), `ho-ekomarket` (Groceries
+instead of Supermarket — leaf below the line, the root was filed as designed), and four names that
+are defensible («Multiplex Lavina», «Justin Poshta»).
+
+### 7.3 Phase 3 result — the skip list, and the two new columns (2026-09-21)
+
+No Claude was spent on any of this: `--judge jev` withholds the Anthropic key by default.
+
+**The skip list stays as it is — measured, not assumed.** `--force-ask` runs Jev over the 28 rows
+§ENRICH-GATE skips. On every obvious MCC (5411, 5499, 5462, 5812/5814, 4121, 5541/5542, 4111,
+5912) its root agreed with the MCC 100% and `recurring` came back 0 — asking buys nothing the code
+did not already know. On own money moving it was WORSE than skipping: the round-up went from the
+transfer bucket to «Other». Both of §4's reasons for the gate held; the list is complete as it is.
+
+**Two new PROPOSALS per row** (migration 0054, never the columns the canon or the tax reads):
+
+| | Jev, first run, criteria written before it | What the app does with it |
+|---|---|---|
+| `ai_importance` (Score, 3 levels of §6) | 86.1% (31/36) | stored only — every 7th proposal would be wrong |
+| `ai_business` (Noul) at 0.5 | 89.5% (17/19) | offered on the operation page (thresholds below) |
+
+The expectations were written into `cases.json` BEFORE the first run, and nothing was tuned after
+it. The one criterion edit — «a salary from an employer is employment, not the holder's business» —
+went in before the run too: it is §TAX-BASE's definition, not a fix for a miss.
+
+**Business is well separated, so the thresholds are measured:** every work row came back
+≥ 0.88, every personal one ≤ 0.56 (the two misses at 0.5 were Netflix and a children's shop, both
+read by a sole-trader profile). The page offers «Схоже на робочу» at ≥ 0.8 on a personal account
+and «Схоже на особисту» at ≤ 0.3 on a business one — zero wrong offers on this set, and only
+where accepting would change what the account already says.
+
+**Importance misses** are groceries (Novus, Fora) and connectivity (Vodafone, Lanet) read as
+«discretionary». Not tuned: they are the first honest number. The structural next step is to ask
+importance in the second round, where the ROOT is known — a question that knows «this is
+Groceries» is a different question, not a reworded one.
+
 ---
 
 ## 8. Known jaggedness, and what each one costs here
@@ -243,12 +327,12 @@ Their published limitations for 1.13, mapped onto this ledger:
 **Phase 1 — measure.** `judge.ts` + `judge-tx.ts` with `root_category`, `kind`, `recurring` only,
 behind a flag. Run the eval both ways. Nothing user-visible. *This is the whole decision.*
 
-**Phase 2 — the full row.** Add `leaf_category` (second round, confidence rule), `brand_span`,
-`known_plan`. Re-measure. Shrink the gate's skip list by what the numbers allow.
+**Phase 2 — the full row.** ✅ Done (§7.2): leaf round, span-selected name, the cascade.
+`known_plan` deliberately not built (§7.2). The gate's skip list was NOT shrunk yet — that is
+phase 3's first measurement.
 
-**Phase 3 — the new columns.** `importance` and `is_business` per transaction, both written as
-PROPOSALS the user can overturn — the same way §A1 facts and advice suggestions already work.
-Never silently authoritative: `is_business` moves a tax figure.
+**Phase 3 — the new columns.** ✅ Done (§7.3): `ai_importance` + `ai_business` as proposals; the
+business one is offered on the operation page; the skip list measured and kept.
 
 **Phase 4 — the other call sites.** §SUB-REVIEW, §F2, §AI-CATCHUP, §CSV-AI, then the search rerank.
 

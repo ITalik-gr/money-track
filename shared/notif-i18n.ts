@@ -16,6 +16,7 @@
 // "1 234 ₴" follows the viewer's locale rather than whatever the cron happened to pick.
 
 import { currencySign, hryvniaSign } from "./currency.ts";
+import { plainCitations } from "./citations.ts";
 
 export type NotifLocale = "uk" | "en";
 
@@ -85,7 +86,7 @@ export function renderNotif(locale: NotifLocale, key: NotifTemplateKey, p: Notif
       return {
         title: `${period} ${kind} · ${dm(num(p, "from"))} – ${dm(num(p, "to"))}`,
         // Body is the AI summary — free text, kept verbatim in whatever locale it was written.
-        body: s(p, "summary") || null,
+        body: plainCitations(s(p, "summary")) || null, // cards stored before the worker stripped [tx:…]
       };
     }
 

@@ -8,6 +8,12 @@ this pins a VERDICT — what the model concluded about a transaction it had neve
     npm run eval -- --group subs --concurrency 2
     npm run eval -- --record   # write baseline.json (deliberate, reviewed changes only)
     npm run eval -- --judge jev   # enrichment answered by Jev (docs/JEV.md); own baseline.jev.json
+    npm run eval -- --judge jev --claude   # …and let the rows Jev hands on reach Haiku (costs money)
+
+Without `--claude`, a Jev run never spends on Anthropic: rows Jev hands to the Haiku ladder are
+listed as DEFERRED and left out of the accuracy columns. The `holdout` group was written before
+phase 2 and must never be used to tune a prompt or a criterion — it is the only honest number.
+A case can also declare `name` — acceptable merchant spellings, compared case-blind.
 
 The run needs `ANTHROPIC_API_KEY` in `.dev.vars` or the environment. It is NOT part of
 `npm run check`: it costs money and it is not deterministic, so it is a tool you reach for

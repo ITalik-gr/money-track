@@ -327,7 +327,7 @@ async function draftReports(env: Env, now: number): Promise<Draft[]> {
     tkey: "report" as const,
     tparams: {
       periodType: r.period_type, from: r.period_from, to: r.period_to,
-      summary: (r.summary ?? "").slice(0, 220),
+      summary: (r.summary ?? "").slice(0, 220), // `[tx:…]` — even one cut here — is stripped by the template
     },
     severity: "info" as const,
     entity_type: "report", entity_id: String(r.id),

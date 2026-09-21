@@ -499,6 +499,16 @@
 
 .fop-tx-label { color: var(--muted); font-size: var(--fs-sm); }
 
+/* A Jev proposal (docs/JEV.md phase 3): a sentence plus the one button that would apply it —
+   offered beside the switch it would move, never applied on its own. */
+.fop-tx-suggest {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
 .fop-tx-note {
   flex-basis: 100%;
   color: var(--muted);

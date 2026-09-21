@@ -292,7 +292,8 @@ export function TxDetail() {
 
             {/* §TAX-BASE — the business flag lives on the operation, next to the other things a
                 human decides about it, not on a settings screen. */}
-            <BusinessToggle txId={id} value={(tx as { is_business?: number | null }).is_business ?? null} />
+            <BusinessToggle txId={id} value={tx.is_business ?? null}
+              proposal={tx.ai_business} accountBusiness={tx.account_business} />
 
             {/*
               The facts stay, folded. They are reference — the exact MCC, the tags, the plan link —

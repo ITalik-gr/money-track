@@ -153,10 +153,20 @@ export function claimsMissingFutureCharge(text: string, notYetDueTitles: string[
  *
  * Script, not vocabulary: a Ukrainian sentence carrying «Claude» and «Spotify» is correct, and a
  * ratio test says so while a word list never could.
+ *
+ * A letter from ANY third script fails outright (2026-09-21). The feed shipped «餐німо й розваги…» —
+ * one Han character glued to a Ukrainian word — and the ratio above cannot see it: it counts only
+ * Cyrillic against Latin, so a stray glyph is invisible to both sides. Neither language this app
+ * speaks writes in another script, so such a letter is never a brand name, only a decoding slip.
+ * Letters only: ₴, «» and emoji are not letters, and «ʼ» belongs to no script; all of them pass.
  */
 export function scriptMatchesLocale(text: string, locale: "uk" | "en"): boolean {
+  // Common/Inherited are excluded because «ʼ» (U+02BC, in «зʼїдено») IS a letter to Unicode —
+  // a modifier letter of no particular script — and the first draft of this line rejected it.
+  if (/(?![\p{Script=Cyrillic}\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])\p{L}/u.test(text)) return false;
   const cyr = (text.match(/\p{Script=Cyrillic}/gu) ?? []).length;
   const lat = (text.match(/\p{Script=Latin}/gu) ?? []).length;
   if (cyr + lat < 8) return true;              // "PS Plus 350" — too short to have a language
   return locale === "uk" ? cyr > lat : lat > cyr;
 }
+

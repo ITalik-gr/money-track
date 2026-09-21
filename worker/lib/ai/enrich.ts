@@ -22,6 +22,8 @@ export interface EnrichResult {
   note: string | null;     // короткий здогад, що це, для контексту
   /** §AI-RECURRING — a subscription charge? The full reasoning is in migration 0046. */
   recurring?: boolean;
+  /** Jev-only PROPOSALS (docs/JEV.md phase 3, migration 0054) — never the columns the canon reads. */
+  importance?: "essential" | "discretionary" | "optional"; business?: number;
 }
 
 export async function enrichTransaction(
@@ -324,10 +326,10 @@ async function applyEnrichment(
 
   // §R7: name_locked → зберігаємо ручну назву (AI уточнює лише категорію/переказ/note).
   await env.DB.prepare(
-    "UPDATE transactions SET merchant = CASE WHEN name_locked >= 1 THEN merchant ELSE ? END, category_id = COALESCE(?, category_id), is_transfer = ?, ai_note = ?, planned_id = COALESCE(?, planned_id), ai_recurring = ?, ai_enriched = 1 WHERE id = ?",
+    "UPDATE transactions SET merchant = CASE WHEN name_locked >= 1 THEN merchant ELSE ? END, category_id = COALESCE(?, category_id), is_transfer = ?, ai_note = ?, planned_id = COALESCE(?, planned_id), ai_recurring = ?, ai_importance = COALESCE(?, ai_importance), ai_business = COALESCE(?, ai_business), ai_enriched = 1 WHERE id = ?",
     // §AI-RECURRING: 0/1 once asked — "not asked" and "said no" mean different things downstream.
   ).bind(cleanName, finalCategory, isTransfer, result.note?.trim() || null, sub?.planned_id ?? null,
-         result.recurring ? 1 : 0, tx.id).run();
+         result.recurring ? 1 : 0, result.importance ?? null, result.business ?? null, tx.id).run();
 
   // Теги (вторинні категорії), до 3, без дублю основної. Неіснуючі id відкидаємо (§FK-GUARD).
   const tags = (result.tag_ids ?? []).filter((t) => t && t !== aiCategory && ok.has(t)).slice(0, 3);

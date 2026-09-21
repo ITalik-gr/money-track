@@ -1,33 +1,534 @@
 {
-  "at": "2026-09-21T18:02:23.254Z",
+  "at": "2026-09-21T18:36:32.532Z",
   "dry": false,
   "judge": "jev",
-  "seconds": 10.2,
+  "seconds": 15.7,
   "tally": {
     "gate": {
-      "ok": 132,
-      "n": 132
+      "ok": 119,
+      "n": 119
     },
     "root": {
-      "ok": 92,
-      "n": 93
+      "ok": 118,
+      "n": 118
+    },
+    "importance": {
+      "ok": 31,
+      "n": 36
+    },
+    "business": {
+      "ok": 17,
+      "n": 19
     },
     "recurring": {
-      "ok": 35,
-      "n": 36
+      "ok": 39,
+      "n": 41
+    },
+    "exact": {
+      "ok": 12,
+      "n": 13
+    },
+    "name": {
+      "ok": 23,
+      "n": 27
     }
   },
   "meter": {
-    "calls": 99,
-    "in": 152272,
-    "out": 24018,
+    "calls": 183,
+    "in": 445552,
+    "out": 48613,
     "cache_read": 0,
     "cache_write": 0,
-    "usd": 0.006395424000000001,
+    "usd": 0.018713184000000008,
     "byModel": {
-      "jev-latest": 99
+      "jev-latest": 183
     },
-    "uncached": []
+    "uncached": [
+      {
+        "model": "jev-latest",
+        "in": 3243
+      },
+      {
+        "model": "jev-latest",
+        "in": 3327
+      },
+      {
+        "model": "jev-latest",
+        "in": 3250
+      },
+      {
+        "model": "jev-latest",
+        "in": 3314
+      },
+      {
+        "model": "jev-latest",
+        "in": 3345
+      },
+      {
+        "model": "jev-latest",
+        "in": 3231
+      },
+      {
+        "model": "jev-latest",
+        "in": 3229
+      },
+      {
+        "model": "jev-latest",
+        "in": 3261
+      },
+      {
+        "model": "jev-latest",
+        "in": 3261
+      },
+      {
+        "model": "jev-latest",
+        "in": 3249
+      },
+      {
+        "model": "jev-latest",
+        "in": 3339
+      },
+      {
+        "model": "jev-latest",
+        "in": 3293
+      },
+      {
+        "model": "jev-latest",
+        "in": 3278
+      },
+      {
+        "model": "jev-latest",
+        "in": 3267
+      },
+      {
+        "model": "jev-latest",
+        "in": 3292
+      },
+      {
+        "model": "jev-latest",
+        "in": 3263
+      },
+      {
+        "model": "jev-latest",
+        "in": 3229
+      },
+      {
+        "model": "jev-latest",
+        "in": 3269
+      },
+      {
+        "model": "jev-latest",
+        "in": 3287
+      },
+      {
+        "model": "jev-latest",
+        "in": 3269
+      },
+      {
+        "model": "jev-latest",
+        "in": 3281
+      },
+      {
+        "model": "jev-latest",
+        "in": 3252
+      },
+      {
+        "model": "jev-latest",
+        "in": 3281
+      },
+      {
+        "model": "jev-latest",
+        "in": 3252
+      },
+      {
+        "model": "jev-latest",
+        "in": 3269
+      },
+      {
+        "model": "jev-latest",
+        "in": 3352
+      },
+      {
+        "model": "jev-latest",
+        "in": 3272
+      },
+      {
+        "model": "jev-latest",
+        "in": 3273
+      },
+      {
+        "model": "jev-latest",
+        "in": 3249
+      },
+      {
+        "model": "jev-latest",
+        "in": 3285
+      },
+      {
+        "model": "jev-latest",
+        "in": 3231
+      },
+      {
+        "model": "jev-latest",
+        "in": 3281
+      },
+      {
+        "model": "jev-latest",
+        "in": 3232
+      },
+      {
+        "model": "jev-latest",
+        "in": 3262
+      },
+      {
+        "model": "jev-latest",
+        "in": 3261
+      },
+      {
+        "model": "jev-latest",
+        "in": 3260
+      },
+      {
+        "model": "jev-latest",
+        "in": 3319
+      },
+      {
+        "model": "jev-latest",
+        "in": 3280
+      },
+      {
+        "model": "jev-latest",
+        "in": 3294
+      },
+      {
+        "model": "jev-latest",
+        "in": 3335
+      },
+      {
+        "model": "jev-latest",
+        "in": 3258
+      },
+      {
+        "model": "jev-latest",
+        "in": 3338
+      },
+      {
+        "model": "jev-latest",
+        "in": 3254
+      },
+      {
+        "model": "jev-latest",
+        "in": 3255
+      },
+      {
+        "model": "jev-latest",
+        "in": 3326
+      },
+      {
+        "model": "jev-latest",
+        "in": 3372
+      },
+      {
+        "model": "jev-latest",
+        "in": 3377
+      },
+      {
+        "model": "jev-latest",
+        "in": 3373
+      },
+      {
+        "model": "jev-latest",
+        "in": 3365
+      },
+      {
+        "model": "jev-latest",
+        "in": 3318
+      },
+      {
+        "model": "jev-latest",
+        "in": 3549
+      },
+      {
+        "model": "jev-latest",
+        "in": 3272
+      },
+      {
+        "model": "jev-latest",
+        "in": 3401
+      },
+      {
+        "model": "jev-latest",
+        "in": 3299
+      },
+      {
+        "model": "jev-latest",
+        "in": 3244
+      },
+      {
+        "model": "jev-latest",
+        "in": 3252
+      },
+      {
+        "model": "jev-latest",
+        "in": 3269
+      },
+      {
+        "model": "jev-latest",
+        "in": 3257
+      },
+      {
+        "model": "jev-latest",
+        "in": 3245
+      },
+      {
+        "model": "jev-latest",
+        "in": 3250
+      },
+      {
+        "model": "jev-latest",
+        "in": 3246
+      },
+      {
+        "model": "jev-latest",
+        "in": 3242
+      },
+      {
+        "model": "jev-latest",
+        "in": 3273
+      },
+      {
+        "model": "jev-latest",
+        "in": 3254
+      },
+      {
+        "model": "jev-latest",
+        "in": 3248
+      },
+      {
+        "model": "jev-latest",
+        "in": 3264
+      },
+      {
+        "model": "jev-latest",
+        "in": 3333
+      },
+      {
+        "model": "jev-latest",
+        "in": 3254
+      },
+      {
+        "model": "jev-latest",
+        "in": 3232
+      },
+      {
+        "model": "jev-latest",
+        "in": 3246
+      },
+      {
+        "model": "jev-latest",
+        "in": 3236
+      },
+      {
+        "model": "jev-latest",
+        "in": 3252
+      },
+      {
+        "model": "jev-latest",
+        "in": 3288
+      },
+      {
+        "model": "jev-latest",
+        "in": 3308
+      },
+      {
+        "model": "jev-latest",
+        "in": 3254
+      },
+      {
+        "model": "jev-latest",
+        "in": 3332
+      },
+      {
+        "model": "jev-latest",
+        "in": 3283
+      },
+      {
+        "model": "jev-latest",
+        "in": 3229
+      },
+      {
+        "model": "jev-latest",
+        "in": 3296
+      },
+      {
+        "model": "jev-latest",
+        "in": 3248
+      },
+      {
+        "model": "jev-latest",
+        "in": 3309
+      },
+      {
+        "model": "jev-latest",
+        "in": 3260
+      },
+      {
+        "model": "jev-latest",
+        "in": 3278
+      },
+      {
+        "model": "jev-latest",
+        "in": 3297
+      },
+      {
+        "model": "jev-latest",
+        "in": 3297
+      },
+      {
+        "model": "jev-latest",
+        "in": 3282
+      },
+      {
+        "model": "jev-latest",
+        "in": 3263
+      },
+      {
+        "model": "jev-latest",
+        "in": 3281
+      },
+      {
+        "model": "jev-latest",
+        "in": 3306
+      },
+      {
+        "model": "jev-latest",
+        "in": 3280
+      },
+      {
+        "model": "jev-latest",
+        "in": 3263
+      },
+      {
+        "model": "jev-latest",
+        "in": 3274
+      },
+      {
+        "model": "jev-latest",
+        "in": 3249
+      },
+      {
+        "model": "jev-latest",
+        "in": 3248
+      },
+      {
+        "model": "jev-latest",
+        "in": 3274
+      },
+      {
+        "model": "jev-latest",
+        "in": 3277
+      },
+      {
+        "model": "jev-latest",
+        "in": 3268
+      },
+      {
+        "model": "jev-latest",
+        "in": 3279
+      },
+      {
+        "model": "jev-latest",
+        "in": 3254
+      },
+      {
+        "model": "jev-latest",
+        "in": 3249
+      },
+      {
+        "model": "jev-latest",
+        "in": 3242
+      },
+      {
+        "model": "jev-latest",
+        "in": 3251
+      },
+      {
+        "model": "jev-latest",
+        "in": 3242
+      },
+      {
+        "model": "jev-latest",
+        "in": 3273
+      },
+      {
+        "model": "jev-latest",
+        "in": 3246
+      },
+      {
+        "model": "jev-latest",
+        "in": 3243
+      },
+      {
+        "model": "jev-latest",
+        "in": 3249
+      },
+      {
+        "model": "jev-latest",
+        "in": 3244
+      },
+      {
+        "model": "jev-latest",
+        "in": 3236
+      },
+      {
+        "model": "jev-latest",
+        "in": 3244
+      },
+      {
+        "model": "jev-latest",
+        "in": 3320
+      },
+      {
+        "model": "jev-latest",
+        "in": 3255
+      },
+      {
+        "model": "jev-latest",
+        "in": 3327
+      },
+      {
+        "model": "jev-latest",
+        "in": 3328
+      },
+      {
+        "model": "jev-latest",
+        "in": 3241
+      },
+      {
+        "model": "jev-latest",
+        "in": 3285
+      },
+      {
+        "model": "jev-latest",
+        "in": 3227
+      },
+      {
+        "model": "jev-latest",
+        "in": 3245
+      },
+      {
+        "model": "jev-latest",
+        "in": 3270
+      },
+      {
+        "model": "jev-latest",
+        "in": 3250
+      },
+      {
+        "model": "jev-latest",
+        "in": 3301
+      }
+    ]
   },
   "results": [
     {
@@ -38,6 +539,8 @@
       "root": 1,
       "category": 1,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -52,7 +555,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "silpo-latin",
@@ -62,6 +566,8 @@
       "root": 1,
       "category": 1,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -76,7 +582,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "varus",
@@ -86,6 +593,8 @@
       "root": 1,
       "category": 1,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -100,7 +609,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "market-stall",
@@ -110,6 +620,8 @@
       "root": 1,
       "category": 1,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -124,7 +636,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "bakery",
@@ -134,6 +647,8 @@
       "root": 1,
       "category": 1,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -148,7 +663,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "grocery-no-mcc",
@@ -156,8 +672,10 @@
       "verdict": "ask",
       "merchant": "Сільпо",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.26,
       "checks": [
         {
           "kind": "gate",
@@ -170,18 +688,33 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 0,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "novus-no-mcc",
       "group": "grocery",
       "verdict": "ask",
-      "merchant": "NOVUS SKYMALL",
+      "merchant": "Novus Skymall",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.21,
       "checks": [
         {
           "kind": "gate",
@@ -194,9 +727,16 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "discretionary",
+          "ok": false
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "aromakava",
@@ -206,6 +746,8 @@
       "root": 2,
       "category": 2,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -220,7 +762,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "mcdonalds",
@@ -230,6 +773,8 @@
       "root": 2,
       "category": 2,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -244,7 +789,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "puzata-hata",
@@ -254,6 +800,8 @@
       "root": 2,
       "category": 2,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -268,16 +816,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "glovo",
       "group": "cafe",
       "verdict": "ask",
-      "merchant": "GLOVO KYIV",
+      "merchant": "Glovo",
       "root": 2,
-      "category": 2,
+      "category": 34,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.36,
       "checks": [
         {
           "kind": "gate",
@@ -290,9 +841,22 @@
           "want": 2,
           "got": 2,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 0,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "bolt-food",
@@ -300,8 +864,10 @@
       "verdict": "ask",
       "merchant": "BOLT FOOD",
       "root": 2,
-      "category": 2,
+      "category": 34,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -314,18 +880,27 @@
           "want": 2,
           "got": 2,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "lviv-coffee",
       "group": "cafe",
       "verdict": "ask",
-      "merchant": "Львівська майстерня кави",
+      "merchant": "майстерня кави",
       "root": 2,
-      "category": 2,
+      "category": 32,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -338,9 +913,16 @@
           "want": 2,
           "got": 2,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "uber-ride",
@@ -350,6 +932,8 @@
       "root": 3,
       "category": 3,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -364,7 +948,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "bolt-ride",
@@ -374,6 +959,8 @@
       "root": 3,
       "category": 3,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -388,7 +975,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "wog-fuel",
@@ -398,6 +986,8 @@
       "root": 3,
       "category": 3,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -412,7 +1002,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "okko-fuel",
@@ -422,6 +1013,8 @@
       "root": 3,
       "category": 3,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -436,7 +1029,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "metro-ticket",
@@ -446,6 +1040,8 @@
       "root": 3,
       "category": 3,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -460,16 +1056,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "uklon-no-mcc",
       "group": "transport",
       "verdict": "ask",
-      "merchant": "UKLON",
+      "merchant": "Uklon",
       "root": 3,
-      "category": 3,
+      "category": 35,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.18,
       "checks": [
         {
           "kind": "gate",
@@ -484,16 +1083,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "blablacar",
       "group": "transport",
       "verdict": "ask",
-      "merchant": "BLABLACAR",
+      "merchant": "Blablacar",
       "root": 3,
       "category": 3,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -508,7 +1110,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "apteka",
@@ -518,6 +1121,8 @@
       "root": 4,
       "category": 4,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -532,7 +1137,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "podorozhnyk",
@@ -542,6 +1148,8 @@
       "root": 4,
       "category": 4,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -556,16 +1164,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "dobrobut-clinic",
       "group": "health",
       "verdict": "ask",
-      "merchant": "DOBROBUT MEDICAL",
+      "merchant": "Dobrobut Medical",
       "root": 4,
-      "category": 4,
+      "category": 41,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.11,
       "checks": [
         {
           "kind": "gate",
@@ -580,16 +1191,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "dental",
       "group": "health",
       "verdict": "ask",
-      "merchant": "STOMATOLOGIYA LUMI",
+      "merchant": "Stomatologiya LUMI",
       "root": 4,
-      "category": 4,
+      "category": 41,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.15,
       "checks": [
         {
           "kind": "gate",
@@ -602,18 +1216,27 @@
           "want": 4,
           "got": 4,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "netflix",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "NETFLIX.COM",
+      "merchant": "Netflix",
       "root": 6,
-      "category": 6,
+      "category": 42,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.51,
       "checks": [
         {
           "kind": "gate",
@@ -632,18 +1255,33 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 1,
+          "ok": false
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "spotify",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "SPOTIFY P1A2B3C4D",
+      "merchant": "Spotify",
       "root": 6,
-      "category": 6,
+      "category": 42,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.05,
       "checks": [
         {
           "kind": "gate",
@@ -662,18 +1300,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "youtube-premium",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "GOOGLE *YOUTUBE PREMIUM",
+      "merchant": "Google Youtube Premium",
       "root": 6,
-      "category": 6,
+      "category": 42,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.07,
       "checks": [
         {
           "kind": "gate",
@@ -694,16 +1341,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "google-one",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "GOOGLE *GOOGLE ONE",
+      "merchant": "Google ONE",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -724,16 +1374,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "icloud",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "APPLE.COM/BILL",
+      "merchant": "Apple",
       "root": 6,
-      "category": 6,
+      "category": 42,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -754,16 +1407,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "chatgpt",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "OPENAI *CHATGPT SUBSCR",
+      "merchant": "Openai Chatgpt",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.15,
       "checks": [
         {
           "kind": "gate",
@@ -784,16 +1440,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "figma",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "FIGMA MONTHLY",
+      "merchant": "Figma",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.57,
       "checks": [
         {
           "kind": "gate",
@@ -814,16 +1473,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "megogo",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "MEGOGO",
+      "merchant": "Megogo",
       "root": 6,
-      "category": 6,
+      "category": 42,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.08,
       "checks": [
         {
           "kind": "gate",
@@ -844,16 +1506,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "steam-game",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "STEAMGAMES.COM 4259",
+      "merchant": "STEAMGAMES.COM",
       "root": 6,
-      "category": 6,
+      "category": 39,
       "recurring": 0,
+      "importance": "optional",
+      "business_p": 0.06,
       "checks": [
         {
           "kind": "gate",
@@ -872,18 +1537,27 @@
           "want": 0,
           "got": 0,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "optional",
+          "got": "optional",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "app-store-oneoff",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "APPLE.COM/BILL",
+      "merchant": "Apple",
       "root": 6,
-      "category": 6,
+      "category": 42,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -898,16 +1572,19 @@
           "ok": false
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "gym",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "SPORTLIFE ABONEMENT",
+      "merchant": "Sportlife",
       "root": 22,
       "category": 22,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.04,
       "checks": [
         {
           "kind": "gate",
@@ -928,16 +1605,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "kyivstar",
       "group": "utility",
       "verdict": "ask",
-      "merchant": "KYIVSTAR POPOVNENNYA",
+      "merchant": "Kyivstar",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.08,
       "checks": [
         {
           "kind": "gate",
@@ -956,18 +1636,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "lifecell",
       "group": "utility",
       "verdict": "ask",
-      "merchant": "LIFECELL",
+      "merchant": "Lifecell",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -986,18 +1675,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "yasno",
       "group": "utility",
       "verdict": "ask",
-      "merchant": "YASNO ELEKTROENERGIYA",
+      "merchant": "Yasno Elektroenergiya",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.08,
       "checks": [
         {
           "kind": "gate",
@@ -1016,18 +1714,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "osbb",
       "group": "utility",
       "verdict": "ask",
-      "merchant": "OSBB KVARTPLATA",
+      "merchant": "OSBB",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.15,
       "checks": [
         {
           "kind": "gate",
@@ -1046,18 +1753,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "internet-volia",
       "group": "utility",
       "verdict": "ask",
-      "merchant": "VOLIA INTERNET",
+      "merchant": "Volia Internet",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.08,
       "checks": [
         {
           "kind": "gate",
@@ -1076,9 +1792,16 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "atm-withdrawal",
@@ -1088,6 +1811,8 @@
       "root": 13,
       "category": 13,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1096,7 +1821,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "own-card-transfer",
@@ -1106,6 +1832,8 @@
       "root": null,
       "category": null,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1114,7 +1842,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "jar-topup",
@@ -1124,6 +1853,8 @@
       "root": null,
       "category": null,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1132,7 +1863,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "roundup",
@@ -1142,6 +1874,8 @@
       "root": null,
       "category": null,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1150,7 +1884,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "p2p-out-plain",
@@ -1160,6 +1895,8 @@
       "root": 13,
       "category": 13,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1168,40 +1905,33 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "salary",
       "group": "income",
       "verdict": "ask",
       "merchant": "Зарахування зарплати",
-      "root": 15,
-      "category": 15,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        },
-        {
-          "kind": "root",
-          "want": 15,
-          "got": 15,
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "freelance-usd",
       "group": "income",
       "verdict": "ask",
-      "merchant": "UPWORK ESCROW INC",
+      "merchant": "Upwork Escrow",
       "root": 16,
       "category": 16,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.89,
       "checks": [
         {
           "kind": "gate",
@@ -1216,7 +1946,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "cashback",
@@ -1226,6 +1957,8 @@
       "root": 45,
       "category": 45,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.21,
       "checks": [
         {
           "kind": "gate",
@@ -1240,7 +1973,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "deposit-interest",
@@ -1250,6 +1984,8 @@
       "root": 46,
       "category": 46,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.16,
       "checks": [
         {
           "kind": "gate",
@@ -1264,7 +2000,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "p2p-in-gift",
@@ -1274,6 +2011,8 @@
       "root": 13,
       "category": 13,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1288,16 +2027,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "olx-sale",
       "group": "income",
       "verdict": "ask",
-      "merchant": "OLX DOSTAVKA vyplata",
+      "merchant": "OLX Dostavka",
       "root": 44,
       "category": 44,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.52,
       "checks": [
         {
           "kind": "gate",
@@ -1312,16 +2054,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-says-salary",
       "group": "note",
       "verdict": "ask",
-      "merchant": "Від Ihor P.",
+      "merchant": "Ihor P.",
       "root": 15,
       "category": 15,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.25,
       "checks": [
         {
           "kind": "gate",
@@ -1336,16 +2081,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-says-gift",
       "group": "note",
       "verdict": "ask",
-      "merchant": "ROZETKA",
+      "merchant": "Rozetka",
       "root": 23,
       "category": 23,
       "recurring": 0,
+      "importance": "optional",
+      "business_p": 0.06,
       "checks": [
         {
           "kind": "gate",
@@ -1358,18 +2106,27 @@
           "want": 23,
           "got": 23,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 0,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-says-work",
       "group": "note",
       "verdict": "ask",
-      "merchant": "NOVA POSHTA",
+      "merchant": "NOVA Poshta",
       "root": 14,
       "category": 14,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.73,
       "checks": [
         {
           "kind": "gate",
@@ -1378,40 +2135,33 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-says-leisure",
       "group": "note",
       "verdict": "ask",
       "merchant": "SILPO 305",
-      "root": 6,
-      "category": 6,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        },
-        {
-          "kind": "root",
-          "want": 6,
-          "got": 6,
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "amazon-usd",
       "group": "fx",
       "verdict": "ask",
-      "merchant": "AMAZON.COM*2K4LM",
+      "merchant": "AMAZON.COM",
       "root": 14,
       "category": 14,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.11,
       "checks": [
         {
           "kind": "gate",
@@ -1420,16 +2170,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "booking-eur",
       "group": "fx",
       "verdict": "ask",
-      "merchant": "BOOKING.COM AMSTERDAM",
+      "merchant": "BOOKING.COM",
       "root": 11,
       "category": 11,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -1444,34 +2197,33 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "aliexpress",
       "group": "fx",
       "verdict": "ask",
       "merchant": "ALIEXPRESS",
-      "root": 14,
-      "category": 14,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "nova-poshta",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "NOVA POSHTA 1245",
+      "merchant": "NOVA Poshta",
       "root": 14,
       "category": 14,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.14,
       "checks": [
         {
           "kind": "gate",
@@ -1486,16 +2238,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "ukrposhta",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "UKRPOSHTA",
+      "merchant": "Ukrposhta",
       "root": 14,
       "category": 14,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.13,
       "checks": [
         {
           "kind": "gate",
@@ -1510,16 +2265,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "epicentr",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "EPICENTR K",
+      "merchant": "Epicentr",
       "root": 8,
       "category": 8,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -1534,16 +2292,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "rozetka-electronics",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "ROZETKA.UA",
+      "merchant": "Rozetka",
       "root": 9,
       "category": 9,
       "recurring": 0,
+      "importance": "optional",
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -1558,16 +2319,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "sinsay-clothes",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "SINSAY 214",
+      "merchant": "Sinsay",
       "root": 5,
       "category": 5,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.05,
       "checks": [
         {
           "kind": "gate",
@@ -1582,16 +2346,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "eva-beauty",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "EVA 108 KYIV",
+      "merchant": "EVA",
       "root": 10,
       "category": 10,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -1606,7 +2373,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "tax-single",
@@ -1614,8 +2382,10 @@
       "verdict": "ask",
       "merchant": "Єдиний податок 5%",
       "root": 24,
-      "category": 24,
+      "category": 25,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.8,
       "checks": [
         {
           "kind": "gate",
@@ -1628,9 +2398,16 @@
           "want": 24,
           "got": 24,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "esv",
@@ -1638,8 +2415,10 @@
       "verdict": "ask",
       "merchant": "ЄСВ за квартал",
       "root": 24,
-      "category": 24,
+      "category": 26,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.6,
       "checks": [
         {
           "kind": "gate",
@@ -1652,18 +2431,27 @@
           "want": 24,
           "got": 24,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "vet",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "VETKLINIKA LAPA",
+      "merchant": "Vetklinika LAPA",
       "root": 21,
       "category": 21,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.24,
       "checks": [
         {
           "kind": "gate",
@@ -1676,36 +2464,41 @@
           "want": 21,
           "got": 21,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 0,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "kids-school",
       "group": "tricky",
       "verdict": "ask",
       "merchant": "SADOCHOK OPLATA",
-      "root": 19,
-      "category": 19,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "cinema",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "PLANETA KINO",
+      "merchant": "Planeta KINO",
       "root": 6,
-      "category": 6,
+      "category": 38,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -1718,27 +2511,30 @@
           "want": 6,
           "got": 6,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 0,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "books",
       "group": "tricky",
       "verdict": "ask",
       "merchant": "KNYGARNYA YE",
-      "root": 14,
-      "category": 14,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "carry-known-merchant",
@@ -1748,6 +2544,8 @@
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1762,7 +2560,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "carry-not-recurring",
@@ -1772,6 +2571,8 @@
       "root": 1,
       "category": 1,
       "recurring": 0,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1786,25 +2587,22 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "no-carry-from-skipped",
       "group": "carry",
       "verdict": "ask",
       "merchant": "ZOOMAGAZIN LAPKY",
-      "root": 6,
-      "category": 6,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "already-enriched",
@@ -1814,6 +2612,8 @@
       "root": 3,
       "category": 3,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -1822,16 +2622,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-payoneer",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "PAYONEER INC",
+      "merchant": "Payoneer",
       "root": 16,
       "category": 16,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.97,
       "checks": [
         {
           "kind": "gate",
@@ -1844,27 +2647,43 @@
           "want": 16,
           "got": 16,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-deel",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "DEEL PAYROLL",
+      "merchant": "DEEL",
       "root": 16,
       "category": 16,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.94,
       "checks": [
         {
           "kind": "gate",
           "want": "ask",
           "got": "ask",
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-invoice-uah",
@@ -1874,6 +2693,8 @@
       "root": 16,
       "category": 16,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.98,
       "checks": [
         {
           "kind": "gate",
@@ -1886,18 +2707,27 @@
           "want": 16,
           "got": 16,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-client-quiet",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "ТОВ РОМАШКА оплата за розробку",
+      "merchant": "РОМАШКА",
       "root": 16,
       "category": 16,
       "recurring": 0,
+      "importance": null,
+      "business_p": 0.97,
       "checks": [
         {
           "kind": "gate",
@@ -1910,27 +2740,43 @@
           "want": 16,
           "got": 16,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-upwork-fee",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "UPWORK -FEE",
+      "merchant": "Upwork",
       "root": 14,
       "category": 14,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.97,
       "checks": [
         {
           "kind": "gate",
           "want": "ask",
           "got": "ask",
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-bank-fee",
@@ -1940,48 +2786,49 @@
       "root": 14,
       "category": 14,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.94,
       "checks": [
         {
           "kind": "gate",
           "want": "ask",
           "got": "ask",
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-jetbrains",
       "group": "fop",
       "verdict": "ask",
       "merchant": "JETBRAINS AMERICAS INC",
-      "root": 43,
-      "category": 43,
-      "recurring": 1,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        },
-        {
-          "kind": "recurring",
-          "want": 1,
-          "got": 1,
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": 9,
+      "category": 9,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "fop-hetzner",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "HETZNER ONLINE GMBH",
-      "root": 9,
-      "category": 9,
+      "merchant": "Hetzner Online GMBH",
+      "root": 43,
+      "category": 43,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.91,
       "checks": [
         {
           "kind": "gate",
@@ -1994,18 +2841,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-cloudflare",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "CLOUDFLARE HTTPSCLOUDFLA",
+      "merchant": "Cloudflare",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.93,
       "checks": [
         {
           "kind": "gate",
@@ -2018,18 +2874,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-namecheap",
       "group": "fop",
       "verdict": "ask",
-      "merchant": "NAMECHEAP.COM",
+      "merchant": "Namecheap",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.88,
       "checks": [
         {
           "kind": "gate",
@@ -2042,9 +2907,16 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-vz",
@@ -2052,8 +2924,10 @@
       "verdict": "ask",
       "merchant": "Військовий збір 1% за III квартал",
       "root": 24,
-      "category": 24,
+      "category": 27,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.94,
       "checks": [
         {
           "kind": "gate",
@@ -2066,9 +2940,16 @@
           "want": 24,
           "got": 24,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "fop-esv-quarter",
@@ -2076,8 +2957,10 @@
       "verdict": "ask",
       "merchant": "Сплата ЄСВ 1902,34",
       "root": 24,
-      "category": 24,
+      "category": 26,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.95,
       "checks": [
         {
           "kind": "gate",
@@ -2090,18 +2973,27 @@
           "want": 24,
           "got": 24,
           "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 1,
+          "got": 1,
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-auchan",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "AUCHAN CITY KYIV",
+      "merchant": "Auchan",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -2114,18 +3006,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-metro",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "METRO Cash and Carry",
+      "merchant": "Metro Cash and Carry",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.47,
       "checks": [
         {
           "kind": "gate",
@@ -2140,16 +3041,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-fora",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "FORA 0412",
+      "merchant": "FORA",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.27,
       "checks": [
         {
           "kind": "gate",
@@ -2162,18 +3066,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "discretionary",
+          "ok": false
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-ashan-cyrillic",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "Ашан Петрівка",
+      "merchant": "Ашан",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.06,
       "checks": [
         {
           "kind": "gate",
@@ -2188,16 +3101,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-aurora",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "AVRORA MULTIMARKET",
+      "merchant": "Avrora Multimarket",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.14,
       "checks": [
         {
           "kind": "gate",
@@ -2206,16 +3122,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-jysk",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "JYSK UKRAINE",
+      "merchant": "JYSK",
       "root": 8,
       "category": 8,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.13,
       "checks": [
         {
           "kind": "gate",
@@ -2230,16 +3149,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-foxtrot",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "FOXTROT 21",
+      "merchant": "Foxtrot",
       "root": 9,
       "category": 9,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.31,
       "checks": [
         {
           "kind": "gate",
@@ -2254,16 +3176,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-allo",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "ALLO UKRAINE",
+      "merchant": "ALLO",
       "root": 9,
       "category": 9,
       "recurring": 0,
+      "importance": "optional",
+      "business_p": 0.18,
       "checks": [
         {
           "kind": "gate",
@@ -2278,40 +3203,33 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-kasta",
       "group": "csv",
       "verdict": "ask",
       "merchant": "KASTA.UA",
-      "root": 14,
-      "category": 14,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        },
-        {
-          "kind": "root",
-          "want": 5,
-          "got": 14,
-          "ok": false
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "csv-intertop",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "INTERTOP 044",
+      "merchant": "Intertop",
       "root": 5,
       "category": 5,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.22,
       "checks": [
         {
           "kind": "gate",
@@ -2326,16 +3244,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-uz-ticket",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "UZ Ticket Kyiv-Lviv",
+      "merchant": "UZ Ticket",
       "root": 11,
       "category": 11,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.11,
       "checks": [
         {
           "kind": "gate",
@@ -2344,16 +3265,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-kyivstar",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "KYIVSTAR popovnennya",
+      "merchant": "Kyivstar",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.11,
       "checks": [
         {
           "kind": "gate",
@@ -2366,18 +3290,27 @@
           "want": 7,
           "got": 7,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-vodafone",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "VODAFONE UA",
+      "merchant": "Vodafone",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -2396,18 +3329,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "discretionary",
+          "ok": false
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-vodokanal",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "Київводоканал за серпень",
+      "merchant": "Київводоканал",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -2426,18 +3368,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-zhek",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "ОСББ внесок",
+      "merchant": "ОСББ",
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -2456,18 +3407,27 @@
           "want": 1,
           "got": 1,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-sport-gym",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "SPORTLIFE abonement",
+      "merchant": "Sportlife",
       "root": 22,
       "category": 22,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.04,
       "checks": [
         {
           "kind": "gate",
@@ -2488,16 +3448,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-zoo",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "MASTERZOO 12",
+      "merchant": "Masterzoo",
       "root": 21,
       "category": 21,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.17,
       "checks": [
         {
           "kind": "gate",
@@ -2512,16 +3475,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-optika",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "LUXOPTICA",
+      "merchant": "Luxoptica",
       "root": 4,
       "category": 4,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.19,
       "checks": [
         {
           "kind": "gate",
@@ -2536,34 +3502,33 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "csv-knyharnya",
       "group": "csv",
       "verdict": "ask",
       "merchant": "BOOK24 zamovlennya",
-      "root": 14,
-      "category": 14,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "csv-barber",
       "group": "csv",
       "verdict": "ask",
-      "merchant": "BARBERSHOP FIRMA",
+      "merchant": "Barbershop Firma",
       "root": 10,
       "category": 10,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.19,
       "checks": [
         {
           "kind": "gate",
@@ -2578,16 +3543,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-contradicts-mcc",
       "group": "note",
       "verdict": "ask",
-      "merchant": "EPICENTR K",
+      "merchant": "Epicentr",
       "root": 8,
       "category": 8,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.69,
       "checks": [
         {
           "kind": "gate",
@@ -2602,16 +3570,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-says-medicine",
       "group": "note",
       "verdict": "ask",
-      "merchant": "ATB 1234 KYIV",
+      "merchant": "ATB",
       "root": 4,
-      "category": 4,
+      "category": 40,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.04,
       "checks": [
         {
           "kind": "gate",
@@ -2624,9 +3595,16 @@
           "want": 4,
           "got": 4,
           "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-blank-on-obvious",
@@ -2636,6 +3614,8 @@
       "root": 1,
       "category": 1,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -2644,16 +3624,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-english",
       "group": "note",
       "verdict": "ask",
-      "merchant": "GLOVO KYIV",
+      "merchant": "Glovo",
       "root": 2,
-      "category": 2,
+      "category": 34,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.74,
       "checks": [
         {
           "kind": "gate",
@@ -2668,34 +3651,33 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-repaid-debt",
       "group": "note",
       "verdict": "ask",
       "merchant": "Від Oleh S.",
-      "root": 18,
-      "category": 18,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "note-split-later",
       "group": "note",
       "verdict": "ask",
-      "merchant": "SILPO 305 KYIV UA",
+      "merchant": "Silpo",
       "root": 1,
-      "category": 1,
+      "category": 30,
       "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.07,
       "checks": [
         {
           "kind": "gate",
@@ -2710,7 +3692,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "note-gift-for-self",
@@ -2719,25 +3702,23 @@
       "merchant": "ROZETKA.UA",
       "root": 9,
       "category": 9,
-      "recurring": 0,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        }
-      ],
-      "error": null
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "note-empty-string",
       "group": "note",
       "verdict": "ask",
-      "merchant": "UKLON",
+      "merchant": "Uklon",
       "root": 3,
-      "category": 3,
+      "category": 35,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.19,
       "checks": [
         {
           "kind": "gate",
@@ -2752,16 +3733,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "subs-figma",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "FIGMA MONTHLY",
+      "merchant": "Figma",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.66,
       "checks": [
         {
           "kind": "gate",
@@ -2776,16 +3760,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "subs-openai",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "OPENAI CHATGPT SUBSCR",
+      "merchant": "Openai Chatgpt",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.22,
       "checks": [
         {
           "kind": "gate",
@@ -2800,16 +3787,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "subs-icloud",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "APPLE.COM/BILL ICLOUD",
+      "merchant": "Apple",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.1,
       "checks": [
         {
           "kind": "gate",
@@ -2824,16 +3814,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "subs-google-one",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "GOOGLE *GOOGLE ONE",
+      "merchant": "Google ONE",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -2848,46 +3841,33 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "subs-megogo",
       "group": "subs",
       "verdict": "ask",
       "merchant": "MEGOGO.NET",
-      "root": 6,
-      "category": 6,
-      "recurring": 1,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        },
-        {
-          "kind": "root",
-          "want": 6,
-          "got": 6,
-          "ok": true
-        },
-        {
-          "kind": "recurring",
-          "want": 1,
-          "got": 1,
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": 7,
+      "category": 7,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "subs-annual-domain",
       "group": "subs",
       "verdict": "ask",
-      "merchant": "GODADDY.COM RENEWAL",
+      "merchant": "GODADDY.COM",
       "root": 43,
       "category": 43,
       "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.57,
       "checks": [
         {
           "kind": "gate",
@@ -2902,31 +3882,22 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "subs-insurance",
       "group": "subs",
       "verdict": "ask",
       "merchant": "ARX strahuvannya OSCPV",
-      "root": 14,
-      "category": 14,
-      "recurring": 1,
-      "checks": [
-        {
-          "kind": "gate",
-          "want": "ask",
-          "got": "ask",
-          "ok": true
-        },
-        {
-          "kind": "recurring",
-          "want": 1,
-          "got": 1,
-          "ok": true
-        }
-      ],
-      "error": null
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     },
     {
       "id": "subs-cancelled-once",
@@ -2936,6 +3907,8 @@
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -2950,16 +3923,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "gate-catering-5811",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "KETERING NA PODIYU",
+      "merchant": "Ketering",
       "root": 2,
       "category": 2,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.08,
       "checks": [
         {
           "kind": "gate",
@@ -2974,16 +3950,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "gate-parking-7523",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "PARKOVKA TRC",
+      "merchant": "Parkovka",
       "root": 3,
       "category": 3,
       "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.12,
       "checks": [
         {
           "kind": "gate",
@@ -2998,16 +3977,19 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "gate-unseeded-mcc",
       "group": "tricky",
       "verdict": "ask",
-      "merchant": "KVITY NA PODARUNOK",
+      "merchant": "Kvity",
       "root": 23,
       "category": 23,
       "recurring": 0,
+      "importance": "optional",
+      "business_p": 0.09,
       "checks": [
         {
           "kind": "gate",
@@ -3022,7 +4004,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "gate-atm-6011",
@@ -3032,6 +4015,8 @@
       "root": 13,
       "category": 13,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -3046,7 +4031,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "gate-enriched-already",
@@ -3056,6 +4042,8 @@
       "root": 6,
       "category": 6,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -3064,7 +4052,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "carry-desc-not-merchant",
@@ -3074,6 +4063,8 @@
       "root": 9,
       "category": 9,
       "recurring": 1,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -3088,7 +4079,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "carry-ignores-amount",
@@ -3098,6 +4090,8 @@
       "root": 7,
       "category": 7,
       "recurring": 1,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -3112,7 +4106,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "transfer-iban-out",
@@ -3122,6 +4117,8 @@
       "root": null,
       "category": null,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -3130,7 +4127,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "transfer-crypto-p2p",
@@ -3140,6 +4138,8 @@
       "root": 13,
       "category": 13,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -3154,7 +4154,8 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
     },
     {
       "id": "transfer-fx-exchange",
@@ -3164,6 +4165,8 @@
       "root": 13,
       "category": 13,
       "recurring": null,
+      "importance": null,
+      "business_p": null,
       "checks": [
         {
           "kind": "gate",
@@ -3178,7 +4181,1093 @@
           "ok": true
         }
       ],
-      "error": null
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-shell",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Shell",
+      "root": 3,
+      "category": 36,
+      "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.19,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 36,
+          "got": 36,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Shell",
+          "got": "Shell",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-socar",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Socar",
+      "root": 3,
+      "category": 36,
+      "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.31,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 36,
+          "got": 36,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "SOCAR",
+          "got": "Socar",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-ontaxi",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Ontaxi",
+      "root": 3,
+      "category": 35,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.14,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 35,
+          "got": 35,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "OnTaxi | Ontaxi",
+          "got": "Ontaxi",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-parking",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Parking",
+      "root": 3,
+      "category": 3,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.11,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 3,
+          "got": 3,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Parking Kyiv City | Parking Kyiv",
+          "got": "Parking",
+          "ok": false
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-apteka911",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Apteka 911",
+      "root": 4,
+      "category": 40,
+      "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.1,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 40,
+          "got": 40,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Apteka 911 | Аптека 911",
+          "got": "Apteka 911",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-synevo",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Synevo LAB",
+      "root": 4,
+      "category": 41,
+      "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.3,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 4,
+          "got": 4,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 41,
+          "got": 41,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Synevo | Synevo Lab | Сінево",
+          "got": "Synevo LAB",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-croissants",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "LVIV CROISSANTS 12",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
+    },
+    {
+      "id": "ho-rocket",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Rocket Delivery",
+      "root": 2,
+      "category": 34,
+      "recurring": 0,
+      "importance": "optional",
+      "business_p": 0.32,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 34,
+          "got": 34,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "optional",
+          "ok": false
+        },
+        {
+          "kind": "name",
+          "want": "Rocket | Rocket Delivery",
+          "got": "Rocket Delivery",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-coffeelike",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Coffee LIKE",
+      "root": 2,
+      "category": 32,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.06,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 32,
+          "got": 32,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Coffee Like",
+          "got": "Coffee LIKE",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-dominos",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Dominos Pizza",
+      "root": 2,
+      "category": 33,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.08,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 2,
+          "got": 2,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Dominos Pizza | Domino's Pizza | Dominos",
+          "got": "Dominos Pizza",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-multiplex",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Multiplex Lavina",
+      "root": 6,
+      "category": 38,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.23,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 38,
+          "got": 38,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Multiplex",
+          "got": "Multiplex Lavina",
+          "ok": false
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-psn",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Playstation Network",
+      "root": 6,
+      "category": 39,
+      "recurring": 0,
+      "importance": "optional",
+      "business_p": 0.08,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 39,
+          "got": 39,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 0,
+          "got": 0,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "optional",
+          "got": "optional",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "PlayStation | PlayStation Network",
+          "got": "Playstation Network",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-disney",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Disney PLUS",
+      "root": 6,
+      "category": 42,
+      "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.05,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 6,
+          "got": 6,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 42,
+          "got": 42,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "discretionary",
+          "got": "discretionary",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Disney Plus | Disney+",
+          "got": "Disney PLUS",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-kyivgaz",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Kyivgaz",
+      "root": 7,
+      "category": 7,
+      "recurring": 1,
+      "importance": "essential",
+      "business_p": 0.21,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Kyivgaz | Kyivgaz Zbut | Київгаз",
+          "got": "Kyivgaz",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-lanet",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Lanet Network",
+      "root": 7,
+      "category": 7,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.25,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 7,
+          "got": 7,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 0,
+          "ok": false
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "discretionary",
+          "ok": false
+        },
+        {
+          "kind": "name",
+          "want": "Lanet | Lanet Network | Ланет",
+          "got": "Lanet Network",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-novaliniya",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "NOVA LINIYA 3",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
+    },
+    {
+      "id": "ho-citrus",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "CITRUS.UA",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
+    },
+    {
+      "id": "ho-prostor",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Prostor",
+      "root": 10,
+      "category": 10,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.23,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 10,
+          "got": 10,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Prostor",
+          "got": "Prostor",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-makeup",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Makeup",
+      "root": 10,
+      "category": 10,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.12,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 10,
+          "got": 10,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Makeup",
+          "got": "Makeup",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-skyup",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Skyup Airlines",
+      "root": 11,
+      "category": 11,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.18,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 11,
+          "got": 11,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 0,
+          "got": 0,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "SkyUp | SkyUp Airlines",
+          "got": "Skyup Airlines",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-ryanair",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Ryanair",
+      "root": 11,
+      "category": 11,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.16,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 11,
+          "got": 11,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Ryanair",
+          "got": "Ryanair",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-yakaboo",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "YAKABOO.UA",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
+    },
+    {
+      "id": "ho-prometheus",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Prometheus",
+      "root": 19,
+      "category": 19,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.37,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 19,
+          "got": 19,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Prometheus",
+          "got": "Prometheus",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-antoshka",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Antoshka",
+      "root": 20,
+      "category": 20,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.58,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 20,
+          "got": 20,
+          "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 1,
+          "ok": false
+        },
+        {
+          "kind": "name",
+          "want": "Antoshka | Антошка",
+          "got": "Antoshka",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-kotiki",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "KOTIKI ZOO",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
+    },
+    {
+      "id": "ho-decathlon",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Decathlon",
+      "root": 22,
+      "category": 22,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.41,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 22,
+          "got": 22,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 0,
+          "got": 0,
+          "ok": true
+        },
+        {
+          "kind": "business",
+          "want": 0,
+          "got": 0,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Decathlon",
+          "got": "Decathlon",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-flowers",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Flowers",
+      "root": 23,
+      "category": 23,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.18,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 23,
+          "got": 23,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Flowers",
+          "got": "Flowers",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-pdfo",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "DPS",
+      "root": 24,
+      "category": 28,
+      "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.31,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 24,
+          "got": 24,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 28,
+          "got": 28,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-digitalocean",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Digitalocean",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.68,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 43,
+          "got": 43,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "DigitalOcean",
+          "got": "Digitalocean",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-1password",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "1PASSWORD",
+      "root": 43,
+      "category": 43,
+      "recurring": 1,
+      "importance": "discretionary",
+      "business_p": 0.32,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 43,
+          "got": 43,
+          "ok": true
+        },
+        {
+          "kind": "recurring",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "1Password",
+          "got": "1PASSWORD",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-ekomarket",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "EKO Market",
+      "root": 1,
+      "category": 1,
+      "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.13,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 30,
+          "got": 1,
+          "ok": false
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Eko Market | ЕКО маркет",
+          "got": "EKO Market",
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-tavria",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Tavria",
+      "root": 1,
+      "category": 30,
+      "recurring": 0,
+      "importance": "essential",
+      "business_p": 0.16,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 1,
+          "got": 1,
+          "ok": true
+        },
+        {
+          "kind": "exact",
+          "want": 30,
+          "got": 30,
+          "ok": true
+        },
+        {
+          "kind": "importance",
+          "want": "essential",
+          "got": "essential",
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Tavria V | Таврія В",
+          "got": "Tavria",
+          "ok": false
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-justin",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Justin Poshta",
+      "root": 14,
+      "category": 14,
+      "recurring": 0,
+      "importance": "discretionary",
+      "business_p": 0.18,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 14,
+          "got": 14,
+          "ok": true
+        },
+        {
+          "kind": "name",
+          "want": "Justin",
+          "got": "Justin Poshta",
+          "ok": false
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-wise",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "WISE PAYMENT FROM ACME LLC",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
+    },
+    {
+      "id": "ho-refund",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "Rozetka",
+      "root": 17,
+      "category": 17,
+      "recurring": 0,
+      "importance": null,
+      "business_p": 0.08,
+      "checks": [
+        {
+          "kind": "root",
+          "want": 17,
+          "got": 17,
+          "ok": true
+        }
+      ],
+      "error": null,
+      "deferred": false
+    },
+    {
+      "id": "ho-prom",
+      "group": "holdout",
+      "verdict": "ask",
+      "merchant": "PROM.UA vyplata prodavtsyu",
+      "root": null,
+      "category": null,
+      "recurring": null,
+      "importance": null,
+      "business_p": null,
+      "checks": [],
+      "error": null,
+      "deferred": true
     }
   ]
 }

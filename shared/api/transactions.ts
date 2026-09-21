@@ -68,6 +68,13 @@ export interface TxDetail extends TxRow {
   planned_title?: string | null;    // назва підписки, якщо прив'язано
   event_id?: number | null;
   event_name?: string | null;
+  /** §TAX-BASE: the human answer for this row (NULL = the account answers). */
+  is_business?: number | null;
+  /** Whether the ACCOUNT is a business one — what a NULL `is_business` resolves to. */
+  account_business?: number | null;
+  /** docs/JEV.md phase 3 — PROPOSALS only (migration 0054); nothing computes from them. */
+  ai_business?: number | null;
+  ai_importance?: "essential" | "discretionary" | "optional" | null;
   receipt: ReceiptRow | null;
   tags: TagRow[];
 }

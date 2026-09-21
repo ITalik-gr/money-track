@@ -293,7 +293,11 @@
   ⚠️ **Language** — `scriptMatchesLocale`: the feed carried English HEADLINES over Ukrainian
   bodies, because the prompt's own STYLE example is an English headline and an illustration in a
   language outvotes a directive about language. Script ratio, not a word list — a Ukrainian
-  sentence naming «Claude» and «Spotify» is correct.
+  sentence naming «Claude» and «Spotify» is correct. Since 2026-09-21 a letter of ANY third script
+  fails outright: «餐німо й розваги…» shipped because the ratio counts Cyrillic against Latin and a
+  Han glyph is invisible to both. (`ʼ` is a letter to Unicode but of no script — it passes.)
+  ⚠️ **Citations in a preview** — the weekly report's feed card showed a raw `[tx:…]`. Stripped by
+  `shared/citations.ts` in the render TEMPLATE, so cards already stored read clean too.
   ⚠️ **Repetition in time** — `repeatsRecentTopic`: ONE shared content word (≥5 letters, minus a
   stoplist of words that name no topic). «Cushion lasts 24 days» and «Rent due in 11 days, cushion
   covers only 0.8 months» share exactly one word, and a threshold of two would pass the very pair
@@ -432,7 +436,12 @@
   does. `getUTCHours() === 6` is true for exactly one delivery, and one tick lost to a deploy took
   the day's rates snapshot and every user's backup with it — and the net-worth series is written
   forward only, so that hole never fills (2026-09-21).
-- **§PLAN-LATE (2026-09-20): a scheduled payment is news only AFTER its date goes by.** The feed
+- **§PLAN-LATE (2026-09-20): a scheduled payment is news only AFTER its date goes by.**
+  ⚠️ **2026-09-21: «not linked» is not «not paid».** The feed said «Київстар — платіж не пройшов»
+  and «EasyPay — платіж не пройшов» for bills paid on the 2nd and 3rd. Before the card is drafted,
+  `paidOnSecondLook` runs `linkPlanHistory` for that plan and re-reads — the card may only state
+  what the ledger shows, and a missing LINK is the app's fault, not the user's. Root causes in
+  `docs/CANON.md` §PLAN-LINK. The feed
   shipped «Квартира відсутня в цьому місяці — 12500 ₴ очікується 20 числа … в рахунках на сьогодні
   цього платежу немає» on the 15th. Every figure and date in it was grounded — the rent IS an
   `upcoming_charges` row — and the model merely observed that no charge had happened yet, which is

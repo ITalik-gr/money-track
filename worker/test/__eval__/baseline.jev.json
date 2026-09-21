@@ -41,7 +41,7 @@
       "verdict": "ask",
       "root": 1,
       "recurring": 0,
-      "pass": true
+      "pass": false
     },
     "aromakava": {
       "verdict": "skip",
@@ -149,7 +149,7 @@
       "verdict": "ask",
       "root": 6,
       "recurring": 1,
-      "pass": true
+      "pass": false
     },
     "spotify": {
       "verdict": "ask",
@@ -273,8 +273,8 @@
     },
     "salary": {
       "verdict": "ask",
-      "root": 15,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "freelance-usd": {
@@ -327,8 +327,8 @@
     },
     "note-says-leisure": {
       "verdict": "ask",
-      "root": 6,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "amazon-usd": {
@@ -345,8 +345,8 @@
     },
     "aliexpress": {
       "verdict": "ask",
-      "root": 14,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "nova-poshta": {
@@ -405,8 +405,8 @@
     },
     "kids-school": {
       "verdict": "ask",
-      "root": 19,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "cinema": {
@@ -417,8 +417,8 @@
     },
     "books": {
       "verdict": "ask",
-      "root": 14,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "carry-known-merchant": {
@@ -435,8 +435,8 @@
     },
     "no-carry-from-skipped": {
       "verdict": "ask",
-      "root": 6,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "already-enriched": {
@@ -483,13 +483,13 @@
     },
     "fop-jetbrains": {
       "verdict": "ask",
-      "root": 43,
-      "recurring": 1,
+      "root": 9,
+      "recurring": null,
       "pass": true
     },
     "fop-hetzner": {
       "verdict": "ask",
-      "root": 9,
+      "root": 43,
       "recurring": 1,
       "pass": true
     },
@@ -533,7 +533,7 @@
       "verdict": "ask",
       "root": 1,
       "recurring": 0,
-      "pass": true
+      "pass": false
     },
     "csv-ashan-cyrillic": {
       "verdict": "ask",
@@ -567,9 +567,9 @@
     },
     "csv-kasta": {
       "verdict": "ask",
-      "root": 14,
-      "recurring": 0,
-      "pass": false
+      "root": null,
+      "recurring": null,
+      "pass": true
     },
     "csv-intertop": {
       "verdict": "ask",
@@ -593,7 +593,7 @@
       "verdict": "ask",
       "root": 7,
       "recurring": 1,
-      "pass": true
+      "pass": false
     },
     "csv-vodokanal": {
       "verdict": "ask",
@@ -627,8 +627,8 @@
     },
     "csv-knyharnya": {
       "verdict": "ask",
-      "root": 14,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "csv-barber": {
@@ -663,8 +663,8 @@
     },
     "note-repaid-debt": {
       "verdict": "ask",
-      "root": 18,
-      "recurring": 0,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "note-split-later": {
@@ -676,7 +676,7 @@
     "note-gift-for-self": {
       "verdict": "ask",
       "root": 9,
-      "recurring": 0,
+      "recurring": null,
       "pass": true
     },
     "note-empty-string": {
@@ -711,8 +711,8 @@
     },
     "subs-megogo": {
       "verdict": "ask",
-      "root": 6,
-      "recurring": 1,
+      "root": 7,
+      "recurring": null,
       "pass": true
     },
     "subs-annual-domain": {
@@ -723,8 +723,8 @@
     },
     "subs-insurance": {
       "verdict": "ask",
-      "root": 14,
-      "recurring": 1,
+      "root": null,
+      "recurring": null,
       "pass": true
     },
     "subs-cancelled-once": {
@@ -790,6 +790,222 @@
     "transfer-fx-exchange": {
       "verdict": "skip",
       "root": 13,
+      "recurring": null,
+      "pass": true
+    },
+    "ho-shell": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-socar": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-ontaxi": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-parking": {
+      "verdict": "ask",
+      "root": 3,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-apteka911": {
+      "verdict": "ask",
+      "root": 4,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-synevo": {
+      "verdict": "ask",
+      "root": 4,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-croissants": {
+      "verdict": "ask",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "ho-rocket": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-coffeelike": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-dominos": {
+      "verdict": "ask",
+      "root": 2,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-multiplex": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-psn": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-disney": {
+      "verdict": "ask",
+      "root": 6,
+      "recurring": 1,
+      "pass": true
+    },
+    "ho-kyivgaz": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 1,
+      "pass": true
+    },
+    "ho-lanet": {
+      "verdict": "ask",
+      "root": 7,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-novaliniya": {
+      "verdict": "ask",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "ho-citrus": {
+      "verdict": "ask",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "ho-prostor": {
+      "verdict": "ask",
+      "root": 10,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-makeup": {
+      "verdict": "ask",
+      "root": 10,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-skyup": {
+      "verdict": "ask",
+      "root": 11,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-ryanair": {
+      "verdict": "ask",
+      "root": 11,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-yakaboo": {
+      "verdict": "ask",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "ho-prometheus": {
+      "verdict": "ask",
+      "root": 19,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-antoshka": {
+      "verdict": "ask",
+      "root": 20,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-kotiki": {
+      "verdict": "ask",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "ho-decathlon": {
+      "verdict": "ask",
+      "root": 22,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-flowers": {
+      "verdict": "ask",
+      "root": 23,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-pdfo": {
+      "verdict": "ask",
+      "root": 24,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-digitalocean": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "ho-1password": {
+      "verdict": "ask",
+      "root": 43,
+      "recurring": 1,
+      "pass": true
+    },
+    "ho-ekomarket": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-tavria": {
+      "verdict": "ask",
+      "root": 1,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-justin": {
+      "verdict": "ask",
+      "root": 14,
+      "recurring": 0,
+      "pass": false
+    },
+    "ho-wise": {
+      "verdict": "ask",
+      "root": null,
+      "recurring": null,
+      "pass": true
+    },
+    "ho-refund": {
+      "verdict": "ask",
+      "root": 17,
+      "recurring": 0,
+      "pass": true
+    },
+    "ho-prom": {
+      "verdict": "ask",
+      "root": null,
       "recurring": null,
       "pass": true
     }

@@ -18,6 +18,7 @@
 import type { Env } from "../../env.ts";
 import { getRates } from "../finance/money.ts";
 import { plannedActuals, plannedUAH, nextChargeUnix } from "../finance/subscriptions.ts";
+import { linkPlanHistoryById } from "../finance/plan-match.ts";
 import { localYmd } from "../finance/stats.ts";
 import type { Draft } from "./notify.ts";
 
@@ -114,6 +115,7 @@ export async function draftMissedPlans(env: Env, now: number): Promise<Draft[]> 
     if (lateDays < LATE_GRACE_DAYS) continue;                // not late yet — say nothing
     const early = earlyToleranceSec(periodSeconds(p.period, p.period_count ?? 1));
     if (a.last_time != null && a.last_time >= due - early) continue;                        // paid
+    if (await paidOnSecondLook(env, p.id, due - early)) continue;                          // paid, unlinked
     out.push({
       kind: "plan_missed",
       tkey: "plan_missed",
@@ -130,6 +132,24 @@ export async function draftMissedPlans(env: Env, now: number): Promise<Draft[]> 
     });
   }
   return out.slice(0, 3);
+}
+
+/**
+ * Before saying a payment did not happen, look once more — and link what is found.
+ *
+ * «Not linked» and «not paid» are different facts, and this card only has the right to state the
+ * second. The first had several ways in: an ingest path that skipped matching (learned aliases did,
+ * until 2026-09-21 — the feed announced missed Київстар and EasyPay bills paid on the 2nd and 3rd),
+ * a CSV import, an operation added by hand. `linkPlanHistory` is the same matcher the plan runs
+ * when it is created, idempotent, and it only ever fills a NULL `planned_id` — so running it for the
+ * one or two plans that look late costs a query each and heals the history for every other screen.
+ */
+async function paidOnSecondLook(env: Env, planId: number, since: number): Promise<boolean> {
+  await linkPlanHistoryById(env.DB, planId);
+  const r = await env.DB.prepare(
+    "SELECT MAX(time) AS t FROM transactions WHERE planned_id = ? AND amount < 0 AND is_transfer = 0",
+  ).bind(planId).first<{ t: number | null }>();
+  return r?.t != null && r.t >= since;
 }
 
 /** Подорожчання підписки: остання фактична сума помітно вища за план (plannedActuals). */

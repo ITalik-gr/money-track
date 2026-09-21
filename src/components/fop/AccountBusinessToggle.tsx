@@ -44,7 +44,7 @@ export function AccountBusinessToggle({ id, value }: { id: string; value: number
         {([[1, t("fop.acct.yes")], [0, t("fop.acct.no")]] as const).map(([v, label]) => (
           <button
             key={v}
-            className={(value ? 1 : 0) === v ? "active" : ""}
+            className={`seg-btn ${(value ? 1 : 0) === v ? "active" : ""}`}
             disabled={isLoading}
             onClick={() => set(v)}
           >{label}</button>

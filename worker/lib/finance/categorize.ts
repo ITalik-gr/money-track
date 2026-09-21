@@ -47,6 +47,25 @@ export async function categorize(
 ): Promise<CategorizeResult> {
   const desc = (input.description ?? "").trim();
 
+  /**
+   * §PLAN-LINK — which declared plan this charge IS, asked whatever decides the CATEGORY.
+   *
+   * The alias steps below used to return `planned_id: null` without asking. A plan is paid to the
+   * same merchant every month, so from the SECOND month on its charge always hits a learned alias
+   * first — and never got linked. The feed then said «Київстар — платіж не пройшов» and «EasyPay —
+   * платіж не пройшов» (2026-09-21) for bills paid on the 2nd and the 3rd, because the last LINKED
+   * charge was August's. Linking and filing are two different facts (see `linkPlanHistory`).
+   *
+   * `name` is the alias's human name: the bank sends «KYIVSTAR», the plan is called «Київстар»,
+   * and only the learned display name spells it the way the plan does.
+   */
+  const planOf = async (name: string | null): Promise<number | null> =>
+    input.amount != null && input.amount < 0 && input.currency_code != null
+      ? (await matchActiveSubscription(db, {
+          merchant: name, description: desc || null, amount: input.amount, currency_code: input.currency_code,
+        }))?.planned_id ?? null
+      : null;
+
   // 1. Learned merchant aliases — exact raw mono description, then mcc.
   if (desc) {
     const byDesc = await db
@@ -55,7 +74,7 @@ export async function categorize(
       )
       .bind(desc)
       .first<{ display_name: string | null; category_id: number | null; is_transfer: number; real_category_id: number | null }>();
-    if (byDesc) return { category_id: byDesc.category_id, display_name: byDesc.display_name, is_transfer: !!byDesc.is_transfer, real_category_id: byDesc.real_category_id, planned_id: null, source: "alias_desc", detail: desc };
+    if (byDesc) return { category_id: byDesc.category_id, display_name: byDesc.display_name, is_transfer: !!byDesc.is_transfer, real_category_id: byDesc.real_category_id, planned_id: byDesc.is_transfer ? null : await planOf(byDesc.display_name), source: "alias_desc", detail: desc };
   }
   if (input.mcc != null) {
     const byMcc = await db
@@ -64,7 +83,7 @@ export async function categorize(
       )
       .bind(String(input.mcc))
       .first<{ display_name: string | null; category_id: number | null; is_transfer: number; real_category_id: number | null }>();
-    if (byMcc) return { category_id: byMcc.category_id, display_name: byMcc.display_name, is_transfer: !!byMcc.is_transfer, real_category_id: byMcc.real_category_id, planned_id: null, source: "alias_mcc", detail: String(input.mcc) };
+    if (byMcc) return { category_id: byMcc.category_id, display_name: byMcc.display_name, is_transfer: !!byMcc.is_transfer, real_category_id: byMcc.real_category_id, planned_id: byMcc.is_transfer ? null : await planOf(byMcc.display_name), source: "alias_mcc", detail: String(input.mcc) };
   }
 
   // 1b. Активна підписка (детерміністично, без AI): той самий мерчант+сума+валюта, що

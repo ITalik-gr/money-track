@@ -36,6 +36,7 @@
  *   node scripts/eval-ai.mjs --dry            # gate only: no network, no cost, still scores the gate
  *   node scripts/eval-ai.mjs --record         # write the baseline (deliberate, reviewed changes only)
  *   node scripts/eval-ai.mjs --judge jev      # the same ladder with enrichment answered by Jev (docs/JEV.md)
+ *   node scripts/eval-ai.mjs --judge jev --claude   # …and let fallbacks / §F2 step 2 reach Claude
  *
  * `--judge jev` is not a second harness: it flips `ENRICH_JUDGE` on the env the production code
  * reads, so the gate, the carry and `applyEnrichment` are the same code on both runs and only the
@@ -69,6 +70,11 @@ const LIMIT = Number(value("limit", 0)) || 0;
 const CONCURRENCY = Number(value("concurrency", 4)) || 4;
 const DRY = flag("dry");
 const RECORD = flag("record");
+// docs/JEV.md §4 — what asking about the SKIPPED rows would buy. The gate still runs and its
+// verdict is still scored; a `skip` is then asked anyway, so the report shows what the judge says
+// about rows the app never asks about today. Never combine with --record: that baseline would
+// describe a gate that does not exist.
+const FORCE_ASK = flag("force-ask");
 const JUDGE = value("judge", "haiku");
 if (JUDGE !== "haiku" && JUDGE !== "jev") {
   console.error(`--judge must be haiku or jev, got ${JUDGE}`);
@@ -166,11 +172,13 @@ async function runCase(c, key) {
     DB: db,
     USER_ID: "eval",
     IS_OWNER: "1",
-    ANTHROPIC_API_KEY: DRY ? "" : key,
+    ANTHROPIC_API_KEY: DRY || !WITH_CLAUDE ? "" : key,
     JEV_API_KEY: DRY ? "" : jevKey ?? "",
     ENRICH_JUDGE: JUDGE,
   };
   db.raw.prepare("INSERT INTO accounts (id, type, title, currency_code, balance) VALUES ('acc', 'black', 'Eval', 980, 0)").run();
+  // The user's own description of themselves — the only way «is this work money?» has an answer.
+  if (c.profile) db.raw.prepare("INSERT INTO app_state (key, value) VALUES ('finance_profile', ?)").run(c.profile);
 
   for (const [i, ctx] of (c.context ?? []).entries()) {
     insertTx(db, {
@@ -209,17 +217,21 @@ async function runCase(c, key) {
   let error = null;
   if (verdict.verdict === "carry") {
     await applyCarry(env, id, verdict.recurring);
-  } else if (verdict.verdict === "ask" && !DRY) {
+  } else if ((verdict.verdict === "ask" || (FORCE_ASK && verdict.verdict === "skip")) && !DRY) {
     try { await enrichOne(env, id); } catch (e) { error = e?.message ?? String(e); }
   }
 
   const after = db.raw.prepare(
-    `SELECT t.category_id, t.is_transfer, t.ai_recurring, t.merchant,
+    `SELECT t.category_id, t.is_transfer, t.ai_recurring, t.merchant, t.ai_importance, t.ai_business,
             COALESCE(c.parent_id, t.category_id) AS root
      FROM transactions t LEFT JOIN categories c ON c.id = t.category_id WHERE t.id = ?`,
   ).get(id);
 
-  return { id: c.id, group: c.group, verdict: verdict.verdict, why: verdict.why ?? null, after, error };
+  // Without `--claude`, a row Jev handed on (the cascade, or a failed call) reaches a Haiku ladder
+  // that has no key. That is not a wrong answer — nothing answered — so it is reported as DEFERRED
+  // and left out of the accuracy columns rather than scored as a miss.
+  const deferred = !!error && !WITH_CLAUDE;
+  return { id: c.id, group: c.group, verdict: verdict.verdict, why: verdict.why ?? null, after, error: deferred ? null : error, deferred };
 }
 
 // ─── scoring ────────────────────────────────────────────────────────────────────────────────────
@@ -235,7 +247,21 @@ function score(c, got) {
   if (e.category != null) checks.push({ kind: "exact", want: e.category, got: got.after?.category_id ?? null });
   if (e.recurring != null) checks.push({ kind: "recurring", want: e.recurring, got: got.after?.ai_recurring ?? null });
   if (e.transfer != null) checks.push({ kind: "transfer", want: e.transfer ? 1 : 0, got: got.after?.is_transfer ?? 0 });
-  for (const ch of checks) ch.ok = ch.want === ch.got;
+  // Phase-3 PROPOSALS (docs/JEV.md). Business is a probability; 0.5 is where a proposal would be
+  // offered at all, so that is the line it is scored at.
+  if (e.importance != null) checks.push({ kind: "importance", want: e.importance, got: got.after?.ai_importance ?? null });
+  if (e.business != null) {
+    const p = got.after?.ai_business;
+    checks.push({ kind: "business", want: e.business, got: p == null ? null : p >= 0.5 ? 1 : 0 });
+  }
+  // The name is a list of acceptable spellings, compared case-blind: «SOCAR» and «Socar» are the
+  // same merchant, and a brand with a Cyrillic and a Latin form is right in either.
+  if (e.name != null) {
+    const got_ = got.after?.merchant ?? null;
+    const ok = e.name.some((n) => n.toLowerCase() === String(got_ ?? "").trim().toLowerCase());
+    checks.push({ kind: "name", want: e.name.join(" | "), got: got_, ok });
+  }
+  for (const ch of checks) ch.ok ??= ch.want === ch.got;
   return checks;
 }
 
@@ -263,7 +289,12 @@ const BASELINE = join(EVAL_DIR, `baseline${SUFFIX}.json`);
 // The Anthropic key is needed on the Jev run too: a row the judge cannot answer falls back to the
 // Haiku ladder (that fallback is production behaviour, so the eval keeps it), and §F2 step 2 still
 // runs on Haiku after a row lands in the transfer bucket.
-const key = devVar("ANTHROPIC_API_KEY");
+// …but NOT by default: the owner pays for every Haiku token a comparison run spends, and a Jev run
+// that quietly fell back would be scoring Haiku under Jev's name anyway. Without `--claude` the
+// Anthropic key is withheld, so a fallback surfaces as an `error` line instead of as a pass, and
+// §F2 step 2 (best-effort) simply does not run. Pass `--claude` for the full production picture.
+const WITH_CLAUDE = JUDGE === "haiku" || flag("claude");
+const key = WITH_CLAUDE ? devVar("ANTHROPIC_API_KEY") : "no-claude";
 const jevKey = JUDGE === "jev" ? devVar("JEV_API_KEY") : null;
 if (!key && !DRY) {
   console.error("No ANTHROPIC_API_KEY (env or .dev.vars). Run with --dry to score the gate alone.");
@@ -278,7 +309,7 @@ if (!DRY) meterFetch();
 const t0 = Date.now();
 const results = await pool(selected, CONCURRENCY, async (c) => {
   const got = await runCase(c, key);
-  return { c, got, checks: score(c, got) };
+  return { c, got, checks: got.deferred ? [] : score(c, got) };
 });
 const seconds = ((Date.now() - t0) / 1000).toFixed(1);
 
@@ -307,8 +338,13 @@ const pct = (t) => (t.n ? `${((t.ok / t.n) * 100).toFixed(1)}% (${t.ok}/${t.n})`
 const asked = results.filter((r) => r.got.verdict === "ask").length;
 
 console.log(`\n=== AI eval (${JUDGE}) — ${results.length} cases in ${seconds}s ===\n`);
-for (const kind of ["gate", "root", "exact", "recurring", "transfer"]) {
+for (const kind of ["gate", "root", "exact", "recurring", "transfer", "name", "importance", "business"]) {
   if (tally[kind]) console.log(`  ${kind.padEnd(10)} ${pct(tally[kind])}`);
+}
+const deferred = results.filter((r) => r.got.deferred);
+if (deferred.length) {
+  console.log(`\n  deferred to the Haiku ladder (not run without --claude): ${deferred.length}` +
+    ` — ${deferred.map((r) => r.c.id).join(", ")}`);
 }
 console.log(`\n  gate: asked ${asked}/${results.length} (${((asked / results.length) * 100).toFixed(0)}%)` +
   `, carried ${results.filter((r) => r.got.verdict === "carry").length}` +
@@ -373,10 +409,14 @@ writeFileSync(join(EVAL_DIR, `last-run${SUFFIX}.json`), `${JSON.stringify({
   results: results.map((r) => ({ id: r.c.id, group: r.c.group, verdict: r.got.verdict,
     merchant: r.got.after?.merchant ?? null, root: r.got.after?.root ?? null,
     category: r.got.after?.category_id ?? null, recurring: r.got.after?.ai_recurring ?? null,
-    checks: r.checks, error: r.got.error })),
+    // The raw probability, not only the scored 0/1: a threshold is chosen from this column.
+    importance: r.got.after?.ai_importance ?? null, business_p: r.got.after?.ai_business ?? null,
+    checks: r.checks, error: r.got.error, deferred: !!r.got.deferred })),
 }, null, 2)}\n`);
 
-if (RECORD) {
+if (RECORD && FORCE_ASK) {
+  console.log("\n--record ignored under --force-ask: that run describes a gate that does not exist.");
+} else if (RECORD) {
   writeFileSync(BASELINE, `${JSON.stringify({ recorded: new Date().toISOString().slice(0, 10), cases: current }, null, 2)}\n`);
   console.log(`\nBaseline written: ${BASELINE}`);
 } else if (existsSync(BASELINE)) {

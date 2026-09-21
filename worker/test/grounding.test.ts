@@ -12,6 +12,7 @@ import assert from "node:assert/strict";
 import {
   collectNumbers, numbersAreGrounded, groundFacts, timeClaimsAreGrounded, scriptMatchesLocale,
 } from "../lib/ai/grounding.ts";
+import { plainCitations } from "../../shared/citations.ts";
 
 const known = (payload: unknown) => { const s = new Set<number>(); collectNumbers(payload, s); return s; };
 
@@ -111,4 +112,20 @@ test("an English headline on a Ukrainian feed is rejected, and brand names are n
   assert.equal(scriptMatchesLocale("Комуналка зросла на 53%", "en"), false);
   // Too short to have a language at all — rejecting it would be a guess of our own.
   assert.equal(scriptMatchesLocale("PS Plus 350 ₴", "uk"), true);
+  // The feed card verbatim: one Han glyph inside a Ukrainian headline, invisible to the ratio.
+  assert.equal(scriptMatchesLocale("餐німо й розваги катапультили вверх на 941 ₴", "uk"), false);
+  assert.equal(scriptMatchesLocale("Coffee 餐", "en"), false);
+  // Not letters, so not a script: the currency sign, guillemets, the modifier apostrophe, emoji.
+  assert.equal(scriptMatchesLocale("Бюджет «Розваги» зʼїдено на 101% 🎯 ₴", "uk"), true);
+});
+
+test("a report preview carries no raw citation tokens", () => {
+  // The feed card verbatim.
+  assert.equal(
+    plainCitations("зайшла оплата квартири 12 500 ₴ [tx:Wd2iiFXN98cFeo-UIQ], тож витрати підскочили"),
+    "зайшла оплата квартири 12 500 ₴, тож витрати підскочили",
+  );
+  assert.equal(plainCitations("як-от [tx:abc|MrGrill 150] учора"), "як-от MrGrill 150 учора");
+  // Cut by a length limit mid-token: the stub goes too.
+  assert.equal(plainCitations("оренда 12 500 ₴ [tx:Wd2ii"), "оренда 12 500 ₴");
 });

@@ -70,6 +70,22 @@ test("§PLAN-LATE: the app worries about a plan only after its date passed", asy
       assert.match(String(out[0].dedup_key), /^plan_missed:\d+:\d{4}-\d{2}-\d{2}$/);
     });
 
+    await t.test("paid but never LINKED → silence, and the charge is linked on the way", async () => {
+      // 2026-09-21, verbatim shape: Київстар paid on the 2nd for a plan due on the 4th, 251 ₴
+      // against 250 ₴, the row stored without `planned_id` because a learned alias answered first.
+      const db = migratedDb();
+      seed(db);
+      const id = plan(db, "Київстар", 4, now);
+      charge(db, "aug", id, 35, now);
+      db.raw.prepare(
+        `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, created_at, merchant)
+         VALUES ('sep', 'acc-uah', 'mono', ?, -12510_00, 980, ?, 'Київстар')`,
+      ).run(now - 6 * DAY, now);
+      assert.deepEqual(await draftMissedPlans(env(db), now), []);
+      const row = db.raw.prepare("SELECT planned_id FROM transactions WHERE id = 'sep'").get() as { planned_id: number };
+      assert.equal(row.planned_id, id);
+    });
+
     await t.test("the charge is there, two days early → silence", async () => {
       const db = migratedDb();
       seed(db);

@@ -94,7 +94,7 @@ If the category is unclear, set category_guess to the nearest one; never invent 
 // they are matched against real descriptions. Categories are anchored by ID rather than by name,
 // because the taxonomy in `buildSystemPrefix` now arrives in the reader's language — a hardcoded
 // «Продукти» would name nothing on an English screen.
-const CACHE_GUIDE = `DETAILED CATEGORY GUIDE (pick the most precise id; subcategories are fine, they roll up into the parent). Category names below are the seed labels for orientation only — always resolve against the id list in the task prompt.
+export const CACHE_GUIDE = `DETAILED CATEGORY GUIDE (pick the most precise id; subcategories are fine, they roll up into the parent). Category names below are the seed labels for orientation only — always resolve against the id list in the task prompt.
 
 EXPENSES — the main categories and when to choose them:
 - Groceries (1): any grocery shop or supermarket. Subcategories: Supermarket (30) — АТБ, Сільпо, Ашан, Novus, Metro, Varus, Fora, Таврія; Market (31) — open-air markets, «базар», produce bought from a stall. A supermarket chain goes to Supermarket (30); a small corner shop to Groceries (1).

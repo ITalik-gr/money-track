@@ -262,6 +262,13 @@
   показував нуль — тобто стрічка оголошувала «списань не видно» про підписку, яку платять щомісяця.
   Це безпечно саме тому, що назва — лише ОДИН із гейтів: валюта й сума (±10%) мусять збігтись.
   Тримається `subscriptions.test.ts` + `planning-consistency.test.ts`.
+- **§PLAN-LINK — two holes closed 2026-09-21** (the false «Київстар/EasyPay — платіж не пройшов»):
+  (1) `categorize()` returned from a LEARNED ALIAS with `planned_id: null`, never asking about plans —
+  and a plan's charge hits a learned alias from its second month on. Linking is now asked whatever
+  decides the category, with the alias's display name in the haystack (bank «KYIVSTAR», plan
+  «Київстар»). (2) `linkPlanHistory` pre-filtered with `LOWER(merchant) LIKE`, and SQLite folds
+  case for ASCII only — a Cyrillic plan could not find a capitalised Cyrillic merchant. It now
+  pre-filters by the ±10% AMOUNT and matches the name in JS. Pinned in `plan-link.test.ts`.
 - **§PLAN-LINK (2026-08-27): план САМ знаходить свої списання в наявній історії — `linkPlanHistory`
   (`lib/finance/plan-match.ts`), і її кличуть `POST /planned`, `PATCH /planned/:id` і кнопка ре-світу.**
   `transactions.planned_id` писався рівно у двох місцях: на ІНЖЕСТІ й усередині
@@ -597,6 +604,9 @@
 - **Витрата:** `amount<0` (або рефанд, див. §REFUND), `transfer_pair_id IS NULL`, НЕ (`is_transfer=1 AND real_category_id IS NULL`), ефективна категорія `IS NOT 13` («Перекази і зняття»). **Holds рахуються** (mono надсилає лише виконані; коли hold закривається — той самий `id` перезаписується, тож без подвійного рахунку). Прапорець `hold` лишається на рядку для UI-бейджа «в обробці». *(Раніше `hold=0` різав свіжий тиждень у репорті — виправлено 2026-07-10.)*
 - **Ефективна категорія** = рол-ап `real_category_id` (готівка/зняття за реальною суттю), інакше рол-ап `category_id`. Хелпери: `EFF_CAT_*`, `SPEND_WHERE`, `INCOME_WHERE`, `STATS_JOINS`, `spendSum/incomeSum/amountSum`, `uahMult` (₴-зведення inline-CASE з курсів), `valueMode` (₴ або «чиста» валюта), `periodBounds/currentPeriodToDate/lastCompletePeriod`.
 - **Вагомість (§6):** `EFF_IMPORTANCE` = `COALESCE(t.importance, рол-ап importance ефективної категорії, 'discretionary')`. Рівні `essential|discretionary|optional`. Задається на категорії (дефолт) + override на транзакції. Міграція 0016.
+  ⚠️ `t.ai_importance` (migration 0054, docs/JEV.md phase 3) is NOT in this COALESCE and must not be
+  added to it: it is a model's PROPOSAL, stored for a person to accept, and measured at 86% — every
+  seventh row would move a figure on a guess. It becomes canon only through `t.importance`, i.e. a click.
 - **Разові vs регулярні (§E1):** `isRecurringExpr` — операція регулярна, якщо прив'язана до плану (`planned_id IS NOT NULL`, напр. квартальна підписка) АБО її мерчант має витрати у ≥3 різних місяцях трейлінг-вікна. `recurringOneoffSplit()` дає {recurring, oneoff, oneoff_items}.
 - **Місячний рівень категорії — `categoryMonthlyLevels()` (ЄДИНЕ джерело, 2026-07-12).** Один «скільки на місяць» на категорію, узгоджений скрізь (Патерни `usual`, Порадник/Бюджети `avg_month_uah`): fixed-кости (рента/підписка — останні 2-3 повні міс стабільні, CV≤0.12) → рівень = середнє останніх платежів (ловить стрибок ціни, коли орендодавець підняв ставку: 6-місячне середнє тягнуло б рівень до старої ціни ще півроку); змінні категорії → середнє за вікно (не хапає випадковий пік). Рахує лише по ПОВНИХ місяцях. Замінив розсинхрон «6-міс середнє / 90д÷3 / останній платіж». НЕ рахувати місячну суму категорії деінде вручну — брати звідси. **§A1 (2026-07-19):** наприкінці функції — `applyFactAdjustments()`: ПІДТВЕРДЖЕНІ факти (`facts.confirmed_at IS NOT NULL`, активні на `now`) коригують рівень (multiplier ×/ delta_minor +). Це ЄДИНЕ місце, де факт рухає число (не в ендпоінті) — тож burn/runway/Патерни/чат лишаються узгодженими.
   **§A1-WRITE (2026-08-12): a fact is created by `addFact` (`lib/ai/facts.ts`) ALONE.** There were

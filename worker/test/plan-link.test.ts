@@ -159,3 +159,36 @@ test("§PLAN-LINK: declaring a plan attaches the charges it ALREADY has", async 
     });
   } finally { restore(); }
 });
+
+test("§PLAN-LINK: a KNOWN merchant's charge is still linked to its plan at ingest", async () => {
+  // 2026-09-21: from the second month on, a plan's charge hits a learned alias first, and the alias
+  // step returned `planned_id: null` — so «Київстар — платіж не пройшов» for a bill paid on time.
+  // The raw text is Latin and the plan Cyrillic: only the alias's display name bridges them.
+  const { categorize } = await import("../lib/finance/categorize.ts");
+  const db = migratedDb();
+  seed(db);
+  db.raw.prepare(
+    `INSERT INTO planned_payments (title, kind, period_amount, period, start_date, is_active, currency_code, period_count)
+     VALUES ('Київстар', 'subscription', 25000, 'month', ?, 1, 980, 1)`,
+  ).run(NOW - 90 * DAY);
+  const planId = (db.raw.prepare("SELECT id FROM planned_payments WHERE title = 'Київстар'").get() as { id: number }).id;
+  db.raw.prepare(
+    `INSERT INTO merchant_aliases (match_type, raw_key, display_name, category_id, is_transfer, source, created_at)
+     VALUES ('mono_desc', 'KYIVSTAR', 'Київстар', 7, 0, 'ai', ?)`,
+  ).run(NOW);
+  const r = await categorize(db, { mcc: 4814, description: "KYIVSTAR", comment: null, amount: -25100, currency_code: 980 });
+  assert.equal(r.source, "alias_desc", "the alias still decides the category");
+  assert.equal(r.planned_id, planId);
+});
+
+test("§PLAN-LINK: a Cyrillic plan finds its capitalised Cyrillic history (SQLite folds ASCII only)", async () => {
+  const db = migratedDb();
+  seed(db);
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    charge(db, "ks-aug", { merchant: "Київстар", amount: -27100, daysAgo: 50 });
+    charge(db, "ks-sep", { merchant: "Київстар", amount: -25100, daysAgo: 20 });
+    const { linked } = await createPlan(db, { title: "Київстар", period_amount: 25000 });
+    assert.equal(linked, 2);
+  } finally { restore(); }
+});

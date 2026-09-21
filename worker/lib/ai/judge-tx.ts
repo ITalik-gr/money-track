@@ -1,23 +1,24 @@
-// docs/JEV.md phase 1 — one transaction, one request, three judgments.
+// docs/JEV.md phases 1–2 — one transaction understood by Jev.
 //
-// This is the MEASUREMENT branch, not the product: it answers the same `EnrichResult` the Haiku
-// ladder answers, so `applyEnrichment` files both identically and `npm run eval` scores both with
-// the same six numbers. Which one ships is decided from that table (docs/JEV.md §7), not here.
+// This is still the MEASUREMENT branch, not the product: it answers the same `EnrichResult` the
+// Haiku ladder answers, so `applyEnrichment` files both identically and `npm run eval` scores both
+// with the same numbers. Which one ships is decided from that table (docs/JEV.md §7), not here.
 //
 // Lives in its own file because `enrich.ts` sits under the C3 ceiling and cannot take it; the only
 // trace in `enrich.ts` is the two-line dispatch at the top of `enrichTransaction`.
 //
-// What phase 1 deliberately does NOT answer, and why the result still files correctly:
-//   • the LEAF category — its options only exist once the root is known, so it is a second round
-//     (phase 2). A root is not a consolation prize: every total in the app rolls up to it anyway.
-//   • `clean_name` — returned empty, so `applyEnrichment` keeps the name the deterministic ladder
-//     already gave the row. Phase 2 makes it span SELECTION, never generation (§8).
-//   • `note`, tags — generative / secondary; nothing computes from them.
+// Two rounds, because the second one's options do not exist until the first has answered:
+//   1. root category · kind · recurring · which span of the raw text is the brand — together;
+//   2. the leaf, over the chosen root's children — only when that root HAS children.
+// Not answered here: `note` and tags (generative / secondary — nothing computes from them), and
+// `known_plan`: the deterministic `matchActiveSubscription` in `applyEnrichment` already links a
+// charge to a declared plan, and does it better now that it is handed a clean name (docs/JEV.md §9).
 import type { Env } from "../../env.ts";
 import type { AnthropicUsage } from "./cost.ts";
 import type { EnrichResult } from "./enrich.ts";
-import { judge, judgeAvailable, type JudgeQuestion, type Rubric } from "./judge.ts";
+import { judge, judgeAvailable, type JudgeQuestion, type JudgeUsage, type Rubric } from "./judge.ts";
 import { CAT_EN } from "../finance/categories-i18n.ts";
+import { categoryGuide } from "./judge-guide.ts";
 
 // Seeded «Перекази і зняття» (0002). Offered on BOTH signs: own money moving is neither spending
 // nor income, and it is the bucket §F2 step 2 picks up from.
@@ -29,43 +30,6 @@ const TRANSFER_ROOT = 13;
  * must dismiss, and the eval's recurring column is what should move this, not intuition.
  */
 const RECURRING_AT = 0.5;
-
-/**
- * What each SEED root means, keyed by id. Condensed from `CACHE_GUIDE` in `prompt.ts` — the same
- * boundaries (delivery is Other, not Transport; there is no «subscriptions» category, §SUBS-CAT),
- * because two definitions of one category would disagree exactly on the rows that are hard.
- * A user's own category has no entry and is offered by name alone.
- */
-const ROOT_GUIDE: Record<number, Rubric> = {
-  1: "Groceries: supermarkets (АТБ, Сільпо, Novus, Varus, Fora), corner shops, markets, bakeries",
-  2: "Cafés & restaurants: food and drink away from home — coffee shops, restaurants, fast food, bars, food delivery (Glovo, Bolt Food)",
-  3: "Transport: taxi (Uber, Bolt, Uklon), fuel (WOG, OKKO, UPG), public transport, car sharing, parking",
-  4: "Health: pharmacies, doctors, clinics, labs, dentists, optics",
-  5: "Clothing & shoes: clothes, footwear, bags, accessories — Zara, H&M, Reserved, Intertop, LC Waikiki, Sinsay",
-  6: "Entertainment: leisure — cinema, concerts, games (Steam, PlayStation), streaming services (Netflix, Spotify, YouTube Premium, MEGOGO, Sweet.tv)",
-  7: "Utilities & connectivity: mobile operators (Київстар, Vodafone, lifecell), internet providers, electricity, gas, water, ОСББ",
-  8: "Home & household: furniture, hardware, repairs, cleaning supplies, decor (IKEA, JYSK, Епіцентр)",
-  9: "Electronics: gadgets and appliances — Rozetka, Comfy, Foxtrot, Allo, Apple hardware, phones, laptops",
-  10: "Beauty & care: hairdresser, barber, manicure, cosmetics, perfume (EVA, Watsons)",
-  11: "Travel: flights, hotels, Booking, Airbnb, intercity trains, tours",
-  [TRANSFER_ROOT]: "Transfers & withdrawals: ATM cash, card-to-card to a person, moving money between the user's own accounts, jars or crypto wallets",
-  14: "Other: postal delivery (Нова пошта, Укрпошта, Meest), fines, bank fees, one-off odds and ends with no clear category",
-  15: "Salary: regular salary or advance from an employer",
-  16: "Freelance: payment for work or services — invoices, clients, Upwork, Deel, Payoneer",
-  17: "Refund: money returned for a cancelled or returned purchase",
-  18: "Other income: income not covered by any other income category",
-  19: "Education: courses, tutors, textbooks, university, language schools",
-  20: "Children: toys, children's clothes, nursery, clubs, nappies",
-  21: "Pets: pet shops, pet food, vets",
-  22: "Sports & fitness: gym membership, sports nutrition, equipment, pools, yoga",
-  23: "Gifts: gifts bought for other people — flowers, souvenirs, gift sets",
-  24: "Taxes: taxes and state fees — ЄП, ЄСВ, military levy, ПДФО, treasury (казначейство), ДПС",
-  43: "Software & cloud: AI tools, hosting, domains, cloud storage, VPN, developer and productivity software (OpenAI, Anthropic, GitHub, iCloud, Google One, Adobe, Notion)",
-  44: "Sale: selling one's own things — OLX, Prom",
-  45: "Cashback: bank cashback and bonuses",
-  46: "Interest: interest on a balance or deposit",
-  47: "Gift: money received as a gift",
-};
 
 const KIND: JudgeQuestion = {
   type: "choice",
@@ -87,29 +51,144 @@ const RECURRING: JudgeQuestion = {
   },
 };
 
-type Tx = Parameters<typeof import("./enrich.ts").enrichTransaction>[1];
+/**
+ * §6 «Вагомість», asked of ONE operation (docs/JEV.md §3, phase 3). The canon reads importance off
+ * the CATEGORY, so a taxi to a hospital and a taxi to a bar are equally «discretionary»; this is
+ * the per-row answer. The three levels are the canon's own, in its order, and their wording is the
+ * one the Stats tooltip already shows people («не поріжеш / гнучкі / можна не робити»).
+ * Written as a PROPOSAL (`ai_importance`, migration 0054) — never into the override the canon reads.
+ */
+const IMPORTANCE_LEVELS = ["essential", "discretionary", "optional"] as const;
+const IMPORTANCE: JudgeQuestion = {
+  type: "score",
+  instructions: "How necessary was this spending for the account holder's everyday life?",
+  criteria: [
+    "Essential: a basic need that cannot be cut — food at home, rent, utilities, medicine, getting to work, taxes",
+    "Discretionary: wanted and flexible — could be smaller or cheaper, but is a normal part of life (eating out, clothes, a streaming plan)",
+    "Optional: could simply not have happened — an impulse buy, a treat, a gadget or a game nobody needed",
+  ],
+};
 
-/** Roots offered for this sign, as option-key → id. Keys are names, because the model reads them. */
-async function rootOptions(env: Env, income: boolean): Promise<Map<string, { id: number; guide: Rubric | null }>> {
+/**
+ * §TAX-BASE, asked of ONE operation. Today the answer is inherited from the account and changed by
+ * hand, and the business page stays empty until someone goes and marks things. Stored as the raw
+ * probability (`ai_business`, migration 0054) so the screen's threshold can move without asking
+ * again — and NEVER copied into `is_business` by code: it moves a tax figure.
+ */
+const BUSINESS: JudgeQuestion = {
+  type: "noul",
+  instructions: "Is this operation part of the account holder's WORK or business, rather than their personal life?",
+  criteria: {
+    true: "Work money: a client paying for work or services, a payout from a freelance platform, software, hosting or tools used for work, a business tax or contribution, a fee on a business account",
+    false: "Personal life: groceries, eating out, leisure, clothes, family, personal transfers, personal subscriptions — and a salary from an employer, which is employment, not the holder's own business",
+  },
+};
+
+/**
+ * Below this confidence on the ROOT, Jev does not file the row — the Haiku ladder does.
+ *
+ * The held-out run (docs/JEV.md §7.2) showed where Jev is weak: a brand it has never heard of,
+ * which it files under «Other» rather than admit it does not know. That is not a wrong judgment
+ * of the TEXT, it is missing world knowledge, and a model that has it is one fallback away. So the
+ * cheap judge answers what it is sure of and hands on the rest: a cascade, not a replacement.
+ * Measured, not chosen (§7.2): on 110 asked cases every root at ≥ 0.8 was right, 102 of them;
+ * the 8 below held all 6 misses.
+ */
+export const ROOT_CASCADE_AT = 0.8;
+
+/**
+ * The leaf is filed only above this probability; below it the ROOT is filed (docs/JEV.md §3).
+ * An answer one level up is still a correct answer — everything rolls up to it anyway.
+ */
+export const LEAF_AT = 0.6;
+
+type Tx = Parameters<typeof import("./enrich.ts").enrichTransaction>[1];
+type Option = { id: number; guide: Rubric | null };
+
+/** A category's criterion: the guide's text, plus the raw descriptions it files there. */
+function criterion(id: number, extraExamples: string[] = []): Rubric | null {
+  const g = categoryGuide(id);
+  if (!g) return null;
+  const examples = [...g.examples, ...extraExamples];
+  return examples.length ? { covers: g.covers, examples } : g.covers;
+}
+
+/** Roots offered for this sign, as option-key → id, and every seed category's parent. */
+async function options(env: Env, income: boolean): Promise<{ roots: Map<string, Option>; children: Map<number, { id: number; name: string }[]> }> {
   const rows = await env.DB.prepare(
-    "SELECT id, name, is_income FROM categories WHERE parent_id IS NULL ORDER BY id",
-  ).all<{ id: number; name: string; is_income: number }>();
-  const out = new Map<string, { id: number; guide: Rubric | null }>();
-  for (const r of rows.results ?? []) {
+    "SELECT id, name, parent_id, is_income FROM categories ORDER BY id",
+  ).all<{ id: number; name: string; parent_id: number | null; is_income: number }>();
+  const all = rows.results ?? [];
+  const children = new Map<number, { id: number; name: string }[]>();
+  for (const r of all) {
+    if (r.parent_id == null) continue;
+    const list = children.get(r.parent_id) ?? [];
+    list.push({ id: r.id, name: CAT_EN[r.name] ?? r.name });
+    children.set(r.parent_id, list);
+  }
+  const roots = new Map<string, Option>();
+  for (const r of all) {
+    if (r.parent_id != null) continue;
     if (r.id !== TRANSFER_ROOT && !!r.is_income !== income) continue;
     let key = CAT_EN[r.name] ?? r.name;
     // Two categories can share a display name (a user's own «Other» beside the seed one); the key
     // must stay unique or one of them becomes unreachable.
-    if (out.has(key)) key = `${key} (#${r.id})`;
-    out.set(key, { id: r.id, guide: ROOT_GUIDE[r.id] ?? null });
+    if (roots.has(key)) key = `${key} (#${r.id})`;
+    // A root's examples include its leaves' — «GLOVO» is evidence for Cafés as much as for Delivery.
+    const leafExamples = (children.get(r.id) ?? []).flatMap((c) => categoryGuide(c.id)?.examples ?? []);
+    roots.set(key, { id: r.id, guide: criterion(r.id, leafExamples) });
   }
-  return out;
+  return { roots, children };
+}
+
+const NO_BRAND = "none of these";
+
+/**
+ * Candidate brand names cut out of the raw description, for Jev to SELECT from (docs/JEV.md §8:
+ * text generation is its weak spot, selection is not). Code decides what a candidate can be, so the
+ * answer can only ever be a piece of what the bank actually sent — never a spelling Jev invented.
+ *
+ * Dropped before windowing: code-like tokens (≥2 digits mixed with letters — «N254», «P1A2B3C4D»,
+ * but not «1PASSWORD»). A pure number stays INSIDE a window and never stands alone: «APTEKA 911»
+ * is a brand and «ATB 1234» is a branch, and only a reader can tell which — so both are offered.
+ * A token with a domain also offers its bare name («CITRUS.UA» → «CITRUS»).
+ */
+export function brandCandidates(raw: string | null): string[] {
+  if (!raw) return [];
+  const tokens = raw.split(/[\s*/]+/).filter((t) => t && !(/\d.*\d/.test(t) && /\p{L}/u.test(t)) && !/^[#№]/.test(t));
+  const bare = tokens.map((t) => t.replace(/^([\p{L}\d-]+)\.(?:com|ua|net|eu|org|io)(?:\.\p{L}+)?$/iu, "$1"));
+  const out = new Set<string>();
+  for (const seq of [tokens, bare]) {
+    for (let i = 0; i < seq.length; i++) {
+      for (let n = 1; n <= 4 && i + n <= seq.length; n++) {
+        const w = seq.slice(i, i + n);
+        if (/^\d+$/.test(w[0])) break; // a window never STARTS with a number
+        out.add(w.join(" "));
+      }
+    }
+  }
+  return [...out].slice(0, 60);
+}
+
+/** «SILPO» → «Silpo»; short all-caps words («WOG», «ATB», «OKKO») are left alone as acronyms. */
+function displayName(span: string): string {
+  return span.split(" ").map((w) => (/^[A-Z][A-Z-]{4,}$/.test(w) ? w[0] + w.slice(1).toLowerCase() : w)).join(" ");
+}
+
+/** The most probable level of a Score — a level, not the weighted mean: the column holds a level. */
+function topLevel(p: Record<string, number>): number {
+  const [k] = Object.entries(p).sort((a, b) => b[1] - a[1])[0] ?? ["1"];
+  return Math.min(IMPORTANCE_LEVELS.length - 1, Math.max(0, Number(k) || 0));
+}
+
+function addUsage(a: JudgeUsage, b: JudgeUsage): JudgeUsage {
+  return { input_tokens: a.input_tokens + b.input_tokens, output_tokens: a.output_tokens + b.output_tokens };
 }
 
 /**
  * The Jev branch of `enrichTransaction`. Returns null when it should not run (flag off, no key,
- * not the owner, a demo) OR when it failed — null always means «use the Haiku ladder», so the
- * webhook degrades instead of losing the verdict (docs/JEV.md §10).
+ * not the owner, a demo), when it failed, OR when it is not sure of the root — null always means
+ * «use the Haiku ladder», so the webhook degrades instead of losing the verdict (docs/JEV.md §10).
  */
 export async function judgeTransaction(
   env: Env,
@@ -118,7 +197,7 @@ export async function judgeTransaction(
   if (env.ENRICH_JUDGE !== "jev" || !judgeAvailable(env)) return null;
   try {
     const income = tx.amount > 0;
-    const roots = await rootOptions(env, income);
+    const { roots, children } = await options(env, income);
     // `user_note` leads: it outranks every other field (the Haiku prompt's PRIORITY 1), and a note
     // buried after the MCC lost to it on the first eval run (SILPO + «розваги» → Groceries).
     const state = {
@@ -135,7 +214,8 @@ export async function judgeTransaction(
       user_profile: tx.profile ?? null,
       known_subscriptions: tx.subscriptions ?? null,
     };
-    const { answers, usage } = await judge(env, state, {
+    const spans = brandCandidates(tx.merchant);
+    const questions: Record<string, JudgeQuestion> = {
       root_category: {
         type: "choice",
         instructions: {
@@ -150,10 +230,22 @@ export async function judgeTransaction(
       },
       kind: KIND,
       recurring: RECURRING,
-    });
-
-    const rootA = answers.root_category, kindA = answers.kind, recA = answers.recurring;
+      business: BUSINESS,
+    };
+    // Importance is a question about SPENDING: an incoming payment has no «how necessary».
+    if (!income) questions.importance = IMPORTANCE;
+    if (spans.length) {
+      questions.brand = {
+        type: "choice",
+        instructions: "Which of these pieces of `raw_description` is the merchant's name as a person would say it — without the city, branch or terminal number, country code, or a payment processor's prefix?",
+        criteria: { ...Object.fromEntries(spans.map((s) => [s, null])), [NO_BRAND]: "The description names no merchant (a transfer to a person, a tax payment, a bank's own wording)" },
+      };
+    }
+    const first = await judge(env, state, questions);
+    const { root_category: rootA, kind: kindA, recurring: recA, brand: brandA, business: bizA, importance: impA } = first.answers;
     if (rootA.type !== "choice" || kindA.type !== "choice" || recA.type !== "noul") throw new Error("answer of the wrong type");
+    let usage = first.usage;
+
     const root = roots.get(rootA.choice)?.id ?? null;
     let kind = kindA.choice as EnrichResult["kind"];
     // Questions cannot see each other (docs/JEV.md §8), so «transfer» can come back beside a
@@ -164,15 +256,50 @@ export async function judgeTransaction(
       (root === TRANSFER_ROOT || kindA.probabilities[kind] > rootA.probabilities[rootA.choice]);
     if (!ownMoney && root === TRANSFER_ROOT) kind = "transfer"; // the bucket IS the answer then
     else if (!ownMoney && (kind === "transfer" || kind === "withdrawal")) kind = income ? "income" : "expense";
-    const recurring = recA.noul >= RECURRING_AT;
+
+    // The cascade. Own money moving is exempt: the transfer bucket is where §F2 step 2 asks the
+    // real question anyway, so an unsure «transfer» is not worth a Haiku call.
+    const rootP = rootA.probabilities[rootA.choice] ?? 0;
+    if (!ownMoney && rootP < ROOT_CASCADE_AT) {
+      console.log(`[jev] root «${rootA.choice}» at ${rootP.toFixed(2)} — handing to the Haiku ladder`);
+      return null;
+    }
+
+    // Round 2 — the leaf, over the chosen root's children. Asked only when there are any.
+    let category = ownMoney ? TRANSFER_ROOT : root;
+    const kids = category != null && !ownMoney ? children.get(category) ?? [] : [];
+    if (kids.length) {
+      const general = `${rootA.choice} (none of the specific ones)`;
+      const second = await judge(env, state, {
+        leaf: {
+          type: "choice",
+          instructions: `This operation is «${rootA.choice}». Which subcategory fits it best?`,
+          criteria: {
+            ...Object.fromEntries(kids.map((k) => [k.name, criterion(k.id)])),
+            [general]: "It belongs to the category, but none of the subcategories describes it",
+          },
+        },
+      });
+      usage = addUsage(usage, second.usage);
+      const leafA = second.answers.leaf;
+      if (leafA.type === "choice" && leafA.choice !== general && (leafA.probabilities[leafA.choice] ?? 0) >= LEAF_AT) {
+        category = kids.find((k) => k.name === leafA.choice)?.id ?? category;
+      }
+    }
+
+    const brand = brandA?.type === "choice" && brandA.choice !== NO_BRAND ? displayName(brandA.choice) : "";
     return {
       result: {
-        clean_name: "",
-        category_id: ownMoney ? TRANSFER_ROOT : root,
+        // Empty keeps the name the deterministic ladder already gave the row (`applyEnrichment`).
+        clean_name: brand,
+        category_id: category,
         kind,
         tag_ids: [],
         note: null,
-        recurring: ownMoney ? false : recurring,
+        recurring: ownMoney ? false : recA.noul >= RECURRING_AT,
+        // Proposals (migration 0054). Own money moving is neither spending nor work.
+        importance: !ownMoney && impA?.type === "score" ? IMPORTANCE_LEVELS[topLevel(impA.probabilities)] : undefined,
+        business: !ownMoney && bizA?.type === "noul" ? bizA.noul : undefined,
       },
       usage,
     };

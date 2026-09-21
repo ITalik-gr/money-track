@@ -182,6 +182,11 @@ outside the `/tax/*` prefix, which a hand-written list of nineteen would never n
 
 **Рішення: діловий статус — це ВЛАСТИВІСТЬ ОПЕРАЦІЇ, успадкована від рахунку.**
 
+> **Jev's proposal (2026-09-21, docs/JEV.md phase 3).** `t.ai_business` holds the judge's probability
+> that a row is work money. It is NEVER read by `repo/tax.ts` and never copied into `is_business` by
+> code — the operation page OFFERS it (≥ 0.8 on a personal account, ≤ 0.3 on a business one) and
+> only the person's click writes `is_business`. A tax figure does not move on a guess.
+
     transactions.is_business  INTEGER NULL   -- NULL = успадкувати, 0/1 = явне рішення людини
     accounts.is_business      INTEGER NOT NULL DEFAULT 0  -- «це ФОП-рахунок»
 

@@ -49,6 +49,8 @@
         "ai_recurring": null,
         "is_business": null,
         "tax_base_uah": null,
+        "ai_importance": null,
+        "ai_business": null,
         "category_name": null,
         "category_color": null,
         "account_title": "Картка ₴"
@@ -88,6 +90,8 @@
         "ai_recurring": null,
         "is_business": null,
         "tax_base_uah": null,
+        "ai_importance": null,
+        "ai_business": null,
         "category_name": "Транспорт",
         "category_color": "#2450C8",
         "account_title": "Рахунок $"
@@ -127,6 +131,8 @@
         "ai_recurring": null,
         "is_business": null,
         "tax_base_uah": null,
+        "ai_importance": null,
+        "ai_business": null,
         "category_name": "Подорожі",
         "category_color": "#127C86",
         "account_title": "Картка ₴"

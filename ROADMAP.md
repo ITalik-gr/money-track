@@ -100,19 +100,21 @@
 
 ## 🔨 Збірка (самодостатнє — не чекає власника)
 
-### Jev (TypeSafe) — phase 2: the full row
-Phase 1 is done and measured (`docs/JEV.md §7.1`): Jev 98.9% root / 97.2% recurring at ~$0.05 per
-1 000 rows vs Haiku 97.8% / 97.2% at ~$1.96. The flag is OFF in production.
-**Owner decisions first (`docs/JEV.md §10`):** (1) whose key — deployment-wide (today: owner-only
-gate in `judge.ts`) or per user; (2) `wrangler secret put JEV_API_KEY` + `ENRICH_JUDGE=jev` to turn it
-on for the owner's own ledger.
-**Steps:**
-1. New eval cases the criteria were NOT tuned on (§7.1 caveat) — 20+ merchants across roots.
-2. `leaf_category` as a second round over the chosen root's children; confidence rule (§3) —
-   below the threshold, file the root. Measure `exact`, which needs `expect.category` in cases.
-3. `clean_name` as span selection (`brand_span`), `known_plan` over declared plans.
-4. Re-measure; then decide how far §ENRICH-GATE's skip list can shrink.
-**Done when:** the phase-2 row of the §7.1 table exists, still with no user-visible effect.
+### Jev (TypeSafe) — phase 4: the other call sites
+Phases 1–3 measured (`docs/JEV.md §7.1–7.3`). The flag is OFF in production.
+**Owner first:** whose key (`§10`); to try it: `wrangler secret put JEV_API_KEY` + `ENRICH_JUDGE=jev`.
+**Steps (§5 order):** §SUB-REVIEW («bill or shop» — `unsure` becomes a probability) · §F2
+`transfers-ai` · §AI-CATCHUP · §CSV-AI column mapping · the §SEARCH-VEC rerank.
+Also: ask `importance` in round 2 where the root is known (86% today, stored only); `known_plan`
+for charges whose name differs from the plan's («X Corp.» vs «Twitter») — the Київстар/EasyPay
+case was NOT that (it was a code bug, fixed 2026-09-21), so build it only with a case that needs it.
+
+### SQLite `LOWER() LIKE` with Cyrillic — two more sites
+SQLite folds case for ASCII only, so `LOWER(x) LIKE '%київстар%'` misses «Київстар». Fixed in
+`linkPlanHistory` (2026-09-21, pre-filter moved to the amount). Same shape still in
+`consensusCategory` (`enrich.ts`, §R6 merchant consensus) and `repo/transactions.ts:888`.
+Fix: filter by something script-free in SQL and match the name in JS, as `linkPlanHistory` now does.
+A lint could flag `LOWER(` next to `LIKE` in worker SQL.
 
 
 ---
