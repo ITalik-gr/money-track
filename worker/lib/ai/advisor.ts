@@ -12,7 +12,7 @@ import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } fro
 import { currencySign } from "../../../shared/currency.ts";
 import { monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
 import { merchantContext, type MerchantRow } from "./merchant-context.ts";
-import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, burnShape, type BurnShape, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
+import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, burnShape, sumLevels, type BurnShape, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
 import { ownFundsMinor } from "../../../shared/own-funds.ts";
@@ -110,19 +110,11 @@ export async function ownFundsUAH(env: Env, ratesIn?: Rates): Promise<number> {
   return (await fundsBreakdown(env, ratesIn)).net;
 }
 
-// §H (2026-07-19): детермінований «Індекс фінздоров'я» 0..100 — БЕЗ AI. Чотири складові з
-// канонічних чисел (stats): runway, норма заощаджень, борг/дохід, стабільність доходу.
-// Дефолтна (проста, прозора) реалізація — далі можна уточнювати ваги/криві.
-export interface HealthComponent { key: string; label: string; value: string; score: number; hint: string }
-export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[] }
 /**
- * The financial health INDEX lives in `lib/finance/health.ts` (lint C3, 2026-08-27).
- *
- * The seam: everything here answers "how is the user doing" as PROSE fed to a model; a score out
- * of 100 with four weighted components is a different job with its own thresholds, and it was the
- * part that kept growing. `health.ts` imports `fundsBreakdown` from here and exports nothing back,
- * so the edge runs one way; the single caller (the route) imports it directly rather than through
- * a re-export, which would close a cycle — same arrangement as `budget.ts`.
+ * The financial health INDEX lives in `lib/finance/health.ts` (lint C3, 2026-08-27): a score with
+ * weighted parts is arithmetic with thresholds, not prose for a model. It imports `fundsBreakdown`
+ * from here, so this file reaches it only by a DYNAMIC import (`healthForModel` below) — a static
+ * one would close the cycle. The stale copies of its types that sat here are gone (2026-09-25).
  */
 
 export async function getProfile(env: Env): Promise<string> {
@@ -363,6 +355,8 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     monthly_burn_lumpy_uah: Math.round(burn.lumpy / 100),
     burn_shape_note: "monthly_burn_uah = monthly_burn_recurring_uah + monthly_burn_lumpy_uah. Never add them to the burn — they ARE the burn, split. Recurring is what repeats every month (rent, groceries, utilities, subscriptions). Lumpy is money that left the account but does NOT arrive monthly: a quarterly tax, a dentist, one month of buying electronics — it is averaged into the burn because it is real, and naming it is usually the most useful thing you can say about why the burn looks high. If the user disputes their burn, this split is the answer.",
     runway_months: runwayMonths,
+    // §HEALTH-AI: the app's own verdict, the SAME number as the card — the model explains it, never recomputes it.
+    ...(await (await import("../finance/health.ts")).healthForModel(env, rates)),
     recent_oneoff: {
       total_uah: Math.round(split.oneoff.spent / 100),
       items: split.oneoff_items.map((o) => ({ merchant: o.merchant, category: o.category, amount_uah: Math.round(o.amount / 100) })),
@@ -630,15 +624,13 @@ async function groupPayload(env: Env, eventId: number) {
   const byCat = new Map<string, number>();
   for (const t of list) if (t.amount < 0) byCat.set(t.cat, (byCat.get(t.cat) ?? 0) - conv(t));
 
-  // Місячний burn + runway для масштабу.
+  // Burn and runway for scale — the CANON's (2026-09-25): this was «90 days ÷ 3» under the name
+  // `monthly_burn_uah` (§AI-AVGNAME: that name means the canonical level) and a runway on NET funds,
+  // so the event verdict quoted a runway no screen and no chat answer ever showed.
   const now = Math.floor(Date.now() / 1000);
-  const { mult: burnMult } = valueMode(rates, null);
-  const burnRow = await env.DB.prepare(
-    `SELECT ${spendSum(burnMult)} AS spent FROM transactions t ${STATS_JOINS} WHERE t.time >= ?`,
-  ).bind(now - 90 * 86400).first<{ spent: number }>();
-  const monthlyBurn = Math.round((burnRow?.spent ?? 0) / 3);
-  const ownFunds = await ownFundsUAH(env);
-  const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
+  const [lv, funds] = await Promise.all([categoryMonthlyLevels(env, valueMode(rates, null).mult, { now }), fundsBreakdown(env, rates)]);
+  const monthlyBurn = sumLevels(lv);
+  const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
 
   return {
     ev, list,

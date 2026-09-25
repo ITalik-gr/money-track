@@ -1,6 +1,7 @@
 // `/analytics/*` — the read-only reporting surface. Every number here comes from the canon
 // (`lib/finance/stats.ts` on the JS side, `repo/analytics.ts` on the SQL side); a handler that
 // starts computing its own total is the §CUR-PLAN mechanism restarting.
+import * as healthRepo from "../../repo/health.ts";
 import {
   getPeriodMode, valueMode, baseMult, periodBounds,
   recurringOneoffSplit, defaultRefFrom, isRecurringExpr, projectSpend, categoryMonthlyLevels, localMonthStart, localYm, localYmd,
@@ -645,7 +646,7 @@ analytics.get("/analytics/spark", async (c) => {
 
 // §H: детермінований Індекс фінздоров'я (без AI) + запис скору за добу для тренду в часі.
 analytics.get("/analytics/health", async (c) => {
-  const { financeHealth } = await import("../../lib/finance/health.ts");
+  const { financeHealth, healthParts } = await import("../../lib/finance/health.ts");
   const h = await financeHealth(c.env);
   const now = Math.floor(Date.now() / 1000);
   // §APP_TZ: доба — київська. Скор пишеться при кожному відкритті сторінки, тож із UTC-ключем
@@ -653,8 +654,9 @@ analytics.get("/analytics/health", async (c) => {
   // порівнює саме ці рядки — просідання «за 5 днів» рахувалось по зсунутій сітці днів.
   const day = localYmd(now);
   try {
-    await analyticsRepo.recordHealthScore(c.env.DB, day, h.score, now);
-    const trend = await analyticsRepo.healthTrend(c.env.DB, localYmd(now - 45 * 86400));
+    // A provisional index is not history (see `recordTodayHealth`).
+    if (!h.insufficient) await healthRepo.recordHealthScore(c.env.DB, day, h.score, now, healthParts(h));
+    const trend = await healthRepo.healthTrend(c.env.DB, localYmd(now - 45 * 86400));
     return c.json({ ...h, trend } satisfies FinanceHealth);
   } catch {
     return c.json({ ...h, trend: [] } satisfies FinanceHealth); // таблиця може лагати на remote до міграції

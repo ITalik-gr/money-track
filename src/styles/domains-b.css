@@ -134,7 +134,9 @@
 .donut-legend { display: flex; flex-direction: column; gap: 7px; }
 .dl-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .dl-item .dl-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-2); }
-.dl-item .dl-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; }
+.dl-item .dl-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12.5px; min-width: 3.5ch; text-align: right; }
+/* §PCT-SUM — money beside the share (owner: not only percentages, not only hryvnia). */
+.dl-item .dl-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 12.5px; white-space: nowrap; }
 @media (max-width: 860px) { .cat-with-donut { grid-template-columns: 1fr; } }
 
 /* ===== Рахунки: розкладка сторінки ======================================
@@ -143,7 +145,7 @@
    а сторінка вдвічі довша, ніж потрібно. Стало: секції — плитки в кілька колонок НА ВСЮ
    ШИРИНУ; довідники (валюти, історія капіталу, архів) — під ними, а не сайдбаром: рахунки
    тут головні, і рейл відрізав би від них 320px заради зведення на два рядки. */
-.acct-sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 0 24px; align-items: start; }
+.acct-sections { grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 0 24px; align-items: start; }
 /* Контейнер для запиту нижче: щільність карток має залежати від ширини САМОЇ секції, а не
    від ширини вікна — секцій може бути одна на всю сторінку або дві поруч. */
 .acct-sec { min-width: 0; container-type: inline-size; }
@@ -154,7 +156,7 @@
    whole point of the 18px is that these headings sit in a multi-column grid and must line up. */
 .acct-sec .section-head:first-child { margin-top: 18px; }
 /* Усередині вужчої колонки картки мають бути щільнішими, інакше в колонку влазить одна. */
-.acct-sec .acct-grid { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; margin-bottom: 6px; }
+.acct-sec .acct-grid { gap: 12px; margin-bottom: 6px; }
 /* Але коли секція займає всю сторінку (один банк — саме так у більшості), 185px давало 7-8
    колонок: назва рахунку обрізалась до «madel…», а кнопка редагування тиснулась до неї
    впритул. Ширина картки має залежати від ширини СЕКЦІЇ, тож це container-query, а не
@@ -270,7 +272,7 @@
 .hb-kind.stopped { color: var(--muted); }
 .hb-total { font-size: 13px; color: var(--muted); white-space: nowrap; }
 /* `minmax(0, …)` на назві — довгий мерчант інакше розпирає рядок і сума виїжджає за картку. */
-.hb-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline; padding: 6px 0; font-size: 13px; }
+.hb-row { font-size: 13px; }
 .hb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hb-when { font-size: 11.5px; white-space: nowrap; }
 .hb-amt { white-space: nowrap; }

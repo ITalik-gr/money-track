@@ -60,6 +60,18 @@ const NOT_MONEY = new Set([
   "elapsed_frac", "cv", "score", "trim_pct", "runway_months", "per_month_pct", "stability",
   "cost_pct", "savings_rate_pct", "share_pct", "income_pct", "share", "category_share", "weight", "confidence", "cv_pct",
   "kept_pct",
+  // §HEALTH: a part's points out of 100 (and the per-day history of them) — a share of a score.
+  "points", "pts_runway", "pts_savings", "pts_debt", "pts_stability",
+  // §PAYDAY-EFFECT: how many income arrivals were observed — a count.
+  "events",
+  // §INCOME-RHYTHM: counts of months and days.
+  "covered_floor", "longest_gap_days", "days_since_last",
+  // §FX-EXPOSURE: a currency CODE and the size of the what-if.
+  "base_currency", "move_pct",
+  // ⚠️ Money, but BASE-RELATIVE by definition: which currency is «foreign» depends on the base, so a
+  // dollar reader's what-if moves the hryvnia part, not the dollar part. Converting the hryvnia
+  // reader's answer would describe a different scenario; `fx-exposure.test.ts` pins them instead.
+  "assets_delta", "spend_delta_monthly",
   "weekend_share_pct",
 ]);
 
@@ -154,11 +166,11 @@ const ENDPOINTS: string[] = [
   "/transactions?limit=50", "/transactions/frequent",
   "/budgets", "/budgets/status", "/budgets/history", "/budgets/auto", "/budgets/auto?trim=25",
   "/categories/1/overview", "/categories/13/overview",
-  "/planned", "/planned/upcoming", "/planned/actuals", "/planned/detect",
+  "/planned", "/planned/upcoming", "/planned/actuals", "/planned/detect", "/planned/stack",
   "/goals", "/goals/1/progress", "/goals/1/contributions", "/events",
   // The `/insights/*` readings carry real money (the period total, new-face spend, the three
   // income bands, the floor and the cushion) beside counts and ratios that must NOT move.
-  "/insights/spend-profile", "/insights/income-split", "/insights/floor",
+  "/insights/spend-profile", "/insights/income-split", "/insights/floor", "/insights/committed", "/insights/payday", "/insights/income-rhythm", "/insights/fx-exposure",
   // ⚠️ `/insights/momentum` is listed and covers NOTHING on this fixture: no category moves the
   // same way for three complete months, so it answers `rows: []` and every assertion about it
   // holds vacuously — the same trap §FX-COST fell into when the fixture had no foreign purchase.

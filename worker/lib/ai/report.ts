@@ -9,11 +9,13 @@ import { catNameSql } from "../finance/categories-i18n.ts";
 import { fundsBreakdown } from "./advisor.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, EFF_AMOUNT, SPEND_WHERE, INCOME_COUNT, SPEND_TX_COUNT, valueMode, spendSum, incomeSum, amountSum,
-  lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit, categoryMonthlyLevels, localMonthStart, localYmSql, localYm,
+  lastCompletePeriod, currentPeriodToDate, recurringOneoffSplit, categoryMonthlyLevels, localMonthStart, localYmSql,
 } from "../finance/stats.ts";
 import { deltaMeaningful } from "../finance/cadence.ts";
 import { savingsRatePct } from "../finance/finance.ts";
 import { plannedActuals } from "../finance/subscriptions.ts";
+import { burnShape } from "../finance/levels.ts";
+import { reportNews } from "./report-news.ts";
 import { getState } from "../finance/repo.ts";
 // The prompt and the model call live in `report-prompt.ts` (split 2026-08-12 under C3): this file
 // assembles the canonical context and stores the result, that one instructs the model.
@@ -203,15 +205,12 @@ export async function buildReportContext(
   // ЛІКВІДНИХ рахунків; борг окремо; інвест-резерв (крипта/брокер) — НЕ подушка.
   const cushion = funds.cushion, debt = funds.debt, investment = funds.investment;
 
-  // §B прогноз не «burn×30»: беремо середнє за 3 ЗАВЕРШЕНІ місяці з тренду (стабільніше й
-  // враховує сезонність), fallback — витрати періоду, масштабовані до 30 днів.
-  // Той самий ключ, у якому згруповано `trend` (локальна зона) — інакше «поточний неповний
-  // місяць» не збігся б із жодним рядком і потрапив би в середнє як завершений.
-  const curMonthKey = localYm(to);
-  const completeMonths = trend.filter((t) => t.month !== curMonthKey);
-  const last3 = completeMonths.slice(-3);
-  const periodScaledBurn = money(Math.round((cur.spend / periodDays) * 30));
-  const burnMonthly = last3.length ? Math.round(last3.reduce((s, t) => s + t.spend_uah, 0) / last3.length) : periodScaledBurn;
+  // Burn and runway are the CANON's (`sumLevels`, §BURN-SHAPE), not a report-only average (2026-09-25).
+  // This used to be «the mean of the last 3 completed months» — a second definition of burn, so
+  // the report could quote a runway no other screen shows (the §AI-AVGNAME class). `levels` was
+  // already fetched above for the categories; the burn is simply their sum.
+  const shape = burnShape(levels);
+  const burnMonthly = money(shape.total);
   const cushionMajor = money(cushion);
   const runwayMonths = burnMonthly > 0 ? Math.round((cushionMajor / burnMonthly) * 10) / 10 : null;
 
@@ -258,9 +257,12 @@ export async function buildReportContext(
     // §R3 investment_reserve_uah — крипта/брокер: НЕ подушка й НЕ входить у runway, окрема остання лінія.
     forecast: {
       cushion_uah: cushionMajor, debt_uah: money(debt), investment_reserve_uah: money(investment),
-      monthly_burn_uah: burnMonthly, burn_method: last3.length ? "average of the 3 completed months" : "period spending ×30",
+      monthly_burn_uah: burnMonthly,
+      burn_method: "the canonical monthly level — the same burn every screen and the chat use; recurring + lumpy = burn",
+      monthly_burn_recurring_uah: money(shape.recurring), monthly_burn_lumpy_uah: money(shape.lumpy),
       runway_months: runwayMonths,
     },
+    ...(await reportNews(env, rates)),
     // §R3: рахунки з роллю та описом (note) — контекст для AI (не пропонуй продавати інвестиції без потреби).
     accounts: funds.accounts.filter((a) => a.own_uah !== 0 || a.note)
       .map((a) => ({ title: a.title, type: a.type, role: a.role, balance_uah: a.own_uah, note: a.note })),

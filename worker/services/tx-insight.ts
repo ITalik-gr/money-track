@@ -51,6 +51,7 @@ export async function explainCategory(
     comment: row.comment ?? null,
     amount: row.amount,
     currency_code: row.currency_code,
+    time: row.time, id: row.id,
   });
 
   return {

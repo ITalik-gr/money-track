@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { api } from "../routes/api/index.ts";
 import { migratedDb, testEnv, freezeTime, type MemDb } from "./harness.ts";
 import { seed, FROZEN_NOW_ISO } from "./fixture.ts";
-import type { SpendProfile, Momentum, IncomeAllocation, SpendFloor } from "../../shared/api/insights.ts";
+import type { SpendProfile, Momentum, IncomeAllocation, SpendFloor, CommittedShare } from "../../shared/api/insights.ts";
 import { localYearStart } from "../lib/finance/time.ts";
 
 async function get<T>(db: MemDb, path: string): Promise<T> {
@@ -113,6 +113,41 @@ test("§FLOOR: floor + lumpy IS the burn, and the floor runway is never the shor
       assert.ok(f.floor_months >= f.runway_months);
     }
     for (const p of f.parts) assert.ok(p.level > 0, "a named part of the floor with no money is noise");
+  } finally { restore(); }
+});
+
+test("§COMMITTED: its floor IS §FLOOR's floor, and share / free are that floor against income", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const db = fixture();
+    const [c, f] = await Promise.all([
+      get<CommittedShare>(db, "/insights/committed"),
+      get<SpendFloor>(db, "/insights/floor"),
+    ]);
+    // The whole point: two blocks on one screen, one number. A second definition of «what repeats»
+    // would let this card and the floor card disagree about the same money.
+    assert.equal(c.floor, f.floor);
+    assert.ok(c.income != null && c.income > 0, "the fixture has income");
+    assert.equal(c.free, c.income! - c.floor);
+    assert.ok(Math.abs(c.share! - c.floor / c.income!) < 1e-9);
+    // The current value is the trend's last point, not a third computation.
+    const last = c.trend[c.trend.length - 1];
+    assert.equal(last.floor, c.floor);
+    assert.equal(last.income, c.income);
+    for (const p of c.trend) assert.ok(p.share != null, "a point without income is dropped, never drawn at zero");
+    assert.deepEqual([...c.trend].map((p) => p.ym), [...c.trend].map((p) => p.ym).sort(), "oldest first");
+  } finally { restore(); }
+});
+
+test("§COMMITTED: an account with no complete month says nothing — not «0% of 0»", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const c = await get<CommittedShare>(migratedDb(), "/insights/committed");
+    assert.equal(c.income, null);
+    assert.equal(c.share, null);
+    assert.equal(c.free, null);
+    assert.equal(c.months, 0);
+    assert.deepEqual(c.trend, []);
   } finally { restore(); }
 });
 

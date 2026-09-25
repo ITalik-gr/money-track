@@ -71,7 +71,7 @@ export function MonthPulse() {
       {head}
       <div className="card pulse">
         <div className="pulse-save">
-          <div className="pulse-save-main">
+          <div>
             <span className="label" style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
               {t("mp.savingsRate")}
               <InfoTip>{t("mp.info")}</InfoTip>
@@ -88,7 +88,7 @@ export function MonthPulse() {
         </div>
 
         {top.length > 0 && (
-          <div className="pulse-cats">
+          <div>
             <span className="label" style={{ display: "block", marginBottom: 8 }}>{t("common.topCategories")}</span>
             {top.map((c, i) => (
               <Link key={c.category_id ?? i} to={`/stats?tab=categories`} className="pulse-cat">

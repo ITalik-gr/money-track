@@ -147,10 +147,12 @@ export async function proposeTransferCategory(
 import { MODEL_SMART, MODEL_FAST } from "./models.ts";
 import { getState } from "../finance/repo.ts";
 import { relatedSubsHint, matchActiveSubscription } from "../finance/subscriptions.ts";
-import { coreToken } from "../finance/merchants.ts";
+import { consensusCategory, merchantHistory } from "./enrich-history.ts";
 
 // Seeded id категорії «Перекази і зняття» (0002). Її діти теж рахуємо через COALESCE(parent_id).
-export const TRANSFER_CAT = 13;
+// One definition (2026-09-25): this was a second `= 13` beside the canon's in `stats.ts`.
+export { TRANSFER_CAT } from "../finance/stats.ts";
+import { TRANSFER_CAT } from "../finance/stats.ts";
 
 export interface TxRow {
   id: string; account_id: string; source: string; merchant: string | null;
@@ -201,57 +203,6 @@ async function writeAiAlias(
     `INSERT INTO merchant_aliases (match_type, raw_key, display_name, category_id, is_transfer, source, created_at)
      VALUES ('mono_desc', ?, ?, ?, ?, 'ai', ?)`,
   ).bind(rawDesc, displayName, categoryId, isTransfer, Math.floor(Date.now() / 1000)).run();
-}
-
-// Якщо той самий мерчант (за коренем) історично ≥3× потрапляв домінантно (≥80%) в одну
-// категорію — застосовуємо її без AI. §Хвіст: ручні правки важать ×3 (вага замість COUNT),
-// тож одне явне рішення користувача переважує кілька авто-класифікацій.
-// Повертає {category_id, merchant, n} або null (n = зважений голос).
-async function consensusCategory(
-  env: Env,
-  tx: TxRow,
-): Promise<{ category_id: number; merchant: string | null; n: number } | null> {
-  const rawDesc = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description ?? null : null;
-  const token = coreToken(rawDesc ?? tx.merchant);
-  if (!token) return null;
-  const rows = await env.DB.prepare(
-    `SELECT t.category_id AS cat, t.merchant AS merchant,
-            SUM(CASE WHEN ma.id IS NOT NULL THEN 3 ELSE 1 END) AS n
-     FROM transactions t LEFT JOIN categories c ON c.id = t.category_id
-       LEFT JOIN merchant_aliases ma ON ma.match_type = 'mono_desc' AND ma.source = 'manual'
-            AND ma.raw_key = json_extract(t.raw_json, '$.description')
-     WHERE t.id != ? AND t.category_id IS NOT NULL AND t.is_transfer = 0
-       AND COALESCE(c.parent_id, t.category_id) != ${TRANSFER_CAT}
-       AND (LOWER(t.merchant) LIKE ? OR LOWER(json_extract(t.raw_json, '$.description')) LIKE ?)
-     GROUP BY t.category_id, t.merchant`,
-  ).bind(tx.id, `%${token}%`, `%${token}%`).all<{ cat: number; merchant: string | null; n: number }>();
-  const list = rows.results ?? [];
-  if (!list.length) return null;
-
-  let total = 0;
-  const byCat = new Map<number, number>();
-  const byMerchant = new Map<string, number>();
-  for (const r of list) {
-    total += r.n;
-    byCat.set(r.cat, (byCat.get(r.cat) ?? 0) + r.n);
-    if (r.merchant) byMerchant.set(r.merchant, (byMerchant.get(r.merchant) ?? 0) + r.n);
-  }
-  const [topCat, topN] = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0];
-  if (topN < 3 || topN / total < 0.8) return null; // недостатньо впевнено — лишаємо AI
-  const merchant = [...byMerchant.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
-  return { category_id: topCat, merchant, n: topN };
-}
-
-// Як користувач раніше класифікував цього мерчанта — контекст для точнішого AI.
-async function merchantHistory(env: Env, tx: TxRow): Promise<string | null> {
-  if (!tx.merchant) return null;
-  const row = await env.DB.prepare(
-    `SELECT c.name AS name, COUNT(*) AS n
-     FROM transactions t JOIN categories c ON c.id = t.category_id
-     WHERE t.merchant = ? AND t.id != ? AND t.category_id IS NOT NULL
-     GROUP BY t.category_id ORDER BY n DESC LIMIT 1`,
-  ).bind(tx.merchant, tx.id).first<{ name: string; n: number }>();
-  return row ? `"${tx.merchant}" was previously classified as "${row.name}" (${row.n}×)` : null;
 }
 
 async function applyEnrichment(
@@ -315,6 +266,7 @@ async function applyEnrichment(
     ? await matchActiveSubscription(env.DB, {
         merchant: cleanName, description: rawDescForSub, amount: tx.amount,
         currency_code: tx.currency_code, ai_note: result.note ?? tx.ai_note, comment: tx.comment,
+        time: tx.time, id: tx.id,
       })
     : null;
   // §FK-GUARD: перевіряємо ВСІ id від AI одним запитом. Категорія підписки (`sub`) —

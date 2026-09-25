@@ -6,7 +6,7 @@ export type RuleMatchType = "mcc" | "text";
 
 export interface RuleRow {
   id: number;
-  match_type: string;
+  match_type: RuleMatchType;
   pattern: string;
   category_id: number;
   priority: number;

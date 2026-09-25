@@ -1,8 +1,10 @@
 // `/categories/*` — the category tree. The delete is a CASCADE and its step ORDER is the
 // behaviour: the harness enforces foreign keys, so a step moved after the row is deleted fails.
+import { wholePcts } from "../../../shared/pct.ts";
 import * as categoriesRepo from "../../repo/categories.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
 import * as planningRepo from "../../repo/planning.ts";
+import * as analyticsRepo from "../../repo/analytics.ts";
 import { monthlyPlannedUAH } from "../../lib/finance/subscriptions.ts";
 import { localizeCatName } from "../../lib/finance/categories-i18n.ts";
 import { st } from "../../lib/platform/i18n.ts";
@@ -185,7 +187,7 @@ categories.get("/categories/:id/overview", async (c) => {
   // looks like a one-off.
   const TREND_MONTHS = 24;
 
-  const [levels, budgets, trend, split, children, parts, closed, lifetime, merchants, cur, yearAgo, prevWin, plans] = await Promise.all([
+  const [levels, budgets, trend, split, children, parts, closed, lifetime, merchants, cur, yearAgo, prevWin, plans, all] = await Promise.all([
     stats.categoryMonthlyLevels(c.env, mult, { now: to }),
     budgetStatus(c.env, mult, now),
     categoriesRepo.monthlyTrend(c.env.DB, mult, scope, stats.localMonthStart(to, -(TREND_MONTHS - 1)), to),
@@ -213,6 +215,8 @@ categories.get("/categories/:id/overview", async (c) => {
     categoriesRepo.windowStats(c.env.DB, mult, scope, from - (to - from), from - 1),
     // §CAT-SUBS: the declared plans, so the page can say how much of the category is subscription.
     planningRepo.activeWithCategory(c.env.DB),
+    // The whole window's spend and income, for «N% усіх витрат» — the canon's own totals (§CAT-SHARE).
+    analyticsRepo.periodTotals(c.env.DB, stats.valueMode(rates, null), { from, to }),
   ]);
 
   // Zero-fill so the axis is continuous: a month with no spending is a real data point, and a gap
@@ -289,10 +293,11 @@ categories.get("/categories/:id/overview", async (c) => {
      */
     composition: (() => {
       const named = new Map(children.map((ch) => [ch.id, ch]));
-      const total = parts.reduce((sum, p) => sum + Math.abs(p.spent), 0);
-      return parts
-        .filter((p) => p.spent !== 0)
-        .map((p) => {
+      const kept = parts.filter((p) => p.spent !== 0);
+      // §PCT-SUM: the parts are a set, so their shares add up to 100 (rounded one by one they could not).
+      const pcts = wholePcts(kept.map((p) => p.spent));
+      return kept
+        .map((p, i) => {
           const ch = named.get(p.leaf);
           return {
             id: p.leaf,
@@ -302,9 +307,15 @@ categories.get("/categories/:id/overview", async (c) => {
             self: !ch,
             spent: Math.abs(p.spent),
             n: p.n,
-            share_pct: total > 0 ? Math.round((Math.abs(p.spent) / total) * 100) : 0,
+            share_pct: pcts[i],
           };
         });
+    })(),
+    // §CAT-SHARE — this category's share of ALL spending (or all income, for an income bucket) in the
+    // same window. The page said only hryvnia; a share is what makes a total comparable (owner, O2).
+    share_of_total_pct: (() => {
+      const whole = scope.isIncome ? all.income : all.spend;
+      return whole > 0 ? Math.round((cur.spent / whole) * 1000) / 10 : null;
     })(),
     subscriptions: {
       items: subItems,

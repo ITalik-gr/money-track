@@ -11,6 +11,7 @@
  * лишається рівно одне.
  */
 import type { AppDb } from "../platform/db-shim.ts";
+import { fitsNextCycle, repriceAmountPlausible, declaredIntervalDays } from "./plan-state.ts";
 
 export interface SubRow {
   id: number;
@@ -19,6 +20,10 @@ export interface SubRow {
   currency_code: number;
   category_id: number | null;
   note: string | null;          // мій опис підписки для AI (§R5)
+  // The schedule, for §PLAN-REPRICE's cycle window. Optional so a caller that only needs the
+  // name/amount test keeps constructing a SubRow the way it did.
+  period?: string;
+  period_count?: number | null;
 }
 
 /**
@@ -32,7 +37,7 @@ export interface SubRow {
  */
 async function activeSubs(db: AppDb): Promise<SubRow[]> {
   const rows = await db.prepare(
-    `SELECT id, title, period_amount, currency_code, category_id, note
+    `SELECT id, title, period_amount, currency_code, category_id, note, period, period_count
      FROM planned_payments
      WHERE is_active = 1 AND period_amount IS NOT NULL AND period_amount > 0`,
   ).all<SubRow>();
@@ -121,19 +126,72 @@ export function amountMatches(txAbsMinor: number, periodAmount: number | null): 
 export async function matchActiveSubscription(
   db: AppDb,
   input: { merchant: string | null; description: string | null; amount: number; currency_code: number;
-           ai_note?: string | null; comment?: string | null },
-): Promise<{ category_id: number | null; title: string; planned_id: number } | null> {
+           ai_note?: string | null; comment?: string | null; time?: number; id?: string },
+): Promise<{ category_id: number | null; title: string; planned_id: number; repriced?: boolean } | null> {
   const subs = await activeSubs(db);
   if (!subs.length) return null;
   const hay = txHaystack(input);
   const abs = Math.abs(input.amount);
-  for (const s of subs) {
-    if (s.currency_code !== input.currency_code) continue;
-    if (!planMatches(s, hay)) continue;
+  const named = subs.filter((s) => s.currency_code === input.currency_code && planMatches(s, hay));
+  for (const s of named) {
     if (!amountMatches(abs, s.period_amount)) continue;
     return { category_id: s.category_id, title: s.title, planned_id: s.id };
   }
+  // §PLAN-REPRICE — the name agrees and the amount does not. Only with the operation's time can
+  // the cycle stand in for the amount gate; without it (a caller that has no time) the answer
+  // stays «no match», which is what it was before this tier existed.
+  if (input.time == null) return null;
+  for (const s of named) {
+    if (await repriceFits(db, s, input.time, abs, input.id ?? null)) {
+      return { category_id: s.category_id, title: s.title, planned_id: s.id, repriced: true };
+    }
+  }
   return null;
+}
+
+/**
+ * §PLAN-REPRICE (2026-09-25) — a charge whose NAME is the plan's but whose AMOUNT is not.
+ *
+ * The case, verbatim from the owner's ledger: YouTube had been 100 ₴ for months, then 179 ₴ landed
+ * on the usual day. `amountMatches` (±10%) refused it, so the charge was never linked, the price
+ * rise was never noticed (`draftPriceUps` reads LINKED charges only), and the subscription card
+ * kept promising next month's date for a plan whose current charge it had missed.
+ *
+ * The amount gate cannot simply be widened: it is what keeps a loose alias from pulling in a
+ * one-off purchase from the same brand. So for this tier it is REPLACED by a set of conditions that
+ * together are at least as strict about identity:
+ *   · the plan has an established series — at least one earlier linked charge to anchor on
+ *     (a brand-new plan may not claim a stranger);
+ *   · the charge lands one, two or three declared cycles after that anchor (`fitsNextCycle`) —
+ *     a mid-cycle purchase does not;
+ *   · the price moved within a plausible factor of the anchor (`repriceAmountPlausible`, ×3) —
+ *     a 10 000 ₴ purchase is never a repriced 100 ₴ plan;
+ *   · the cycle is not already settled — no linked charge in the half-cycle after it either,
+ *     so a healing pass over history cannot give one cycle two charges.
+ *
+ * ⚠️ The link is a fact («this charge is that plan»); the plan's `period_amount` is NOT touched.
+ * The card then shows the declared price against the real one (`price_change_pct`, §PRICE-STEPS)
+ * and a person decides. A near-match never silently rewrites money.
+ */
+async function repriceFits(
+  db: AppDb, s: SubRow, t: number, abs: number, selfId: string | null,
+): Promise<boolean> {
+  if (!s.period) return false;
+  const count = s.period_count ?? 1;
+  const anchor = await db.prepare(
+    `SELECT time, ABS(amount) AS amount FROM transactions
+     WHERE planned_id = ? AND amount < 0 AND is_transfer = 0 AND time < ?
+     ORDER BY time DESC LIMIT 1`,
+  ).bind(s.id, t).first<{ time: number; amount: number }>();
+  if (!anchor) return false;
+  if (!fitsNextCycle(anchor.time, t, s.period, count)) return false;
+  if (!repriceAmountPlausible(abs, anchor.amount)) return false;
+  const halfCycle = Math.floor(declaredIntervalDays(s.period, count) * 86400 / 2);
+  const later = await db.prepare(
+    `SELECT COUNT(*) AS n FROM transactions
+     WHERE planned_id = ? AND amount < 0 AND is_transfer = 0 AND time >= ? AND time < ? AND id != ?`,
+  ).bind(s.id, t, t + halfCycle, selfId ?? "").first<{ n: number }>();
+  return (later?.n ?? 0) === 0;
 }
 
 // Короткий опис підписок, чиї назви перегукуються з мерчантом операції — як контекст
@@ -160,62 +218,6 @@ export async function relatedSubsHint(
     parts.push(`«${s.title}» (~${amt}${cat}${note})`);
   }
   return `у користувача є схожі активні підписки: ${parts.join("; ")} — якщо ця операція є списанням такої підписки, став ту саму категорію`;
-}
-
-// §Хвіст: факт vs план по підписках. Для кожної активної підписки рахуємо ФАКТИЧНІ
-// списання, прив'язані до неї (planned_id), останню суму/дату та ознаку подорожчання
-// (остання сума помітно > оголошеної period_amount). Дає відповісти «скільки реально
-// плачу» і «підписка подорожчала?». Без AI — просто агрегація по linked транзакціях.
-export interface PlannedActual {
-  id: number;              // planned_payments.id
-  count: number;           // скільки фактичних списань прив'язано
-  last_amount: number | null;   // остання сума (додатні копійки, у валюті операції)
-  last_time: number | null;     // час останнього списання (unix)
-  currency_code: number | null; // валюта останнього списання
-  price_change_pct: number | null; // % відхилення останньої суми від плану (+ = подорожчало)
-}
-
-export async function plannedActuals(db: AppDb): Promise<PlannedActual[]> {
-  const subs = await db.prepare(
-    "SELECT id, period_amount FROM planned_payments WHERE is_active = 1",
-  ).all<{ id: number; period_amount: number | null }>();
-  // ONE grouped query instead of two per plan (2026-08-27). With a dozen subscriptions that was
-  // 24 round trips to answer a question about a single table — and this runs on every open of the
-  // Subscriptions page and inside `dead_sub` drafting.
-  const agg = await db.prepare(
-    `SELECT t.planned_id AS id, COUNT(*) AS n,
-            MAX(t.time) AS last_time,
-            (SELECT ABS(x.amount) FROM transactions x
-             WHERE x.planned_id = t.planned_id AND x.amount < 0 AND x.is_transfer = 0
-             ORDER BY x.time DESC LIMIT 1) AS last_amount,
-            (SELECT x.currency_code FROM transactions x
-             WHERE x.planned_id = t.planned_id AND x.amount < 0 AND x.is_transfer = 0
-             ORDER BY x.time DESC LIMIT 1) AS currency_code
-     FROM transactions t
-     WHERE t.planned_id IS NOT NULL AND t.amount < 0 AND t.is_transfer = 0
-     GROUP BY t.planned_id`,
-  ).all<{ id: number; n: number; last_time: number; last_amount: number; currency_code: number }>();
-  const byId = new Map((agg.results ?? []).map((r) => [r.id, r]));
-
-  const out: PlannedActual[] = [];
-  for (const s of subs.results ?? []) {
-    const a = byId.get(s.id);
-    const last = a ? { amount: a.last_amount, time: a.last_time, currency_code: a.currency_code } : null;
-    const lastAbs = last ? Math.abs(last.amount) : null;
-    // Подорожчання рахуємо лише коли є план і фактична сума (в тій самій валюті-порядку).
-    const pct = lastAbs != null && s.period_amount && s.period_amount > 0
-      ? Math.round(((lastAbs - s.period_amount) / s.period_amount) * 100)
-      : null;
-    out.push({
-      id: s.id,
-      count: a?.n ?? 0,
-      last_amount: lastAbs,
-      last_time: last?.time ?? null,
-      currency_code: last?.currency_code ?? null,
-      price_change_pct: pct,
-    });
-  }
-  return out;
 }
 
 // Ре-світ по наявних операціях: виправити категорію тих, що підпадають під активну
@@ -295,6 +297,36 @@ export async function linkPlanHistory(db: AppDb, sub: SubRow): Promise<PlanLinkR
       out.recategorised++;
     }
   }
+
+  // §PLAN-REPRICE, the healing half: without it a price change stays invisible to history, and
+  // `paidOnSecondLook` (the feed's «look once more before saying it was missed») looks through the
+  // same ±10% window and misses the very charge it is looking for.
+  // Oldest first, so each repriced charge becomes the anchor for the next one — three months at
+  // 179 ₴ after nine at 100 ₴ link as a chain, not only the first.
+  // The SQL window is ×3 either way (`REPRICE_MAX_FACTOR`); `repriceFits` decides against the
+  // ANCHOR's amount, which is the price actually being paid, not the declared one.
+  if (sub.period) {
+    const wide = await db.prepare(
+      `SELECT id, merchant, raw_json, ai_note, comment, amount, category_id, planned_id, time FROM transactions
+       WHERE amount < 0 AND is_transfer = 0 AND currency_code = ? AND time >= ? AND planned_id IS NULL
+         AND -amount BETWEEN ? AND ? AND NOT (-amount BETWEEN ? AND ?)
+       ORDER BY time ASC`,
+    ).bind(sub.currency_code, since, Math.floor(sub.period_amount / 3), Math.ceil(sub.period_amount * 3), lo, hi)
+      .all<TxLite & { time: number }>();
+    for (const t of wide.results ?? []) {
+      const hay = txHaystack({ merchant: t.merchant, description: descOf(t.raw_json), ai_note: t.ai_note, comment: t.comment });
+      if (!planMatches(sub, hay)) continue;
+      if (!(await repriceFits(db, sub, t.time, Math.abs(t.amount), t.id))) continue;
+      await db.prepare("UPDATE transactions SET planned_id = ? WHERE id = ? AND planned_id IS NULL")
+        .bind(sub.id, t.id).run();
+      out.linked++;
+      if (sub.category_id != null && t.category_id == null) {
+        await db.prepare("UPDATE transactions SET category_id = ?, ai_enriched = 1 WHERE id = ? AND category_id IS NULL")
+          .bind(sub.category_id, t.id).run();
+        out.recategorised++;
+      }
+    }
+  }
   return out;
 }
 
@@ -318,7 +350,7 @@ export async function applySubscriptionCategories(db: AppDb): Promise<{ fixed: n
 /** Той самий прохід, але для ОДНОГО плану за його id — для роутів створення/редагування. */
 export async function linkPlanHistoryById(db: AppDb, id: number): Promise<PlanLinkResult> {
   const sub = await db.prepare(
-    "SELECT id, title, period_amount, currency_code, category_id, note FROM planned_payments WHERE id = ? AND is_active = 1",
+    "SELECT id, title, period_amount, currency_code, category_id, note, period, period_count FROM planned_payments WHERE id = ? AND is_active = 1",
   ).bind(id).first<SubRow>();
   return sub ? await linkPlanHistory(db, sub) : { linked: 0, recategorised: 0 };
 }

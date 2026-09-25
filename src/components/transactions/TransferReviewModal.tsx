@@ -125,7 +125,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
                   <MerchantLogo merchant={r.merchant} color="var(--c-plum, var(--accent))" fallbackLabel={r.merchant ?? r.comment} transfer />
                   <div className="rev-card-title">
                     <div className="rev-name">
-                      <span className="rev-name-txt">{r.merchant ?? r.comment ?? t("chat.txFallback")}</span>
+                      <span>{r.merchant ?? r.comment ?? t("chat.txFallback")}</span>
                       {r.needs_attention && <span className="rev-badge">{t("trev.needsAttentionBadge")}</span>}
                     </div>
                     <div className="rev-meta">

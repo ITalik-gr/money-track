@@ -1,6 +1,5 @@
 // Money is minor units (копійки) everywhere; format only for display.
 import { dateFmt, numFmt } from "../i18n/locale.ts";
-import { baseSign } from "./currency.ts";
 
 // The symbol table moved to `shared/currency.ts` (§BASE-CUR): the worker prints signs too — in
 // the deterministic advice and in the notification feed — and two tables would have disagreed
@@ -30,10 +29,6 @@ export function toBaseMinor(minor: number, code: number, rates: Record<string, n
   return rate ? Math.round(minor * rate) : null;
 }
 
-/** Amount + the sign of the currency the app is currently rolling up into. */
-export function formatBase(minor: number, opts?: { decimals?: boolean }): string {
-  return `${formatMinor(minor, opts)} ${baseSign()}`;
-}
 
 export function formatDate(unix: number): string {
   return dateFmt({ day: "2-digit", month: "short" }).format(unix * 1000);

@@ -382,7 +382,12 @@ export function Chat() {
         <button className="btn primary chat-new" onClick={newChat}><Icon name="plus" size={15} />{tr("chat.newConvo")}</button>
         <div className="chat-rail-list">
           {railItems.map((c) => (
-            <div key={c.id} className={`chat-rail-item ${c.id === activeId ? "active" : ""}`} onClick={() => openChat(c.id)}>
+            // Keyboard-reachable (C21): it holds a nested delete <button>, so it cannot itself be a
+            // <button> — a role, a tab stop and Enter/Space instead.
+            <div key={c.id} className={`chat-rail-item ${c.id === activeId ? "active" : ""}`}
+              role="button" tabIndex={0} aria-current={c.id === activeId ? "true" : undefined}
+              onClick={() => openChat(c.id)}
+              onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); openChat(c.id); } }}>
               <span className="cri-title">{c.title}</span>
               <button className="cri-del" aria-label={tr("chat.deleteConvoAria")} title={tr("common.delete")}
                 onClick={(e) => { e.stopPropagation(); void deleteChat(c.id); }}>×</button>

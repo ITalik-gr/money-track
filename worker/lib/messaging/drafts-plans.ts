@@ -17,7 +17,10 @@
  */
 import type { Env } from "../../env.ts";
 import { getRates } from "../finance/money.ts";
-import { plannedActuals, plannedUAH, nextChargeUnix } from "../finance/subscriptions.ts";
+import { plannedActuals, plannedUAH } from "../finance/subscriptions.ts";
+import {
+  lastDueUnix, periodSeconds, earlyToleranceSec, LATE_GRACE_DAYS,
+} from "../finance/plan-state.ts";
 import { linkPlanHistoryById } from "../finance/plan-match.ts";
 import { localYmd } from "../finance/stats.ts";
 import type { Draft } from "./notify.ts";
@@ -27,61 +30,11 @@ import type { Draft } from "./notify.ts";
 // otherwise share nothing.
 const isoDay = (unix: number) => localYmd(unix);
 
-/**
- * §PLAN-LATE — how long a scheduled payment may be late before the app says anything.
- *
- * Three days, and the number is the whole feature. The feed used to carry «Квартира відсутня в
- * цьому місяці — 12500 ₴ очікується 20 числа» on the 15th: a plan that was simply not due yet,
- * announced as an absence, five days early. Nothing about that was false and every word of it was
- * alarming, which is the specific way a feed loses its reader — the app crying about money that
- * has not gone anywhere.
- *
- * Why the grace exists at all rather than "the day after": a bank posts a payment a day late, a
- * weekend moves a transfer, and an enrichment links the charge to its plan on the next pass. Three
- * days is past all three, and it is still well inside the month the payment belongs to.
- */
-const LATE_GRACE_DAYS = 3;
-/**
- * A charge up to five days EARLY still counts as that period's payment: people pay rent before
- * the weekend, and a plan whose charge landed on the 18th for a due date of the 20th must not be
- * reported as missed on the 23rd.
- *
- * But the window may never reach back into the PREVIOUS cycle, so it is capped at half a period
- * (`earlyToleranceSec`). A weekly plan charges every 7 days: with a flat 5 days, a charge that was
- * merely 3 days late for due date A (inside `LATE_GRACE_DAYS`, so never reported) still sits
- * inside A+7's tolerance window and is read as ITS payment — and a weekly plan that genuinely
- * stopped stays silent for an extra cycle. Half a period is past every real "paid a few days
- * early" case and cannot touch the neighbour's.
- */
-const EARLY_TOLERANCE_DAYS = 5;
-const earlyToleranceSec = (periodSec: number) =>
-  Math.min(EARLY_TOLERANCE_DAYS * 86400, Math.floor(periodSec / 2));
-
-/**
- * The most recent scheduled date at or before `now`, or null when the plan has not been due yet.
- *
- * `nextChargeUnix` only answers forward, so the previous date is found by walking: from an anchor
- * comfortably in the past, step to each following charge while it is still behind us. Bounded by
- * construction — each step is one period — and it reuses the ONE implementation of «when does this
- * plan charge» (§SUB-DATE) instead of repeating month-end clamping and DST here.
- */
-export function periodSeconds(period: string, count: number): number {
-  return (period === "week" ? 7 : period === "year" ? 366 : 31) * 86400 * Math.max(1, count || 1);
-}
-
-export function lastDueUnix(
-  start: number, period: string, count: number, now: number,
-): number | null {
-  const periodSec = periodSeconds(period, count);
-  let due = nextChargeUnix(start, period, count, Math.max(start - 1, now - periodSec * 2));
-  if (due > now) return null;
-  for (let guard = 0; guard < 8; guard++) {
-    const nxt = nextChargeUnix(start, period, count, due);
-    if (nxt > now) break;
-    due = nxt;
-  }
-  return due;
-}
+// §PLAN-LATE's windows (the 3-day grace, the half-period early tolerance) and the backward walk
+// `lastDueUnix` moved to `finance/plan-state.ts` on 2026-09-25, so the subscription card can ask the
+// same question the feed asks — «did the last cycle land» — with the same answer. Re-exported for
+// the tests that pinned them here.
+export { lastDueUnix, periodSeconds } from "../finance/plan-state.ts";
 
 /**
  * §PLAN-LATE: a plan whose date has passed by more than the grace period with no charge linked.

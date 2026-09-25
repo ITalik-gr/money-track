@@ -378,8 +378,7 @@
 .btn.danger:hover { background: color-mix(in srgb, var(--neg) 88%, #000); border-color: color-mix(in srgb, var(--neg) 88%, #000); }
 
 /* Підписки — блок AI-пошуку + поле «кожні N» */
-.sub-ai-block { padding: 16px; border: 1px solid var(--accent-soft); background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface)); }
-:root[data-theme="dark"] .sub-ai-block { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.sub-ai-block { padding: 16px; border: 1px solid var(--accent-soft); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sub-ai-block { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); } }
 .sub-ai-hint { margin: 0 0 12px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
 /* §SUB-FIND: what the search actually looked for. A screenful of unrelated merchants reads as a
@@ -590,7 +589,7 @@
    Її сусідка по рейлу, «Індекс здоровʼя», живе в `advisor.css` (шов C8, 2026-09-10). */
 .corpus-card { padding: 18px 20px; }
 .corpus-list { display: flex; flex-direction: column; gap: 2px; }
-.corpus-doc { display: flex; align-items: flex-start; gap: 9px; padding: 9px 0; border-top: 1px solid var(--line); }
+.corpus-doc { display: flex; gap: 9px; border-top: 1px solid var(--line); }
 .corpus-doc:first-child { border-top: none; }
 .corpus-doc > svg { color: var(--muted); flex-shrink: 0; margin-top: 2px; }
 .corpus-doc-title { font-size: var(--fs-md); color: var(--ink); font-weight: 500; }

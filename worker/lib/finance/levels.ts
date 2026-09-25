@@ -89,16 +89,39 @@ export function levelWindowKeys(now: number, months = LEVEL_WINDOW_MONTHS): stri
   return keys;
 }
 
-export async function coveredMonths(env: Env, keys: string[]): Promise<string[]> {
-  const firstRow = await env.DB.prepare("SELECT MIN(time) AS t FROM transactions").first<{ t: number | null }>();
-  const firstFullYm = firstRow?.t == null
-    ? null
-    : localYm(localMonthStart(firstRow.t, localParts(firstRow.t).d <= FIRST_MONTH_GRACE_DAYS ? 0 : 1));
+/**
+ * The window months the ledger REALLY covers — and nothing else: empty for an account with no
+ * operations, or one younger than its first full month.
+ *
+ * Split out of `coveredMonths` on 2026-09-25 for §HEALTH. `coveredMonths` has to return something
+ * (a level over no months would blank burn, runway and every budget), so it falls back — to every
+ * key when there are no operations at all, to the newest key when the ledger is younger than a
+ * month. For a LEVEL those fallbacks are harmless: the months are zeros either way. For a verdict
+ * they are not: the health index read an empty account as «six months without income» and graded
+ * it, when the honest answer is «there is nothing to grade yet». Same rule, one definition; the
+ * fallback is the only difference.
+ */
+export async function fullyCoveredMonths(env: Env, keys: string[]): Promise<string[]> {
+  return fullyCoveredMonthsDb(env.DB, keys);
+}
+
+/** The same rule for a caller that holds only the database (`buildIncomeAnalytics`). */
+export async function fullyCoveredMonthsDb(db: Env["DB"], keys: string[]): Promise<string[]> {
+  const firstRow = await db.prepare("SELECT MIN(time) AS t FROM transactions").first<{ t: number | null }>();
+  if (firstRow?.t == null) return [];
+  const firstFullYm = localYm(localMonthStart(firstRow.t, localParts(firstRow.t).d <= FIRST_MONTH_GRACE_DAYS ? 0 : 1));
   // `YYYY-MM` sorts as text, the same comparison §CAT-PARTS uses for the trend's first month.
-  const covered = firstFullYm ? keys.filter((k) => k >= firstFullYm) : keys;
+  return keys.filter((k) => k >= firstFullYm);
+}
+
+export async function coveredMonths(env: Env, keys: string[]): Promise<string[]> {
+  const covered = await fullyCoveredMonths(env, keys);
+  if (covered.length) return covered;
+  // No operations at all: every key, as before — the level is a zero whichever months it divides by.
   // Fewer than one full month of history: the newest window month, alone. There is no honest
   // average over nothing, and returning nothing would blank burn, runway and every budget.
-  return covered.length ? covered : keys.slice(-1);
+  const any = await env.DB.prepare("SELECT 1 AS x FROM transactions LIMIT 1").first<{ x: number }>();
+  return any ? keys.slice(-1) : keys;
 }
 
 export async function categoryMonthlyLevels(

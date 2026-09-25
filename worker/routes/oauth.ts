@@ -21,7 +21,7 @@ import { cspForFormTarget } from "../lib/platform/security-headers.ts";
 import type { ServerLocale } from "../lib/platform/i18n.ts";
 import { st } from "../lib/platform/i18n.ts";
 import {
-  MCP_SCOPE, OFFLINE_SCOPE, ACCESS_TTL_SEC, canonicalResource, resourceMatches,
+  MCP_SCOPE, ACCESS_TTL_SEC, canonicalResource, resourceMatches,
   redirectAllowed, redirectUriUsable, pkceVerifies, createAccessToken, issuerFor,
 } from "../lib/platform/oauth.ts";
 import {
@@ -284,5 +284,3 @@ oauth.post("/oauth/token", async (c) => {
 
   return tokenError(c, "unsupported_grant_type", `unsupported grant_type: ${grantType ?? "(none)"}`);
 });
-
-export const SCOPES = [MCP_SCOPE, OFFLINE_SCOPE];

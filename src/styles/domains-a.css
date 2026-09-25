@@ -82,14 +82,14 @@
 /* вшитий AI-коментар */
 .ai-card {
   padding: 18px 20px;
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-  border-color: color-mix(in srgb, var(--accent) 20%, var(--line));
+
+
 }
 .ai-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
 .ai-badge {
   width: 36px; height: 36px; border-radius: var(--radius-sm); flex-shrink: 0;
-  background: var(--accent);
-  color: #fff; display: grid; place-items: center;
+
+ display: grid; place-items: center;
 }
 .ai-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
 .ai-text { font-size: 14.5px; line-height: 1.6; color: var(--ink); margin: 0; }
@@ -179,8 +179,8 @@
 .wd-drill { margin-top: 12px; }
 .wd-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
 /* Стовпчик росте scaleY від низу — height анімує layout. */
-.wd-bar { width: 100%; height: 100%; border-radius: 6px 6px 0 0;
-  transform-origin: bottom center; transition: transform var(--dur-3, .3s) var(--ease-out, ease); }
+.wd-bar { width: 100%; height: 100%;
+  transform-origin: bottom center; }
 
 .wd-lbl { font-size: 11px; color: var(--muted); }
 .deep-desc { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 14px 0 0; }
@@ -407,7 +407,7 @@
 .whatif-cut.raise { color: var(--neg); font-weight: 600; }
 .whatif-result { display: flex; flex-direction: column; gap: 11px; padding: 16px; border-radius: var(--radius); background: var(--surface-2); }
 .whatif-runway-big { display: flex; flex-direction: column; gap: 2px; }
-.wr-label { font-size: 12px; color: var(--muted); }
+.wr-label { color: var(--muted); }
 .wr-nums { display: flex; align-items: baseline; gap: 7px; }
 .wr-base { font-size: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .wr-arrow { color: var(--muted); }
@@ -796,14 +796,13 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 .fact-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
 
 /* AI-блок у деталі транзакції */
-.ai-block { padding: 16px; display: flex; flex-direction: column; gap: 12px; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); background: color-mix(in srgb, var(--accent) 4%, var(--surface)); }
+.ai-block { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
 .ai-block-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ai-block-title { font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 7px; }
 .ai-block-title svg { color: var(--accent); flex-shrink: 0; }
 /* Іконка на початку заголовка секції/модалки (замість емоджі-префікса) — вирівнювання + акцент. */
 .h-ico { display: inline-flex; align-items: center; gap: 8px; }
 .h-ico svg { color: var(--accent); flex-shrink: 0; }
-.ai-recognize { padding: 7px 14px; border-color: var(--accent); color: var(--accent); background: var(--surface); font-weight: 500; }
-.ai-recognize:hover:not(:disabled) { background: var(--accent-soft); }
+.ai-recognize { padding: 7px 14px; background: var(--surface); font-weight: 500; }
 .ai-block-hint { font-size: 13px; color: var(--ink-2); line-height: 1.5; margin: 0; }
 .ai-block-sub { font-size: 12px; color: var(--muted); }

@@ -1,5 +1,6 @@
 // Planned payments / subscriptions. See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import { likeVariants } from "../lib/platform/text.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
 
 /**
@@ -86,6 +87,39 @@ export async function activeWithCategory(db: AppDb): Promise<CategorisedPlanRow[
   return r.results ?? [];
 }
 
+/**
+ * §SUB-STACK — what the plans ACTUALLY took per month, all outflow plans (cancelled ones included:
+ * a subscription stopped in May still cost what it cost in April). `mult` converts to the reader's
+ * base, the same way `planCharges` does. Month keys are Kyiv (`localYmSql`), built by the caller's
+ * window.
+ */
+export async function linkedPaidByMonth(
+  db: AppDb, mult: string, ymSql: string, from: number, to: number,
+): Promise<{ m: string; paid: number }[]> {
+  const r = await db.prepare(
+    `SELECT ${ymSql} AS m, CAST(ROUND(SUM(ABS(t.amount) * ${mult})) AS INTEGER) AS paid
+     FROM transactions t JOIN planned_payments p ON p.id = t.planned_id
+     WHERE t.amount < 0 AND t.is_transfer = 0 AND COALESCE(p.kind, '') <> 'income'
+       AND t.time >= ? AND t.time < ?
+     GROUP BY m ORDER BY m`,
+  ).bind(from, to).all<{ m: string; paid: number }>();
+  return r.results ?? [];
+}
+
+/** Every charge linked to an ACTIVE outflow plan since `since`, oldest first — for trial detection. */
+export async function linkedChargesSince(
+  db: AppDb, since: number,
+): Promise<{ planned_id: number; time: number; amount: number; currency_code: number }[]> {
+  const r = await db.prepare(
+    `SELECT t.planned_id, t.time, ABS(t.amount) AS amount, t.currency_code
+     FROM transactions t JOIN planned_payments p ON p.id = t.planned_id
+     WHERE t.amount < 0 AND t.is_transfer = 0 AND p.is_active = 1 AND COALESCE(p.kind, '') <> 'income'
+       AND t.time >= ?
+     ORDER BY t.time ASC`,
+  ).bind(since).all<{ planned_id: number; time: number; amount: number; currency_code: number }>();
+  return r.results ?? [];
+}
+
 /** Every column, for the plans screen. */
 export async function listActive(db: AppDb): Promise<PlannedPayment[]> {
   const r = await db.prepare("SELECT * FROM planned_payments WHERE is_active = 1").all<PlannedPayment>();
@@ -124,17 +158,47 @@ export async function create(db: AppDb, p: NewPlan): Promise<number> {
 
 /** Partial update. @returns false when the patch was empty, so the caller can skip the write. */
 export async function update(
-  db: AppDb, id: number, patch: { note?: string | null; category_id?: number | null },
+  db: AppDb, id: number,
+  patch: {
+    note?: string | null; category_id?: number | null;
+    // §CAT-SETTINGS' sibling on the plan page: the schedule itself, edited where it is read.
+    period_amount?: number; period?: "month" | "week"; period_count?: number;
+  },
 ): Promise<boolean> {
   const sets: string[] = [];
   const binds: unknown[] = [];
-  for (const col of ["note", "category_id"] as const) {
+  for (const col of ["note", "category_id", "period_amount", "period", "period_count"] as const) {
     const v = patch[col];
     if (v !== undefined) { sets.push(`${col} = ?`); binds.push(v); }
   }
   if (!sets.length) return false;
   await db.prepare(`UPDATE planned_payments SET ${sets.join(", ")} WHERE id = ?`).bind(...binds, id).run();
   return true;
+}
+
+/**
+ * §PLAN-REPRICE — the person's click that makes a new price the plan's own.
+ *
+ * The amount is read HERE, from the latest linked charge, and never taken from a request body:
+ * the client only ever holds display figures, and a declared amount written from one is how a
+ * UAH number ends up in a dollar plan (§CUR-PLAN). Refused (null) when the latest charge was billed
+ * in another currency — a biller switching currency did not change its price, and converting it
+ * here would bake one day's rate into the plan forever.
+ */
+export async function acceptLastPrice(
+  db: AppDb, id: number,
+): Promise<{ from: number | null; to: number } | null> {
+  const plan = await db.prepare(
+    "SELECT period_amount, currency_code FROM planned_payments WHERE id = ? AND is_active = 1",
+  ).bind(id).first<{ period_amount: number | null; currency_code: number | null }>();
+  if (!plan) return null;
+  const last = await db.prepare(
+    `SELECT ABS(amount) AS amount, currency_code FROM transactions
+     WHERE planned_id = ? AND amount < 0 AND is_transfer = 0 ORDER BY time DESC LIMIT 1`,
+  ).bind(id).first<{ amount: number; currency_code: number | null }>();
+  if (!last || (last.currency_code ?? 980) !== (plan.currency_code ?? 980)) return null;
+  await db.prepare("UPDATE planned_payments SET period_amount = ? WHERE id = ?").bind(last.amount, id).run();
+  return { from: plan.period_amount, to: last.amount };
 }
 
 /**
@@ -262,19 +326,8 @@ const searchHaystack = (a = "t.") =>
   `COALESCE(${a}merchant, '') || ' ' || COALESCE(json_extract(${a}raw_json, '$.description'), '') ` +
   `|| ' ' || COALESCE(${a}comment, '') || ' ' || COALESCE(${a}ai_note, '')`;
 
-/**
- * Case variants of one search term.
- *
- * SQLite's `LIKE` folds case for ASCII ONLY, and `LOWER()` does the same — so «твітер» never
- * matches «Твітер» and a Cyrillic search silently depends on how the text happened to be typed.
- * Two variants (as given, and capitalised) cover what actually occurs in merchant names and notes;
- * a full Unicode fold would need a collation D1 does not offer.
- */
-function likeVariants(term: string): string[] {
-  const low = term.toLowerCase();
-  const cap = low.charAt(0).toUpperCase() + low.slice(1);
-  return [...new Set([low, cap, term])].map((v) => `%${v}%`);
-}
+// Case variants of a search term: `likeVariants` in `lib/platform/text.ts` (§CYR-CASE). The copy
+// that lived here left out UPPER CASE, so «київстар» missed «КИЇВСТАР» — the way banks write it.
 
 /**
  * Spending grouped by merchant+currency for a free-text search — the §F4 "describe it" flow.

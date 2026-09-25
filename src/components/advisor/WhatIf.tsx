@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useGetAdviceQuery, useGetPatternsQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
@@ -16,7 +17,7 @@ const rw = (m: number | null) => (m == null ? "—" : m.toFixed(1));
 export function WhatIf() {
   const t = useT();
   const { data: advice } = useGetAdviceQuery();
-  const { data: patterns } = useGetPatternsQuery();
+  const { data: patterns, error: patternsError, refetch } = useGetPatternsQuery();
   const [cuts, setCuts] = useState<Record<string, number>>({});
 
   // Топ категорій за місячним рівнем (лише з реальним рівнем) — повзунки скорочення.
@@ -25,6 +26,8 @@ export function WhatIf() {
     [patterns],
   );
 
+  // C17: the sliders are built from `patterns`; a failed request must not look like «no categories».
+  if (patternsError) return <ErrorNote error={patternsError} what={t("wif.title")} onRetry={refetch} />;
   if (!advice || advice.monthly_burn <= 0 || advice.cushion <= 0 || cats.length === 0) return null;
 
   const baseBurn = advice.monthly_burn;

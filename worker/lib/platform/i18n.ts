@@ -149,6 +149,7 @@ const S = {
   },
   healthNoDebt: { uk: "нема боргу", en: "no debt" },
   healthMonthsMax: { uk: "12+ міс", en: "12+ mo" },
+  healthNotEnough: { uk: "замало даних", en: "not enough data" },
   healthMonths: { uk: "{n} міс", en: "{n} mo" },
   healthDebtRatio: { uk: "{n}× міс", en: "{n}× mo" },
 
@@ -298,6 +299,14 @@ const S = {
   errDocNotFound: { uk: "Документ не знайдено", en: "Document not found" },
   errGroupNotFound: { uk: "Групу не знайдено", en: "Group not found" },
   errPlanNotFound: { uk: "Підписку не знайдено", en: "Subscription not found" },
+  errPlanSchedule: {
+    uk: "Сума має бути більшою за нуль, період — місяць або тиждень, кожні 1–24 періоди",
+    en: "The amount must be above zero, the period a month or a week, every 1–24 periods",
+  },
+  errPriceNotAccepted: {
+    uk: "Немає останнього списання в валюті підписки — суму не змінено",
+    en: "No recent charge in the subscription's currency — the amount was not changed",
+  },
   // §ADVICE-LOOP — a mark is refused rather than stored for a suggestion the adviser never made:
   // an orphan state would never render anywhere and would still occupy a slot in the cap.
   errAdviceSuggestionUnknown: { uk: "Такої поради немає", en: "No such suggestion" },

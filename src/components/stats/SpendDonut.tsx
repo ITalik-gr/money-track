@@ -1,3 +1,4 @@
+import { wholePcts } from "../../../shared/pct.ts";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { CHART_ANIM } from "../../lib/motion.ts";
 import { formatMinor } from "../../lib/format.ts";
@@ -33,7 +34,9 @@ export function SpendDonut({ rows, sign }: { rows: Overview["byCategory"]; sign:
   if (restSum > 0) top.push({ name: t("sd.othersLabel"), value: restSum, color: "#9aa5a0" });
   const total = top.reduce((s, d) => s + d.value, 0);
   if (!total) return null;
-  const withPct = top.map((d) => ({ ...d, pct: Math.round((d.value / total) * 100) }));
+  // §PCT-SUM: one rule for the whole set, so the legend adds up to 100 (it could read 99 or 101).
+  const pcts = wholePcts(top.map((d) => d.value));
+  const withPct = top.map((d, i) => ({ ...d, pct: pcts[i] }));
 
   return (
     <div className="card spend-donut-card">
@@ -56,6 +59,8 @@ export function SpendDonut({ rows, sign }: { rows: Overview["byCategory"]; sign:
           <span key={i} className="dl-item">
             <span className="d" style={{ background: d.color }} />
             <span className="dl-name">{d.name}</span>
+            {/* Money AND share — the owner: «щоб ще показувало скільки відсотково … а не тіки гривні». */}
+            <span className="dl-amt">{formatMinor(d.value, { decimals: false })} {sign}</span>
             <span className="dl-pct">{d.pct}%</span>
           </span>
         ))}

@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { dateFmt } from "../../i18n/locale.ts";
 import { useT } from "../../i18n/index.ts";
 import { useGetCashflowCalendarQuery } from "../../store/api.ts";
@@ -21,6 +22,43 @@ const MAX_OFFSET = 2; // сервер віддає поточний + два н�
 interface DayItem { title: string; amount: number; amountOrig: number; currency: number; kind: string }
 interface DayCell { total: number; items: DayItem[] }
 
+/**
+ * The day popover, rendered into `document.body` and placed against the day's rectangle.
+ *
+ * ⚠️ It used to be an absolutely positioned child of the day cell, inside `.cf-grid`, which has
+ * `overflow: hidden` (the rounded canvas needs it). So a popover that opened below a day in the last
+ * row — or past the card's edge — was simply CUT OFF, and the days at the edges were exactly the ones
+ * a person checks at the end of a month (owner, 2026-09-25: «попап міні обрізається якщо виходить
+ * за межі календаря»). The old `.left` flip handled only the right edge of the week.
+ *
+ * Now: measured after mount, placed below the day, flipped ABOVE when the viewport has no room
+ * below, and clamped horizontally to the viewport with an 8px gutter — which also covers a 400px
+ * phone. `position: fixed`, so it closes on scroll rather than drifting away from its day.
+ */
+function DayPopover({ anchor, children }: { anchor: DOMRect; children: ReactNode }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const { width, height } = el.getBoundingClientRect();
+    const GAP = 6, EDGE = 8;
+    const below = anchor.bottom + GAP;
+    const top = below + height > window.innerHeight - EDGE && anchor.top - GAP - height >= EDGE
+      ? anchor.top - GAP - height
+      : Math.min(below, Math.max(EDGE, window.innerHeight - EDGE - height));
+    const left = Math.min(Math.max(EDGE, anchor.left), Math.max(EDGE, window.innerWidth - EDGE - width));
+    setPos({ top, left });
+  }, [anchor]);
+  return createPortal(
+    <span ref={ref} className="cf-pop" role="tooltip"
+      style={{ top: pos?.top ?? -9999, left: pos?.left ?? -9999, visibility: pos ? "visible" : "hidden" }}>
+      {children}
+    </span>,
+    document.body,
+  );
+}
+
 export function CashflowCalendar() {
   const t = useT();
   const WD = Array.from({ length: 7 }, (_, i) => weekdayShort(i));
@@ -29,7 +67,18 @@ export function CashflowCalendar() {
   // вперед одним шматком, бо проєкція подушки — це наскрізне віднімання). Клієнт не вдає, що
   // вміє гортати далі, ніж є дані: порожній місяць читався б як «списань більше не буде».
   const [offset, setOffset] = useState(0);
-  const [open, setOpen] = useState<string | null>(null); // дата розкритого поповера
+  // The open day and the rectangle its popover is placed against (§ DayPopover).
+  const [open, setOpenState] = useState<{ date: string; rect: DOMRect } | null>(null);
+  const openAt = (date: string, el: HTMLElement) => setOpenState({ date, rect: el.getBoundingClientRect() });
+  const closeIf = (date: string) => setOpenState((o) => (o?.date === date ? null : o));
+  // A fixed popover does not follow a scrolling page; closing it is honest, drifting is not.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpenState(null);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => { window.removeEventListener("scroll", close, true); window.removeEventListener("resize", close); };
+  }, [open]);
 
   // Списання по днях. Кілька входжень одного плану в один день склеюємо в рядок з ×N.
   const byDate = useMemo(() => {
@@ -137,21 +186,21 @@ export function CashflowCalendar() {
           const INLINE = 2;
           const inline = cell.items.slice(0, INLINE);
           const rest = cell.items.length - inline.length;
-          // Поповер біля правого краю тижня відкриваємо вліво, щоб не вилазив за картку.
-          const col = i % 7;
 
           return (
             <button
               key={dateStr}
               type="button"
-              className={`cf-day has ${isToday ? "today" : ""} ${weekend ? "wknd" : ""} ${bal != null && bal < 0 ? "danger" : ""} ${open === dateStr ? "open" : ""}`}
+              className={`cf-day has ${isToday ? "today" : ""} ${weekend ? "wknd" : ""} ${bal != null && bal < 0 ? "danger" : ""} ${open?.date === dateStr ? "open" : ""}`}
               style={{ background: `color-mix(in srgb, var(--neg) ${Math.round(intensity * 100)}%, var(--surface))` }}
               aria-label={t("cfcal.dayAria", { date: dayFmt.format(new Date(`${dateStr}T00:00:00`)), count: cell.items.length, amount: `${formatMinor(cell.total, { decimals: false })} ${baseSign()}` })}
-              onMouseEnter={() => setOpen(dateStr)}
-              onMouseLeave={() => setOpen((o) => (o === dateStr ? null : o))}
-              onFocus={() => setOpen(dateStr)}
-              onBlur={() => setOpen((o) => (o === dateStr ? null : o))}
-              onClick={() => setOpen((o) => (o === dateStr ? null : dateStr))}
+              aria-expanded={open?.date === dateStr}
+              onMouseEnter={(e) => openAt(dateStr, e.currentTarget)}
+              onMouseLeave={() => closeIf(dateStr)}
+              onFocus={(e) => openAt(dateStr, e.currentTarget)}
+              onBlur={() => closeIf(dateStr)}
+              onClick={(e) => (open?.date === dateStr ? setOpenState(null) : openAt(dateStr, e.currentTarget))}
+              onKeyDown={(e) => { if (e.key === "Escape") setOpenState(null); }}
             >
               <span className="cf-dhead">
                 <span className="cf-dnum">{d}</span>
@@ -177,8 +226,8 @@ export function CashflowCalendar() {
                 {rest > 0 && <span className="cf-item more">{t("cfcal.moreItems", { n: rest })}</span>}
               </span>
 
-              {open === dateStr && (
-                <span className={`cf-pop ${col >= 5 ? "left" : ""}`} role="tooltip">
+              {open?.date === dateStr && (
+                <DayPopover anchor={open.rect}>
                   <span className="cf-pop-head">{dayFmt.format(new Date(`${dateStr}T00:00:00`))}</span>
                   {cell.items.map((it, k) => (
                     <span className="cf-pop-row" key={k}>
@@ -201,7 +250,7 @@ export function CashflowCalendar() {
                       {t("cfcal.cushionAfter", { amount: `${formatMinor(bal, { decimals: false })} ${baseSign()}` })}
                     </span>
                   )}
-                </span>
+                </DayPopover>
               )}
             </button>
           );

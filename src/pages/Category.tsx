@@ -6,6 +6,7 @@ import { dateFmt, numFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
 import { useGetCategoryOverviewQuery, useGetCategoryDrillQuery, useGetTransactionsQuery } from "../store/api.ts";
 import { CategoryShapeBlocks } from "../components/stats/CategoryShape.tsx";
+import { CategorySettings } from "../components/stats/CategorySettings.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
@@ -157,6 +158,14 @@ export function Category() {
         </div>
       </div>
 
+      {/* §CAT-SHARE — the one sentence that makes the total comparable: how big this category is
+          against everything else in the same window. Hryvnia alone could not say it (owner, O2). */}
+      {data.share_of_total_pct != null && total > 0 && (
+        <p className="cat-summary">
+          <Money minor={total} decimals={false} /> · {t(inc ? "cat.shareOfIncome" : "cat.shareOfSpend", { pct: data.share_of_total_pct, range: rangeLabel.toLowerCase() })}
+        </p>
+      )}
+
       <div className="cat-page-stats">
         {/* The level FIRST: it is the answer to "how much does this cost me", which is the reason
             anyone opens a category. The period total is secondary — it depends on today's date. */}
@@ -274,6 +283,9 @@ export function Category() {
           )}
         </div>
       )}
+
+      {/* §CAT-SETTINGS — importance, envelope and name, where the category is being looked at. */}
+      <CategorySettings data={data} monthView={range === "month"} />
 
       {/* §CAT-PAGE — the whole history, so the page can be read without choosing a window at all. */}
       {data.lifetime.n > 0 && (

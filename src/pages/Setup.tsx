@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { useSearchParams } from "react-router";
 import { useT } from "../i18n/index.ts";
 import { toast } from "../lib/toast.ts";
@@ -301,7 +302,7 @@ function DangerZone() {
 function TranslitFixes() {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const { data, isFetching } = useGetTranslitFixesQuery(undefined, { skip: !open });
+  const { data, isFetching, error, refetch } = useGetTranslitFixesQuery(undefined, { skip: !open });
   const [apply, applyState] = useApplyTranslitFixesMutation();
   const fixes = data?.fixes ?? [];
 
@@ -318,7 +319,8 @@ function TranslitFixes() {
   return (
     <div className="translit-box">
       {isFetching && <p className="set-card-sub" style={{ margin: 0 }}>{t("common.loading")}</p>}
-      {!isFetching && fixes.length === 0 && <p className="set-card-sub" style={{ margin: 0 }}>{t("setup.translitNone")}</p>}
+      <ErrorNote error={error} what={t("setup.translitCheck")} onRetry={refetch} />
+      {!isFetching && !error && fixes.length === 0 && <p className="set-card-sub" style={{ margin: 0 }}>{t("setup.translitNone")}</p>}
       {!isFetching && fixes.length > 0 && (
         <>
           <p className="set-card-sub" style={{ margin: "0 0 8px" }}>{t("setup.translitFound", { n: fixes.length })}</p>
@@ -448,7 +450,7 @@ function AiModelToggle() {
   // product — say it instead, and show the model that is actually used.
   const isDemo = me?.demo === true;
   return (
-    <div className="ai-model-list">
+    <div>
       {isDemo && <p className="ai-model-note">{t("setup.aiModelDemoNote")}</p>}
       {AI_MODEL_TASKS.map((row) => {
         const cur = isDemo ? "haiku" : (models?.[row.task] ?? "sonnet");

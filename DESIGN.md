@@ -158,6 +158,14 @@ Standing rules distilled from the log up to 2026-09-21 (the full history is in g
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-25 | §PLAN-STATE banner (`.plan-state`, `.warn`/`.bad`) above a subscription's tiles, with ONE action (accept the new price / find the charge); the next-charge tile shows the EXPECTED date in `--neg` while overdue; list cards swap the «next» badge for a `.sub-badge.warn/.bad` word. | The YouTube card promised next month's date for a plan whose current charge it had missed. The border carries severity so the sentence can ask instead of accuse. Not seen live yet. |
+| 2026-09-25 | Transactions search: under the box, one chip per understood condition («сума · понад 200», «крім · Starbucks» in a red tint), each removable with a click that deletes its words from the query. | A parser that silently narrowed the list would be worse than none. Not seen live yet. |
+| 2026-09-25 | Cashflow calendar: the day popover is a portal placed from the day's rect (flips above, clamps to the viewport, closes on scroll/Escape, no pointer events); hover = inner ring (the old border hover drew nothing), open day = accent ring; weekday row sentence case; inflow = teal text and pill, one rule. | «попап міні обрізається якщо виходить за межі календаря» — `.cf-grid` needs `overflow: hidden` for its rounded canvas, so the popover had to leave it. |
+| 2026-09-25 | §PCT-SUM: every composition shows money AND share; shares of one set are rounded as a set (`shared/pct.ts`, largest remainder) so a legend always sums to 100. Donut legend: name · amount · %. | Owner: «скільки відсотково ця категорія займає, бо зараз майже завжди тіки гривні». |
+| 2026-09-25 | Category page: one line above the tiles — period total · «N% усіх витрат за <range>»; a «Налаштування категорії» card (importance segment, monthly limit with Save/Remove, «Назва, колір, іконка» → `CategoryModal`). Subscription page: «Налаштування підписки» card at the end (amount + every N months/weeks + Save, category `Select`, other-names textarea + Save, two-step «Завершити»); linked charges at a non-declared price carry a ±% chip. | Owner: «налаштування мо якісь прям там» and «скільки відсотково ця категорія займає». Nothing saves on blur. Not seen live yet. |
+| 2026-09-25 | §SUB-STACK card under the Subscriptions hero: drift pill (+red / −green by value), a sentence with the two averages, 12 month columns of what was ACTUALLY charged, then «Trial ended» rows (link to the plan) and «Similar subscriptions» as questions. Subscription page: «Якщо скасувати» card — per month, per year, points of committed income, and a trial line. | The stack drifts while every row looks small; a cancel decision needs its size in the reader's own terms. Duplicates are questions — a household can have two phones. Not seen live yet. |
+| 2026-09-25 | §COMMITTED card on Advisor → Стан, under the floor card: percentage FIRST (`--fs-3xl`), money sentence beside it, one income-length bar, six month columns with their own % labels. Tone: neutral ink below 70%, `--warn` from 70%, `--neg` past 100% — never green. | A share of income taken by fixed costs is never «good» on its own terms; the owner asked for percentages next to hryvnia. Not seen live yet. |
+| 2026-09-25 | Health trend = Recharts area on a fixed 0..100 axis with a tooltip (score · band · four parts' points, each ± vs the previous day, «moved most»), replacing the bare sparkline. A provisional index shows «—» and no band. Unmeasured parts use `.idle` (no signal colour). | «Can't hover it and see what the score was». A score alone teaches nothing; the part that moved names what to look at. Not seen live yet. |
 
 ## 7. Working on design (skills — mandatory)
 
@@ -182,8 +190,11 @@ Standing rules distilled from the log up to 2026-09-21 (the full history is in g
   its unconditional twin (import order is the cascade). Lint C11.
 - **C15:** a `var(--x)` nobody defines silently drops the whole declaration; use a token or
   `var(--x, fallback)`.
-- Open (needs the owner's eye): 8 selectors declared twice with different bodies, ~60 hardcoded
-  colours outside the theme blocks.
+- **C20 (2026-09-25):** no declaration that a later rule for the SAME selector always overrides. The
+  «8 selectors declared twice» were really 37 dead declarations; removed with the effective cascade
+  PROVEN identical (every property of every top-level selector, every conditional block). Still
+  open (needs the owner's eye): ~60 hardcoded colours outside the theme blocks, and `.sub-ai-block`
+  which is neutral in explicit dark but accent-tinted in system dark.
 - A block whose content is history does not hide on an empty current period; loading ≠ empty ≠ error.
 - Per-user `localStorage` keys are scoped by user id.
 - **§SET-FLOW:** Settings cards flow in CSS columns (`columns: 2`, `set-full` spans all), not a grid.

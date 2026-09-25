@@ -91,7 +91,7 @@ details[open] > .disclose { margin-bottom: 10px; }
 
 /* Linked banks: the rows were unstyled text ("mono рахунків: 6" on its own line). A connection is
    a NAME, a state and a count — three different weights, so they get three. */
-.conn-row { display: flex; flex-direction: column; gap: 2px; padding: 9px 0; }
+.conn-row { flex-direction: column; gap: 2px; padding: 9px 0; }
 .conn-row + .conn-row { border-top: 1px solid var(--line); }
 .conn-top { display: flex; align-items: baseline; gap: 8px; }
 .conn-name { font-size: 14px; font-weight: 600; }
@@ -265,3 +265,17 @@ details[open] > .disclose { margin-bottom: 10px; }
    scrolled. Still one column on a phone — the width is a maximum, not a demand. */
 .modal.modal-wide { max-width: 620px; }
 .modal-wide .kind-grid { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+
+/* §QUERY-PARSE — what the search box understood, one removable chip per condition. */
+.q-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 12px; }
+.q-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 9px; cursor: pointer;
+  font: inherit; font-size: var(--fs-xs); color: var(--ink); background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); border-radius: var(--radius-pill);
+}
+.q-chip.exclude { background: color-mix(in srgb, var(--neg) 10%, var(--surface)); border-color: color-mix(in srgb, var(--neg) 30%, transparent); }
+.q-chip-kind { color: var(--muted); }
+.q-chip-x { color: var(--muted); font-size: 10px; }
+@media (hover: hover) and (pointer: fine) {
+  .q-chip:hover .q-chip-x { color: var(--ink); }
+}

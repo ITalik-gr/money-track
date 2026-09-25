@@ -93,7 +93,3 @@ export function checkRate(bucket: "general" | "ai", now = Date.now()): RateVerdi
   return { ok: true, retryAfter: 0 };
 }
 
-/** Test seam — the map is module state, so a test would otherwise leak between cases. */
-export function resetRateLimits(): void {
-  hits.clear();
-}

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
+import { wholePcts } from "../../shared/pct.ts";
 import { getLocale, dateFmt } from "../i18n/locale.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { Link, useParams } from "react-router-dom";
@@ -54,7 +56,7 @@ function Delta({ pct }: { pct: number | null }) {
 // ---- Список репортів (сторінка /reports) -----------------------------------
 export function Reports() {
   const t = useT();
-  const { data: reports } = useGetReportsQuery();
+  const { data: reports, error: reportsError, refetch: refetchReports } = useGetReportsQuery();
   const [deleteReport] = useDeleteReportMutation();
   const [busy, setBusy] = useState<string | null>(null);
   // §A6: звіт рахується у фоні. Свідомо втратили авто-перехід на щойно згенерований звіт —
@@ -159,7 +161,9 @@ export function Reports() {
         </div>
       </div>
 
-      {(reports ?? []).length === 0 && <div className="card empty">{t("report.empty")}</div>}
+      {/* C17: a failed list must not read as «no reports yet». */}
+      <ErrorNote error={reportsError} what={t("nav.reports")} onRetry={refetchReports} />
+      {!reportsError && (reports ?? []).length === 0 && <div className="card empty">{t("report.empty")}</div>}
 
       <div className="report-cards">
         {(reports ?? []).map((r) => (
@@ -413,7 +417,8 @@ function CategoryDonut({ cats, sign }: { cats: { name: string; amount_uah: numbe
   if (restSum > 0) top.push({ name: t("report.other"), value: restSum, color: "#9aa5a0" });
   const total = top.reduce((s, d) => s + d.value, 0);
   if (!total) return null;
-  const withPct = top.map((d) => ({ ...d, pct: Math.round((d.value / total) * 100) }));
+  const pcts = wholePcts(top.map((d) => d.value));   // §PCT-SUM
+  const withPct = top.map((d, i) => ({ ...d, pct: pcts[i] }));
   return (
     <div className="report-donut">
       <ResponsiveContainer width="100%" height={200}>

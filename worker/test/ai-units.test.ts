@@ -86,3 +86,26 @@ test("§0a: the snapshot the model reads is in WHOLE units, and the directive sa
     });
   } finally { restore(); }
 });
+
+/**
+ * The report and the chat quote ONE burn and ONE runway (2026-09-25). The report used to compute
+ * its own «average of the last 3 completed months» — a second definition of burn — so a weekly
+ * report could name a runway the advisor, the chat and the health card never showed.
+ */
+test("the report's burn and runway are the snapshot's — one definition, not two", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const m = migratedDb();
+    seed(m);
+    const { buildReportContext } = await import("../lib/ai/report.ts");
+    const snap = await collectFinanceSnapshot(env(m));
+    const rep = await buildReportContext(env(m), "month", "current");   // «now», like the chat
+    const ctx = snap.context as Record<string, number | null>;
+    const fc = (rep.context as { forecast: Record<string, number | null> }).forecast;
+    assert.equal(fc.monthly_burn_uah, ctx.monthly_burn_uah);
+    assert.equal(fc.monthly_burn_recurring_uah! + fc.monthly_burn_lumpy_uah!, fc.monthly_burn_uah, "the split is OF the burn");
+    // The report also carries the app's own verdicts now (report-news.ts).
+    const c = rep.context as Record<string, unknown>;
+    assert.ok("health_index" in c && "subscriptions_attention" in c && "committed_income" in c);
+  } finally { restore(); }
+});

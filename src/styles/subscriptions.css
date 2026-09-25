@@ -87,6 +87,9 @@
 .sub-card-foot { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding-top: 10px; border-top: 1px solid var(--line); }
 .sub-badge { font-size: 11.5px; color: var(--ink-2); background: var(--surface-2); border-radius: 6px; padding: 3px 8px; }
 .sub-badge.done { color: var(--muted); }
+/* §PLAN-STATE on a list card: the one word that says this plan's date is not to be trusted yet. */
+.sub-badge.warn { color: var(--warn); background: var(--warn-soft); }
+.sub-badge.bad { color: var(--neg); background: var(--neg-soft); }
 .sub-rem { font-size: 11.5px; color: var(--muted); }
 
 /* §SUB-PAGE — one subscription. Reuses `.merchant-stat` tiles and `.cat-page-stats`, so only the
@@ -99,6 +102,16 @@
 .sub-cadence-v { font-size: 16px; margin-top: 2px; }
 .sub-cadence.warn { border-color: var(--warn); }
 .sub-cadence-note { font-size: 13px; color: var(--warn); max-width: 44ch; }
+
+/* §PLAN-STATE — what happened to the latest cycle, above the tiles, because it changes how every
+   tile below reads: a «next charge» date means nothing while the current one is missing. The
+   border carries the severity so the sentence can stay calm — it asks, it does not accuse. */
+.plan-state { display: flex; align-items: center; justify-content: space-between; gap: 12px 16px; flex-wrap: wrap; padding: 14px 18px; margin-bottom: 14px; }
+.plan-state.warn { border-color: var(--warn); background: var(--warn-soft); }
+.plan-state.bad { border-color: var(--neg); background: var(--neg-soft); }
+.plan-state-text { min-width: 0; flex: 1 1 32ch; }
+.plan-state-title { font-weight: 600; font-size: 14.5px; }
+.plan-state-sub { font-size: 13px; color: var(--ink-2); margin-top: 3px; }
 
 /* Three shares, one grid, so the bars line up and can be read against each other — separate rows
    with their own widths would compare nothing. */
@@ -138,4 +151,55 @@
   margin-left: 8px; padding: 1px 7px; border-radius: 999px;
   font-size: 11px; line-height: 1.5; font-weight: 500;
   color: var(--c-cobalt); background: color-mix(in srgb, var(--c-cobalt) 12%, transparent);
+}
+
+/* ---- §SUB-STACK: the subscriptions as one thing ------------------------------- */
+.stack-card { padding: 18px 20px; }
+.stack-drift { margin-left: auto; font-size: var(--fs-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stack-drift.neg { color: var(--neg); }
+.stack-drift.pos { color: var(--pos); }
+.stack-drift-said { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.stack-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; margin-top: var(--sp-3); }
+.stack-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.stack-col-track { width: 100%; height: 56px; display: flex; align-items: flex-end; border-radius: var(--radius-xs); background: var(--surface-2); overflow: hidden; }
+.stack-col-track i { display: block; width: 100%; border-radius: inherit; background: var(--accent); }
+.stack-col-m { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.stack-block { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); display: grid; gap: 6px; }
+.stack-row { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; color: inherit; text-decoration: none; }
+.stack-row-name { font-weight: 600; }
+.stack-row-said { font-size: var(--fs-sm); color: var(--ink-2); min-width: 0; }
+.stack-dupe { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+.stack-dupe-sum { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
+@media (max-width: 620px) {
+  .stack-card { padding: 14px; }
+  .stack-col-m { font-size: 9.5px; }
+}
+
+/* §SUB-STACK on one subscription: what cancelling frees — a simulation, stated calmly. */
+.sub-cancel { padding: 14px 18px; margin-top: 14px; }
+.sub-cancel-row { display: flex; flex-wrap: wrap; gap: 6px 22px; margin-top: 4px; font-size: var(--fs-sm); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sub-cancel-row b { font-size: var(--fs-lg); color: var(--ink); font-weight: 600; }
+.sub-cancel-note { margin-top: 8px; font-size: var(--fs-sm); color: var(--muted); }
+
+/* §SUB-SETTINGS — the plan's own controls. Label left, control right; wraps to a column on a phone. */
+.sub-settings { display: grid; gap: 14px; padding: 16px 18px; }
+.ss-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
+.ss-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); }
+.ss-ctrl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ss-amt { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
+.ss-count { width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.ss-cur, .ss-sep { color: var(--muted); font-size: var(--fs-sm); }
+.ss-cat { min-width: 220px; }
+.ss-note-row { align-items: flex-start; }
+.ss-note { flex: 1 1 280px; align-items: flex-start; }
+.ss-note textarea { flex: 1 1 auto; min-width: 0; resize: vertical; }
+.ss-end { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--line); }
+.ss-end-q { font-size: var(--fs-sm); color: var(--ink-2); }
+/* A linked charge at a price other than the declared one carries its difference on the row. */
+.sub-charge-amt { display: inline-flex; align-items: baseline; gap: 8px; }
+.sub-charge-diff { font-size: var(--fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sub-charge-diff.neg { color: var(--neg); }
+.sub-charge-diff.pos { color: var(--pos); }
+@media (max-width: 620px) {
+  .ss-cat { min-width: 0; flex: 1 1 100%; }
 }

@@ -830,29 +830,6 @@ export async function sliceTransactions(
 
 // ---- health index (§H) -------------------------------------------------------
 
-/**
- * Records today's health score, one row per day.
- *
- * §APP_TZ: `day` MUST be a Kyiv-local key. The notification feed's `draftHealthDrop` compares
- * these rows to spot a decline "over 5 days", so a UTC key would put an evening view and a
- * late-night view of the same day into two different rows and measure the drop on a shifted grid.
- */
-export async function recordHealthScore(
-  db: AppDb, day: string, score: number, ts: number,
-): Promise<void> {
-  await db.prepare(
-    "INSERT INTO health_history (day, score, ts) VALUES (?, ?, ?) ON CONFLICT(day) DO UPDATE SET score = excluded.score, ts = excluded.ts",
-  ).bind(day, score, ts).run();
-}
-
-export async function healthTrend(
-  db: AppDb, since: string,
-): Promise<{ day: string; score: number }[]> {
-  const res = await db.prepare(
-    "SELECT day, score FROM health_history WHERE day >= ? ORDER BY day",
-  ).bind(since).all<{ day: string; score: number }>();
-  return res.results ?? [];
-}
 
 /**
  * §IMPORTANCE-TREND — the monthly split into essential / discretionary / optional.

@@ -58,7 +58,7 @@ export function Goals() {
       {loading ? <GoalGridSkeleton /> : hasAny ? (
         <div className="goal-grid">
           {jarGoals.map((a) => (
-            <div key={a.id} className="goal-card goal-jar" style={{ "--goal-color": "var(--c-teal)" } as React.CSSProperties}>
+            <div key={a.id} className="goal-card" style={{ "--goal-color": "var(--c-teal)" } as React.CSSProperties}>
               <div className="goal-top">
                 <div className="goal-name">🏦 {a.title || t("goal.jarFallback")}</div>
               </div>

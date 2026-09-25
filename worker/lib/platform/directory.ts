@@ -177,15 +177,6 @@ export async function ensureOwner(db: D1Database, email: string): Promise<Direct
   return existing;
 }
 
-/** Marks a successful sign-in. Kept separate from `loginWithGoogle` so the transitional
- *  password path reports the same "active / last seen" facts as OAuth does — otherwise the
- *  owner would sit at `status='invited'` forever and the users list would lie. */
-export async function touchLogin(db: D1Database, id: string): Promise<void> {
-  await db
-    .prepare("UPDATE users SET status = 'active', last_login_at = ? WHERE id = ?")
-    .bind(Math.floor(Date.now() / 1000), id)
-    .run();
-}
 
 export async function listUsers(db: D1Database): Promise<DirectoryUser[]> {
   return (await db.prepare("SELECT * FROM users ORDER BY created_at").all<DirectoryUser>()).results;

@@ -38,7 +38,7 @@ function MonthTip(props: any) {
       <div className="tip-lbl">{r.label}</div>
       <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{t("fop.income")}: {fmt0.format(r.income)} {hryvniaSign()}</div>
       <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{t("fop.costs")}: {fmt0.format(r.costs)} {hryvniaSign()}</div>
-      <div className="r tip-net" style={{ color: r.net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
+      <div className="r" style={{ color: r.net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
         <span className="d" style={{ background: "transparent" }} />
         {t("fop.net")}: {r.net >= 0 ? "+" : ""}{fmt0.format(r.net)} {hryvniaSign()}
       </div>

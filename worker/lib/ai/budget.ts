@@ -26,7 +26,7 @@ import { monthlyPlannedUAH } from "../finance/subscriptions.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { resolveLocale } from "../platform/i18n.ts";
-import { ownFundsUAH, getProfile } from "./advisor.ts";
+import { ownFundsUAH, fundsBreakdown, getProfile } from "./advisor.ts";
 import type { BudgetProposalRow, BudgetPlanResult } from "../../../shared/api/planning.ts";
 
 // AI-планувальник бюджету: середні витрати по категоріях + ситуація → пропозиції
@@ -43,8 +43,8 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
 
   const rates = await getRates(env);
   const { mult } = valueMode(rates, null);
-  const [ownFunds, spendRows, budgetRows] = await Promise.all([
-    ownFundsUAH(env, rates),
+  const [funds, spendRows, budgetRows] = await Promise.all([
+    fundsBreakdown(env, rates),
     env.DB.prepare(
       `SELECT ${EFF_CAT_ID} AS category_id, ${catNameSql(loc, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
@@ -64,7 +64,9 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
 
   // P1: burn = сума канонічних місячних рівнів (узгоджено з порадником/патернами).
   const monthlyBurn = sumLevels(levels);
-  const runwayMonths = monthlyBurn > 0 ? Math.round((ownFunds / monthlyBurn) * 10) / 10 : null;
+  // Runway is the liquid CUSHION over burn — the canon's (2026-09-25); it was NET funds here, so with
+  // a credit-card debt the planner saw a shorter runway than every screen and the chat.
+  const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
 
   /**
    * The SHAPE of each category, not only its size.
@@ -98,7 +100,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
   }
   const payload = {
     situation: (await getProfile(env)) || "(not specified)",
-    own_funds_uah: Math.round(ownFunds / 100),
+    own_funds_uah: Math.round(funds.net / 100),
     monthly_burn_uah: Math.round(monthlyBurn / 100),
     monthly_burn_recurring_uah: Math.round(burnShape(levels).recurring / 100),
     runway_months: runwayMonths,

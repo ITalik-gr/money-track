@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { wholePcts } from "../../shared/pct.ts";
 import { useT } from "../i18n/index.ts";
 import {
   useGetAccountsQuery,
@@ -183,6 +184,7 @@ function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
   if (rows.length < 2) return null;
   const total = rows.reduce((s, [, v]) => s + v, 0) || 1;
   const COLORS = ["var(--accent)", "var(--c-teal)", "var(--c-ochre)", "var(--c-plum)", "var(--c-pine)"];
+  const curPcts = wholePcts(rows.map(([, v]) => v));   // §PCT-SUM — the legend adds up to 100
   // Заголовок несе `section-head` сторінки — тут лише смуга + легенда (інакше два заголовки поспіль).
   return (
     <div className="card cur-split">
@@ -197,7 +199,7 @@ function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
             <span className="d" style={{ background: COLORS[i % COLORS.length] }} />
             <span className="cs-cur">{currencySign(code)}</span>
             <span className="cs-val">{formatMinor(v, { decimals: false })} {baseSign()}</span>
-            <span className="cs-pct muted">{Math.round((v / total) * 100)}%</span>
+            <span className="cs-pct muted">{curPcts[i]}%</span>
           </span>
         ))}
       </div>

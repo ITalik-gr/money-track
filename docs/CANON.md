@@ -92,6 +92,24 @@
   comment + `ai_note`. The model returns a LIST of brand names; terms shorter than `MIN_TERM = 3`
   are not searched; `likeVariants` sends both cases. `planNeedles`: a plan is also known by words
   of its `note` (≥ 4 letters, minus stop words); safe because currency and amount (±10%) must match.
+- **§PLAN-REPRICE — a price change does not break a plan's identity** (`plan-match.ts`). When the
+  name and currency match but the amount is outside ±10%, the charge is still the plan's IF it
+  lands 1–3 declared cycles after the last LINKED charge (±⅕ cycle, ≥ 3 days), within ×3 of that
+  charge, the cycle has no linked charge yet, and the plan has history — the time gate REPLACES the
+  amount gate. Linking never touches `period_amount`; only `POST /planned/:id/accept-price` does,
+  reading the amount from the ledger (409 across currencies). Held by `plan-reprice.test.ts`.
+- **§PLAN-STATE — a plan says what happened to its latest cycle** (`plan-state.ts`, derived, never
+  stored): `paid · changed · due · late · missing · stopped · ended · no_history`, on §PLAN-LATE's
+  windows (3-day grace, half-period early tolerance). Cycles before the first linked charge are
+  never «missed». While overdue, the card leads with the EXPECTED date, not the next one.
+- **§SUB-STACK** (`lib/finance/sub-stack.ts`, `GET /planned/stack`): `monthly`/`count` over the
+  SAME set as the Subscriptions hero (every active outflow plan, §SUB-MONTH); `paid` = what LINKED
+  charges took per complete month (cancelled plans included), trimmed to the first observed month;
+  `drift` = first 3 vs last 3 observed months (null under 6). Two-of-a-kind = ≥ 2 live
+  subscriptions under one LEAF category, asked not asserted. Trial = first linked charge ≤ 10% of
+  the median price since (`detectTrial`), announced for 90 days. The overview's `cancel` share uses
+  §FLOW-SERIES income (same as §COMMITTED). No `annual` on the wire — it is `monthly × 12`.
+  Held by `sub-stack.test.ts`.
 - **§SUB-DETECT — a subscription is recognised by RHYTHM and PRICE, not exact amount**
   (`lib/finance/recurring.ts`, single source). The repo returns raw charges (`detectCharges`);
   grouping is by `coreToken`, amount buckets ±10% (same as `amountMatches`), `BUCKET_DOMINANCE`
@@ -209,10 +227,17 @@ Used by every `/analytics` endpoint AND the AI context → **UI numbers = AI num
 - **§AI-AVGNAME — one field name, one quantity:** `avg_month_uah` is the canonical level;
   "90 days ÷ 3" is `per_month_90d_uah`.
 - **§HEALTH — the health index is computed LIVE** on every `GET /analytics/health`
-  (`lib/finance/health.ts`); one `health_history` row per Kyiv day (gaps on unopened days are a
-  known limit). Client cache tags = what it READS (`Tx`, `Account`, `Advice`). Savings rate
-  compares fact with fact; stability SHOWS the clamped value, not `1 − cv`. Held by `consistency.test.ts`.
-- **§HEALTH-INCOME — a month WITHOUT income is a month and counts** (via `coveredMonths`).
+  (`lib/finance/health.ts`, arithmetic in the pure `scoreHealth`); one `health_history` row per
+  Kyiv day, written by the page AND by the daily run (§HEALTH-TREND, with the four parts' points,
+  migration 0055). Client cache tags = what it READS (`Tx`, `Account`, `Advice`). Savings rate
+  compares fact with fact; stability SHOWS the clamped value, not `1 − cv`. A part the data cannot
+  measure is UNMEASURED — left out, other weights renormalised — never graded: stability needs ≥ 2
+  months, zero income is stability 0 (not 100). Parts' points sum EXACTLY to the score (largest
+  remainder). Under half the formula measured = `insufficient`: no number or band on screen, not
+  recorded. The AI gets the same index via `healthForModel` (§HEALTH-AI). Held by `health.test.ts`,
+  `consistency.test.ts`.
+- **§HEALTH-INCOME — a month WITHOUT income is a month and counts** (via `fullyCoveredMonths`,
+  which — unlike `coveredMonths` — never falls back to months the ledger does not have).
 - **§IMPORTANCE-TREND:** `importanceByMonth` → `essential/discretionary/optional` in
   `/analytics/monthly-history`; the three shares sum to `spend`. `GROUP BY` the expression, not the alias.
 
@@ -254,6 +279,12 @@ The client never derives it.
   `SPEND_TX_COUNT`). `/analytics/compare` returns merged `rows` and `movers`; the noise floor is
   `MOVERS_FLOOR_UAH_MINOR` converted. A meaningless delta is shown without colour. Reports carry
   `charges_n`, `monthly_usual_uah`, `billing`, `delta_meaningful`. Held by `cadence.test.ts`.
+- **§FX-EXPOSURE** (`lib/finance/fx-exposure.ts`, `GET /insights/fx-exposure`): assets =
+  `computeSummary().byCurrency` converted (sums to `/summary` total); spend = canonical spend by
+  the OPERATION currency (`COALESCE(original_currency, currency_code)`), monthly over 3 complete
+  months; what-if = every non-base currency +10% vs the READER's base — base-relative by
+  definition, so excluded from the §BASE-CUR sweep and pinned by `fx-exposure.test.ts`. A what-if,
+  never worded as a forecast.
 - **§FX-COST — what conversion cost** (`lib/finance/fx.ts`): each side valued at ITS day's rate,
   compared in ₴, converted once; a day without a stored rate is skipped and counted (`unpriced`);
   no `STATS_JOINS`. Held by `fx-cost.test.ts`.
@@ -280,6 +311,28 @@ The client never derives it.
   be negative; no income → `shares: null`. `amountSum` already returns spend POSITIVE.
 - **§FLOOR** (`lib/finance/floor.ts`): floor = `burnShape(levels).recurring`, total = `sumLevels`;
   two runways, the full one stays primary; `lumpy` ≠ "optional".
+- **§FLOW-SERIES** (`lib/finance/flow-series.ts`): income and spend per COMPLETE month the ledger
+  fully covers, zero-filled — the ONE «typical month's income» (`seriesMean`). Empty for an empty
+  or brand-new ledger, and every reader treats empty as unmeasurable, not zero. Read by §HEALTH
+  and §COMMITTED.
+- **§COMMITTED** (`lib/finance/committed.ts`, `GET /insights/committed`): §FLOOR's floor ÷
+  §FLOW-SERIES income; `free = income − floor` (may be negative), `share` may exceed 1. Plans are
+  NOT added (a repeating subscription is already in the floor); the tax reserve is NOT in it (an
+  outstanding total, not a rate). Trend = the same two functions as of each of the last 6 month
+  starts; a point without income is dropped. Held by `insights.test.ts` (its floor IS §FLOOR's).
+- **§INCOME-CV** (`incomeCv`, `flow-series.ts`): population stddev ÷ mean over a ZERO-FILLED series
+  of the 6 complete covered months; null under 2 months or a zero mean. ONE definition for the
+  health index's stability, `/analytics/income` `stability.cv_pct` and §INCOME-RHYTHM (the income
+  card used to average only months that had income — the §HEALTH-INCOME bug). Held by
+  `income-rhythm.test.ts`.
+- **§INCOME-RHYTHM** (`lib/finance/income-rhythm.ts`, `GET /insights/income-rhythm`): longest gap
+  between arrivals (the running one included), days since the last, months with income ≥ §FLOOR,
+  and §INCOME-CV. Arrivals are §PAYDAY-EFFECT's events.
+- **§PAYDAY-EFFECT** (`lib/finance/payday-effect.ts`, `GET /insights/payday`): receipts = canonical
+  income ≥ ¼ of the §FLOW-SERIES typical month, merged within 3 days; discretionary = `SPEND_WHERE`,
+  not plan-linked, not `essential`; after-week vs the window's average week (from the ledger's
+  first row); only full weeks inside the last 6 complete months; < 3 events → null. Held by
+  `payday-effect.test.ts` (a ledger WITH the effect and one without).
 - **§CASH-PROJ** (`lib/finance/cash-projection.ts`, `GET /analytics/cash-projection`): scheduled
   money by date (`cashflowMoves`) + ordinary spend shaped by day-of-month/weekday weights +
   paydays (`detectPaydays`, median). No AI. The TOTAL is preserved, only the shape moves; ordinary
@@ -298,11 +351,28 @@ The client never derives it.
   Same scope in `lib/finance/category-drill.ts`. Held by `category-page.test.ts`.
 - **§CAT-PARTS:** rows selected by roll-up, grouped by leaf; the parent's own rows are a `self`
   share; shares sum to the page total; the trend starts at the category's first operation.
+- **§CAT-SHARE:** `share_of_total_pct` = the category's window total ÷ `periodTotals` over the SAME
+  window (spend; income for an income category), 0.1 precision; the shares of all top-level spend
+  categories sum to 100 (`category-page.test.ts`). Category 13 reports 0.
+- **§CAT-SETTINGS / §SUB-SETTINGS:** a category's importance, monthly envelope (top-level spend, month
+  view only) and name, and a plan's amount/period/count, category and other-names note, are edited
+  on their own pages, by explicit action. `PATCH /planned/:id` validates the schedule (integer
+  amount > 0, `month|week`, count 1–24) and re-links history after any change.
 - **§CAT-SHAPE** (`GET /categories/:id/shape`, `lib/finance/category-shape.ts`): importance
   inside the category, when money goes, how the month ends. Needs a SAMPLE (≥ 2 observations per
   bucket: weekday from 14 charges, day of month from 2 months); `null` is a REFUSAL, not zero; no
   forecast where an envelope already shows one; no importance for income. Held by
   `category-shape.test.ts`.
+
+## Search
+
+- **§QUERY-PARSE** (`lib/finance/query-parse.ts`, pure; `query-search.ts` feeds it): the search box
+  reads a sentence — amounts (`понад/менше/від/до/over/under/>/<`, ranges), Kyiv periods (relative,
+  month names = latest non-future occurrence, years), income/spend words, a category (longest
+  Cyrillic-folded name, inflections via a stem), exclusions (`без/крім/except/-x`). Every piece is a
+  chip (`GET /transactions/parse`); unrecognised words stay text, each must match (§CYR-CASE). Used by
+  the feed (`smart=1`, explicit panel filters win) AND by `find_transactions` (chat + MCP). A number
+  directly before a month word is never an amount. Held by `query-parse.test.ts`.
 
 ## Categorisation (deterministic first, AI last)
 

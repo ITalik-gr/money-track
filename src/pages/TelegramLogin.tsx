@@ -39,7 +39,7 @@ export function TelegramLogin({ onSignedIn }: { onSignedIn: () => void }) {
   useEffect(() => { void attempt(); }, [attempt]);
 
   return (
-    <div className="app tg-gate">
+    <div className="tg-gate">
       <div className="card tg-gate-card">
         <div className="label">Money Track</div>
         {/* Three states, three different sentences. A single "щось пішло не так" would make

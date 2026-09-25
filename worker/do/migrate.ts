@@ -54,7 +54,3 @@ export function runMigrations(sql: SqlStorage): MigrationReport {
   return report;
 }
 
-/** Names of all embedded migrations, in apply order. */
-export function migrationNames(): string[] {
-  return MIGRATIONS.map((m) => m.name);
-}

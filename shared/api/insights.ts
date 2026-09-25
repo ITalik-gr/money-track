@@ -97,3 +97,74 @@ export interface SpendFloor {
   floor_months: number | null;
   parts: FloorPart[];
 }
+
+// ---- §COMMITTED -------------------------------------------------------------
+
+export interface CommittedPoint {
+  /** The last COMPLETE month the point rests on. */
+  ym: string;
+  floor: number;
+  income: number | null;
+  /** floor ÷ income, 0..1+ (above 1 = the floor alone exceeds income). */
+  share: number | null;
+}
+
+/** How much of a typical month's income the recurring floor takes before any decision. */
+export interface CommittedShare {
+  /** §FLOOR — the repeating half of the burn. */
+  floor: number;
+  /** Mean monthly income over the complete months the ledger covers (§FLOW-SERIES); null with none. */
+  income: number | null;
+  /** income − floor; NEGATIVE when the floor alone outruns income. */
+  free: number | null;
+  share: number | null;
+  /** How many complete months `income` averages — the card says «за N міс». */
+  months: number;
+  /** Oldest first; points without income are dropped, not drawn at zero. */
+  trend: CommittedPoint[];
+}
+
+// ---- §PAYDAY-EFFECT ---------------------------------------------------------
+
+/** Discretionary spend in the week after income lands, against an ordinary week. */
+export interface PaydayEffect {
+  /** Income events (≥ ¼ of a typical month, merged within 3 days) whose full week was observed. */
+  events: number;
+  typical_week: number | null;
+  after_week: number | null;
+  /** after ÷ typical; null under 3 events or without a baseline. */
+  ratio: number | null;
+}
+
+// ---- §INCOME-RHYTHM ---------------------------------------------------------
+
+/** How income ARRIVES over the last six complete months. */
+export interface IncomeRhythm {
+  /** Complete months the ledger covers (§FLOW-SERIES). */
+  months: number;
+  /** Of those, how many had income ≥ the recurring floor (§FLOOR); null without a floor. */
+  covered_floor: number | null;
+  /** Longest wait between arrivals, the current one included; null without arrivals. */
+  longest_gap_days: number | null;
+  days_since_last: number | null;
+  /** §INCOME-CV as a percentage — the same figure the income card shows. */
+  cv_pct: number | null;
+}
+
+// ---- §FX-EXPOSURE -----------------------------------------------------------
+
+/** Which currencies the money and the spending sit in, and a ±10% what-if. Money in base minor units. */
+export interface FxExposure {
+  /** The reader's base currency code — «foreign» means anything else. */
+  base_currency: number;
+  /** Own funds per currency, converted; `share` of the absolute total, 0..1. */
+  assets: { currency_code: number; amount: number; share: number }[];
+  /** Average monthly spend per OPERATION currency over the last 3 complete months. */
+  spend: { currency_code: number; monthly: number; share: number }[];
+  /** The what-if size, in percent (10). */
+  move_pct: number;
+  /** Change in own funds if every foreign currency gains `move_pct` against the base. */
+  assets_delta: number;
+  /** Change in monthly spending under the same move. */
+  spend_delta_monthly: number;
+}

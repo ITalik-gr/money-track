@@ -27,9 +27,6 @@ function render(docs: { title: string; body: string }[]): string {
   return docs.map((d) => `# ${d.title}\n${d.body}`).join("\n\n---\n\n");
 }
 
-// Вбудований корпус без користувацького шару. Лишається як фолбек: якщо таблиці 0028 ще нема
-// на remote, чат має працювати по-старому, а не падати.
-export const KNOWLEDGE_CORPUS: string = [PREAMBLE, render(KNOWLEDGE_DOCS)].join("\n\n---\n\n");
 
 async function loadRows(db: AppDb): Promise<KnowledgeRow[]> {
   try {

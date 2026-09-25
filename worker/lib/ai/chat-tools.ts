@@ -13,6 +13,8 @@
  * `runFinanceTool`. A filter in one language against names stored in another silently returns
  * nothing, which the model then reports as "you have no such spending".
  */
+import { orLikeClause } from "../platform/text.ts";
+import { parseForReader } from "../finance/query-search.ts";
 import type { Env } from "../../env.ts";
 import type { ChatTool } from "./ai.ts";
 import { getRates } from "../finance/money.ts";
@@ -39,10 +41,6 @@ const READ_ONLY = new Set(["query_spend", "find_transactions", "list_categories"
 /** The read-only subset, for callers that are not the in-app chat. */
 export function financeReadTools(): ChatTool[] {
   return financeChatTools().filter((t) => READ_ONLY.has(t.name));
-}
-
-export function isReadOnlyTool(name: string): boolean {
-  return READ_ONLY.has(name);
 }
 
 /**
@@ -225,9 +223,28 @@ export async function runFinanceTool(env: Env, name: string, input: Record<strin
     if (to != null) { parts.push("t.time <= ?"); binds.push(to); }
     if (input.flow === "spend") parts.push("t.amount < 0");
     else if (input.flow === "income") parts.push("t.amount > 0");
-    if (typeof input.category === "string" && input.category.trim()) { parts.push(`${CAT_NAME} LIKE ?`); binds.push(`%${input.category.trim()}%`); }
-    if (typeof input.query === "string" && input.query.trim()) { const q = `%${input.query.trim()}%`; parts.push("(t.merchant LIKE ? OR t.comment LIKE ?)"); binds.push(q, q); }
-    if (typeof input.min_amount_uah === "number" && input.min_amount_uah > 0) { parts.push(`ABS(t.amount * ${mult}) >= ?`); binds.push(Math.round(input.min_amount_uah * 100)); }
+    // §CYR-CASE: `orLikeClause`, never a bare LIKE — «продукти» must find «Продукти».
+    const like = (cols: string[], term: string) => { const m = orLikeClause(cols, term); parts.push(m.sql); binds.push(...m.binds); };
+    if (typeof input.category === "string" && input.category.trim()) like([CAT_NAME], input.category.trim());
+    // §QUERY-PARSE: the same reading of a sentence as the app's own search box, so an assistant that
+    // writes «кава понад 200 у травні» into `query` gets the filters, not a substring that matches
+    // nothing. Explicit parameters win; whatever the parser does not claim stays a text match.
+    let minMinor = typeof input.min_amount_uah === "number" && input.min_amount_uah > 0 ? Math.round(input.min_amount_uah * 100) : null;
+    if (typeof input.query === "string" && input.query.trim()) {
+      const pq = await parseForReader(env.DB, loc, input.query.trim(), Math.floor(Date.now() / 1000));
+      if (from == null && pq.from != null) { parts.push("t.time >= ?"); binds.push(pq.from); }
+      if (to == null && pq.to != null) { parts.push("t.time <= ?"); binds.push(pq.to); }
+      if (!input.flow || input.flow === "any") { if (pq.type === "expense") parts.push("t.amount < 0"); else if (pq.type === "income") parts.push("t.amount > 0"); }
+      if (!input.category && (pq.catparent ?? pq.category) != null) {
+        parts.push(pq.catparent != null ? "COALESCE(c.parent_id, t.category_id) = ?" : "t.category_id = ?");
+        binds.push(pq.catparent ?? pq.category);
+      }
+      if (minMinor == null && pq.amin != null) minMinor = Math.round(pq.amin * 100);
+      if (pq.amax != null) { parts.push(`ABS(t.amount * ${mult}) <= ?`); binds.push(Math.round(pq.amax * 100)); }
+      for (const w of pq.text?.split(/\s+/).filter((x) => x.length >= 2) ?? []) like(["t.merchant", "t.comment"], w);
+      for (const w of pq.exclude) { const m = orLikeClause(["COALESCE(t.merchant, '')", "COALESCE(t.comment, '')"], w); parts.push(`NOT ${m.sql}`); binds.push(...m.binds); }
+    }
+    if (minMinor != null) { parts.push(`ABS(t.amount * ${mult}) >= ?`); binds.push(minMinor); }
     const limit = Math.min(Math.max(Math.trunc(Number(input.limit) || 12), 1), 25);
     const rows = await env.DB.prepare(
       `SELECT t.id AS id, t.time AS time, t.merchant AS merchant, t.comment AS comment,

@@ -166,12 +166,15 @@ function CatSection({ title, groups, onEdit, onAddSub, onDelete }: {
             </div>
             <div className="cat-subs">
               {children.map((ch) => (
-                <button key={ch.id} className="cat-sub" onClick={() => onEdit(ch)}>
+                // The ✕ sits INSIDE this button (a nested control is invalid), so the keyboard gets
+                // Delete/Backspace on the chip instead, announced through aria-keyshortcuts (C21).
+                <button key={ch.id} className="cat-sub" onClick={() => onEdit(ch)} aria-keyshortcuts="Delete"
+                  onKeyDown={(e) => { if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); onDelete(ch); } }}>
                   <span className="cat-sub-dot" style={{ background: ch.color ?? parent.color ?? "var(--muted)" }}>
                     <CategoryIcon slug={ch.icon} size={12} />
                   </span>
                   {ch.name}
-                  <span className="cat-sub-x" onClick={(e) => { e.stopPropagation(); onDelete(ch); }} aria-label={t("common.delete")}>✕</span>
+                  <span className="cat-sub-x" onClick={(e) => { e.stopPropagation(); onDelete(ch); }} aria-hidden>✕</span>
                 </button>
               ))}
               <button className="cat-sub cat-sub-add" onClick={() => onAddSub(parent)}>＋ {t("cat.addSubcategory")}</button>

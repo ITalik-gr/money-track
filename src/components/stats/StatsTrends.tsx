@@ -204,7 +204,7 @@ export function DeeperAnalytics({ series, sign, from, to, currency }: {
               <div className="split-seg" style={{ width: `${100 - weekendPct}%`, background: "var(--c-cobalt, var(--accent))" }}>{100 - weekendPct}%</div>
             </HoverTip>
             <HoverTip content={<><div className="tip-lbl">{t("stats.patterns.weekendLabel")}</div><div className="r">{formatMinor(weekendSum, { decimals: false })} {sign} · {weekendPct}%</div></>}>
-              <div className="split-seg alt" style={{ width: `${weekendPct}%`, background: "var(--c-teal)" }}>{weekendPct}%</div>
+              <div className="split-seg" style={{ width: `${weekendPct}%`, background: "var(--c-teal)" }}>{weekendPct}%</div>
             </HoverTip>
           </div>
           <div className="split-legend">

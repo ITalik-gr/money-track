@@ -1,34 +1,57 @@
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { Layout } from "./components/layout/Layout.tsx";
-import { Dashboard } from "./pages/Dashboard.tsx";
-import { Transactions } from "./pages/Transactions.tsx";
-import { TxDetail } from "./pages/TxDetail.tsx";
-import { Add } from "./pages/Add.tsx";
-import { Accounts } from "./pages/Accounts.tsx";
-import { Stats } from "./pages/Stats.tsx";
-import { Merchant } from "./pages/Merchant.tsx";
-import { Reports, ReportDetail } from "./pages/Reports.tsx";
-import { Wrapped } from "./pages/Wrapped.tsx";
-import { Advisor } from "./pages/Advisor.tsx";
-import { Chat } from "./pages/Chat.tsx";
-import { Plan } from "./pages/Plan.tsx";
-import { Business } from "./pages/Business.tsx";
-import { Category } from "./pages/Category.tsx";
-import { Subscription } from "./pages/Subscription.tsx";
-import { Categories } from "./pages/Categories.tsx";
-import { Goals } from "./pages/Goals.tsx";
-import { Subscriptions } from "./pages/Subscriptions.tsx";
-import { Events } from "./pages/Events.tsx";
-import { EventDetail } from "./pages/EventDetail.tsx";
-import { Notifications } from "./pages/Notifications.tsx";
-import { Setup } from "./pages/Setup.tsx";
-import { Login } from "./pages/Login.tsx";
-import { Landing } from "./pages/Landing.tsx";
-import { TelegramLogin } from "./pages/TelegramLogin.tsx";
 import { telegramInitData } from "./lib/telegram.ts";
-import { useState } from "react";
+import { lazy, Suspense, useState, type ComponentType } from "react";
 import { useGetMeQuery } from "./store/api.ts";
 import { useFopVisible } from "./components/fop/gate.ts";
+
+
+/**
+ * Route-level code splitting (2026-09-25). Every page used to be imported eagerly, so the first
+ * load — including the landing a logged-out visitor sees — shipped ONE 919 kB chunk (249 kB gzip)
+ * holding all 25 pages. Each page is now its own chunk, fetched when its route is first opened;
+ * only the layout stays in the entry chunk. The dashboard is lazy TOO, on purpose: it pulls in
+ * Recharts (the 399 kB `charts` chunk), and eagerly it made every logged-out visitor of the landing
+ * download a charting library they never see. For a returning user the cost is nil — the PWA
+ * precache holds every chunk, so the dashboard comes from the service worker, not the network.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lazyPage<K extends string, P extends Record<string, any> = Record<string, never>>(
+  load: () => Promise<Record<K, ComponentType<P>>>, name: K,
+) {
+  const C = lazy<ComponentType<P>>(() => load().then((m) => ({ default: m[name] as ComponentType<P> })));
+  // `fallback={null}`: the layout (nav, header) is already on screen; a spinner for a chunk that
+  // usually arrives in tens of milliseconds would flash more than it informs.
+  return function Page(props: P) {
+    return <Suspense fallback={null}><C {...props} /></Suspense>;
+  };
+}
+const Transactions = lazyPage(() => import("./pages/Transactions.tsx"), "Transactions");
+const TxDetail = lazyPage(() => import("./pages/TxDetail.tsx"), "TxDetail");
+const Add = lazyPage(() => import("./pages/Add.tsx"), "Add");
+const Accounts = lazyPage(() => import("./pages/Accounts.tsx"), "Accounts");
+const Stats = lazyPage(() => import("./pages/Stats.tsx"), "Stats");
+const Merchant = lazyPage(() => import("./pages/Merchant.tsx"), "Merchant");
+const Reports = lazyPage(() => import("./pages/Reports.tsx"), "Reports");
+const ReportDetail = lazyPage(() => import("./pages/Reports.tsx"), "ReportDetail");
+const Wrapped = lazyPage(() => import("./pages/Wrapped.tsx"), "Wrapped");
+const Advisor = lazyPage(() => import("./pages/Advisor.tsx"), "Advisor");
+const Chat = lazyPage(() => import("./pages/Chat.tsx"), "Chat");
+const Plan = lazyPage(() => import("./pages/Plan.tsx"), "Plan");
+const Business = lazyPage(() => import("./pages/Business.tsx"), "Business");
+const Category = lazyPage(() => import("./pages/Category.tsx"), "Category");
+const Subscription = lazyPage(() => import("./pages/Subscription.tsx"), "Subscription");
+const Categories = lazyPage(() => import("./pages/Categories.tsx"), "Categories");
+const Goals = lazyPage(() => import("./pages/Goals.tsx"), "Goals");
+const Subscriptions = lazyPage(() => import("./pages/Subscriptions.tsx"), "Subscriptions");
+const Events = lazyPage(() => import("./pages/Events.tsx"), "Events");
+const EventDetail = lazyPage(() => import("./pages/EventDetail.tsx"), "EventDetail");
+const Notifications = lazyPage(() => import("./pages/Notifications.tsx"), "Notifications");
+const Dashboard = lazyPage(() => import("./pages/Dashboard.tsx"), "Dashboard");
+const Setup = lazyPage(() => import("./pages/Setup.tsx"), "Setup");
+const Login = lazyPage(() => import("./pages/Login.tsx"), "Login");
+const Landing = lazyPage(() => import("./pages/Landing.tsx"), "Landing");
+const TelegramLogin = lazyPage(() => import("./pages/TelegramLogin.tsx"), "TelegramLogin");
 
 /** §FOP-GATE — the route half of the gate; `useFopVisible` is its single source of truth. */
 function BusinessRoute() {

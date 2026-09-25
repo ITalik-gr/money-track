@@ -15,8 +15,6 @@ import type { AiChange } from "../../shared/api/ai.ts";
 // what the app changed on its own, and the undo is the same.
 export const AUDITED_FIELDS = ["category_id", "real_category_id", "is_transfer", "ai_note", "merchant"] as const;
 export type AuditedField = (typeof AUDITED_FIELDS)[number];
-export const isAuditedField = (v: unknown): v is AuditedField =>
-  AUDITED_FIELDS.includes(v as AuditedField);
 
 /** How many entries are kept. A year of enrichment would otherwise outgrow the data it describes. */
 const MAX_ROWS = 500;

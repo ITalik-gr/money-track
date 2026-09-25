@@ -16,6 +16,7 @@ import {
 } from "../store/api.ts";
 import type { AiDetectResult, RecurringCandidate } from "../../shared/api/index.ts";
 import { Money } from "../components/ui/Money.tsx";
+import { SubsStackCard } from "../components/planning/SubsStack.tsx";
 import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { CashflowCalendar } from "../components/stats/CashflowCalendar.tsx";
@@ -177,6 +178,8 @@ export function Subscriptions() {
           </div>
         </div>
 
+        <SubsStackCard />
+
         {/*
           §INCOME-PLAN — expected inflows get their OWN section, above the subscriptions.
           They live in the same table and are created by the same form, but mixing them into the
@@ -276,7 +279,28 @@ export function Subscriptions() {
                       <span className="sub-badge done">{t("sub.finished")}</span>
                     ) : (
                       <>
-                        <span className="sub-badge">{t("sub.next")} {fmtDate.format(nextCharge(p) * 1000)}</span>
+                        {(() => {
+                          // §PLAN-STATE: a plan whose current charge is missing must not lead with next
+                          // month's date — that is exactly what the YouTube card did. The expected date
+                          // comes first, marked; a changed price rides alongside the ordinary date.
+                          const st = actualBy.get(p.id)?.state;
+                          const overdue = st && (st.kind === "late" || st.kind === "missing" || st.kind === "stopped");
+                          if (overdue && st.due_at != null) {
+                            const word = st.kind === "late" ? t("planState.badgeLate")
+                              : st.kind === "missing" ? t("planState.badgeMissing") : t("planState.badgeStopped");
+                            return (
+                              <span className={`sub-badge ${st.kind === "late" ? "warn" : "bad"}`}>
+                                {word} · {t("planState.expected").toLowerCase()} {fmtDate.format(st.due_at * 1000)}
+                              </span>
+                            );
+                          }
+                          return (
+                            <>
+                              <span className="sub-badge">{t("sub.next")} {fmtDate.format(nextCharge(p) * 1000)}</span>
+                              {st?.kind === "changed" && <span className="sub-badge warn">{t("planState.badgeChanged")}</span>}
+                            </>
+                          );
+                        })()}
                         {rem != null && <span className="sub-rem">{t("sub.remaining", { n: rem })}</span>}
                         {(() => {
                           // Детект «мертвої»: активна >60 днів, але поряд НЕ видно фактичних списань → лише підказка.
@@ -312,7 +336,7 @@ export function Subscriptions() {
         )}
 
         {topExpensive.length >= 3 && (
-          <div className="card top-subs-card">
+          <div className="card">
             <div className="section-head"><h2>{t("sub.expensive")}</h2><span className="label">{t("sub.perMonthShort")}</span></div>
             <div className="top-subs">
               {topExpensive.map(({ p, uah }) => (

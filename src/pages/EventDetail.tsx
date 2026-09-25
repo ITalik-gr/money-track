@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useNavigate, useParams } from "react-router-dom";
 import { useGetEventQuery, useEvaluateGroupMutation, useChatGroupMutation, useAddEventPlannedMutation, useDeleteEventPlannedMutation } from "../store/api.ts";
@@ -26,9 +27,11 @@ export function EventDetail() {
   const t = useT();
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const { data, isLoading } = useGetEventQuery(Number(id), { skip: !id });
+  const { data, isLoading, error, refetch } = useGetEventQuery(Number(id), { skip: !id });
 
   if (isLoading) return <div className="empty">{t("common.loading")}</div>;
+  // C17: a failed request used to fall through to «group not found».
+  if (error) return <ErrorNote error={error} what={t("evt.notFound")} onRetry={refetch} />;
   if (!data?.event) return <div className="card empty">{t("evt.notFound")}</div>;
 
   // Суми беремо з сервера (зведені в ₴), а не рахуємо тут — інакше сторінка й список груп
@@ -213,7 +216,7 @@ function GroupAiPanel({ eventId, groupName }: { eventId: number; groupName: stri
             {(evalResult.facts ?? []).map((f, i) => (
               <div key={i} className="grp-fact">
                 <span className={`grp-fact-dot ${f.tone ?? "neutral"}`} />
-                <span className="grp-fact-label">{renderMarkdown(f.label)}</span>
+                <span>{renderMarkdown(f.label)}</span>
                 {f.amount != null && <span className="grp-fact-amt">{f.amount.toLocaleString(localeTag(getLocale()))} {baseSign()}</span>}
               </div>
             ))}

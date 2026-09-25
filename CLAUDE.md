@@ -4,8 +4,8 @@
 > in `ROADMAP.md`. Everything else is here, one or two sentences per rule. The story behind each
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
-> In production (`https://money.italik.dev`). Migrations: `finance` to **0054**, `directory` to
-> **0011**. Lints **C1–C15**.
+> In production (`https://money.italik.dev`). Migrations: `finance` to **0055**, `directory` to
+> **0011**. Lints **C1–C21**.
 
 ## Documents
 
@@ -96,7 +96,12 @@ C1 no SQL in routes/services · C2/C4 API shapes only in `shared/api/` · C3 fil
 writes · C7 route order · C8 `index.css` imports only · C9 every class has a rule and vice versa ·
 C10 one conversion target, no `₴` literals · C11 no `@media` rule killed by a later plain rule ·
 C12 no UTC date parts in the worker · C13 worker-first list · C14 own-funds formula · C15 no
-undefined `var(--x)`. Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
+undefined `var(--x)` · C16 no `LOWER(…) LIKE` in worker SQL (§CYR-CASE: SQLite folds ASCII
+only — use `orLikeClause`/`likeVariants` from `lib/platform/text.ts`) · C17 a component rendering
+`?? []` from a query has an error branch (exceptions listed with reasons, only shrink) · C18 every
+§TAG cited in code is defined in CLAUDE.md / docs / DESIGN.md (49 legacy ids, shrinking) · C19 no
+export that nothing uses (a short KEEP list with reasons) · C20 no CSS declaration always overridden
+by a later rule for the same selector · C21 a clickable div/span/li has a role (keyboard-reachable). Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
 `gen-migrations --check` (regenerate the DO embed after touching `migrations/`). Re-record a golden
 (`UPDATE_GOLDEN=1`) only for a deliberate, explained change.
 

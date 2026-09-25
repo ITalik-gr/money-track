@@ -90,9 +90,6 @@ export async function indexBatch(env: Env, rows: IndexableTx[]): Promise<number>
   return withText.length;
 }
 
-export async function removeFromIndex(env: Env, ids: string[]): Promise<void> {
-  if (ids.length) await env.TX_INDEX.deleteByIds(ids.map((id) => `${env.USER_ID}:${id}`));
-}
 
 export interface SemanticHit { id: string; score: number }
 

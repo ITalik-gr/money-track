@@ -337,3 +337,35 @@ test("§CAT-PAGE: the parts of a category sum to the category", async () => {
       "adding a child must not move the parent's own total");
   } finally { restore(); }
 });
+
+/**
+ * §CAT-SHARE — «N% усіх витрат» on every top-level spend category, over one window, adds up to the
+ * whole. A share whose denominator is a different population than the numerator's (say, spend
+ * WITHOUT refunds against a category total WITH them) would still look plausible on each page on
+ * its own; only the sum can catch it. Rounding is to 0.1, so the sum may drift by 0.05 per category.
+ */
+test("§CAT-SHARE: the shares of all top-level spend categories add up to 100%", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const { api } = await import("../routes/api/index.ts");
+    const { testEnv } = await import("./harness.ts");
+    const db = migratedDb(); seed(db);
+    const env = testEnv(db);
+    const roots = db.raw.prepare(
+      "SELECT id FROM categories WHERE parent_id IS NULL AND COALESCE(is_income, 0) = 0",
+    ).all() as { id: number }[];
+    const window = "?from=0&to=99999999999";
+    let sum = 0;
+    let counted = 0;
+    for (const r of roots) {
+      const res = await api.request(`/categories/${r.id}/overview${window}`, { method: "GET" }, env);
+      assert.equal(res.status, 200);
+      const o = await res.json() as { share_of_total_pct: number | null };
+      if (o.share_of_total_pct != null) { sum += o.share_of_total_pct; counted++; }
+    }
+    assert.ok(counted > 1, "the fixture spends in several categories");
+    // Category 13 («Перекази і зняття») is in the loop too: the canon's spend excludes it, so its page
+    // reports 0% — which is itself part of the claim (it must not steal a share from real spending).
+    assert.ok(Math.abs(sum - 100) <= 0.05 * counted + 0.001, `shares summed to ${sum}`);
+  } finally { restore(); }
+});

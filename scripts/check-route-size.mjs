@@ -30,7 +30,11 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const DIRS = ["worker/routes", "worker/services", "worker/lib"];
+// `worker/repo` joined on 2026-09-25. It had been outside the check since the ARCH refactor, and
+// two of its files had quietly passed 900 lines (`analytics.ts` 1006, `transactions.ts` 915) — the
+// same drift C3 exists to stop, in the one layer nobody was measuring. Entered at their current
+// sizes below: they may only shrink, and a new repo file starts under the ordinary cap.
+const DIRS = ["worker/routes", "worker/services", "worker/lib", "worker/repo"];
 const CAP = 400;
 /**
  * How far under its exception a file may sit before the allowance counts as stale.
@@ -56,6 +60,14 @@ const SLACK = 40;
  * Files allowed above CAP. ONLY EVER GOES DOWN — delete the line once a file is under the cap.
  */
 const EXCEPTIONS = {
+  // worker/repo, entered 2026-09-25 at the sizes they had (see DIRS). Seams already visible in them:
+  // `analytics.ts` holds health, insights and drill queries side by side; `transactions.ts` the feed,
+  // the receipt and the reimbursement queries.
+  "worker/repo/analytics.ts": 971,   // 1006 → 971 the same night: `health_history` → repo/health.ts
+  "worker/repo/transactions.ts": 915,
+  "worker/repo/planning.ts": 521,
+  "worker/repo/categories.ts": 503,
+  "worker/repo/tax.ts": 476,
   // 19 dense reporting handlers over one prefix. Splitting it further means splitting `/analytics`
   // itself into sub-domains, which is a design decision and not a mechanical move.
   // 2026-08-14 (§INCOME-PLAN): 720 → 687. Adding expected income pushed this file over, and the
@@ -89,7 +101,9 @@ const EXCEPTIONS = {
   // the slack was 80 and the drift was 74, so it missed by six lines. The lesson is not the one
   // the first note drew: it is that C8 re-derived the same constant as 40 three days earlier and
   // nobody reconciled the two. `SLACK` is now 40 and this case would fire.
-  "worker/lib/ai/advisor.ts": 695,
+  // 2026-09-25: 695 → 689 — stale copies of the health types removed; the index reaches the
+  // context through `healthForModel` in `health.ts`, one spread line here.
+  "worker/lib/ai/advisor.ts": 689,
   // The notification centre: one drafting function per event kind, plus the Telegram push.
   // 2026-08-27: 1000 → 861. The three guards added after «Rent due in 11 days» (calendar, language,
   // repetition) pushed the file over, and the answer was a seam rather than a bigger number — the
@@ -108,7 +122,10 @@ const EXCEPTIONS = {
   // its job. Seventh seam, again one the file had already drawn in prose: the comment above
   // `draftBigTx` explained why those two branches read raw `t.amount` instead of the canon, i.e.
   // why they are not like their neighbours. They are now `drafts-tx.ts`.
-  "worker/lib/messaging/notify.ts": 619,
+  // 2026-09-25: 619 → 597. §HEALTH-TREND needed the daily run to record the index, and the file had
+  // one line of room. Eighth seam: `draftHealthDrop` → `drafts-health.ts`, next to the recorder it
+  // now depends on — the only two functions in the feed that touch `health_history`.
+  "worker/lib/messaging/notify.ts": 597,
   // The canon itself. Long ON PURPOSE — this is the file the whole project points at when it says
   // "one number, one home", and cutting it up would give that number two homes again.
   // 2026-08-27: 500 → 398, and the exception is kept only because the file is still over the cap.

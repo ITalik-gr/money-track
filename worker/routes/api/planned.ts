@@ -8,8 +8,9 @@ import { monthlyPlannedUAH } from "../../lib/finance/subscriptions.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, idParam } from "./_shared.ts";
+import { createPlan, type NewPlanBody } from "../../services/plans.ts";
 import type { PlannedActual } from "../../../shared/types.ts";
-import type { UpcomingSubs, RecurringCandidate, PlanFromHabit, PlannedRow, AiDetectResult, SubscriptionOverview } from "../../../shared/api/planning.ts";
+import type { UpcomingSubs, RecurringCandidate, PlanFromHabit, PlannedRow, AiDetectResult, SubscriptionOverview, AcceptPriceResult, SubStack } from "../../../shared/api/planning.ts";
 
 export const planned = apiRoutes();
 
@@ -17,6 +18,12 @@ export const planned = apiRoutes();
 planned.get("/planned/actuals", async (c) => {
   const { plannedActuals } = await import("../../lib/finance/subscriptions.ts");
   return c.json(await plannedActuals(c.env.DB) satisfies PlannedActual[]);
+});
+
+// §SUB-STACK — the subscriptions as one thing. A literal path, so ABOVE every `/planned/:id` (C7).
+planned.get("/planned/stack", async (c) => {
+  const { subscriptionStack } = await import("../../lib/finance/sub-stack.ts");
+  return c.json(await subscriptionStack(c.env, await getRates(c.env)) satisfies SubStack);
 });
 
 planned.get("/planned", async (c) => {
@@ -33,49 +40,9 @@ planned.get("/planned", async (c) => {
 });
 
 planned.post("/planned", async (c) => {
-  const b = await c.req.json<{
-    title: string; kind: "subscription" | "installment" | "income"; total_amount?: number;
-    period_amount?: number; period: "month" | "week"; period_count?: number; start_date: number;
-    category_id?: number; account_id?: string; currency_code?: number; amount_varies?: boolean;
-  }>();
-  // §INCOME-PLAN: an expected inflow is the same schedule with the sign flipped, so it reuses
-  // everything here. `amount_varies` only marks the figure as an ESTIMATE — the owner's actual
-  // constraint is that income is neither the same size nor on time, and a number presented as
-  // exact when it is not is the thing that makes the forecast untrustworthy.
-  if (b.kind === "income" && !(b.period_amount && b.period_amount > 0)) {
-    return c.json({ error: st(c.get("locale"), "errIncomeAmount") }, 400);
-  }
-  const periodCount = Math.max(1, Math.round(b.period_count ?? 1)); // «кожні N періодів» (§SUB4)
-  // Installment auto-math (§6.5): derive occurrences/end_date from total & per-period.
-  let occurrences: number | null = null;
-  let end_date: number | null = null;
-  if (b.kind === "installment" && b.total_amount && b.period_amount) {
-    occurrences = Math.ceil(b.total_amount / b.period_amount);
-    const step = (b.period === "week" ? 7 * 86400 : 30 * 86400) * periodCount;
-    end_date = b.start_date + occurrences * step;
-  }
-  const id = await planningRepo.create(c.env.DB, {
-    title: b.title, kind: b.kind,
-    total_amount: b.total_amount ?? null, period_amount: b.period_amount ?? null,
-    period: b.period, period_count: periodCount, start_date: b.start_date,
-    end_date, occurrences,
-    category_id: b.category_id ?? null, account_id: b.account_id ?? null,
-    currency_code: b.currency_code ?? 980,
-    amount_varies: !!b.amount_varies,
-  });
-  // §PLAN-LINK: a plan is declared BECAUSE it has been charging for a while, so the history it
-  // describes already exists. Without this the plan opened with zero charges and every screen said
-  // «списань не видно» about a subscription paid every month — see `linkPlanHistory`.
-  // ⚠️ An income plan has no outflow to link, and linking is best-effort: failing to attach the
-  // past must not fail the creation the user asked for.
-  let linked = 0;
-  if (b.kind !== "income") {
-    try {
-      const { linkPlanHistoryById } = await import("../../lib/finance/subscriptions.ts");
-      linked = (await linkPlanHistoryById(c.env.DB, id)).linked;
-    } catch { /* the plan exists; the back-link can be redone from Settings */ }
-  }
-  return c.json({ ok: true, id, occurrences, end_date, linked });
+  const r = await createPlan(c.env.DB, await c.req.json<NewPlanBody>());
+  if ("error" in r) return c.json({ error: st(c.get("locale"), "errIncomeAmount") }, 400);
+  return c.json({ ok: true, ...r });
 });
 
 /**
@@ -188,6 +155,18 @@ planned.post("/planned/:id/relink", async (c) => {
   return c.json(await linkPlanHistoryById(c.env.DB, id));
 });
 
+/**
+ * §PLAN-REPRICE — «yes, this is the new price». The plan's amount changes only through a person's
+ * click, and the amount itself comes from the ledger (`acceptLastPrice`), not from the body.
+ */
+planned.post("/planned/:id/accept-price", async (c) => {
+  const id = idParam(c, "id");
+  if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  const r = await planningRepo.acceptLastPrice(c.env.DB, id);
+  if (!r) return c.json({ error: st(c.get("locale"), "errPriceNotAccepted") }, 409);
+  return c.json({ ok: true, ...r } satisfies AcceptPriceResult);
+});
+
 planned.delete("/planned/:id", async (c) => {
   const id = idParam(c);
   if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
@@ -197,14 +176,32 @@ planned.delete("/planned/:id", async (c) => {
 
 // §R5: редагувати підписку (наразі — опис для AI; розширювано за потреби).
 planned.patch("/planned/:id", async (c) => {
-  const b = await c.req.json<{ note?: string | null; category_id?: number | null }>();
+  const b = await c.req.json<{
+    note?: string | null; category_id?: number | null;
+    period_amount?: number; period?: string; period_count?: number;
+  }>();
   const id = idParam(c, "id");
   if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
+  // The schedule is validated HERE: a zero or fractional amount, or a period the schedule code does
+  // not know, would silently break `nextChargeUnix` and every total that reads it.
+  if (b.period_amount !== undefined && !(Number.isInteger(b.period_amount) && b.period_amount > 0)) {
+    return c.json({ error: st(c.get("locale"), "errPlanSchedule") }, 400);
+  }
+  if (b.period !== undefined && b.period !== "month" && b.period !== "week") {
+    return c.json({ error: st(c.get("locale"), "errPlanSchedule") }, 400);
+  }
+  if (b.period_count !== undefined && !(Number.isInteger(b.period_count) && b.period_count >= 1 && b.period_count <= 24)) {
+    return c.json({ error: st(c.get("locale"), "errPlanSchedule") }, 400);
+  }
   await planningRepo.update(c.env.DB, id, {
     ...(b.note !== undefined ? { note: b.note?.trim() || null } : {}),
     ...(b.category_id !== undefined ? { category_id: b.category_id } : {}),
+    ...(b.period_amount !== undefined ? { period_amount: b.period_amount } : {}),
+    ...(b.period !== undefined ? { period: b.period as "month" | "week" } : {}),
+    ...(b.period_count !== undefined ? { period_count: b.period_count } : {}),
   });
-  // §PLAN-LINK: both editable fields CHANGE WHAT THE PLAN MATCHES. The note carries the plan's
+  // §PLAN-LINK: every editable field CHANGES WHAT THE PLAN MATCHES — the amount gates matching
+  // (±10%, §PLAN-REPRICE beyond it). The note carries the plan's
   // other names (§SUB-ALIAS — «X Corp.» is the owner's Twitter), and the category is what an
   // uncategorised charge can now be filed under. Adding either and seeing nothing happen is the
   // same dead end the create route had.

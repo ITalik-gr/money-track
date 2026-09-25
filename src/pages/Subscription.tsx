@@ -11,6 +11,8 @@ import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { EmptyCard } from "../components/ui/EmptyCard.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
+import { PlanStateNote } from "../components/planning/PlanStateNote.tsx";
+import { SubSettings } from "../components/planning/SubSettings.tsx";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { currencySign } from "../../shared/currency.ts";
 
@@ -92,6 +94,7 @@ export function Subscription() {
   if (isError) return <ErrorNote error={error} what={t("nav.subs")} onRetry={refetch} />;
   if (!data) return null;
   const { plan, actual, share } = data;
+  const overdue = data.state.kind === "late" || data.state.kind === "missing" || data.state.kind === "stopped";
 
   // The chart is drawn in the BILLED currency when every charge shares one — that is where a price
   // rise is visible at all. A mixed history (the biller switched currency) has no such axis, so it
@@ -153,6 +156,11 @@ export function Subscription() {
         </div>
       </div>
 
+      <PlanStateNote
+        planId={plan.id} state={data.state} declared={plan.period_amount} currency={plan.currency_code}
+        onRelink={findMissing} relinking={relinking}
+      />
+
       <div className="cat-page-stats">
         {/* The monthly burden FIRST — the canonical §SUB-MONTH figure, a quarterly plan already
             divided by three. It is the number every other screen uses for this plan. */}
@@ -179,15 +187,22 @@ export function Subscription() {
           </div>
         </div>
 
+        {/* §PLAN-STATE: while the current cycle's charge is missing, the date that matters is the
+            one it was EXPECTED on. Announcing next month's date instead is what the YouTube card did
+            — a confident future for a plan whose present had gone unnoticed. */}
         <div className="card merchant-stat">
-          <div className="label">{t("sub.nextCharge")}</div>
-          <div className="merchant-stat-v num-hero">
-            {data.next_charge ? t("sub.inDays", { n: data.next_charge.in_days }) : "—"}
+          <div className="label">{overdue ? t("planState.expected") : t("sub.nextCharge")}</div>
+          <div className={`merchant-stat-v num-hero${overdue ? " neg" : ""}`}>
+            {overdue && data.state.due_at != null
+              ? fmtDay.format(new Date(data.state.due_at * 1000))
+              : data.next_charge ? t("sub.inDays", { n: data.next_charge.in_days }) : "—"}
           </div>
           <div className="merchant-stat-sub">
-            {data.next_charge
-              ? fmtDay.format(new Date(data.next_charge.at * 1000))
-              : t("sub.noNextCharge")}
+            {overdue
+              ? (data.next_charge ? <>{t("sub.nextCharge")} {fmtDay.format(new Date(data.next_charge.at * 1000))}</> : "")
+              : data.next_charge
+                ? fmtDay.format(new Date(data.next_charge.at * 1000))
+                : t("sub.noNextCharge")}
           </div>
         </div>
 
@@ -242,6 +257,30 @@ export function Subscription() {
                   fix that itself. Pointing at a problem you could solve and not offering to is
                   worse than staying quiet. */}
               <button className="btn ghost sm" disabled={relinking} onClick={findMissing}>{t("sub.relink")}</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* §SUB-STACK — the decision this page exists for, as a simulation: nothing changes until a
+          person acts. Points of income use the same typical income as «Скільки доходу вже зайнято». */}
+      {plan.is_active && data.cancel.monthly > 0 && (
+        <div className="card sub-cancel">
+          <div className="label">{t("subp.ifCancelled")}</div>
+          <div className="sub-cancel-row">
+            <span><b><Money minor={data.cancel.monthly} decimals={false} /></b>{t("stack.perMonthSuffix")}</span>
+            <span><b><Money minor={data.cancel.annual} decimals={false} /></b>{t("subp.perYearSuffix")}</span>
+            {data.cancel.income_share_pp != null && (
+              <span>{t("subp.incomePoints", { n: data.cancel.income_share_pp })}</span>
+            )}
+          </div>
+          {data.trial && (
+            <div className="sub-cancel-note">
+              {t("subp.trialLine", {
+                from: fmtDay.format(new Date(data.trial.trial_at * 1000)),
+                since: fmtDay.format(new Date(data.trial.paid_since * 1000)),
+              })}{" "}
+              <Money minor={data.trial.trial_amount} currency={plan.currency_code} /> → <Money minor={data.trial.paid_amount} currency={plan.currency_code} decimals={false} />
             </div>
           )}
         </div>
@@ -340,12 +379,26 @@ export function Subscription() {
             {data.charges.slice(0, 12).map((c) => (
               <Link key={c.id} className="sub-charge-row" to={`/tx/${c.id}`}>
                 <span>{fmtDay.format(new Date(c.time * 1000))}</span>
-                <Money minor={c.amount} currency={c.currency_code} decimals={false} />
+                <span className="sub-charge-amt">
+                  {/* §PLAN-REPRICE: a charge linked at a price other than the declared one says so, so
+                      «why is 179 in a 100 plan» is answered on the row itself. Same currency only. */}
+                  {plan.period_amount && c.currency_code === plan.currency_code
+                    && Math.abs(c.amount - plan.period_amount) > plan.period_amount * 0.1 && (
+                    <span className={`sub-charge-diff ${c.amount > plan.period_amount ? "neg" : "pos"}`}>
+                      {c.amount > plan.period_amount ? "+" : "−"}{Math.round(Math.abs(c.amount - plan.period_amount) / plan.period_amount * 100)}%
+                    </span>
+                  )}
+                  <Money minor={c.amount} currency={c.currency_code} decimals={false} />
+                </span>
               </Link>
             ))}
           </div>
         </section>
       )}
+
+      <section>
+        <SubSettings plan={plan} />
+      </section>
     </>
   );
 }

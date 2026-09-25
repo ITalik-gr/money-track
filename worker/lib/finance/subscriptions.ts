@@ -1,5 +1,4 @@
 import { toBaseMinor, type Rates } from "./money.ts";
-import { localParts, localWallTime } from "./time.ts";
 
 /**
  * Розклад і місячний тягар плану — і НІЧОГО більше.
@@ -9,16 +8,19 @@ import { localParts, localWallTime } from "./time.ts";
  * лишають одне визначення на кожну назву, тож наявні імпорти незмінні.
  */
 export {
-  type SubRow, type PlanLinkResult, type PlannedActual,
+  type SubRow, type PlanLinkResult,
   nameMatches, planNeedles, planMatches, txHaystack, amountMatches,
-  matchActiveSubscription, relatedSubsHint, plannedActuals,
+  matchActiveSubscription, relatedSubsHint,
   linkPlanHistory, linkPlanHistoryById, applySubscriptionCategories,
 } from "./plan-match.ts";
+export { type PlannedActual, plannedActuals } from "./plan-actuals.ts";
+// §PLAN-STATE: the schedule itself moved to `plan-state.ts` (2026-09-25) so `plan-match` can read
+// the cycle window without importing this file back. Re-exported: every existing import stands.
+export {
+  nextChargeUnix, lastDueUnix, planState, type LinkedCharge, type PlanScheduleLike,
+} from "./plan-state.ts";
+import { nextChargeUnix } from "./plan-state.ts";
 
-// §SUB4 канонічне «наступне списання»: від start_date крокуємо періодом × period_count
-// у майбутнє. ЄДИНЕ джерело для воркера (ендпоінти/proactive) — дзеркалиться фронтовим
-// Subscriptions.nextCharge. Раніше частина ендпоінтів ігнорувала period_count, тож
-// квартальна підписка помилково «спливала» щомісяця.
 // §CUR-PLAN (2026-07-20): ЄДИНЕ джерело «скільки коштує план у ₴».
 // Раніше кожен ендпоінт сумував `period_amount` НАПРЯМУ, ігноруючи `currency_code` —
 // підписка $5 рахувалась як 5 ₴ (у «Скоро спишеться», прогнозі, календарі та в
@@ -33,41 +35,6 @@ export function sumPlannedUAH(
   rates: Rates,
 ): number {
   return plans.reduce((s, p) => s + plannedUAH(p.period_amount, p.currency_code ?? 980, rates), 0);
-}
-
-function daysInMonth(y: number, mIndex: number): number {
-  return new Date(Date.UTC(y, mIndex + 1, 0)).getUTCDate();
-}
-
-export function nextChargeUnix(startDate: number, period: string, count = 1, now = Math.floor(Date.now() / 1000)): number {
-  const n = Math.max(1, Math.round(count || 1));
-  if (period === "week") { let t = startDate; while (t <= now) t += 7 * 86400 * n; return t; }
-
-  // ⚠️ Every charge is counted from the START, not from the previous one (2026-08-27). The old
-  // implementation stepped a `Date` with `setMonth(+1)`, and JavaScript resolves 31 February by
-  // ROLLING OVER: a plan starting on the 31st went 31 Jan → 3 Mar → 3 Apr, skipping February
-  // outright and then charging on the 3rd for the rest of its life. A subscription whose date
-  // quietly moves is worse than one that is late — it lands in a different budget month, and the
-  // charge that "disappeared" is the one nobody goes looking for.
-  // ⚠️ The anchor is the KYIV day (§APP_TZ): a charge at 01:00 Kyiv on the 20th is the 19th in UTC,
-  // and reading it as the 19th would move every schedule a day earlier than the person's calendar.
-  const p = localParts(startDate);
-  // Start the scan near `now` rather than at the plan's birth: a plan from 2019 would otherwise
-  // cost ~80 timezone resolutions per call, and `chargesBetween` calls this in a loop.
-  const q = localParts(Math.max(now, startDate));
-  let k = Math.max(0, Math.floor((((q.y - p.y) * 12 + (q.m - p.m)) - n) / n) * n);
-  for (let guard = 0; guard < 600; guard++, k += n) {
-    const mi = (p.m - 1) + k;                       // months since January of the start's year
-    const y = p.y + Math.floor(mi / 12);
-    const m0 = ((mi % 12) + 12) % 12;               // 0-based, for `daysInMonth`
-    // Clamp, never roll over: the 31st of a 30-day month is that month's LAST day, which is what
-    // every biller in the world does.
-    // `localWallTime` rather than midnight + seconds: on the day the clocks change there are 23 or
-    // 25 hours, and adding a time-of-day to midnight moves the charge by one (§APP_TZ).
-    const t = localWallTime(y, m0 + 1, Math.min(p.d, daysInMonth(y, m0)), p.hh, p.mm, p.ss);
-    if (t > now) return t;
-  }
-  return startDate;
 }
 
 /** Мінімум полів плану, потрібний для розкладу й місячного тягаря. */

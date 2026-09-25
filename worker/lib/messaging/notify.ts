@@ -28,6 +28,7 @@ import { draftPriceUps, draftDeadSubs, draftMissedPlans } from "./drafts-plans.t
 // One operation, not a period: the big-cheque and double-debit cards (C3, 2026-09-20).
 import { draftBigTx, draftDuplicates, TX_SPEND } from "./drafts-tx.ts";
 import { draftAiObservations } from "./drafts-ai.ts";
+import { draftHealthDrop, recordTodayHealth } from "./drafts-health.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { renderNotif, type NotifTemplateKey, type NotifParams } from "../../../shared/notif-i18n.ts";
 import type { NotifKind } from "../../../shared/api/platform.ts";
@@ -468,32 +469,6 @@ async function draftLiquidity(env: Env, now: number): Promise<Draft[]> {
   return [];
 }
 
-/** Індекс фінздоровʼя помітно просів проти минулого тижня (дані з health_history). */
-async function draftHealthDrop(env: Env, now: number): Promise<Draft[]> {
-  const rows = await env.DB.prepare(
-    "SELECT day, score FROM health_history WHERE ts >= ? ORDER BY ts DESC LIMIT 30",
-  ).bind(now - 30 * 86400).all<{ day: string; score: number }>();
-  const hist = rows.results ?? [];
-  if (hist.length < 2) return [];
-
-  const latest = hist[0];
-  // Порівнюємо з найсвіжішим записом, старшим за 5 днів — щоб не ловити добовий шум.
-  const cutoff = isoDay(now - 5 * 86400);
-  const past = hist.find((h) => h.day <= cutoff);
-  if (!past) return [];
-  const drop = past.score - latest.score;
-  if (drop < 8) return [];
-
-  return [{
-    kind: "health_drop",
-    tkey: "health_drop",
-    tparams: { drop, pastScore: past.score, pastDay: past.day, latestScore: latest.score },
-    severity: "warn",
-    entity_type: null, entity_id: null,
-    dedup_key: `health_drop:${latest.day}`,
-  }];
-}
-
 /** Операційний борг: багато витрат без категорії — вся аналітика через це бреше. */
 async function draftTodo(env: Env, now: number): Promise<Draft[]> {
   const r = await env.DB.prepare(
@@ -545,6 +520,9 @@ export async function generateNotifications(
   const prefs = await getPrefs(env);
   const loc = await resolveLocale(env);
   const skipped: string[] = [];
+  // §HEALTH-TREND: today's score is written HERE, whatever the prefs say — the trend and
+  // `health_drop` used to exist only for days someone happened to open the health card.
+  try { await recordTodayHealth(env, now); } catch (e) { skipped.push(`health_record: ${e instanceof Error ? e.message : String(e)}`); }
 
   // `anomaly` і `win` дивляться на ту саму базу — рахуємо її раз і лише якщо треба.
   let pace: MonthPace | null = null;

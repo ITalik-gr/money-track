@@ -134,6 +134,67 @@
 }
 .floor-chip .d { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 .floor-chip b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+/* ---- §COMMITTED: the floor as a share of income ------------------------------ */
+.committed-card { padding: 18px 20px; }
+.cm-head { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-3); }
+.cm-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: var(--fs-3xl); font-weight: 600; line-height: 1; color: var(--ink); }
+.cm-pct.warn { color: var(--warn); }
+.cm-pct.neg { color: var(--neg); }
+.cm-said { font-size: var(--fs-sm); color: var(--ink-2); min-width: 0; }
+.cm-said b { color: var(--ink); font-weight: 600; }
+/* One track, the income's length; the fill is what the floor takes. Muted ink by default — a share
+   of income taken by fixed costs is never «good» on its own terms, so it never goes green. */
+.cm-bar { height: 8px; margin-top: var(--sp-3); border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; }
+.cm-fill { display: block; height: 100%; border-radius: inherit; background: var(--ink-2); }
+.cm-fill.warn { background: var(--warn); }
+.cm-fill.neg { background: var(--neg); }
+.cm-trend { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+.cm-trend-head { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
+/* Rising share is bad, falling is good — the tone follows the value (DESIGN §6), not the slope. */
+.cm-moved { margin-left: auto; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; font-weight: 600; }
+.cm-moved.neg { color: var(--neg); }
+.cm-moved.pos { color: var(--pos); }
+.cm-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-top: var(--sp-2); }
+.cm-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.cm-col-v { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.cm-col-track { width: 100%; max-width: 34px; height: 52px; display: flex; align-items: flex-end; border-radius: var(--radius-xs); background: var(--surface-2); overflow: hidden; }
+.cm-col-track i { display: block; width: 100%; border-radius: inherit; background: var(--ink-2); transform-origin: bottom; }
+.cm-col-track i.warn { background: var(--warn); }
+.cm-col-track i.neg { background: var(--neg); }
+.cm-col-track i.idle { background: var(--ink-2); }
+.cm-col-m { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
+/* ---- §INCOME-RHYTHM ---------------------------------------------------------- */
+.rhythm-card { padding: 18px 20px; }
+.rh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--sp-3); margin-top: var(--sp-3); }
+.rh-cell { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rh-cell b { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: var(--fs-xl); font-weight: 600; color: var(--ink); }
+.rh-cell b.warn { color: var(--warn); }
+/* ---- §FX-EXPOSURE ------------------------------------------------------------ */
+.fx-card { padding: 18px 20px; }
+.fx-said { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); color: var(--ink-2); }
+.fx-effects { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-top: 6px; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.fx-effects b { font-size: var(--fs-lg); font-weight: 600; }
+.fx-effects b.pos { color: var(--pos); }
+.fx-effects b.neg { color: var(--neg); }
+.fx-split { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-3); }
+.fx-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fx-chip { padding: 2px 9px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); font-size: var(--fs-xs); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.fx-chip b { color: var(--ink); }
+/* ---- §PAYDAY-EFFECT ----------------------------------------------------------- */
+.payday-card { padding: 18px 20px; }
+.pd-head { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-2); }
+.pd-ratio { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: var(--fs-3xl); font-weight: 600; line-height: 1; color: var(--ink); }
+.pd-ratio.warn { color: var(--warn); }
+.pd-said { font-size: var(--fs-sm); color: var(--ink-2); min-width: 0; flex: 1 1 24ch; }
+.pd-weeks { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.pd-weeks b { color: var(--ink); font-weight: 600; }
+@media (max-width: 620px) {
+  .committed-card { padding: 14px; }
+  .cm-pct { font-size: var(--fs-2xl); }
+  .payday-card { padding: 14px; }
+  .rhythm-card { padding: 14px; }
+  .fx-card { padding: 14px; }
+}
 @media (max-width: 620px) {
   .floor-card { padding: 14px; }
   .fl-row.total .fl-amt { font-size: var(--fs-xl); }

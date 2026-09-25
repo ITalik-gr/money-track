@@ -35,9 +35,11 @@
 .cf-warn { margin: 4px 0 12px; padding: 9px 12px; border-radius: var(--radius-sm); font-size: var(--fs-sm); line-height: 1.4;
   background: color-mix(in srgb, var(--neg) 10%, var(--surface)); border: 1px solid color-mix(in srgb, var(--neg) 28%, transparent); color: var(--ink); }
 .cf-wd { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; padding: 0 2px; }
+/* Sentence case, not letter-spaced capitals (2026-09-25): DESIGN §2 «labels are sans sentence-case,
+   never UPPERCASE» — the weekday row was the last shouting label on the page. */
 .cf-wd span {
-  text-align: center; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--muted);
+  text-align: center; font-size: var(--fs-xs); font-weight: 500;
+  text-transform: capitalize; color: var(--muted);
 }
 /* Сітка — суцільне полотно з внутрішніми лініями, а не сім рядів окремих коробок: рамка на
    кожній клітинці читається як таблиця, а не як календар. */
@@ -64,10 +66,14 @@
 /* День зі списаннями — інтерактивний (button): відкриває поповер із повним списком. */
 .cf-day.has { cursor: pointer; font: inherit; color: inherit; }
 .cf-day.has:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* Hover and «open» are a ring INSIDE the cell. The old hover set `border-color` on a cell that has
+   `border: none` — it never drew anything (2026-09-25). The open ring says which day the floating
+   popover belongs to, now that the popover no longer sits inside the cell. */
 @media (hover: hover) and (pointer: fine) {
-  .cf-day.has:hover { border-color: color-mix(in srgb, var(--neg) 45%, transparent); }
+  .cf-day.has:hover { box-shadow: inset 0 0 0 1.5px var(--line-strong); }
 }
-.cf-day.open { z-index: 3; } /* поповер має лягати поверх сусідніх днів */
+.cf-day.open, .cf-day.open:hover { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.cf-day.danger.open { box-shadow: inset 0 0 0 1.5px var(--neg); }
 .cf-dhead { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
 .cf-dnum { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Сума дня — пігулка: вона мусить читатись як ЗНАЧЕННЯ дня, а не як другий підпис поруч із
@@ -78,8 +84,11 @@
   font-size: 10.5px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right;
   color: var(--neg); background: color-mix(in srgb, var(--neg) 12%, transparent);
 }
-.cf-damt.in { color: var(--pos); background: color-mix(in srgb, var(--pos) 14%, transparent); }
-.cf-item-amt.in, .cf-pop-amt.in { color: var(--pos); }
+/* Inflow (§INCOME-PLAN) — teal, text AND pill. It was two rules in two files: `--pos` here and
+   `--c-teal` in budgets.css, which loads later and won the text colour, leaving a teal figure on a
+   green pill. One rule, one colour (2026-09-25). */
+.cf-damt.in { color: var(--c-teal); background: color-mix(in srgb, var(--c-teal) 14%, transparent); }
+.cf-item-amt.in, .cf-pop-amt.in, .cf-pop-foot b.in { color: var(--c-teal); }
 
 /* Списання прямо в клітинці — щоб «що це за платіж» читалось без наведення. */
 .cf-items { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -88,12 +97,13 @@
 .cf-item-amt { color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .cf-item.more { color: var(--muted); }
 
-/* Поповер дня — повний список списань + проєкція подушки на кінець дня. */
-.cf-pop { position: absolute; top: calc(100% + 6px); left: 0; z-index: 20; min-width: 210px; max-width: 280px;
-  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; cursor: default;
+/* Поповер дня — повний список списань + проєкція подушки на кінець дня. Лежить у `body` (портал) і
+   позиціонується від клітинки в JS (`DayPopover`): всередині `.cf-grid { overflow: hidden }` його
+   обрізало на крайніх днях. Не ловить курсор — він лише показує, а наведення лишається на дні. */
+.cf-pop { position: fixed; z-index: 200; min-width: 210px; max-width: min(280px, calc(100vw - 16px));
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; pointer-events: none;
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card); font-size: var(--fs-xs); text-align: left; }
-.cf-pop.left { left: auto; right: 0; } /* біля правого краю тижня — розкриваємо вліво */
+  box-shadow: var(--shadow-card); font-size: var(--fs-xs); text-align: left; color: var(--ink); }
 .cf-pop-head { font-weight: 600; color: var(--ink); text-transform: capitalize; }
 .cf-pop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .cf-pop-name { color: var(--ink-2); overflow-wrap: anywhere; }

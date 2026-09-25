@@ -1,5 +1,6 @@
 // Transaction reads. See `worker/repo/README.md`.
 import type { AppDb } from "../lib/platform/db-shim.ts";
+import { orLikeClause } from "../lib/platform/text.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import { stLit } from "../lib/platform/i18n.ts";
 import { STATS_JOINS, SPEND_WHERE, amountSum, refundDescOn } from "../lib/finance/stats.ts";
@@ -44,6 +45,9 @@ export interface FeedFilter {
   /** Amount bounds in MINOR units, compared on absolute value. */
   aminMinor?: number;
   amaxMinor?: number;
+  /** §QUERY-PARSE — every word must appear (any of the four text columns), and none of `qNot`. */
+  qWords?: string[];
+  qNot?: string[];
 }
 
 function buildWhere(f: FeedFilter): { clause: string; binds: unknown[] } {
@@ -66,9 +70,21 @@ function buildWhere(f: FeedFilter): { clause: string; binds: unknown[] } {
     where.push(`t.id IN (${f.ids.map(() => "?").join(",")})`);
     binds.push(...f.ids);
   }
+  // §CYR-CASE: every text match goes through `orLikeClause` — a bare `LIKE '%кава%'` never finds
+  // «Кава» (SQLite folds ASCII only). The plain `q` had exactly that gap until 2026-09-25.
+  const TEXT_COLS = ["t.merchant", "t.comment", "t.user_note", "e.name"];
   if (f.q !== undefined) {
-    where.push("(t.merchant LIKE ? OR t.comment LIKE ? OR t.user_note LIKE ? OR e.name LIKE ?)");
-    binds.push(`%${f.q}%`, `%${f.q}%`, `%${f.q}%`, `%${f.q}%`);
+    const m = orLikeClause(TEXT_COLS, f.q);
+    where.push(m.sql); binds.push(...m.binds);
+  }
+  for (const w of f.qWords ?? []) {
+    const m = orLikeClause(TEXT_COLS, w);
+    where.push(m.sql); binds.push(...m.binds);
+  }
+  for (const w of f.qNot ?? []) {
+    // COALESCE: a NULL column inside NOT(...) would make the whole row vanish, not pass.
+    const m = orLikeClause(TEXT_COLS.map((c) => `COALESCE(${c}, '')`), w);
+    where.push(`NOT ${m.sql}`); binds.push(...m.binds);
   }
   return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
 }
@@ -877,7 +893,8 @@ export async function findSimilar(
   locale: NotifLocale = "uk",
   limit = 30,
 ): Promise<SimilarTx[]> {
-  const like = `%${token.toLowerCase()}%`;
+  // §CYR-CASE: `LOWER(x) LIKE` folds ASCII only — «similar to Київстар» found nothing Cyrillic.
+  const match = orLikeClause(["t.merchant", "json_extract(t.raw_json, '$.description')"], token);
   const res = await db
     .prepare(
       `SELECT t.id, t.time, t.amount, t.currency_code, t.merchant,
@@ -886,12 +903,12 @@ export async function findSimilar(
          FROM transactions t
          LEFT JOIN categories c ON c.id = t.category_id
         WHERE t.id != ?
-          AND (LOWER(t.merchant) LIKE ? OR LOWER(json_extract(t.raw_json, '$.description')) LIKE ?)
+          AND ${match.sql}
           AND (t.category_id IS NOT ? OR t.is_transfer != ?)
         ORDER BY t.time DESC
         LIMIT ?`,
     )
-    .bind(id, like, like, target.category_id, target.is_transfer, limit)
+    .bind(id, ...match.binds, target.category_id, target.is_transfer, limit)
     .all<SimilarTx>();
   return res.results ?? [];
 }

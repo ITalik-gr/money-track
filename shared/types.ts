@@ -1,3 +1,4 @@
+import type { PlanState } from "./api/planning.ts";
 // Domain types shared between the Worker API and the React frontend.
 // Money is always INTEGER minor units (копійки); divide by 100 only for display.
 
@@ -145,6 +146,8 @@ export interface PlannedActual {
   last_time: number | null;
   currency_code: number | null;
   price_change_pct: number | null;
+  /** §PLAN-STATE — whether the latest cycle landed, so the list can stop promising a date it has not earned. */
+  state: PlanState;
 }
 
 // Sum of own funds per currency, plus the credit-limit breakdown for the black card.

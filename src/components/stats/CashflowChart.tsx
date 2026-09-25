@@ -25,7 +25,7 @@ function CfTooltip(props: any) {
       <div className="tip-lbl">{label}</div>
       <div className="r"><span className="d" style={{ background: "var(--chart-income)" }} />{translate(getLocale(), "mp.income")}: {fmt0.format(inc)} {baseSign()}</div>
       <div className="r"><span className="d" style={{ background: "var(--chart-expense)" }} />{translate(getLocale(), "common.expenses")}: {fmt0.format(exp)} {baseSign()}</div>
-      <div className="r tip-net" style={{ color: net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
+      <div className="r" style={{ color: net >= 0 ? "var(--chart-income)" : "var(--chart-expense)" }}>
         <span className="d" style={{ background: "transparent" }} />{translate(getLocale(), "common.balance")}: {net >= 0 ? "+" : ""}{fmt0.format(net)} {baseSign()}
       </div>
     </div>

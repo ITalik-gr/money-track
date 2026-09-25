@@ -23,6 +23,9 @@ import { getRates } from "./money.ts";
 import { valueMode, categoryMonthlyLevels, sumLevels } from "./stats.ts";
 import { catNameSql } from "./categories-i18n.ts";
 import { nextChargeUnix, monthlyPlannedUAH, sumMonthlyPlannedUAH } from "./subscriptions.ts";
+import { planState } from "./plan-state.ts";
+import { detectTrial } from "./sub-stack.ts";
+import { monthlyFlowSeries, seriesMean } from "./flow-series.ts";
 import { chargeRhythm } from "./recurring.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 
@@ -68,11 +71,12 @@ export async function subscriptionOverview(
   const { mult } = valueMode(rates, null);
   const loc = await resolveLocale(env);
 
-  const [charges, totals, levels, allPlans, cat] = await Promise.all([
+  const [charges, totals, levels, allPlans, flow, cat] = await Promise.all([
     planningRepo.planCharges(env.DB, id, mult),
     planningRepo.planTotals(env.DB, id, mult),
     categoryMonthlyLevels(env, mult, { now }),
     planningRepo.activeWithCategory(env.DB),
+    monthlyFlowSeries(env, mult, now),
     plan.category_id == null ? Promise.resolve(null) : env.DB.prepare(
       `SELECT ${catNameSql(loc, "name")} AS name FROM categories WHERE id = ?`,
     ).bind(plan.category_id).first<{ name: string }>(),
@@ -123,6 +127,9 @@ export async function subscriptionOverview(
       const at = nextChargeUnix(plan.start_date, plan.period, plan.period_count ?? 1, now);
       return { at, in_days: Math.max(0, Math.round((at - now) / 86400)) };
     })(),
+    // §PLAN-STATE — the half `next_charge` cannot say: whether the cycle that just went by landed.
+    // The owner's YouTube card promised 24 October while September's charge sat unlinked.
+    state: planState(plan, charges, now),
     actual: {
       n: totals.n,
       first_time: totals.first_time, last_time: totals.last_time,
@@ -141,6 +148,20 @@ export async function subscriptionOverview(
       of_burn_pct: pct(monthlyBase, burn),
     },
     annual_base: monthlyBase * 12,
+    /**
+     * §SUB-STACK — what dropping this plan would free, as money AND as percentage points of a typical
+     * month's income (§FLOW-SERIES — the income §COMMITTED divides by, so the two screens agree).
+     * A simulation: nothing changes until a person acts. Null share without income history.
+     */
+    cancel: (() => {
+      const income = seriesMean(flow.incomes);
+      return {
+        monthly: monthlyBase, annual: monthlyBase * 12,
+        income_share_pp: income && income > 0 ? Math.round((monthlyBase / income) * 1000) / 10 : null,
+      };
+    })(),
+    // A first charge at a tenth of the price or less, then the real one — the trial is part of the story.
+    trial: detectTrial(charges),
     category_monthly_base: categoryMonthly,
   };
 }

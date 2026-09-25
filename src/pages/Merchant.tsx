@@ -1,4 +1,5 @@
 import { Link, useParams } from "react-router-dom";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
 import { dateFmt, numFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
@@ -48,7 +49,10 @@ export function Merchant() {
   const t = useT();
   const { name = "" } = useParams();
   const decoded = decodeURIComponent(name);
-  const { data, isLoading } = useGetMerchantQuery(decoded, { skip: !decoded });
+  const { data, isLoading, isError, error, refetch } = useGetMerchantQuery(decoded, { skip: !decoded });
+  // A failed request and a merchant with no history would otherwise render the SAME empty page
+  // (C17 — a page reading `data?.x ?? []` must have an error branch).
+  if (isError) return <ErrorNote error={error} what={decoded} onRetry={refetch} />;
 
   const rows = (data?.by_month ?? []).map((r) => ({ month: r.month, spent: Math.round(r.spent / 100), label: monthLabel(r.month) }));
 

@@ -130,8 +130,8 @@
   animation: sel-in 0.14s ease;
 }
 .modal {
-  width: 100%; max-width: 460px; background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: 20px; max-height: 90vh; overflow-y: auto;
+  width: 100%; background: var(--surface); border: 1px solid var(--line-strong);
+ box-shadow: var(--shadow-card); max-height: 90vh; overflow-y: auto;
 }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .modal-head h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
@@ -203,7 +203,7 @@
 .link-btn:hover { color: var(--accent-strong); }
 
 /* savings goals grid */
-.goal-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.goal-grid { display: grid; gap: 12px; }
 .goal-card {
   padding: 16px; border-radius: var(--radius); background: var(--surface);
   border: 1px solid var(--line);
@@ -264,7 +264,6 @@
   border: 1px solid var(--line);
   display: flex; flex-direction: column; gap: 9px;
 }
-.cat-card-name { font-size: 14px; }
 .cat-card .cat-ico { width: 34px; height: 34px; }
 .cat-card-head { display: flex; align-items: flex-start; gap: 11px; }
 .cat-card .cat-ico { margin-top: 1px; }

@@ -2,7 +2,7 @@ import { Gauge } from "../ui/Gauge.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { Icon } from "../ui/Icon.tsx";
-import { Sparkline } from "../ui/Sparkline.tsx";
+import { HealthTrend, shortDay } from "./HealthTrend.tsx";
 import { useGetHealthQuery } from "../../store/api.ts";
 import { useT } from "../../i18n/index.ts";
 
@@ -19,12 +19,6 @@ const dot = (s: number) => (s >= 70 ? "pos" : s >= 45 ? "warn" : "neg");
  */
 const BAND_KEY = { good: "hic.band.good", ok: "hic.band.ok", risk: "hic.band.risk" } as const;
 
-/** `2026-09-10` → `10.09`. The trend axis needs a day, not a year it already knows. */
-function shortDay(day: string): string {
-  const [, m, d] = day.split("-");
-  return m && d ? `${d}.${m}` : day;
-}
-
 /** Whole days between two `YYYY-MM-DD` keys, i.e. what the window actually SPANS. */
 function daysBetween(a: string, b: string): number {
   return Math.max(1, Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000));
@@ -36,7 +30,8 @@ const deltaTone = (d: number) => (d > 0 ? "pos" : d < 0 ? "neg" : "flat");
 export function HealthIndexCard() {
   const t = useT();
   const { data, error, refetch } = useGetHealthQuery();
-  const score = data?.score ?? null;
+  // §HEALTH: a provisional index gets no number and no band — the parts below say what IS known.
+  const score = data && !data.insufficient ? data.score : null;
   const gTone = score == null ? "accent" : score >= 70 ? "pos" : score >= 45 ? "warn" : "neg";
   const trend = data?.trend ?? [];
 
@@ -53,7 +48,7 @@ export function HealthIndexCard() {
         </div>
         {/* The band in words. The gauge is already coloured by it, but a colour is not a reading:
             «21 зі 100» invites «out of what» and the answer is a three-step scale, not a target. */}
-        {data && <span className={`hic-band ${gTone}`}>{t(BAND_KEY[data.band])}</span>}
+        {data && score != null && <span className={`hic-band ${gTone}`}>{t(BAND_KEY[data.band])}</span>}
       </div>
 
       {/* The card already renders a dash for «score unknown», which is right — and made a FAILURE
@@ -75,24 +70,30 @@ export function HealthIndexCard() {
                * the bigger failure while costing a third as much. The weight comes from the
                * worker (`HealthComponent.weight`), the same constant the score is summed from.
                */
+              // ⚠️ Both numbers come from the worker (2026-09-25). The card used to round each part
+              // on its own, and in about a third of real cases the four «got» added up to one more
+              // or one less than the gauge above them. `points` are allocated so they sum exactly.
               const max = Math.round(c.weight * 100);
-              const got = Math.round((c.score / 100) * max);
+              const tone = c.measured ? dot(c.score) : "idle";
               return (
                 <div className="health-factor" key={c.key}>
                   <span className="hf-lbl">
-                    <span className={`hf-dot ${dot(c.score)}`} />
+                    <span className={`hf-dot ${tone}`} />
                     {c.label}
                     <InfoTip>{c.hint}</InfoTip>
                   </span>
                   <span className="hf-val">{c.value}</span>
-                  <span className={`hf-bar ${dot(c.score)}`} aria-hidden>
-                    <i style={{ width: `${Math.max(2, c.score)}%` }} />
+                  <span className={`hf-bar ${tone}`} aria-hidden>
+                    <i style={{ width: `${c.measured ? Math.max(2, c.score) : 0}%` }} />
                   </span>
-                  <span className="hf-pts">{t("hic.points", { got, max })}</span>
+                  <span className="hf-pts">{c.measured ? t("hic.points", { got: c.points, max }) : "—"}</span>
                 </div>
               );
             })}
           </div>
+          {/* A score resting on less than half its formula is a first impression, not a verdict —
+              a new account would otherwise meet a confident «risk» on its first day. */}
+          {data.insufficient && <p className="hic-provisional">{t("hic.insufficient")}</p>}
         </div>
       ) : null}
 
@@ -130,11 +131,7 @@ export function HealthIndexCard() {
                 </span>
               </span>
             </div>
-            {/* Fixed viewBox, scaled by CSS to the card width: `preserveAspectRatio` keeps the
-                shape honest, and a percentage width would need a resize observer to redraw. */}
-            <div className="ht-chart">
-              <Sparkline values={scores} width={560} height={72} color="var(--accent)" goodUp area />
-            </div>
+            <HealthTrend trend={trend} components={data?.components ?? []} />
             <div className="ht-axis">
               <span>{shortDay(first.day)}</span>
               <span className="ht-range">

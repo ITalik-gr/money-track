@@ -93,6 +93,11 @@
 .health-factor .hf-bar.pos > i { background: var(--pos); }
 .health-factor .hf-bar.warn > i { background: var(--warn); }
 .health-factor .hf-bar.neg > i { background: var(--neg); }
+/* An UNMEASURED part (§HEALTH: stability from one month, savings with no history) — neither good
+   nor bad, so it takes no signal colour at all (DESIGN §6: a neutral state is not green). */
+.health-factor .hf-dot.idle { background: var(--line-strong); }
+.health-factor .hf-bar.idle > i { background: transparent; }
+.hic-provisional { margin: 10px 0 0; font-size: var(--fs-sm); color: var(--muted); }
 .health-factor .hf-pts { font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 /* The band, in words, at the far end of the card head. */
 .hic-band { margin-left: auto; align-self: flex-start; flex-shrink: 0; font-size: var(--fs-xs); font-weight: 600; padding: 2px 9px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--ink-2); }
@@ -114,6 +119,17 @@
 /* Fixed viewBox scaled to the card: `height: auto` keeps the aspect the SVG was drawn with, so
    the curve never shears — the reason the chart is not sized in percent inside the component. */
 .ht-chart { margin-top: 8px; }
-.ht-chart .spark { display: block; width: 100%; height: auto; overflow: visible; }
+/* §HEALTH-TREND tooltip. Sits on the shared dark `.chart-tip`, so the up/down tones are the theme's
+   own pos/neg lifted toward white — the plain tokens are tuned for a light card and read as mud on
+   the tooltip's near-black. */
+.ht-tip { min-width: 190px; }
+.ht-tip .ht-tip-score b { font-size: 15px; font-weight: 600; }
+.ht-tip .ht-tip-of { color: rgba(255, 255, 255, 0.6); }
+.ht-tip-parts { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.ht-tip .ht-tip-name { flex: 1; min-width: 0; color: rgba(255, 255, 255, 0.75); font-family: var(--font-sans); }
+.ht-tip .ht-tip-v { min-width: 2ch; text-align: right; }
+.ht-tip .ht-tip-up { color: color-mix(in srgb, var(--pos) 55%, white); min-width: 3ch; text-align: right; }
+.ht-tip .ht-tip-down { color: color-mix(in srgb, var(--neg) 55%, white); min-width: 3ch; text-align: right; }
+.ht-tip-note { margin-top: 6px; font-size: 11px; color: rgba(255, 255, 255, 0.6); max-width: 30ch; }
 .ht-axis { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ht-axis .ht-range { text-align: center; }

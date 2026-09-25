@@ -1,4 +1,5 @@
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
 import { dateFmt, numFmt } from "../../i18n/locale.ts";
 import { useGetCapitalTrendQuery } from "../../store/api.ts";
@@ -27,7 +28,9 @@ function CapTooltip(props: any) {
 
 export function CapitalTrendCard() {
   const t = useT();
-  const { data } = useGetCapitalTrendQuery(6);
+  const { data, error, refetch } = useGetCapitalTrendQuery(6);
+  // C17: a dead request is not «fewer than two points» — say so instead of vanishing.
+  if (error) return <ErrorNote error={error} what={t("ct.title")} onRetry={refetch} />;
   const points = data?.points ?? [];
   if (points.length < 2) return null;
 

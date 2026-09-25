@@ -15,6 +15,7 @@ import {
   useGetCategoriesQuery,
   useGetEventsQuery,
   useGetTransactionsQuery,
+  useParseQueryQuery,
 } from "../store/api.ts";
 import type { Category } from "../../shared/types.ts";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
@@ -29,7 +30,7 @@ function FilterSection({ id, title, open, active, onToggle, children }: {
   return (
     <div className={`filt-sec ${open ? "open" : ""}`}>
       <button type="button" className="filt-sec-head" onClick={() => onToggle(id)} aria-expanded={open}>
-        <span className="filt-sec-title">{title}</span>
+        <span>{title}</span>
         <span className="filt-sec-right">
           {active && !open && <span className="filt-sec-dot" title={t("tx.list.activeFilter")} />}
           <Icon name="chevron" size={15} className="filt-sec-chev" />
@@ -84,7 +85,7 @@ export function Transactions() {
 
   const [limit, setLimit] = useState(() => Number(sessionStorage.getItem(limitKey)) || 100);
   const { data: rows = [], isFetching, error: txError, refetch: refetchTx } = useGetTransactionsQuery({
-    limit, q: q || undefined, category, catparent, type: type || undefined,
+    limit, q: q || undefined, smart: true, category, catparent, type: type || undefined,
     account: acc || undefined, from: dateToUnix(dfrom), to: dateToUnix(dto, true),
     amin: amin ? Number(amin) : undefined, amax: amax ? Number(amax) : undefined,
   });
@@ -199,6 +200,9 @@ export function Transactions() {
             <span className="ico"><Icon name="search" size={17} /></span>
             <input placeholder={t("tx.list.searchPlaceholder")} value={q} onChange={(e) => patch({ q: e.target.value })} />
           </div>
+          {/* §QUERY-PARSE — what the box understood, as removable chips: a parser that silently
+              narrowed the list would be worse than one that understood nothing. */}
+          <QueryChips q={q} onChange={(next) => patch({ q: next || null })} />
 
           <div className="seg" style={{ marginBottom: 14 }}>
             {[["", t("tx.list.allTypes")], ["expense", t("common.expenses")], ["income", t("tx.list.typeIncome")]].map(([v, l]) => (
@@ -333,5 +337,30 @@ export function Transactions() {
         <GroupModal onClose={() => setShowGroupModal(false)} onCreated={(id) => assignGroup(id)} />
       )}
     </>
+  );
+}
+
+const CHIP_KEY = {
+  amount: "search.chip.amount", period: "search.chip.period", type: "search.chip.type",
+  category: "search.chip.category", exclude: "search.chip.exclude",
+} as const;
+
+function QueryChips({ q, onChange }: { q: string; onChange: (q: string) => void }) {
+  const t = useT();
+  const text = q.trim();
+  const { data } = useParseQueryQuery(text, { skip: text.length < 3 });
+  if (!text || !data || !data.chips.length) return null;
+  return (
+    <div className="q-chips" aria-label={t("search.understood")}>
+      {data.chips.map((c, i) => (
+        <button key={`${c.kind}-${i}`} type="button" className={`q-chip ${c.kind}`}
+          title={t("search.removeChip")}
+          onClick={() => onChange(q.replace(c.raw, " ").replace(/\s+/g, " ").trim())}>
+          <span className="q-chip-kind">{t(CHIP_KEY[c.kind])}</span>
+          {c.raw}
+          <span className="q-chip-x" aria-hidden>✕</span>
+        </button>
+      ))}
+    </div>
   );
 }

@@ -11,15 +11,12 @@
 
 ## 🔥 Queue — blocked on the OWNER's eye
 
-### 13 modifier classes that do nothing
-Listed in `STYLELESS_OK` (`scripts/check-styles-used.mjs`): `advisor-main`, `pulse-cats`,
-`top-subs-card`, `lp-top-signin`, `goal-jar`, `tip-net`, `alt`… Each is a leftover or an unfinished
-intent — only a live screen tells which. The list must shrink, never grow.
-
-### STYLES phases 0.5 + 4 (`DESIGN.md §8`)
-Phase 0.5: 8 selectors that silently conflict — today's render is their unwritten merge, so
-collapsing them changes the render. Phase 4: real domain grouping across cascade boundaries.
-**Done-when:** the 8 conflicts are resolved against live screens with no unapproved visual change.
+### STYLES phase 4 (`DESIGN.md §8`)
+Phase 0.5 is done (C20, 2026-09-25). Phase 4: real domain grouping across cascade boundaries.
+Also found on the way: `.sub-ai-block` renders neutral in explicit dark (`data-theme="dark"`) but
+accent-tinted in system dark (`prefers-color-scheme`) — pick one; and `.wd-bar`'s transform
+transition was dead (overridden by `transition: opacity .15s`), so the weekday bars do not animate
+the way DESIGN §6 says bars animate.
 
 ### MCP for a second assistant (ChatGPT) — live connection
 Everything is built against the specs and pinned in `oauth.test.ts` (§MCP-OAUTH).
@@ -36,16 +33,19 @@ Everything is built against the specs and pinned in `oauth.test.ts` (§MCP-OAUTH
 - Other users: a per-user TypeSafe key through `user_secrets` (§10).
 - `known_plan`: only with a real case whose bank name differs from the plan's.
 
-### SQLite `LOWER() LIKE` with Cyrillic — two more sites
-SQLite folds case for ASCII only, so `LOWER(x) LIKE '%київстар%'` misses «Київстар». Fixed in
-`linkPlanHistory`; still in `consensusCategory` (`enrich.ts`) and `repo/transactions.ts:888`.
-Fix: filter by something script-free in SQL, match the name in JS. A lint could flag `LOWER(`
-next to `LIKE` in worker SQL.
-
 ### Batch runs — wire a real job kind
 The mechanics exist (§A6-BATCH, migration 0053, pinned on `noop_batch`). Left: hang
 `enrichPending` on it as its own job kind with its own `NotifKind` and template. Needs the owner's
 live key — the paid payload cannot be tested otherwise.
+
+### A saved token that later goes bad is never recorded
+`user_secrets.last_ok_at` is set only when a token is SAVED (`putSecret`). `markVerified` exists to
+record a later success or failure and nothing calls it — so a monobank token that expired last week
+still shows as verified, which is the exact confusion `routes/credentials.ts` says `last_ok_at` exists
+to prevent. **Goal:** the bank sync and the Anthropic calls mark the secret on a 401/403 (and on the
+first success after one). **Files:** `lib/bank/mono.ts` error path, `lib/ai/ai.ts` transport,
+`lib/platform/secrets.ts`. **Done-when:** a test drives a 401 through the sync and the status turns
+unverified. (Found by the dead-export sweep, 2026-09-25.)
 
 ## 📌 Backlog
 

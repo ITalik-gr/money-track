@@ -270,8 +270,26 @@ export interface HealthComponent {
    * contributes, and the card shows that number.
    */
   weight: number;
+  /**
+   * Points out of the 100 this part contributes. Allocated by largest remainder, so the four
+   * ALWAYS add up to `score` — the card rounded each one on its own and could be off by 1–2.
+   */
+  points: number;
+  /** False when the data cannot measure this part (e.g. stability from one month). It is then left
+   *  out of the score and the other weights are renormalised, instead of being graded as zero. */
+  measured: boolean;
 }
-export interface FinanceHealth { score: number; band: "good" | "ok" | "risk"; components: HealthComponent[]; trend?: { day: string; score: number }[] }
+/** The four parts' POINTS on a recorded day — null for a part that was unmeasured, and for rows
+ *  written before the parts were stored (2026-09-25). Named `pts_*`, like the columns: a bare
+ *  `debt` here would read as money (and collide with net worth's `debt`, which IS money). */
+export interface HealthParts { pts_runway: number | null; pts_savings: number | null; pts_debt: number | null; pts_stability: number | null }
+export interface HealthTrendPoint { day: string; score: number; parts: HealthParts | null }
+export interface FinanceHealth {
+  score: number; band: "good" | "ok" | "risk"; components: HealthComponent[];
+  /** Less than half the formula could be measured — the score is provisional and the card says so. */
+  insufficient: boolean;
+  trend?: HealthTrendPoint[];
+}
 
 // Спарклайни: 6-міс місячні витрати (копійки) на категорію (ключ=id) і мерчанта (ключ=назва).
 export interface SparkData { buckets: string[]; categories: Record<string, number[]>; merchants: Record<string, number[]> }
@@ -400,6 +418,8 @@ export interface CategoryOverview {
    * таксі чи пальне?». Shares are against the sum of the parts, so they add up to 100.
    */
   composition: { id: number; name: string; color: string | null; self: boolean; spent: number; n: number; share_pct: number }[];
+  /** §CAT-SHARE — % of ALL spending in the window (of all income for an income category); null when the whole is 0. */
+  share_of_total_pct: number | null;
   /**
    * §CAT-SUBS — how much of this category is a DECLARED subscription.
    *

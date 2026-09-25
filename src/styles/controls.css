@@ -221,9 +221,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 .runway { padding: 16px; margin-bottom: 6px; }
 .runway-metric { display: flex; flex-direction: column; gap: 4px; }
-.runway-val { font-size: 20px; letter-spacing: -0.02em; }
+.runway-val { letter-spacing: -0.02em; }
 .runway-val.accent { color: var(--accent); }
-.runway-comment { margin: 12px 0 0; font-size: 14px; line-height: 1.5; padding-top: 12px; border-top: 1px solid var(--line); }
+.runway-comment { font-size: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .tag-chip {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 7px 12px; border-radius: 999px; font-size: 13px; line-height: 1;

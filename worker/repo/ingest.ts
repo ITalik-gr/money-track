@@ -126,6 +126,7 @@ export async function upsertCanonicalTx(
     comment: tx.comment ?? null,
     amount: tx.amount,
     currency_code: tx.currency_code,
+    time: tx.time, id: tx.id,
   });
 
   // §Інваріанти lists insert-time description detection as one of the five paths that set

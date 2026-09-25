@@ -3,6 +3,8 @@
 //
 // Route order inside this file is behaviour: `/transactions/frequent` MUST stay above
 // `/transactions/:id`, or Hono resolves the literal as an id (a real outage, CLAUDE.md).
+import { parseForReader, mergeParsed } from "../../lib/finance/query-search.ts";
+import type { ParsedQuery } from "../../../shared/api/transactions.ts";
 import { createCashTx } from "../../lib/finance/finance.ts";
 import * as accountsRepo from "../../repo/accounts.ts";
 import * as categoriesRepo from "../../repo/categories.ts";
@@ -36,7 +38,7 @@ transactions.get("/transactions", async (c) => {
   const amin = url.searchParams.get("amin"); // мін. сума (₴, порівняння по модулю)
   const amax = url.searchParams.get("amax"); // макс. сума (₴)
 
-  const rows = await txRepo.listFeed(c.env.DB, c.get("locale"), {
+  const base: txRepo.FeedFilter = {
     limit, offset,
     category: category ? Number(category) : undefined,
     catparent: catparent ? Number(catparent) : undefined,
@@ -48,14 +50,20 @@ transactions.get("/transactions", async (c) => {
     // ₴ → копійки тут, бо це розбір ВВОДУ; порівняння по модулю — у репозиторії.
     aminMinor: amin ? Math.round(Number(amin) * 100) : undefined,
     amaxMinor: amax ? Math.round(Number(amax) * 100) : undefined,
-  });
+  };
+  // §QUERY-PARSE: `smart=1` reads the box as a sentence («кава понад 200 у травні»), not a substring.
+  const smart = q && url.searchParams.get("smart") === "1"
+    ? mergeParsed(base, await parseForReader(c.env.DB, c.get("locale"), q, Math.floor(Date.now() / 1000)))
+    : base;
+  const rows = await txRepo.listFeed(c.env.DB, c.get("locale"), smart);
 
   // §SEARCH-VEC — the semantic fallback, and ONLY when the text filter came back short. The exact
   // rows keep their place and their order; the extra ones are appended. A query `LIKE` already
   // answered costs no embedding call, which is both the cost rule and the correctness one.
-  if (q) {
+  const leftover = smart === base ? q : smart.qWords?.join(" ");
+  if (leftover) {
     const { appendSemantic } = await import("../../lib/finance/search-vec.ts");
-    const out = await appendSemantic(c.env, c.get("locale"), q, rows, limit);
+    const out = await appendSemantic(c.env, c.get("locale"), leftover, rows, limit);
     return c.json(out.rows satisfies unknown[] as TxRow[]);
   }
   return c.json(rows satisfies TxRow[]);
@@ -119,6 +127,12 @@ transactions.get("/transactions/:id/why", async (c) => {
  * The suggested amount is the MEDIAN of the last few, not the mean: one atypical 900 ₴ refill
  * would otherwise drag every suggestion off the value the user actually repeats.
  */
+// §QUERY-PARSE — what the box understood, for the chips under it. Literal: above `/:id` (C7).
+transactions.get("/transactions/parse", async (c) => {
+  const q = new URL(c.req.url).searchParams.get("q") ?? "";
+  return c.json(await parseForReader(c.env.DB, c.get("locale"), q, Math.floor(Date.now() / 1000)) satisfies ParsedQuery);
+});
+
 transactions.get("/transactions/frequent", async (c) => {
   const rows = await txRepo.frequentManual(c.env.DB, Math.floor(Date.now() / 1000) - 180 * 86400);
 

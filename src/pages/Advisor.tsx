@@ -29,6 +29,10 @@ import { HealthIndexCard } from "../components/stats/HealthIndexCard.tsx";
 import { KnowledgeCorpusCard } from "../components/advisor/KnowledgeCorpusCard.tsx";
 import { CashflowCalendar } from "../components/stats/CashflowCalendar.tsx";
 import { SpendFloorCard } from "../components/advisor/SpendFloor.tsx";
+import { CommittedCard } from "../components/advisor/CommittedCard.tsx";
+import { PaydayCard } from "../components/advisor/PaydayCard.tsx";
+import { IncomeRhythmCard } from "../components/advisor/IncomeRhythmCard.tsx";
+import { FxExposureCard } from "../components/advisor/FxExposureCard.tsx";
 import { NetworthCard } from "../components/stats/NetworthCard.tsx";
 import { UsageCost } from "../components/settings/UsageCost.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
@@ -127,6 +131,10 @@ export function Advisor() {
           <HealthIndexCard />
           <NetworthCard />
           <SpendFloorCard />
+          <CommittedCard />
+          <PaydayCard />
+          <IncomeRhythmCard />
+          <FxExposureCard />
           <CashflowCalendar />
           <FactsCard />
           <KnowledgeCorpusCard />
@@ -180,7 +188,7 @@ export function Advisor() {
 
         <div className="advisor-grid">
           {/* Головна колонка — структуровані поради */}
-          <section className="advisor-main">
+          <section>
             {/* Кнопку генерації прибрано звідси — вона тепер у шапці сторінки (одна дія, одне місце). */}
             <div className="section-head">
               <h2>{t("adv.adviceOnNumbers")}</h2>

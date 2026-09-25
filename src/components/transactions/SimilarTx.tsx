@@ -9,6 +9,7 @@
 // Deliberately NOT a single "apply to everything similar" button. A bulk edit fired blind touches
 // precisely the rows nobody is looking at, so what would change is listed, and each line can be
 // unticked.
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useState } from "react";
 import { Link } from "react-router";
 import { useT } from "../../i18n/index.ts";
@@ -25,12 +26,14 @@ export function SimilarTx({ txId, categoryId, isTransfer }: {
   isTransfer: boolean;
 }) {
   const t = useT();
-  const { data } = useGetSimilarQuery(txId);
+  const { data, error, refetch } = useGetSimilarQuery(txId);
   const [bulk, { isLoading }] = useBulkEditTransactionsMutation();
   // `undefined` = the server's suggestion still stands; a Set once the person has touched anything.
   const [chosen, setChosen] = useState<Set<string> | null>(null);
 
   const items = data?.items ?? [];
+  // C17: «nothing similar» and «could not look» are different answers.
+  if (error) return <ErrorNote error={error} what={t("tx.similarTitle", { n: 0 })} onRetry={refetch} />;
   if (!items.length) return null;
 
   // The server decides what is pre-ticked (`suggested`): a row with no category is a gap to fill,

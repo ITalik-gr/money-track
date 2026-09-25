@@ -152,9 +152,28 @@ if (dead.length) {
   );
 }
 
+/**
+ * 5. An ENGLISH string with Cyrillic in it is an untranslated one — unless the Cyrillic is a proper
+ *    name the English reader needs verbatim (ФОП, ЄСВ: Ukrainian legal terms with no English
+ *    equivalent) or a QUOTE of someone else's interface («…» / “…”), e.g. the monobank button a person
+ *    has to find by its Ukrainian label. Added 2026-09-25, when the dictionaries held exactly seven
+ *    such strings and all seven were one of those two cases — so the check starts at zero exceptions.
+ */
+const CYR = /[А-Яа-яЇїІіЄєҐґ]/;
+const KEEP_TERMS = /ФОП|ЄСВ/g;
+const QUOTED = /«[^»]*»|“[^”]*”/g;
+const untranslated = Object.entries(en).filter(([, v]) =>
+  typeof v === "string" && CYR.test(v.replace(QUOTED, "").replace(KEEP_TERMS, "")));
+if (untranslated.length) {
+  problems.push(
+    `${untranslated.length} English string(s) still carry Cyrillic: ${untranslated.slice(0, 6).map(([k]) => k).join(", ")}\n` +
+    `    Translate them — only ФОП / ЄСВ and quoted foreign UI labels («…», “…”) may stay Ukrainian.`,
+  );
+}
+
 if (problems.length) {
   console.error(`✗ i18n lint: ${problems.length} problem(s)\n`);
   for (const p of problems) console.error("  " + p);
   process.exit(1);
 }
-console.log(`✓ i18n lint: no hardcoded locale tags; en/uk in parity; ${DYNAMIC_KEYS.length} runtime-built key prefixes resolved; no unused keys`);
+console.log(`✓ i18n lint: no hardcoded locale tags; en/uk in parity; ${DYNAMIC_KEYS.length} runtime-built key prefixes resolved; no unused keys; no untranslated English`);

@@ -61,10 +61,6 @@
 /* Late money is a question for someone, so it is warned — not negative. Nothing has been lost. */
 .sts-expect-line.late, .sts-expect-line.late b { color: var(--warn, #c9871a); }
 
-/* §INCOME-PLAN in the cashflow calendar: an inflow day is not a smaller outflow, it is the other
-   direction. `.cf-damt` / `.cf-pop-amt` are `--neg` by default (every item used to be a charge),
-   so the inflow variant has to restate the colour rather than merely lighten it. */
-.cf-damt.in, .cf-pop-amt.in, .cf-item-amt.in, .cf-pop-foot b.in { color: var(--c-teal, #2f7d6b); }
 
 /* ---- §BUDGET-MEMORY: how the months closed --------------------------------- */
 .bh-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
@@ -121,6 +117,18 @@
    than shared: the two pages happen to want the same measurements today, and a single class named
    after one of them would make the next change to either one a change to both. */
 .cat-page-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+/* §CAT-SHARE — the category against everything else, one line above the tiles. */
+.cat-summary { margin: 0 0 12px; font-size: var(--fs-md); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+/* §CAT-SETTINGS — the controls that belong to the category, where it is being looked at. */
+.cat-settings { margin-top: 14px; padding: 14px 18px; display: grid; gap: 12px; }
+.cs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.cs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
+.cs-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); }
+.cs-seg { flex: 0 0 auto; }
+.cs-limit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cs-input { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+.cs-cur { color: var(--muted); font-size: var(--fs-sm); }
+.cs-note { font-size: var(--fs-xs); color: var(--muted); }
 .cat-page-dot { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
 .cat-page-children { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Also unstyled until now: a sub-category link rendered as bare underlined text in a row of them. */
@@ -136,7 +144,7 @@
    must ALIGN down the list — a column of sums that does not line up cannot be compared at a
    glance, which is the entire reason to list merchants by spend. */
 .cat-merch-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.cat-merch-list > li { display: grid; grid-template-columns: 1fr auto auto; align-items: baseline;
+.cat-merch-list > li { display: grid; align-items: baseline;
   gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
 .cat-merch-list > li:last-child { border-bottom: none; }
 /* Both ends trimmed, not just the top (2026-08-22, reported: «внизу багато місця порівняно з

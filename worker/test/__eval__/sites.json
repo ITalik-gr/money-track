@@ -1,5 +1,5 @@
 {
-  "note": "docs/JEV.md phase 4 — labelled cases for the judgments OUTSIDE enrich. Written 2026-09-21 BEFORE any phase-4 code existed; never tune a criterion against them (they are the held-out set for these sites). Run by scripts/eval-sites.mjs.",
+  "note": "docs/JEV.md phase 4 — labelled cases for the judgments OUTSIDE enrich. Written 2026-09-21 BEFORE any phase-4 code existed; never tune a criterion against them (they are the held-out set for these sites). Run by scripts/eval-sites.mjs. 2026-09-25: 20 more `subs` cases (`added`), written before any §SUB-REVIEW line moves — the lines (0.5 / 0.4) sat in a 0.1-wide gap measured on 20 merchants; these widen the evidence, they do not re-tune.",
   "subs": [
     { "merchant": "Netflix", "amount": 419, "charges": 11, "months": 11, "every_days": 30, "expect": "subscription" },
     { "merchant": "Київстар", "amount": 260, "charges": 12, "months": 12, "every_days": 30, "expect": "subscription" },
@@ -20,7 +20,27 @@
     { "merchant": "Rozetka", "amount": 900, "charges": 5, "months": 5, "every_days": 31, "near_miss": "shop", "expect": "not" },
     { "merchant": "Нова пошта", "amount": 85, "charges": 9, "months": 9, "every_days": 30, "expect": "not" },
     { "merchant": "Аптека Доброго Дня", "amount": 310, "charges": 6, "months": 6, "every_days": 30, "near_miss": "shop", "expect": "not" },
-    { "merchant": "Хвиля здоров'я | Доставка води", "amount": 480, "charges": 6, "months": 6, "every_days": 30, "expect": "subscription", "why": "a water-delivery plan billed monthly — a service, not a shop visit" }
+    { "merchant": "Хвиля здоров'я | Доставка води", "amount": 480, "charges": 6, "months": 6, "every_days": 30, "expect": "subscription", "why": "a water-delivery plan billed monthly — a service, not a shop visit" },
+    { "merchant": "Apple.com/bill", "amount": 99, "charges": 10, "months": 10, "every_days": 30, "expect": "subscription", "why": "billed under the PLATFORM's name, not the service's", "added": "2026-09-25" },
+    { "merchant": "Glovo Prime", "amount": 99, "charges": 7, "months": 7, "every_days": 30, "expect": "subscription", "why": "a MEMBERSHIP of a delivery brand whose ordinary orders («Glovo») are in the set as «not» — same root, opposite verdict", "added": "2026-09-25" },
+    { "merchant": "Megogo", "amount": 199, "charges": 6, "months": 6, "every_days": 30, "expect": "subscription", "added": "2026-09-25" },
+    { "merchant": "Укртелеком", "amount": 250, "charges": 9, "months": 9, "every_days": 30, "expect": "subscription", "why": "a Cyrillic internet/phone bill", "added": "2026-09-25" },
+    { "merchant": "Воля", "amount": 300, "charges": 12, "months": 12, "every_days": 30, "expect": "subscription", "why": "a Cyrillic cable/internet bill, one short word", "added": "2026-09-25" },
+    { "merchant": "ОСББ Затишок", "amount": 1100, "charges": 12, "months": 12, "every_days": 30, "expect": "subscription", "why": "a monthly housing-association bill — plans cover bills, not only digital services", "added": "2026-09-25" },
+    { "merchant": "Google One", "amount": 80, "charges": 12, "months": 12, "every_days": 30, "expect": "subscription", "why": "a tiny dollar plan converted to hryvnia", "added": "2026-09-25" },
+    { "merchant": "Adobe", "amount": 950, "charges": 12, "months": 12, "every_days": 30, "expect": "subscription", "added": "2026-09-25" },
+    { "merchant": "OpenAI ChatGPT", "amount": 850, "charges": 7, "months": 7, "every_days": 30, "expect": "subscription", "added": "2026-09-25" },
+    { "merchant": "Duolingo", "amount": 250, "charges": 4, "months": 4, "every_days": 30, "expect": "subscription", "why": "young: only four months of history", "added": "2026-09-25" },
+    { "merchant": "Rozetka Premium", "amount": 1499, "charges": 2, "months": 2, "every_days": 365, "expect": "subscription", "why": "ANNUAL billing — two charges a year apart; its shop («Rozetka») is in the set as «not»", "added": "2026-09-25" },
+    { "merchant": "Kyivstar TV", "amount": 99, "charges": 5, "months": 5, "every_days": 30, "expect": "subscription", "why": "same brand as a phone plan already in the set, a different service", "added": "2026-09-25" },
+    { "merchant": "Сільпо", "amount": 1200, "charges": 20, "months": 6, "every_days": 9, "expect": "not", "why": "a supermarket every week or so", "added": "2026-09-25" },
+    { "merchant": "Uklon", "amount": 180, "charges": 25, "months": 6, "every_days": 7, "expect": "not", "why": "taxi rides — frequent, never a plan", "added": "2026-09-25" },
+    { "merchant": "OKKO", "amount": 1500, "charges": 8, "months": 6, "every_days": 22, "expect": "not", "why": "fuel roughly every three weeks — a rhythm, not a plan", "added": "2026-09-25" },
+    { "merchant": "Аптека АНЦ", "amount": 300, "charges": 6, "months": 6, "every_days": 30, "expect": "not", "why": "a pharmacy visited monthly — a shop with a rhythm, the hardest near-miss", "added": "2026-09-25" },
+    { "merchant": "Comfy", "amount": 3200, "charges": 3, "months": 3, "every_days": 30, "expect": "not", "why": "an electronics shop: three purchases a month apart look periodic and are not", "added": "2026-09-25" },
+    { "merchant": "Укрпошта", "amount": 45, "charges": 10, "months": 7, "every_days": 20, "expect": "not", "why": "per-parcel fees", "added": "2026-09-25" },
+    { "merchant": "Bolt Food", "amount": 400, "charges": 12, "months": 5, "every_days": 12, "expect": "not", "added": "2026-09-25" },
+    { "merchant": "Епіцентр", "amount": 900, "charges": 9, "months": 6, "every_days": 20, "expect": "not", "why": "a DIY store with a monthly-ish rhythm", "added": "2026-09-25" }
   ],
   "transfers": [
     { "desc": "Анна К.", "comment": "комуналка за серпень", "amount": -99300, "mcc": 4829, "expect": 7 },

@@ -10,6 +10,7 @@
  * `/analytics/overview` request they all read. Everything a single tab owns lives here.
  */
 
+import { pctOf } from "../../../shared/pct.ts";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useT } from "../../i18n/index.ts";
@@ -47,7 +48,12 @@ export function MerchantsBlock({ data, sign, merchMax }: {
               {spark?.merchants[m.merchant] && <Sparkline values={spark.merchants[m.merchant]} color="var(--accent)" />}
               <div style={{ textAlign: "right" }}>
                 <div className="m-val">{formatMinor(m.spent, { decimals: false })} {sign}</div>
-                <div className="m-sub">{t("stats.merchants.avgSub", { n: m.n, amount: formatMinor(Math.round(m.spent / m.n), { decimals: false }), sign })}</div>
+                <div className="m-sub">
+                  {t("stats.merchants.avgSub", { n: m.n, amount: formatMinor(Math.round(m.spent / m.n), { decimals: false }), sign })}
+                  {/* A share of the period's WHOLE spend — only the top seven are listed, so it is not a
+                      set that sums to 100 and is not rounded as one (§PCT-SUM `pctOf`). */}
+                  {pctOf(m.spent, data.summary.spend) != null && <> · {t("stats.shareOfSpend", { pct: pctOf(m.spent, data.summary.spend)! })}</>}
+                </div>
               </div>
             </Link>
           ))}
@@ -86,7 +92,10 @@ export function EventsBlock({ data, from, to, currency, sign }: {
               <button type="button" className={`catbar catbar-btn ${isOpen ? "open" : ""}`} onClick={() => setOpen(isOpen ? null : e.event_id)}>
                 <span className="cb-name"><span className="d" style={{ background: e.event_color ?? "var(--accent)" }} />{e.event_name}</span>
                 <span className="cb-track"><span className="cb-fill" style={{ width: `${(e.spent / max) * 100}%`, background: e.event_color ?? "var(--accent)" }} /></span>
-                <span className="cb-val">{formatMinor(e.spent, { decimals: false })} {sign}</span>
+                <span className="cb-val">
+                  {formatMinor(e.spent, { decimals: false })} {sign}
+                  {pctOf(e.spent, data.summary.spend) != null && <span className="muted"> · {pctOf(e.spent, data.summary.spend)}%</span>}
+                </span>
                 <span className="cb-pct">{e.n}</span>
               </button>
               {isOpen && <SliceDrillPanel dim="event" value={String(e.event_id)} from={from} to={to} currency={currency} sign={sign} />}
@@ -129,7 +138,10 @@ export function AccountsBlock({ data, from, to, currency, sign }: {
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <div className="m-val">{formatMinor(a.spent, { decimals: false })} {sign}</div>
-                  <div className="m-sub">{t("stats.accounts.nTx", { n: a.n })}</div>
+                  <div className="m-sub">
+                    {t("stats.accounts.nTx", { n: a.n })}
+                    {pctOf(a.spent, data.summary.spend) != null && <> · {t("stats.shareOfSpend", { pct: pctOf(a.spent, data.summary.spend)! })}</>}
+                  </div>
                 </div>
               </button>
               {isOpen && a.account_id && <SliceDrillPanel dim="account" value={a.account_id} from={from} to={to} currency={currency} sign={sign} />}

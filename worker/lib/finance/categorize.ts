@@ -18,6 +18,13 @@ export interface CategorizeInput {
   comment?: string | null;
   amount?: number | null;        // копійки (знак: витрата < 0) — для матчу з підписками
   currency_code?: number | null; // валюта РАХУНКУ операції
+  /**
+   * When the operation happened, and its id. Only §PLAN-REPRICE reads them: a charge whose amount
+   * moved can still be its plan's, but only if it lands where the next cycle was expected, and a
+   * time is the only thing that can say so. Without them the match behaves exactly as before.
+   */
+  time?: number | null;
+  id?: string | null;
 }
 
 /**
@@ -63,6 +70,7 @@ export async function categorize(
     input.amount != null && input.amount < 0 && input.currency_code != null
       ? (await matchActiveSubscription(db, {
           merchant: name, description: desc || null, amount: input.amount, currency_code: input.currency_code,
+          time: input.time ?? undefined, id: input.id ?? undefined,
         }))?.planned_id ?? null
       : null;
 
@@ -96,6 +104,7 @@ export async function categorize(
   if (input.amount != null && input.amount < 0 && input.currency_code != null) {
     const sub = await matchActiveSubscription(db, {
       merchant: null, description: desc || null, amount: input.amount, currency_code: input.currency_code,
+      time: input.time ?? undefined, id: input.id ?? undefined,
     });
     if (sub?.category_id != null) {
       return { category_id: sub.category_id, display_name: null, is_transfer: false, real_category_id: null, planned_id: sub.planned_id, source: "subscription", detail: sub.title ?? null };

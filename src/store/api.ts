@@ -16,12 +16,12 @@ import type {
   BankConnections, CashProjection, CategoryWhy, FxCost, FrequentTx, FundsBreakdown, SimilarTxList, GoalBody, GoalContribution, GoalProgressSeries, IncomeAnalytics, Insight,
   KnowledgeDocFull, KnowledgeList, McpStatus, McpToken, QuickAddStatus, QuickAddToken, MerchantAnalytics, MonthlyHistory, Networth,
   NotifPrefs, NotifSchedule, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
-  AiChange, AiDetectResult, SubscriptionOverview, BudgetStatusList, CategoryOverview, CategoryShape, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
+  AiChange, AiDetectResult, SubscriptionOverview, AcceptPriceResult, SubStack, BudgetStatusList, CategoryOverview, CategoryShape, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SpendingShape, SetupStatus, SliceDrill, SparkData, SpendPatterns,
-  Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
+  Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, ParsedQuery, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
   BackupList, RestoreResult, PushStatus, PushSendResult, RatesSnapshot,
-  SpendProfile, Momentum, IncomeAllocation, SpendFloor,
+  SpendProfile, Momentum, IncomeAllocation, SpendFloor, CommittedShare, PaydayEffect, IncomeRhythm, FxExposure,
   TaxStatus, TaxProfile as TaxProfileDto, TaxLedger, TaxBackfillResult, BusinessOverview, RegWatch,
   TaxPaymentCandidates,
 } from "../../shared/api/index.ts";
@@ -316,7 +316,7 @@ export const api = createApi({
       query: (id) => `/transactions/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Tx", id }],
     }),
-    getTransactions: b.query<TxRow[], { limit?: number; category?: number; catparent?: number; type?: string; account?: string; q?: string; from?: number; to?: number; amin?: number; amax?: number }>({
+    getTransactions: b.query<TxRow[], { limit?: number; category?: number; catparent?: number; type?: string; account?: string; q?: string; smart?: boolean; from?: number; to?: number; amin?: number; amax?: number }>({
       query: (p) => {
         const s = new URLSearchParams();
         if (p.limit) s.set("limit", String(p.limit));
@@ -325,6 +325,7 @@ export const api = createApi({
         if (p.type) s.set("type", p.type);
         if (p.account) s.set("account", p.account);
         if (p.q) s.set("q", p.q);
+        if (p.q && p.smart) s.set("smart", "1");   // §QUERY-PARSE
         if (p.from) s.set("from", String(p.from));
         if (p.to) s.set("to", String(p.to));
         if (p.amin != null) s.set("amin", String(p.amin));
@@ -333,6 +334,8 @@ export const api = createApi({
       },
       providesTags: ["Tx"],
     }),
+    // §QUERY-PARSE — what the search box understood, for the chips. Pure reading, no cache tag.
+    parseQuery: b.query<ParsedQuery, string>({ query: (q) => `/transactions/parse?q=${encodeURIComponent(q)}` }),
     getByCategory: b.query<CategorySpend[], { from: number; to: number }>({
       query: ({ from, to }) => `/analytics/by-category?from=${from}&to=${to}`,
     }),
@@ -417,6 +420,14 @@ export const api = createApi({
     getSpendFloor: b.query<SpendFloor, void>({
       query: () => "/insights/floor",
       providesTags: ["Tx", "Account"],
+    }),
+    getPaydayEffect: b.query<PaydayEffect, void>({ query: () => "/insights/payday", providesTags: ["Tx"] }),
+    getIncomeRhythm: b.query<IncomeRhythm, void>({ query: () => "/insights/income-rhythm", providesTags: ["Tx"] }),
+    getFxExposure: b.query<FxExposure, void>({ query: () => "/insights/fx-exposure", providesTags: ["Tx", "Account"] }),
+    // §COMMITTED: reads levels and income only — no balances — so `Tx` alone invalidates it.
+    getCommitted: b.query<CommittedShare, void>({
+      query: () => "/insights/committed",
+      providesTags: ["Tx"],
     }),
     getCompare: b.query<Compare, { from: number; to: number; currency?: number | null; bfrom?: number; bto?: number }>({
       query: ({ from, to, currency, bfrom, bto }) =>
@@ -612,7 +623,14 @@ export const api = createApi({
       query: (id) => ({ url: `/planned/${id}/relink`, method: "POST" }),
       invalidatesTags: ["Planned", "Tx"],
     }),
-    updatePlanned: b.mutation<{ ok: boolean; linked: number }, { id: number; note?: string | null; category_id?: number | null }>({
+    // §SUB-STACK — reads plans and linked charges.
+    getSubStack: b.query<SubStack, void>({ query: () => "/planned/stack", providesTags: ["Planned", "Tx"] }),
+    // §PLAN-REPRICE: the body is EMPTY on purpose — the server reads the new amount from the ledger.
+    acceptPlanPrice: b.mutation<AcceptPriceResult, number>({
+      query: (id) => ({ url: `/planned/${id}/accept-price`, method: "POST" }),
+      invalidatesTags: ["Planned"],
+    }),
+    updatePlanned: b.mutation<{ ok: boolean; linked: number }, { id: number; note?: string | null; category_id?: number | null; period_amount?: number; period?: "month" | "week"; period_count?: number }>({
       query: ({ id, ...body }) => ({ url: `/planned/${id}`, method: "PATCH", body }),
       invalidatesTags: ["Planned", "Tx"],
     }),
@@ -1160,6 +1178,7 @@ export const {
   useGenerateReportMutation,
   useDeleteReportMutation,
   useGetTransactionsQuery,
+  useParseQueryQuery,
   useGetTransactionQuery,
   useGetByCategoryQuery,
   useGetSafeToSpendQuery,
@@ -1182,6 +1201,10 @@ export const {
   useGetMomentumQuery,
   useGetIncomeSplitQuery,
   useGetSpendFloorQuery,
+  useGetCommittedQuery,
+  useGetPaydayEffectQuery,
+  useGetIncomeRhythmQuery,
+  useGetFxExposureQuery,
   useGetCompareQuery,
   useGetCategoryDrillQuery,
   useGetSliceDrillQuery,
@@ -1243,6 +1266,8 @@ export const {
   useApplySubscriptionCategoriesMutation,
   useUpdatePlannedMutation,
   useRelinkPlannedMutation,
+  useAcceptPlanPriceMutation,
+  useGetSubStackQuery,
   useDismissPlannedCandidateMutation,
   usePlanFromHabitMutation,
   useCategorizeTransfersMutation,

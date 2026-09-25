@@ -3,6 +3,7 @@
 // The backup enumerates tables from the SCHEMA, not from a list in code: a dump that silently
 // misses a table added by a later migration is worse than no dump, because it looks like one.
 import { getRates } from "../../lib/finance/money.ts";
+import { caseVariants } from "../../lib/platform/text.ts";
 import {
   valueMode, } from "../../lib/finance/stats.ts";
 import * as txRepo from "../../repo/transactions.ts";
@@ -151,8 +152,7 @@ dataExport.get("/search", async (c) => {
   // Unicode-aware) і матчимо через OR. Покриває реальні введення: усе малими, усе великими,
   // з великої літери. Екзотичний внутрішній регістр («МакДональдз» на запит «макдональдз»)
   // лишається поза — це свідомий компроміс проти сканування всієї таблиці на кожну літеру.
-  const variants = [...new Set([q, q.toLocaleLowerCase("uk"), q.toLocaleUpperCase("uk"),
-    q.charAt(0).toLocaleUpperCase("uk") + q.slice(1).toLocaleLowerCase("uk")])];
+  const variants = caseVariants(q);   // the one definition, `lib/platform/text.ts`
 
   return c.json(await txRepo.search(c.env.DB, c.get("locale"), mult, variants) satisfies SearchResults);
 });

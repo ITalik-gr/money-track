@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { wholePcts } from "../../../shared/pct.ts";
 import { useNavigate } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
@@ -43,13 +44,15 @@ function StackTip({ active, payload, label, slices }: {
   const total = [...by.values()].reduce((s, v) => s + v, 0);
   // Biggest first: the tooltip answers "what made this month", and the answer is at the top.
   const rows = slices.filter((s) => (by.get(s.key) ?? 0) > 0).sort((a, b) => (by.get(b.key) ?? 0) - (by.get(a.key) ?? 0));
+  // §PCT-SUM — «з чого складається місяць» is a question about SHARES; the owner saw only hryvnia.
+  const pcts = wholePcts(rows.map((s) => by.get(s.key) ?? 0));
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{label}</div>
-      {rows.map((s) => (
+      {rows.map((s, i) => (
         <div className="r" key={s.key}>
           <span className="d" style={{ background: s.color }} />
-          {s.name} · {formatMinor((by.get(s.key) ?? 0) * 100, { decimals: false })}
+          {s.name} · {formatMinor((by.get(s.key) ?? 0) * 100, { decimals: false })} · {pcts[i]}%
         </div>
       ))}
       <div className="r tip-total">{t("stats.compare.totalSpend")} · {formatMinor(total * 100, { decimals: false })}</div>

@@ -26,7 +26,7 @@ export function Login({ onBack }: { onBack?: () => void }) {
     : null;
 
   return (
-    <div className="app" style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}>
+    <div style={{ minHeight: "100dvh", display: "grid", placeItems: "center" }}>
       <div className="card" style={{ padding: 24, width: "100%", maxWidth: 340 }}>
         {onBack && (
           <button className="btn ghost xs" style={{ marginLeft: -8, marginBottom: 8 }} onClick={onBack}>

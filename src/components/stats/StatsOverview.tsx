@@ -10,6 +10,7 @@
  * `/analytics/overview` request they all read. Everything a single tab owns lives here.
  */
 
+import { wholePcts } from "../../../shared/pct.ts";
 import { useState } from "react";
 import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
@@ -67,6 +68,8 @@ export function ImportanceBreakdown({ data, sign, from, to, currency }: { data: 
   const [open, setOpen] = useState<Importance | null>(null);
   if (!total) return null;
   const byLevel = (lv: string) => Math.abs(rows.find((r) => r.importance === lv)?.spent ?? 0);
+  // §PCT-SUM: three shares of one whole, rounded as a set so the three cards add up to 100.
+  const impPcts = wholePcts(IMPORTANCE_LEVELS.map((lv) => byLevel(lv)));
   return (
     <section>
       <div className="section-head">
@@ -77,10 +80,10 @@ export function ImportanceBreakdown({ data, sign, from, to, currency }: { data: 
       </div>
       <div className="card" style={{ padding: 18 }}>
         <div className="imp-bar imp-bar-lg">
-          {IMPORTANCE_LEVELS.map((lv) => {
+          {IMPORTANCE_LEVELS.map((lv, li) => {
             const v = byLevel(lv);
             if (!v) return null;
-            const pct = Math.round((v / total) * 100);
+            const pct = impPcts[li];
             return (
               <span key={lv} style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }} title={`${t(IMPORTANCE_META[lv].labelKey)}: ${pct}%`}>
                 {pct >= 8 && <span className="imp-seg-lbl">{pct}%</span>}
@@ -89,9 +92,9 @@ export function ImportanceBreakdown({ data, sign, from, to, currency }: { data: 
           })}
         </div>
         <div className="imp-cards">
-          {IMPORTANCE_LEVELS.map((lv) => {
+          {IMPORTANCE_LEVELS.map((lv, li) => {
             const v = byLevel(lv);
-            const pct = Math.round((v / total) * 100);
+            const pct = impPcts[li];
             return (
               <button type="button" key={lv} className={`imp-card fact-click ${open === lv ? "open" : ""}`}
                 disabled={!v} onClick={() => setOpen((o) => (o === lv ? null : lv))}>

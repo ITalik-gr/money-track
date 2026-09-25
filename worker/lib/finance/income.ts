@@ -27,6 +27,8 @@ import { localMonthStart, localYm, valueMode, STATS_JOINS, INCOME_WHERE, incomeS
 import type { AppDb } from "../platform/db-shim.ts";
 import { st, type ServerLocale } from "../platform/i18n.ts";
 import type { IncomeAnalytics } from "../../../shared/api/analytics.ts";
+import { incomeCv } from "./flow-series.ts";
+import { fullyCoveredMonthsDb } from "./levels.ts";
 
 export interface IncomeOutlook {
   /** Actually arrived since the 1st, ₴ minor — the canon, unchanged. */
@@ -121,8 +123,9 @@ export async function buildIncomeAnalytics(
     analyticsRepo.incomeBySource(db, locale, v, { from, to }),
     analyticsRepo.incomeTotal(db, v, { from, to }),
     analyticsRepo.incomeTotal(db, v, { from: prevFrom, to: prevTo }),
-    // 6 календарних місяців для оцінки стабільності (по місяцях).
-    analyticsRepo.monthlyIncome(db, v, now, { from: localMonthStart(now, -5), to: now }),
+    // Six COMPLETE months for §INCOME-CV (the same window as §FLOW-SERIES, so the card and the health
+    // index / income rhythm quote one number), plus the current month for the chart.
+    analyticsRepo.monthlyIncome(db, v, now, { from: localMonthStart(now, -6), to: now }),
   ]);
 
   const total = curTot?.income ?? 0;
@@ -134,24 +137,26 @@ export async function buildIncomeAnalytics(
     amount: s.amount, n: s.n, pct: total > 0 ? Math.round((s.amount / total) * 100) : 0,
   }));
 
-  // Стабільність: коеф. варіації (stddev/mean) по ПОВНИХ місяцях (без поточного часткового).
+  // Stability: §INCOME-CV over the COMPLETE months the ledger covers, ZERO-FILLED (2026-09-25). It
+  // used to average only the months that had income — a jobless month made income look more stable
+  // (the §HEALTH-INCOME bug, fixed in the health index and still alive here).
   const nowMonth = localYm(now);
-  const complete = monthly.filter((r) => r.m !== nowMonth).map((r) => r.income);
-  let cvPct: number | null = null, label = st(locale, "stabilityUnknown");
-  if (complete.length >= 2) {
-    const mean = complete.reduce((a, b) => a + b, 0) / complete.length;
-    if (mean > 0) {
-      const variance = complete.reduce((a, b) => a + (b - mean) ** 2, 0) / complete.length;
-      cvPct = Math.round((Math.sqrt(variance) / mean) * 100);
-      label = st(locale, cvPct <= 15 ? "stabilityStable" : cvPct <= 40 ? "stabilityModerate" : "stabilityVolatile");
-    }
-  }
+  const keys: string[] = [];
+  for (let i = 6; i >= 1; i--) keys.push(localYm(localMonthStart(now, -i)));
+  const covered = (await fullyCoveredMonthsDb(db, keys)).filter((k) => k !== nowMonth);
+  const byM = new Map(monthly.map((r) => [r.m, r.income]));
+  const cv = incomeCv(covered.map((k) => Math.max(0, byM.get(k) ?? 0)));
+  const cvPct = cv == null ? null : Math.round(cv * 100);
+  const label = st(locale, cvPct == null ? "stabilityUnknown"
+    : cvPct <= 15 ? "stabilityStable" : cvPct <= 40 ? "stabilityModerate" : "stabilityVolatile");
 
   return {
     period: { from, to, preset: preset as IncomeAnalytics["period"]["preset"] },
     total, prev_total: prevTotal, delta_pct: deltaPct,
     sources: srcRows,
-    monthly: monthly.map((r) => ({ month: r.m, income: r.income })),
+    // The chart keeps its six calendar months (five complete + the current one); the seventh, oldest
+    // row was fetched for the CV only.
+    monthly: monthly.filter((r) => r.m >= localYm(localMonthStart(now, -5))).map((r) => ({ month: r.m, income: r.income })),
     stability: { cv_pct: cvPct, label },
   };
 }

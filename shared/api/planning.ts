@@ -319,6 +319,8 @@ export interface SubscriptionOverview {
     is_active: boolean; monthly_base: number;
   };
   next_charge: { at: number; in_days: number } | null;
+  /** §PLAN-STATE — what happened to the latest cycle; see `PlanState` below. */
+  state: PlanState;
   actual: {
     n: number; first_time: number | null; last_time: number | null;
     total_base: number; avg_base: number | null;
@@ -345,4 +347,78 @@ export interface SubscriptionOverview {
   share: { of_subscriptions_pct: number | null; of_category_pct: number | null; of_burn_pct: number | null };
   annual_base: number;
   category_monthly_base: number | null;
+  /** §SUB-STACK — dropping this plan frees `monthly` / `annual`; `income_share_pp` of a typical month's income. */
+  cancel: { monthly: number; annual: number; income_share_pp: number | null };
+  /** Began as a trial (first charge ≤ 10% of the price since), in the billing currency; null otherwise. */
+  trial: { trial_amount: number; trial_at: number; paid_amount: number; paid_since: number } | null;
+}
+
+/**
+ * §PLAN-STATE — what happened to a plan's LATEST cycle, derived from the charges linked to it.
+ *
+ * «Next charge» used to be the only thing a plan said about time, and it is arithmetic on the
+ * start date: it rolls forward whether or not the previous charge ever landed. The owner's YouTube
+ * went from 100 to 179 ₴, the charge was not linked, and the card serenely announced the NEXT
+ * month's date for a plan whose present it had missed. A plan must be able to say «something
+ * happened to this subscription» — that is what this is for.
+ *
+ * ⚠️ Derived, never stored (same reasoning as `amount_varies` in migration 0044): a stored
+ * «paid/unpaid» per occurrence goes stale the moment a charge is linked late, and a wrong one
+ * marks real money as missing.
+ *   · `paid`       — the latest cycle has its charge, at the declared price (±10%);
+ *   · `changed`    — it has its charge, at a DIFFERENT price: the card shows old → new and the plan's
+ *                    own amount is updated only by a person;
+ *   · `due`        — the latest due date is under §PLAN-LATE's grace (or not reached yet);
+ *   · `late`       — one cycle past the grace with nothing linked;
+ *   · `missing`    — two cycles in a row with nothing;
+ *   · `stopped`    — three or more: the biller has most likely stopped, whatever the plan says;
+ *   · `ended`      — the person ended it (inactive, or past `end_date`);
+ *   · `no_history` — nothing has EVER been linked, so there is no rhythm to be late against
+ *                    (`dead_sub`'s story, not this one's).
+ */
+export type PlanStateKind =
+  | "paid" | "changed" | "due" | "late" | "missing" | "stopped" | "ended" | "no_history";
+
+export interface PlanState {
+  kind: PlanStateKind;
+  /** The most recent scheduled date at or before now — what lateness is measured from. */
+  due_at: number | null;
+  /** Whole days since `due_at`; null when nothing is due yet. */
+  late_days: number | null;
+  /** Consecutive cycles, counting back from `due_at`, with no linked charge. */
+  missed_cycles: number;
+  /** The charge that settled the latest cycle (`paid` / `changed`), in the plan's currency. */
+  paid_at: number | null;
+  paid_amount: number | null;
+}
+
+/** `POST /planned/:id/accept-price` — the declared amount before and after, in the plan's currency. */
+export interface AcceptPriceResult { ok: true; from: number | null; to: number }
+
+// ---- §SUB-STACK --------------------------------------------------------------
+
+export interface StackDuplicate {
+  category_id: number; category_name: string;
+  plans: { id: number; title: string; monthly: number }[];
+}
+export interface StackTrial {
+  id: number; title: string; currency_code: number;
+  /** In the plan's billing currency. */
+  trial_amount: number; trial_at: number; paid_amount: number; paid_since: number;
+}
+/** `GET /planned/stack` — the subscriptions as one thing. Money in base minor units unless noted. */
+export interface SubStack {
+  /** Active outflow plans — the same set as the page hero. */
+  count: number;
+  /** §SUB-MONTH over the same set. No `annual` field: it is `monthly × 12`, and a derived figure on the
+   *  wire only multiplies a rounding (the §BASE-CUR sweep caught a 6-minor-unit drift). */
+  monthly: number;
+  /** What linked charges ACTUALLY took per complete month, oldest first, from the first month anything was linked. */
+  paid: { ym: string; paid: number }[];
+  /** First three observed months against the last three; null without six observed months. */
+  drift: { from_avg: number; to_avg: number; pct: number } | null;
+  /** Two or more live subscriptions under one LEAF category — asked, never asserted. */
+  duplicates: StackDuplicate[];
+  /** Plans that began as a trial and started charging in full within the last 90 days. */
+  trials: StackTrial[];
 }

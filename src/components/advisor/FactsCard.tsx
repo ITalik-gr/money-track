@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { useT, translate } from "../../i18n/index.ts";
 import { Icon } from "../ui/Icon.tsx";
@@ -28,7 +29,7 @@ function effectLabel(f: Fact): string | null {
 
 export function FactsCard() {
   const t = useT();
-  const { data: facts } = useGetFactsQuery();
+  const { data: facts, error: factsError, refetch } = useGetFactsQuery();
   const [adding, setAdding] = useState(false);
   const list = facts ?? [];
 
@@ -47,6 +48,7 @@ export function FactsCard() {
           <Icon name={adding ? "check" : "plus"} /> {adding ? t("facts.collapse") : t("facts.addBtn")}
         </button>
       </div>
+      <ErrorNote error={factsError} what={t("facts.title")} onRetry={refetch} />
 
       {adding && <FactForm onDone={() => setAdding(false)} />}
 

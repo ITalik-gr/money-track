@@ -46,19 +46,13 @@ const STYLELESS_OK = new Set([
   //    (`tg-more` left this list on 2026-08-18: it was never a namespace — it is the drawer at the
   //     bottom of the Telegram card, and with no rule it sat glued to the button above it.)
 
-  // ── MODIFIERS AND WRAPPERS THAT CURRENTLY DO NOTHING. Not namespaces — nothing anywhere reads
-  //    them. Each is either a leftover or an intent never written, and telling those apart needs
-  //    the page ON SCREEN: every one of them sits on Порадник / Підписки / Landing / Головна,
-  //    which the owner has not reviewed live yet (ROADMAP «UI-черга»). Listed rather than deleted
-  //    or invented, because guessing a style for a page I cannot see is how the `cat-page-*` bug
-  //    got written in the first place.
-  //    ⚠️ Shrink this list during the live design pass; do not grow it.
-  "app",              // Login: the layout is inline `style`, so the class is decoration
-  "alt",              // StatsTrends `.split-seg alt` — colour comes from inline `background`
-  "tip-net",          // CashflowChart — colour comes from inline `style`
-  "goal-jar",         // Goals — the colour comes from the inline `--goal-color`
-  "advisor-main", "rev-name-txt", "grp-fact-label", "filt-sec-title",
-  "pulse-cats", "pulse-save-main", "top-subs-card", "lp-top-signin", "ai-model-list",
+  // ── MODIFIERS THAT DID NOTHING — cleared 2026-09-25. Thirteen sat here waiting for a live design
+  //    pass to say which were leftovers and which were unwritten intents. Removing a class that has
+  //    no rule cannot change a pixel, so twelve were removed from the markup (`app`, `alt`,
+  //    `tip-net`, `goal-jar`, `advisor-main`, `rev-name-txt`, `grp-fact-label`, `filt-sec-title`,
+  //    `pulse-cats`, `pulse-save-main`, `top-subs-card`, `ai-model-list`); an intent that turns out
+  //    to be real gets its class back WITH its rule. The thirteenth, `lp-top-signin`, was listed by
+  //    mistake — `landing.css` has styled it all along. The list stays at zero.
 ]);
 
 /** Rules kept although nothing names them, with the reason. */

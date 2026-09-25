@@ -15,7 +15,7 @@ import { apiRoutes, numParam } from "./_shared.ts";
 import { getRates } from "../../lib/finance/money.ts";
 import { localMonthStart } from "../../lib/finance/stats.ts";
 import type {
-  SpendProfile, Momentum, IncomeAllocation, SpendFloor,
+  SpendProfile, Momentum, IncomeAllocation, SpendFloor, CommittedShare, PaydayEffect, IncomeRhythm, FxExposure,
 } from "../../../shared/api/insights.ts";
 
 export const insights = apiRoutes();
@@ -57,4 +57,28 @@ insights.get("/insights/income-split", async (c) => {
 insights.get("/insights/floor", async (c) => {
   const { spendFloor } = await import("../../lib/finance/floor.ts");
   return c.json(await spendFloor(c.env, await getRates(c.env)) satisfies SpendFloor);
+});
+
+// §COMMITTED — the floor as a share of a typical month's income, and how that share moved.
+insights.get("/insights/committed", async (c) => {
+  const { committedShare } = await import("../../lib/finance/committed.ts");
+  return c.json(await committedShare(c.env, await getRates(c.env)) satisfies CommittedShare);
+});
+
+// §PAYDAY-EFFECT — how much faster discretionary money leaves in the week after income arrives.
+insights.get("/insights/payday", async (c) => {
+  const { paydayEffect } = await import("../../lib/finance/payday-effect.ts");
+  return c.json(await paydayEffect(c.env, await getRates(c.env)) satisfies PaydayEffect);
+});
+
+// §INCOME-RHYTHM — gaps between arrivals, time since the last one, months that covered the floor.
+insights.get("/insights/income-rhythm", async (c) => {
+  const { incomeRhythm } = await import("../../lib/finance/income-rhythm.ts");
+  return c.json(await incomeRhythm(c.env, await getRates(c.env)) satisfies IncomeRhythm);
+});
+
+// §FX-EXPOSURE — currencies of the money and of the spending, and a ±10% what-if.
+insights.get("/insights/fx-exposure", async (c) => {
+  const { fxExposure } = await import("../../lib/finance/fx-exposure.ts");
+  return c.json(await fxExposure(c.env, await getRates(c.env)) satisfies FxExposure);
 });

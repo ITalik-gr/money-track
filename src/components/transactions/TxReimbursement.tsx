@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { dateFmt } from "../../i18n/locale.ts";
 import { useT } from "../../i18n/index.ts";
 import { Link } from "react-router-dom";
@@ -28,7 +29,7 @@ const toMajor = (minor: number) => (Math.max(0, minor) / 100).toFixed(2);
 
 export function TxReimbursement({ txId, amount, currency }: { txId: string; amount: number; currency: number }) {
   const t = useT();
-  const { data } = useGetReimbursementQuery(txId);
+  const { data, error, refetch } = useGetReimbursementQuery(txId);
   const [save, { isLoading }] = useSetReimbursementMutation();
   const [editing, setEditing] = useState(false);
   // Ключ присутній = надходження обране; значення = скільки саме з нього беремо (у гривнях).
@@ -92,6 +93,8 @@ export function TxReimbursement({ txId, amount, currency }: { txId: string; amou
   }
 
   if (amount >= 0) return null;
+  // C17: a failed read must not look like «nothing was ever compensated».
+  if (error) return <ErrorNote error={error} what={t("rb.title")} onRetry={refetch} />;
 
   if (has && !editing) {
     return (

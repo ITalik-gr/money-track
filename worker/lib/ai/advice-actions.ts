@@ -103,22 +103,6 @@ export async function setSuggestionState(
   return rec;
 }
 
-/**
- * Record the outcome of a taken suggestion — computed by the caller from the canon.
- *
- * ⚠️ The number never comes from the model. This is the same rule `numbersAreGrounded` enforces
- * for notifications, and it matters more here: «delivery is down 15%» is precisely the kind of
- * encouraging sentence a model will produce whether or not it is true.
- */
-export async function setSuggestionOutcome(
-  env: Env, key: string, outcome: NonNullable<AdviceSuggestion["outcome"]>,
-): Promise<void> {
-  const rows = await getSuggestionRecords(env);
-  const rec = rows.get(key);
-  if (!rec) return;
-  rows.set(key, { ...rec, outcome });
-  await write(env, rows);
-}
 
 /**
  * Merge what is remembered onto freshly generated suggestions, and tolerate advice written before

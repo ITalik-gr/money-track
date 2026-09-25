@@ -7,7 +7,15 @@
       "last_amount": null,
       "last_time": null,
       "currency_code": null,
-      "price_change_pct": null
+      "price_change_pct": null,
+      "state": {
+        "kind": "no_history",
+        "due_at": null,
+        "late_days": null,
+        "missed_cycles": 0,
+        "paid_at": null,
+        "paid_amount": null
+      }
     },
     {
       "id": 2,
@@ -15,7 +23,15 @@
       "last_amount": null,
       "last_time": null,
       "currency_code": null,
-      "price_change_pct": null
+      "price_change_pct": null,
+      "state": {
+        "kind": "no_history",
+        "due_at": null,
+        "late_days": null,
+        "missed_cycles": 0,
+        "paid_at": null,
+        "paid_amount": null
+      }
     },
     {
       "id": 3,
@@ -23,7 +39,15 @@
       "last_amount": null,
       "last_time": null,
       "currency_code": null,
-      "price_change_pct": null
+      "price_change_pct": null,
+      "state": {
+        "kind": "no_history",
+        "due_at": null,
+        "late_days": null,
+        "missed_cycles": 0,
+        "paid_at": null,
+        "paid_amount": null
+      }
     },
     {
       "id": 4,
@@ -31,7 +55,15 @@
       "last_amount": null,
       "last_time": null,
       "currency_code": null,
-      "price_change_pct": null
+      "price_change_pct": null,
+      "state": {
+        "kind": "no_history",
+        "due_at": null,
+        "late_days": null,
+        "missed_cycles": 0,
+        "paid_at": null,
+        "paid_amount": null
+      }
     }
   ]
 }

@@ -161,3 +161,24 @@ export interface CategoryWhy {
   ai_enriched: boolean;
   ai_note: string | null;
 }
+
+// ---- §QUERY-PARSE ------------------------------------------------------------
+
+/** One recognised piece of a search query, shown as a removable chip. `raw` is the text as typed. */
+export interface ParsedQueryChip { kind: "amount" | "period" | "type" | "category" | "exclude"; raw: string }
+
+/** `GET /transactions/parse?q=` — what the search box understood. Amounts are whole units. */
+export interface ParsedQuery {
+  /** Whatever was not recognised — searched as text (every word must match). Null when nothing is left. */
+  text: string | null;
+  from?: number; to?: number;
+  amin?: number; amax?: number;
+  type?: "expense" | "income";
+  /** A top-level category (sub-categories included) … */
+  catparent?: number;
+  /** … or a sub-category. */
+  category?: number;
+  /** Words an operation must NOT contain («без Starbucks»). */
+  exclude: string[];
+  chips: ParsedQueryChip[];
+}
