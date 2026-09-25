@@ -18,6 +18,7 @@ import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { renderNotif, type NotifLocale, type NotifParams } from "../../shared/notif-i18n.ts";
+import { localDayStart, nowUnix } from "../../shared/time.ts";
 
 // Compose a feed row's text: templated rows (P3.3) re-render in the CURRENT locale from
 // key+params, so switching language retranslates the whole feed live; `ai`/legacy rows have
@@ -66,13 +67,11 @@ const timeFmt = dateFmt({ hour: "2-digit", minute: "2-digit" });
 
 // Заголовок групи: «Сьогодні» / «Вчора» / дата. Стрічку читають зверху вниз за днями.
 function dayLabel(unix: number): string {
-  const d = new Date(unix * 1000);
-  const today = new Date();
-  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = Math.round((startOf(today) - startOf(d)) / 86400000);
+  // Kyiv days (§APP_TZ), like the digest that wrote these; rounding absorbs a DST day.
+  const diff = Math.round((localDayStart(nowUnix()) - localDayStart(unix)) / 86400);
   if (diff === 0) return translate(getLocale(), "notif.today");
   if (diff === 1) return translate(getLocale(), "notif.yesterday");
-  return dayFmt.format(d);
+  return dayFmt.format(unix * 1000);
 }
 
 /**
@@ -227,7 +226,7 @@ export function Notifications() {
             {KINDS.map((k) => (
               <label key={k} className="nt-pref">
                 <input
-                  type="checkbox"
+                  type="checkbox" role="switch" className="switch"
                   checked={prefs?.[k] ?? true}
                   onChange={(e) => { void setPrefs({ [k]: e.target.checked }); }}
                 />

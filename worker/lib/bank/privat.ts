@@ -13,7 +13,7 @@
 // failed is the worst possible outcome, because nothing looks wrong.
 import { localParts } from "../finance/stats.ts";
 import { currencyNumeric, parseAmountMinor, parseStatementDate } from "./normalize.ts";
-import type { CanonicalAccount, CanonicalTx } from "./providers/provider.ts";
+import { CredentialRefused, type CanonicalAccount, type CanonicalTx } from "./providers/provider.ts";
 
 const BASE = "https://acp.privatbank.ua";
 
@@ -97,6 +97,7 @@ async function get<T>(cred: PrivatCredential, path: string, params: Record<strin
     },
   });
   if (res.status === 429) throw new PrivatUnavailable("429");
+  if (res.status === 401 || res.status === 403) throw new CredentialRefused(`privat ${path} -> ${res.status}`);
   if (!res.ok) throw new Error(`privat ${path} -> ${res.status}: ${(await res.text()).slice(0, 300)}`);
 
   const body = (await res.json()) as PrivatPage<T>;

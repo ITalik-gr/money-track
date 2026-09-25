@@ -8,12 +8,13 @@ import {
   useUnmuteRegSourceMutation, useRemoveRegSourceMutation, useSaveRequisiteMutation,
 } from "../../store/api.ts";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
+import { localYmd } from "../../../shared/time.ts";
 
 const KINDS = ["single_tax", "military_levy", "social_contribution"] as const;
 
 function ago(unix: number | null, never: string): string {
   if (!unix) return never;
-  return new Date(unix * 1000).toISOString().slice(0, 10);
+  return localYmd(unix);
 }
 
 /**

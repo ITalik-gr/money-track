@@ -105,10 +105,19 @@ export async function deleteSecret(db: AppDb, name: SecretName): Promise<void> {
   await db.prepare("DELETE FROM user_secrets WHERE name = ?").bind(name).run();
 }
 
+/**
+ * The credential's API answered (`ok`) or refused it (401/403) AFTER it was saved.
+ *
+ * A success writes only when the row is currently marked bad: `last_ok_at` means «verified», and
+ * rewriting it on every one-a-minute backfill step would be a write per request for no new fact.
+ * No row (the owner's deployment secret) → nothing to mark, by design.
+ */
 export async function markVerified(db: AppDb, name: SecretName, ok: boolean): Promise<void> {
   await db
-    .prepare("UPDATE user_secrets SET last_ok_at = ? WHERE name = ?")
-    .bind(ok ? Math.floor(Date.now() / 1000) : null, name)
+    .prepare(ok
+      ? "UPDATE user_secrets SET last_ok_at = ? WHERE name = ? AND last_ok_at IS NULL"
+      : "UPDATE user_secrets SET last_ok_at = NULL WHERE name = ?")
+    .bind(...(ok ? [Math.floor(Date.now() / 1000), name] : [name]))
     .run();
 }
 

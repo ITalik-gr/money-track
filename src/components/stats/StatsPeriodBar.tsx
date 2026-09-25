@@ -3,17 +3,16 @@ import { Icon } from "../ui/Icon.tsx";
 import { Select } from "../ui/Select.tsx";
 import { currencySign } from "../../lib/format.ts";
 import { RANGES, type Cur, type RangeKey } from "./shared.tsx";
+import { localMidnight, localYm, nowUnix } from "../../../shared/time.ts";
 
 /** `YYYY-MM` of the current month, and the same string shifted — the page's own month arithmetic. */
 export function curYm(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return localYm(nowUnix()); // the Kyiv month (§APP_TZ), not the browser's
 }
 
 export function shiftYm(ym: string, n: number): string {
   const [y, m] = ym.split("-").map(Number);
-  const d = new Date(y!, m! - 1 + n, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return localYm(localMidnight(y!, m! + n, 1));
 }
 
 /**

@@ -13,6 +13,7 @@ import { useT } from "../i18n/index.ts";
 import { Icon } from "../components/ui/Icon.tsx";
 import { Select } from "../components/ui/Select.tsx";
 import { Money } from "../components/ui/Money.tsx";
+import { localParts, localWallTime, localYmd, nowUnix } from "../../shared/time.ts";
 
 /**
  * "Add an operation".
@@ -61,15 +62,15 @@ const currencyCode = (c: string): number => (c === "USD" ? 840 : c === "EUR" ? 9
 const fmtMoney = (major: number, cur: string): string =>
   `${major.toLocaleString(localeTag(getLocale()), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${cur}`;
 
-/** `YYYY-MM-DD` of the LOCAL day — `toISOString()` hands back yesterday late in the evening. */
+/** `YYYY-MM-DD` of the Kyiv day (§APP_TZ) — `toISOString()` hands back yesterday late in the evening. */
 function todayIso(): string {
-  return new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  return localYmd(nowUnix());
 }
-/** Date input value → unix. Keeps the current time of day, so today's entries stay in order. */
+/** Date input value → unix. Keeps the current Kyiv time of day, so today's entries stay in order. */
 function isoToUnix(iso: string): number {
   const [y, m, d] = iso.split("-").map(Number);
-  const now = new Date();
-  return Math.floor(new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds()).getTime() / 1000);
+  const now = localParts(nowUnix());
+  return localWallTime(y, m, d, now.hh, now.mm, now.ss);
 }
 
 const num = (s: string): number => Number(s.replace(",", "."));

@@ -38,15 +38,6 @@ The mechanics exist (§A6-BATCH, migration 0053, pinned on `noop_batch`). Left: 
 `enrichPending` on it as its own job kind with its own `NotifKind` and template. Needs the owner's
 live key — the paid payload cannot be tested otherwise.
 
-### A saved token that later goes bad is never recorded
-`user_secrets.last_ok_at` is set only when a token is SAVED (`putSecret`). `markVerified` exists to
-record a later success or failure and nothing calls it — so a monobank token that expired last week
-still shows as verified, which is the exact confusion `routes/credentials.ts` says `last_ok_at` exists
-to prevent. **Goal:** the bank sync and the Anthropic calls mark the secret on a 401/403 (and on the
-first success after one). **Files:** `lib/bank/mono.ts` error path, `lib/ai/ai.ts` transport,
-`lib/platform/secrets.ts`. **Done-when:** a test drives a 401 through the sync and the status turns
-unverified. (Found by the dead-export sweep, 2026-09-25.)
-
 ## 📌 Backlog
 
 ### ФОП — audit A1 findings (each needs a canon decision)

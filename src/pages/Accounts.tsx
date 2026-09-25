@@ -31,6 +31,7 @@ import type { Account } from "../../shared/types.ts";
 import { baseSign, getBaseCurrency } from "../lib/currency.ts";
 import { ownFundsMinor, debtMinor } from "../../shared/own-funds.ts";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
+import { useFopVisible } from "../components/fop/gate.ts";
 
 // ₴-величина рахунку для сортування/підсумків — дзеркалить `shown` у картці (кредитка = власні).
 // Від'ємне НЕ затискаємо: кредитка в боргу має власних коштів менше нуля, і саме це число
@@ -295,6 +296,7 @@ function AccountCard({ a, rates, spark }: {
   a: Account; rates: Record<string, number>; spark?: number[];
 }) {
   const t = useT();
+  const fopVisible = useFopVisible();
   const [editing, setEditing] = useState(false);
   const kind = a.type ?? "manual";
   // Per-account flags (were section-level before institution grouping): manual accounts allow
@@ -342,7 +344,9 @@ function AccountCard({ a, rates, spark }: {
         {/* §TAX-BASE: which account the tax module treats as the business one has to be
             visible on the card, not only inside the editor — it decides what every receipt
             on it counts as, including the imported history. */}
-        {a.is_business === 1 && <span className="acct2-role" title={t("fop.acct.badgeTitle")}>{t("fop.acct.badge")}</span>}
+        {/* §FOP-GATE: the flag only the owner can set today — gated anyway, so a latent row
+            never announces the hidden module (UI_PASS FOP1). */}
+        {fopVisible && a.is_business === 1 && <span className="acct2-role" title={t("fop.acct.badgeTitle")}>{t("fop.acct.badge")}</span>}
         {pan && a.type !== "jar" && <span className="acct2-pan">·· {pan}</span>}
         <button className="acct2-edit" onClick={() => setEditing(true)} aria-label={t("acct.settings")}>
           <Icon name="edit" size={14} />

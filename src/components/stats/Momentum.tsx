@@ -15,25 +15,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { useGetMomentumQuery } from "../../store/api.ts";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { HoverTip } from "../ui/HoverTip.tsx";
-
-/** Small enough to read as a shape rather than a chart, which is what it is. */
-const W = 74, H = 22;
-
-function Spark({ series, tone }: { series: number[]; tone: string }) {
-  const max = Math.max(...series, 1);
-  // The floor is 0, not the minimum: these are amounts of money, and a baseline at the smallest
-  // month would turn a 2% wobble into a cliff — the same reason `Y_AXIS` is never hand-sized.
-  const pts = series.map((v, i) => {
-    const x = series.length > 1 ? (i / (series.length - 1)) * W : W / 2;
-    const y = H - (v / max) * (H - 3) - 1.5;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  return (
-    <svg className="mo-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
-      <polyline points={pts.join(" ")} fill="none" stroke={tone} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+import { Sparkline } from "../ui/Sparkline.tsx";
 
 export function Momentum({ sign }: { sign: string }) {
   const t = useT();
@@ -52,7 +34,7 @@ export function Momentum({ sign }: { sign: string }) {
           <span className="label">{t("common.whatIsThis")}</span>
         </HoverTip>
       </div>
-      <div className="card mo-list">
+      <div className="card flush"><div className="ilist">
         {data.rows.slice(0, 6).map((r) => {
           const up = r.direction === "up";
           // Rising spending is bad news and falling is good — the opposite of a stock chart, and
@@ -60,11 +42,13 @@ export function Momentum({ sign }: { sign: string }) {
           const tone = up ? "var(--neg)" : "var(--pos)";
           return (
             <Link key={r.category_id} to={`/categories/${r.category_id}`} className="mo-row">
-              <span className="mo-name">
+              <span className="mo-name" title={r.name}>
                 <span className="d" style={{ background: r.color ?? "var(--muted)" }} />
-                {r.name}
+                <span>{r.name}</span>
               </span>
-              <Spark series={r.series} tone={tone} />
+              {/* ST6: the shared, readable sparkline (hover / tap / arrows per month) instead of a private
+                  picture; baseline at 0 — a 2% wobble drawn from the minimum reads as a cliff. */}
+              <Sparkline values={r.series} months={data.months} sign={sign} color={tone} width={74} height={22} floor0 running={false} goodUp={false} />
               <span className="mo-run">{t("stats.momentum.run", { n: r.run })}</span>
               <span className={`mo-delta ${up ? "up" : "down"}`}>
                 {up ? "+" : "−"}{formatMinor(Math.abs(r.change), { decimals: false })} {sign}
@@ -75,7 +59,7 @@ export function Momentum({ sign }: { sign: string }) {
             </Link>
           );
         })}
-      </div>
+      </div></div>
     </section>
   );
 }

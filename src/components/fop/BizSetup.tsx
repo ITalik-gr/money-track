@@ -45,7 +45,7 @@ export function BizSetup({ profile, onSave, saving, sample, onSample }: {
 
         <label className="fop-check">
           <input
-            type="checkbox"
+            type="checkbox" role="switch" className="switch"
             checked={business}
             disabled={saving || sample}
             onChange={(e) => save({ business: e.target.checked })}
@@ -58,7 +58,7 @@ export function BizSetup({ profile, onSave, saving, sample, onSample }: {
 
         <label className={`fop-check ${business ? "" : "is-off"}`}>
           <input
-            type="checkbox"
+            type="checkbox" role="switch" className="switch"
             checked={taxOn}
             // Off, not hidden: somebody looking for the tax module must find it and see WHY it is
             // unavailable, rather than conclude the app does not have one.

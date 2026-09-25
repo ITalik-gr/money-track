@@ -11,13 +11,14 @@ import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { formatMinor } from "../lib/format.ts";
 import { CHART_ANIM } from "../lib/motion.ts";
 import { baseSign } from "../lib/currency.ts";
+import {  } from "../../shared/time.ts";
 
 // §P3: сторінка одного мерчанта — уся історія витрат, тренд 6 міс, середній чек, частка в
 // категорії, перша/остання покупка. Дані канонічні (stats.ts), зведені в ₴.
 const fmt0 = numFmt({ maximumFractionDigits: 0 });
 const monthShort = dateFmt({ month: "short" });
 const dateFull = dateFmt({ day: "numeric", month: "short", year: "numeric" });
-const monthLabel = (m: string) => { const [y, mm] = m.split("-"); return monthShort.format(new Date(Number(y), Number(mm) - 1, 1)); };
+const monthLabel = (m: string) => monthShort.format(new Date(`${m}-15T12:00:00Z`));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function MTooltip(props: any) {

@@ -47,7 +47,7 @@ export function KnowledgeCorpusCard() {
 
       {error && <ErrorNote error={error} what={t("corpus.errorWhat")} onRetry={refetch} />}
 
-      <div className="corpus-list">
+      <div className="corpus-list ilist">
         {builtin.map((d) => <DocRow key={d.id} d={d} onEdit={() => setEditing({ id: d.id })} />)}
       </div>
 
@@ -56,7 +56,7 @@ export function KnowledgeCorpusCard() {
         {data && <span className="corpus-quota" title={t("corpus.quotaTitle", { used: data.user_chars, limit: data.user_limit })}>{t("corpus.usedPct", { pct: usedPct })}</span>}
       </div>
       {mine.length ? (
-        <div className="corpus-list">
+        <div className="corpus-list ilist">
           {mine.map((d) => <DocRow key={d.id} d={d} onEdit={() => setEditing({ id: d.id })} />)}
         </div>
       ) : (

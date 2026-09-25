@@ -5,7 +5,7 @@
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
 > In production (`https://money.italik.dev`). Migrations: `finance` to **0055**, `directory` to
-> **0011**. Lints **C1–C21**.
+> **0011**. Lints **C1–C22**.
 
 ## Documents
 
@@ -95,13 +95,13 @@ C1 no SQL in routes/services · C2/C4 API shapes only in `shared/api/` · C3 fil
 (exceptions only shrink — extract, never raise) · C5 golden analytics · C6 golden DB state after
 writes · C7 route order · C8 `index.css` imports only · C9 every class has a rule and vice versa ·
 C10 one conversion target, no `₴` literals · C11 no `@media` rule killed by a later plain rule ·
-C12 no UTC date parts in the worker · C13 worker-first list · C14 own-funds formula · C15 no
+C12 no runtime-zone date parts anywhere (worker, client, shared — the calendar is `shared/time.ts`) · C13 worker-first list · C14 own-funds formula · C15 no
 undefined `var(--x)` · C16 no `LOWER(…) LIKE` in worker SQL (§CYR-CASE: SQLite folds ASCII
 only — use `orLikeClause`/`likeVariants` from `lib/platform/text.ts`) · C17 a component rendering
 `?? []` from a query has an error branch (exceptions listed with reasons, only shrink) · C18 every
-§TAG cited in code is defined in CLAUDE.md / docs / DESIGN.md (49 legacy ids, shrinking) · C19 no
+§TAG cited in code is defined in CLAUDE.md / docs / DESIGN.md (48 legacy ids, shrinking) · C19 no
 export that nothing uses (a short KEEP list with reasons) · C20 no CSS declaration always overridden
-by a later rule for the same selector · C21 a clickable div/span/li has a role (keyboard-reachable). Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
+by a later rule for the same selector · C21 a clickable div/span/li has a role (keyboard-reachable) · C22 row separators with a hover fill only from `.ilist` (§ROW-LIST). Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
 `gen-migrations --check` (regenerate the DO embed after touching `migrations/`). Re-record a golden
 (`UPDATE_GOLDEN=1`) only for a deliberate, explained change.
 
@@ -152,7 +152,8 @@ click writes the real column. The amount never comes from a model.
   sample rows and shown for confirmation). The target account is never guessed.
 - §RENAME-MEMORY: two agreeing manual renames name the next row; `name_locked` 0/1/2.
 - §BANK-FETCH / §BANK-POLL / §BANK-CRED / §BANK-CONN: pacing belongs to the provider; one credential
-  resolver; a new provider has no deployment fallback.
+  resolver; a new provider has no deployment fallback. A 401/403 (`CredentialRefused`, or the AI
+  transport) clears `last_ok_at`; the first success after it sets it again (`noteCredential`).
 - Privat: no personal-card API (CSV only); the ФОП account works via AutoClient polling but has
   never touched the live API. Other banks = one aggregator later (Teller → SimpleFIN → Enable Banking).
 

@@ -58,7 +58,7 @@ const MAX_LINES = 700;
 // §WEEKDAY/§HABITS family that had been sitting in this part (and two more in `shell.css` and
 // `topbar.css`). The ratchet does not care WHY the file shrank: 53 lines of allowance nobody
 // decided to grant is 53 lines a future block can occupy with the lint green the whole way.
-const EXCEPTIONS = { "domains-a.css": 810 };
+const EXCEPTIONS = { "domains-a.css": 741 };
 /**
  * How far under its exception a part may sit before the number counts as stale.
  *

@@ -375,7 +375,7 @@ export function Subscription() {
       {data.charges.length > 0 && (
         <section>
           <div className="section-head"><h2>{t("sub.linkedTx")}</h2></div>
-          <div className="card sub-charge-list">
+          <div className="card flush"><div className="ilist">
             {data.charges.slice(0, 12).map((c) => (
               <Link key={c.id} className="sub-charge-row" to={`/tx/${c.id}`}>
                 <span>{fmtDay.format(new Date(c.time * 1000))}</span>
@@ -392,7 +392,7 @@ export function Subscription() {
                 </span>
               </Link>
             ))}
-          </div>
+          </div></div>
         </section>
       )}
 

@@ -121,7 +121,7 @@ export function SubSettings({ plan }: { plan: SubscriptionOverview["plan"] }) {
 
         <div className="setform-row">
           <div className="setform-lbl">
-            <span className="setform-name">{t("sub.category")}</span>
+            <span className="setform-name">{t("subset.category")}</span>
             <span className="setform-hint">{t("subset.categoryHint")}</span>
           </div>
           <div className="setform-ctrl">

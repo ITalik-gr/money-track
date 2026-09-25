@@ -10,6 +10,7 @@ export const monoProvider: BankProvider = {
   id: "mono",
   label: "Monobank",
   mode: "webhook",
+  secret: "mono_token",
 
   async listAccounts(token: string): Promise<CanonicalAccount[]> {
     const info = await getClientInfo(token);

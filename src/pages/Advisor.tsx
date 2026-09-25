@@ -127,14 +127,16 @@ export function Advisor() {
 
       {tab === "state" && (
         <div className="advisor-state">
+          {/* A2 (2026-09-25): «Місячний мінімум» full width; «Як приходить дохід» and «Валютна
+              експозиція» side by side under it. */}
           <HealthIndexCard />
           <NetworthCard />
           <SpendFloorCard />
-          <PaydayCard />
           <IncomeRhythmCard />
           <FxExposureCard />
-          <CashflowCalendar />
+          <PaydayCard />
           <FactsCard />
+          <CashflowCalendar />
           <KnowledgeCorpusCard />
         </div>
       )}
@@ -344,13 +346,13 @@ function AdviceHistory() {
         </div>
       )}
 
-      <div className="card" style={{ padding: 8 }}>
+      <div className="card flush"><div className="ilist">
         {rows.map((h, i) => {
           const prev: AdviceHistoryItem | undefined = hist[i + 1]; // наступний = старіший
           return (
             <div key={h.generated_at} className="adv-hist-row">
               <span className="adv-hist-date">{dfmt.format(h.generated_at * 1000)}</span>
-              <span className="adv-hist-sum">{h.summary || "—"}</span>
+              <span className="adv-hist-sum" title={h.summary || undefined}>{h.summary || "—"}</span>
               <span className="adv-hist-nums">
                 {h.runway_months != null && (
                   <>runway <b>{h.runway_months}{t("adv.monthsAbbr")}</b> {prev && <DeltaPill cur={h.runway_months} prev={prev.runway_months} goodUp unit={t("adv.monthsAbbr")} />} · </>
@@ -371,7 +373,7 @@ function AdviceHistory() {
             {showAll ? t("adv.histShowLess") : t("adv.histShowMore", { n: hidden })}
           </button>
         )}
-      </div>
+      </div></div>
     </section>
   );
 }

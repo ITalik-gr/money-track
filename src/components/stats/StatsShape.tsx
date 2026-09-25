@@ -16,7 +16,7 @@ import { useT } from "../../i18n/index.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { useGetSpendingShapeQuery } from "../../store/api.ts";
 import { FactLabel } from "./shared.tsx";
-import { HoverTip } from "../ui/HoverTip.tsx";
+import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import type { Cur } from "./shared.tsx";
 
@@ -43,6 +43,11 @@ export function SpendingShape({ from, to, currency, sign }: {
       : b.from === 0 ? t("stats.shape.bucketUnder", { to: bound(b.up_to) })
         : t("stats.shape.bucketRange", { from: bound(b.from), to: bound(b.up_to) });
 
+  // ST4: the block leads with the ONE sentence the bar exists for — which cheque size carries the
+  // most money, and how many operations that is. It used to be a 14px bar, a four-row legend and
+  // two full tiles: the largest block of the tab for a fact that fits in a line.
+  const lead = data.buckets.reduce((m, b) => (b.share_pct > m.share_pct ? b : m), data.buckets[0]);
+
   return (
     <section>
       <div className="section-head">
@@ -51,15 +56,14 @@ export function SpendingShape({ from, to, currency, sign }: {
       </div>
 
       <div className="card shape-card">
+        <p className="shape-lead">
+          {t("stats.shape.lead", { pct: lead.share_pct, n: lead.n, size: label(lead) })}
+        </p>
         <div className="shape-bar">
           {data.buckets.map((b, i) => (
             b.spent > 0 && (
-              <HoverTip key={i} content={
-                <>
-                  <div className="tip-lbl">{label(b)}</div>
-                  <div className="r">{money(b.spent)} · {t("stats.shape.nOps", { n: b.n })}</div>
-                </>
-              }>
+              <HoverTip key={i} content={<TipBody label={label(b)} color={BUCKET_TONES[i]} value={money(b.spent)}
+                sub={<>{b.share_pct}% · {t("stats.shape.nOps", { n: b.n })}</>} />}>
                 <span className="shape-seg" style={{ width: `${b.share_pct}%`, background: BUCKET_TONES[i] }} />
               </HoverTip>
             )
@@ -67,35 +71,34 @@ export function SpendingShape({ from, to, currency, sign }: {
         </div>
         <div className="shape-legend">
           {data.buckets.map((b, i) => (
-            <div key={i} className="shape-leg">
+            <span key={i} className="shape-leg">
               <span className="d" style={{ background: BUCKET_TONES[i] }} />
-              <span className="shape-leg-lbl">{label(b)}</span>
+              {label(b)}
               {/* The COUNT next to the share is the whole point: «38% витрат — це 214 покупок» is a
                   different month from «38% — це три платежі», and the share alone hides which. */}
               <span className="shape-leg-v">{b.share_pct}% · {t("stats.shape.nOps", { n: b.n })}</span>
-            </div>
+            </span>
           ))}
         </div>
-      </div>
-
-      <div className="stat-facts shape-facts">
-        <div className="fact">
-          <FactLabel info={<>{t("stats.shape.unbudgetedInfo")}</>}>{t("stats.shape.unbudgeted")}</FactLabel>
-          <div className="fact-val">
-            {data.unbudgeted.share_pct == null ? "—" : `${data.unbudgeted.share_pct}%`}
+        <div className="shape-foot">
+          <div>
+            <FactLabel info={<>{t("stats.shape.unbudgetedInfo")}</>}>{t("stats.shape.unbudgeted")}</FactLabel>
+            <div className="shape-foot-v">
+              <b>{data.unbudgeted.share_pct == null ? "—" : `${data.unbudgeted.share_pct}%`}</b>
+              <span>{money(data.unbudgeted.spent)}</span>
+            </div>
           </div>
-          <div className="fact-sub">{money(data.unbudgeted.spent)}</div>
-        </div>
-        <div className="fact">
-          <FactLabel info={<>{t("stats.shape.uncategorisedInfo")}</>}>{t("stats.shape.uncategorised")}</FactLabel>
-          {/* Zero here is a RESULT, not an absence — «нічого не загублено» is worth printing. */}
-          <div className={`fact-val ${data.uncategorised.spent > 0 ? "neg" : ""}`}>
-            {data.uncategorised.share_pct == null ? "—" : `${data.uncategorised.share_pct}%`}
-          </div>
-          <div className="fact-sub">
-            {data.uncategorised.n > 0
-              ? `${money(data.uncategorised.spent)} · ${t("stats.shape.nOps", { n: data.uncategorised.n })}`
-              : t("stats.shape.allAttributed")}
+          <div>
+            <FactLabel info={<>{t("stats.shape.uncategorisedInfo")}</>}>{t("stats.shape.uncategorised")}</FactLabel>
+            {/* Zero here is a RESULT, not an absence — «нічого не загублено» is worth printing. */}
+            <div className="shape-foot-v">
+              <b className={data.uncategorised.spent > 0 ? "neg" : ""}>{data.uncategorised.share_pct == null ? "—" : `${data.uncategorised.share_pct}%`}</b>
+              <span>
+                {data.uncategorised.n > 0
+                  ? `${money(data.uncategorised.spent)} · ${t("stats.shape.nOps", { n: data.uncategorised.n })}`
+                  : t("stats.shape.allAttributed")}
+              </span>
+            </div>
           </div>
         </div>
       </div>

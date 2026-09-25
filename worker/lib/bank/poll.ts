@@ -17,7 +17,7 @@ import type { Env } from "../../env.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { upsertCanonicalTx } from "../../repo/ingest.ts";
 import { recordSync } from "../../repo/connections.ts";
-import { bankCredential } from "./credentials.ts";
+import { bankCredential, noteCredential } from "./credentials.ts";
 import { getProvider } from "./providers/index.ts";
 
 /** How often one account is refreshed. */
@@ -107,6 +107,7 @@ export async function pollOnce(env: Env): Promise<{ account: string; rows: numbe
     }
     await setState(env.DB, accountKey(oldest.id), String(now));
     await recordSync(env.DB, oldest.provider, provider.label, { ok: true });
+    await noteCredential(env.DB, oldest.provider);
     return { account: oldest.id, rows: txs.length };
   } catch (e) {
     if (provider.statement!.isRateLimit(e)) return null; // pause; the account stays due
@@ -119,6 +120,7 @@ export async function pollOnce(env: Env): Promise<{ account: string; rows: numbe
       ok: false,
       error: e instanceof Error ? e.message : String(e),
     });
+    await noteCredential(env.DB, oldest.provider, e);
     return null;
   }
 }

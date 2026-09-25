@@ -24,7 +24,6 @@ const KEEP = {
   RootState: "Redux convention — the store's type, for typed hooks when they are added",
   AppDispatch: "Redux convention — same",
   JUDGED_MIN_SCORE: "the measured-but-unwired search rerank line (§JEV-EVAL); re-measured by scripts/eval-sites.mjs",
-  markVerified: "records a token going bad after it was saved — the call site is a ROADMAP card",
 };
 
 function* files(dir) {

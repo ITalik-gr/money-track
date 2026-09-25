@@ -49,7 +49,7 @@
 .advisor-state > * { min-width: 0; }
 /* Індекс здоров'я, календар потоку і НЕТВОРТ — на всю ширину: це графіки з віссю часу,
    у півколонці підписи місяців зливались, а нетворт узагалі стояв на 50% (фідбек користувача). */
-.advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card { grid-column: 1 / -1; }
+.advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card, .advisor-state > .floor-card { grid-column: 1 / -1; }
 @media (max-width: 760px) { .advisor-state { grid-template-columns: 1fr; } }
 
 /* §ADVICE-LOOP — the row under a suggestion: where it stands, and what came of it.
@@ -133,3 +133,41 @@
 .ht-tip-note { margin-top: 6px; font-size: 11px; color: rgba(255, 255, 255, 0.6); max-width: 30ch; }
 .ht-axis { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 .ht-axis .ht-range { text-align: center; }
+
+/* Moved from domains-a.css (C8, 2026-09-25); this file is imported right after it, so the cascade
+   position is unchanged. */
+/* §2 Історія порад — компактні знімки runway/burn */
+/* A1 (2026-09-25): two lines — the advice gets the full width, the numbers sit under it. On one
+   line the `nowrap` numbers took the row and cut the advice to «Ти…». Separators come from `.ilist`. */
+.adv-hist-row { display: grid; grid-template-columns: 62px minmax(0, 1fr) auto; grid-template-areas: "date sum del" ". nums del"; gap: 3px 10px; align-items: baseline; padding: 9px 10px; border-radius: var(--radius-sm); }
+.adv-hist-date { grid-area: date; }
+.adv-hist-sum { grid-area: sum; }
+.adv-hist-nums { grid-area: nums; }
+.adv-hist-del { grid-area: del; align-self: center; }
+.adv-hist-date { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+.adv-hist-sum { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adv-hist-nums { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.adv-hist-nums b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
+/* `white-space: normal` без стелі розгортав КОЖНУ минулу пораду на повний абзац — сторінка
+   Порадника на телефоні перетворювалась на стіну старого тексту, у якій свіжу пораду не
+   знайти. Історія — це орієнтир, а не читання: три рядки + повний текст у `title`. */
+@media (max-width: 560px) {
+  .adv-hist-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "date del" "sum del" "nums del"; gap: 2px 8px; }
+  .adv-hist-sum {
+    white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+  }
+}
+.adv-hist-nums .cmp-delta { margin-left: 2px; }
+/* Per-row delete. Faint until the row is touched: it removes a record, so it should be reachable
+   without inviting itself — the row is a log entry, not a to-do. */
+.adv-hist-del {
+  background: none; border: none; cursor: pointer; padding: 0 2px; line-height: 1;
+  font-size: 16px; color: var(--muted); opacity: 0.45; transition: opacity var(--dur-1) ease, color var(--dur-1) ease;
+}
+.adv-hist-row:hover .adv-hist-del, .adv-hist-del:focus-visible { opacity: 1; color: var(--neg); }
+.adv-hist-more {
+  display: block; width: 100%; padding: 8px; background: none; border: none; border-radius: var(--radius-sm); cursor: pointer;
+  font: inherit; font-size: var(--fs-xs); color: var(--muted);
+}
+.adv-hist-more:hover { color: var(--ink); }

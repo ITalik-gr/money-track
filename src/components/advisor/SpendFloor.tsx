@@ -55,13 +55,24 @@ export function SpendFloorCard() {
     </HoverTip>
   );
 
-  const first = cm?.trend[0];
+  // Leading months with no floor yet (the ledger had not started) are not «0% of income» — trimmed,
+  // or the delta below reads «+49 pp since April» about a month that had no data (seen live).
+  const lead = cm ? cm.trend.findIndex((p) => (p.share ?? 0) > 0) : -1;
+  const trend = cm && lead >= 0 ? cm.trend.slice(lead) : [];
+  const first = trend[0];
   const nowPct = income != null ? pctOf(data.floor, income) : null;
-  const moved = first && cm && cm.trend.length >= 2 && nowPct != null ? nowPct - Math.round((first.share ?? 0) * 100) : null;
-  const maxShare = cm ? Math.max(1, ...cm.trend.map((p) => p.share ?? 0)) : 1;
+  const moved = first && trend.length >= 2 && nowPct != null ? nowPct - Math.round((first.share ?? 0) * 100) : null;
+  const maxShare = Math.max(1, ...trend.map((p) => p.share ?? 0));
+  // A3: the trend says what it MEANS in a sentence — the last month's share, where it started, and
+  // what that share leaves for decisions. The bare columns were «still not understood» (owner).
+  const last = trend.length >= 2 ? trend[trend.length - 1] : null;
+  const lastPct = last ? Math.round((last.share ?? 0) * 100) : null;
+  const firstPct = first ? Math.round((first.share ?? 0) * 100) : null;
+  const meaningKey = lastPct == null ? null : lastPct > 100 ? "base.meanOver" : lastPct >= 70 ? "base.meanTight" : "base.meanRoom";
+  const SAFE = 0.7;
 
   return (
-    <div className="card floor-card">
+    <div className="card floor-card"><div className="mb-grid"><div className="mb-main">
       <div className="ai-head">
         <div style={{ minWidth: 0 }}>
           <div className="ai-title">{t("base.title")}<InfoTip>{t("base.tip")}</InfoTip></div>
@@ -103,6 +114,7 @@ export function SpendFloorCard() {
         </p>
       )}
 
+      </div><div className="mb-side">
       {data.parts.length > 0 && (
         <div className="mb-block">
           <div className="label">{t("base.made")}</div>
@@ -120,10 +132,11 @@ export function SpendFloorCard() {
         </div>
       )}
 
-      {cm && cm.trend.length >= 2 && (
+      {trend.length >= 2 && (
         <div className="mb-block">
           <div className="cm-trend-head">
             <span className="label">{t("base.trend")}</span>
+            <span className="cm-safe-key"><i />{t("base.safeLine", { pct: Math.round(SAFE * 100) })}</span>
             {moved != null && moved !== 0 && first && (
               <span className={`cm-moved ${moved > 0 ? "neg" : "pos"}`}>
                 {t("base.moved", { value: `${moved > 0 ? "+" : "−"}${Math.abs(moved)}`, month: fmtMonth.format(monthOf(first.ym)) })}
@@ -131,7 +144,7 @@ export function SpendFloorCard() {
             )}
           </div>
           <div className="cm-cols">
-            {cm.trend.map((p) => {
+            {trend.map((p) => {
               const s = p.share ?? 0;
               return (
                 <HoverTip key={p.ym} content={
@@ -144,15 +157,25 @@ export function SpendFloorCard() {
                 }>
                   <div className="cm-col">
                     <span className="cm-col-v">{Math.round(s * 100)}%</span>
-                    <span className="cm-col-track"><i className={toneOf(s)} style={{ height: `${Math.max(4, (s / maxShare) * 100)}%` }} /></span>
+                    <span className="cm-col-track">
+                      <i className={toneOf(s)} style={{ height: `${Math.max(4, (s / maxShare) * 100)}%` }} />
+                      <b className="cm-safe" style={{ bottom: `${(SAFE / maxShare) * 100}%` }} />
+                    </span>
                     <span className="cm-col-m">{fmtMonth.format(monthOf(p.ym))}</span>
                   </div>
                 </HoverTip>
               );
             })}
           </div>
+          {last && lastPct != null && meaningKey && (
+            <p className="cm-say">
+              {t("base.lastSay", { month: fmtMonthLong.format(monthOf(last.ym)), pct: lastPct })}
+              {first && firstPct != null && first.ym !== last.ym && <> {t("base.wasSay", { month: fmtMonth.format(monthOf(first.ym)), pct: firstPct })}</>}
+              {" "}<span className="muted">{t(meaningKey)}</span>
+            </p>
+          )}
         </div>
       )}
-    </div>
+    </div></div></div>
   );
 }

@@ -478,7 +478,7 @@ function BudgetCard({
               mistake all over again — a control that exists and has no effect. */}
           {!zero && (
             <label className="bc-roll" title={t("plan.rolloverTitle")}>
-              <input type="checkbox" checked={rollover} onChange={(e) => onSave(limit, e.target.checked)} />
+              <input type="checkbox" role="switch" className="switch" checked={rollover} onChange={(e) => onSave(limit, e.target.checked)} />
               <span>{t("plan.rollover")}</span>
             </label>
           )}

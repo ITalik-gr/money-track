@@ -21,6 +21,7 @@ import type { Env } from "../../env.ts";
 import { demoAiGate, isDemoEnv } from "../platform/demo.ts";
 import { MODEL_FAST } from "./models.ts";
 import { recordUsage, type AnthropicUsage } from "./cost.ts";
+import { markVerified } from "../platform/secrets.ts";
 
 const API = "https://api.anthropic.com/v1/messages";
 
@@ -167,6 +168,21 @@ async function readStream(
   return { content: blocks.filter(Boolean), usage, stop };
 }
 
+/**
+ * §BANK-CRED for the AI key: a 401/403 marks the user's saved key unverified, the first success
+ * after that marks it verified again — Settings otherwise kept saying «verified» about a revoked
+ * key while every AI feature failed. Never fatal: the call's own error is the one that matters,
+ * and a database without `user_secrets` (a demo, a test env) must not replace it with another.
+ */
+async function noteKey(env: Env, ok: boolean): Promise<void> {
+  try { await markVerified(env.DB, "anthropic_api_key", ok); } catch { /* see above */ }
+}
+
+async function anthropicFailure(env: Env, res: Response): Promise<Error> {
+  if (res.status === 401 || res.status === 403) await noteKey(env, false);
+  return new Error(`anthropic ${res.status}: ${await res.text()}`);
+}
+
 export async function callHaiku(
   env: Env,
   system: AnthropicContentBlock[],
@@ -197,7 +213,8 @@ export async function callHaiku(
       messages: [{ role: "user", content: userContent }],
     }),
   });
-  if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw await anthropicFailure(env, res);
+  await noteKey(env, true);
   const data = (await res.json()) as {
     content: { type: string; text?: string }[];
     usage: AnthropicUsage;
@@ -236,7 +253,8 @@ export async function callHaikuMessages(
       ...(onText ? { stream: true } : {}),
     }),
   });
-  if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw await anthropicFailure(env, res);
+  await noteKey(env, true);
   if (onText) {
     const s = await readStream(res, onText);
     const text = s.content.filter((b) => b.type === "text").map((b) => b.text).join("");
@@ -278,7 +296,8 @@ export async function callMessagesRaw(
       ...(onText ? { stream: true } : {}),
     }),
   });
-  if (!res.ok) throw new Error(`anthropic ${res.status}: ${await res.text()}`);
+  if (!res.ok) throw await anthropicFailure(env, res);
+  await noteKey(env, true);
   if (onText) {
     const s = await readStream(res, onText);
     await recordUsage(env, model, s.usage);

@@ -28,6 +28,7 @@ import { toBaseMinor, formatMinor } from "../lib/format.ts";
 import type { PlannedPayment } from "../../shared/types.ts";
 import { baseSign, getBaseCurrency } from "../lib/currency.ts";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
+import { localParts, localWallTime } from "../../shared/time.ts";
 
 const fmtDate = dateFmt({ day: "numeric", month: "short" });
 const CUR_OPTS = [
@@ -61,9 +62,11 @@ function nextCharge(p: PlannedPayment): number {
     while (t <= now) t += 7 * 86400 * n;
     return t;
   }
-  const d = new Date(p.start_date * 1000);
-  while (d.getTime() / 1000 <= now) d.setMonth(d.getMonth() + n);
-  return Math.floor(d.getTime() / 1000);
+  // Month steps on the Kyiv calendar (§APP_TZ), keeping the wall time of the first charge.
+  const s = localParts(p.start_date);
+  let k = 0, t = p.start_date;
+  while (t <= now) { k += n; t = localWallTime(s.y, s.m + k, s.d, s.hh, s.mm, s.ss); }
+  return t;
 }
 
 // Мітка каденції: «/міс», «/тиж», або «кожні N міс/тиж».

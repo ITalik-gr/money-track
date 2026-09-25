@@ -63,7 +63,7 @@ const EXCEPTIONS = {
   // worker/repo, entered 2026-09-25 at the sizes they had (see DIRS). Seams already visible in them:
   // `analytics.ts` holds health, insights and drill queries side by side; `transactions.ts` the feed,
   // the receipt and the reimbursement queries.
-  "worker/repo/analytics.ts": 971,   // 1006 → 971 the same night: `health_history` → repo/health.ts
+  "worker/repo/analytics.ts": 920,   // 1006 → 971: `health_history` → repo/health.ts; → 920 (2026-09-25): income reads → repo/income.ts
   "worker/repo/transactions.ts": 915,
   "worker/repo/planning.ts": 521,
   "worker/repo/categories.ts": 503,

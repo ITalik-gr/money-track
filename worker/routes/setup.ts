@@ -10,7 +10,7 @@ import { MonoRateLimit } from "../lib/bank/mono.ts";
 import { getState, setState } from "../lib/finance/repo.ts";
 import { rowCounts } from "../repo/state.ts";
 import { type Cursor, CURSOR_KEY, nextStepGapMs, startBackfill, stepBackfill } from "../lib/bank/backfill.ts";
-import { bankCredential } from "../lib/bank/credentials.ts";
+import { bankCredential, noteCredential } from "../lib/bank/credentials.ts";
 import { listConnections, recordSync } from "../repo/connections.ts";
 
 export const setup = new Hono<{ Bindings: Env }>();
@@ -29,10 +29,12 @@ setup.post("/sync-accounts", async (c) => {
     // The connection row is written on BOTH outcomes: a sync that fails silently is
     // indistinguishable from a user who spent nothing (BANKS.md §5, step 4).
     await recordSync(c.env.DB, provider.id, provider.label, { ok: true });
+    await noteCredential(c.env.DB, provider.id);
     return c.json({ ok: true, ...res });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     await recordSync(c.env.DB, "mono", null, { ok: false, error: message });
+    await noteCredential(c.env.DB, "mono", e);
     if (e instanceof MonoRateLimit) return c.json({ error: "rate_limited", retryAfter: 60 }, 429);
     return c.json({ error: String(e) }, 502);
   }
@@ -59,8 +61,10 @@ setup.post("/register-webhook", async (c) => {
     const { getProvider } = await import("../lib/bank/providers/index.ts");
     await getProvider("mono")!.registerWebhook!(token, url);
     await setState(c.env.DB, "webhook_url", url);
+    await noteCredential(c.env.DB, "mono");
     return c.json({ ok: true, url });
   } catch (e) {
+    await noteCredential(c.env.DB, "mono", e);
     return c.json({ error: String(e) }, 502);
   }
 });

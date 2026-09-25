@@ -26,7 +26,7 @@ const SELF = "scripts/check-section-index.mjs";
 /** Cited in code, defined nowhere, as of 2026-09-25. ONLY EVER SHRINKS. */
 const LEGACY = new Set([
   "§A2", "§A3", "§A5", "§ADV-METRICS", "§AGENT", "§B1", "§BUDGET", "§C1", "§C2", "§CANON",
-  "§CAT-LEAF", "§CAT2", "§CH4", "§CTX", "§D4", "§D5", "§E4", "§EFF_IMPORTANCE", "§F1", "§F3",
+  "§CAT-LEAF", "§CAT2", "§CH4", "§CTX", "§D4", "§D5", "§E4", "§EFF_IMPORTANCE", "§F3",
   "§F4", "§F5", "§G1", "§G2", "§GR2", "§P2", "§P3", "§P4", "§PERIMETER", "§PLATFORM",
   "§PRICE-DRIFT", "§R2-CUR1", "§R2-CUR2", "§R2-ST1", "§R2-ST2", "§R2-ST3", "§R2-ST4", "§R2-ST5",
   "§R2-TX1", "§R2-TX2", "§R2-TX3", "§R2-TX4", "§R5", "§R6", "§R7", "§ROADMAP", "§SUB4", "§TAX",

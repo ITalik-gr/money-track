@@ -48,8 +48,13 @@
    на всю ширину — індекс здоровʼя, кредитка й останні операції їхали ПІД аналітику, тобто
    «швидкий погляд» переставав бути швидким. Ширші за 1440px екрани обмежує `.content`. */
 .dash { display: grid; grid-template-columns: 1fr; gap: var(--sp-5); align-items: start; }
-@media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr) 340px; } }
-.dash-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
+/* 300px rail on a laptop, 340px from 1320px: at 1100px of window the 340px rail left the main
+   column 399px wide, and every paired card in it ~190px (UI_PASS S11, seen live). */
+@media (min-width: 1040px) { .dash { grid-template-columns: minmax(0, 1fr) 300px; } }
+@media (min-width: 1320px) { .dash { grid-template-columns: minmax(0, 1fr) 340px; } }
+/* The pairs below split by the COLUMN's width (a container query), not the window's: the window
+   says nothing about how much room the sidebar and the rail left. */
+.dash-main { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; container-type: inline-size; }
 .dash-rail { display: flex; flex-direction: column; gap: var(--sp-5); min-width: 0; }
 
 /* Paired supporting cards within the main column (equal, side by side) */
@@ -58,7 +63,7 @@
    половина пари = сама картка; але кожна половина несе ще й ЗАГОЛОВОК секції над карткою, і по
    низу ці заголовки роз'їжджались по вертикалі — око читає розсинхрон заголовків як зламану
    верстку швидше, ніж різну довжину карток. Заголовки в одному рядку важливіші за рівний низ. */
-@media (min-width: 680px) { .dash-pair { grid-template-columns: 1fr 1fr; align-items: start; } }
+@container (min-width: 620px) { .dash-pair { grid-template-columns: 1fr 1fr; align-items: start; } }
 .dash-pair > * { min-width: 0; }
 /* Safety net (ROADMAP L3): a pair whose second half rendered nothing must not leave half the
    page blank — the survivor takes the full width. Empty-state cards cover the cases we know
@@ -150,11 +155,16 @@
 .stab-badge.pos { background: color-mix(in srgb, var(--pos) 14%, transparent); color: var(--pos); }
 .stab-badge.warn { background: color-mix(in srgb, var(--c-ochre, #c9871a) 16%, transparent); color: var(--c-ochre, #c9871a); }
 .stab-badge.neg { background: color-mix(in srgb, var(--neg) 14%, transparent); color: var(--neg); }
-.inc-months { display: flex; align-items: flex-end; gap: 8px; height: 90px; margin-bottom: 8px; }
+/* ST5: the stability card is the wider half — six labelled columns need the room. */
+.inc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 14px; }
+@media (max-width: 860px) { .inc-grid { grid-template-columns: 1fr; } }
+.inc-months { display: flex; align-items: flex-end; gap: 10px; height: 128px; margin-bottom: 8px; }
 .im-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; }
 .im-bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
 .im-bar { width: 100%; background: var(--pos); border-radius: 5px 5px 0 0; min-height: 2px; }
 .im-lbl { font-size: 10.5px; color: var(--muted); }
+.im-val { font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.im-col.running .im-bar { opacity: 0.45; }
 
 /* §4 «Скоро спишеться» — прийдешні підписки з лого */
 .up-subs { padding: 14px 16px; }
@@ -185,7 +195,7 @@
 .pulse-save-detail b { font-variant-numeric: tabular-nums; margin-left: 5px; }
 .pulse-save-detail .pos { color: var(--pos); }
 .pulse-save-detail .neg { color: var(--neg); }
-.pulse-cat { display: grid; grid-template-columns: 1fr 70px 84px; align-items: center; gap: 10px; padding: 5px 0; color: inherit; text-decoration: none; }
+.pulse-cat { display: grid; grid-template-columns: minmax(90px, 1fr) minmax(40px, 70px) auto; align-items: center; gap: 10px; padding: 5px 0; color: inherit; text-decoration: none; }
 .pulse-cat:hover .pc-name { color: var(--accent); }
 .pulse-cat .pc-name { display: flex; align-items: center; gap: 8px; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pulse-cat .pc-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
@@ -221,7 +231,10 @@
 .hover-tip .r + .r { margin-top: 2px; }
 .hover-tip .d { width: 8px; height: 8px; border-radius: 50%; }
 .hover-tip b { color: #fff; }
-.tip-explain { line-height: 1.45; max-width: 210px; }
+/* Prose tips (T3): one comfortable measure, not the data tips' 250px cap — at 210px an explanation
+   was a column of single words. `max-content` keeps a short sentence on one line. */
+.hover-tip:has(> .tip-explain) { max-width: min(300px, calc(100vw - 16px)); }
+.tip-explain { line-height: 1.45; width: max-content; max-width: 100%; }
 .tip-explain b { color: #fff; }
 /* Shared tooltip vocabulary for both dark tips (`.chart-tip`, `.hover-tip`): a muted line, a
    key-value row, a section under a hairline, and pos/neg tones lifted toward white — the plain
@@ -244,3 +257,32 @@
 }
 .info-tip:hover, .info-tip:focus-visible { color: var(--ink-2); background: var(--surface-2); outline: none; }
 
+
+/* ---- UI_PASS S11: the dashboard catches up with the app ------------------------------------- */
+/* «Потребує уваги»: one row per thing to fix, the tone on the icon only — a whole red row for a
+   late subscription would shout louder than the balance above it. */
+.att-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: var(--radius-sm); color: inherit; text-decoration: none; transition: background var(--dur-1) var(--ease-out); }
+.att-row:hover { background: var(--surface-2); }
+.att-ico { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); color: var(--muted); }
+.att-row.bad .att-ico { color: var(--neg); background: color-mix(in srgb, var(--neg) 10%, var(--surface)); }
+.att-row.warn .att-ico { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.att-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.att-text { font-size: 13.5px; font-weight: 500; line-height: 1.35; }
+.att-sub { font-size: 12px; color: var(--muted); }
+.att-more { display: block; width: 100%; padding: 9px 10px; border: none; border-radius: var(--radius-sm); background: none; color: var(--accent); font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer; }
+.att-more:hover { background: var(--surface-2); }
+.att-clear { display: flex; align-items: center; gap: 8px; padding: 14px 16px; font-size: 13.5px; color: var(--ink-2); }
+.att-clear svg { color: var(--pos); }
+/* Goals mini: name + %, a bar with a tooltip, what is left. */
+.gm-card { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
+.gm-row { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: var(--radius-sm); color: inherit; text-decoration: none; }
+.gm-row:hover { background: var(--surface-2); }
+.gm-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
+.gm-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gm-pct { font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 600; }
+.gm-bar { display: block; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.gm-bar i { display: block; height: 100%; border-radius: inherit; }
+.gm-sub { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Forecast card: the month as a line under the numbers. */
+.fc-flow { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+.fc-flow > .label { display: block; margin-bottom: 6px; }

@@ -11,6 +11,7 @@ import { EmptyCard } from "../components/ui/EmptyCard.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { monthShort } from "../lib/format.ts";
+import { localMidnight, localParts, nowUnix } from "../../shared/time.ts";
 
 /**
  * `/wrapped` — the year, as a screen somebody would want to show another person.
@@ -34,15 +35,15 @@ import { monthShort } from "../lib/format.ts";
 export function Wrapped() {
   const t = useT();
   const [params, setParams] = useSearchParams();
-  const thisYear = new Date().getFullYear();
+  const thisYear = localParts(nowUnix()).y;
   const yParam = Number(params.get("year"));
   const year = Number.isInteger(yParam) && yParam >= 2000 && yParam <= thisYear ? yParam : thisYear;
 
-  // Local wall-clock year edges, like every other period in this app: a UTC edge would pull three
+  // Kyiv year edges, like every other period in this app: a UTC (or browser-zone) edge would pull
   // hours of the neighbouring year into the window (§APP_TZ).
   const bounds = useMemo(() => ({
-    from: Math.floor(+new Date(year, 0, 1) / 1000),
-    to: Math.min(Math.floor(Date.now() / 1000), Math.floor(+new Date(year + 1, 0, 1) / 1000)),
+    from: localMidnight(year, 1, 1),
+    to: Math.min(nowUnix(), localMidnight(year + 1, 1, 1)),
   }), [year]);
 
   const { data, isLoading, error, refetch } = useGetOverviewQuery(

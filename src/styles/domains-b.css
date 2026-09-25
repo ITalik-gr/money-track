@@ -229,36 +229,6 @@
 .cur-split-legend .cs-val { font-variant-numeric: tabular-nums; }
 .cur-split-legend .cs-pct { font-size: 12px; }
 
-/* §WEEKDAY — витрати за днями тижня. Сім рівних колонок; висота стовпчика від ТИПОВОГО дня.
-   `min-width: 0` на колонці обов'язковий: без нього довший підпис у перекладі розпирає рівну
-   стрічку ширше за viewport — те саме правило, що врятувало таб-бар (CLAUDE.md). */
-.wd-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; align-items: end; }
-.wd-col { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.wd-bar-wrap { width: 100%; height: 96px; display: flex; align-items: flex-end; }
-.wd-bar {
-  width: 100%; min-height: 3px; border-radius: 5px 5px 2px 2px;
-  background: var(--accent); opacity: .85; transition: opacity .15s;
-}
-/* Блідий = сума дня тримається на одному платежі. Видно, що стовпчик є, але він не про звичку. */
-/* C11 (2026-09-04): this opt-out lived in `domains-a.css`, directly under the `.wd-bar` block it
-   was written for — and four more copies of that block were declared after it, the last one right
-   above. `@media` adds no specificity, so every one of them re-armed the transition and the
-   accessibility opt-out had been doing nothing. It has to sit below the LAST `.wd-bar`, which is
-   why it is here rather than beside the rule it negates. */
-@media (prefers-reduced-motion: reduce) { .wd-bar { transition: none; } }
-.wd-bar.lumpy { opacity: .3; background: repeating-linear-gradient(45deg, var(--accent) 0 3px, transparent 3px 6px); }
-.wd-bar.busiest { opacity: 1; box-shadow: 0 0 0 2px var(--accent-soft); }
-.wd-col.weekend .wd-label { color: var(--muted); font-weight: 600; }
-.wd-val { font-size: 12px; color: var(--muted); white-space: nowrap; }
-.wd-label { font-size: 11px; }
-.wd-foot { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 12.5px; }
-
-@media (max-width: 480px) {
-  /* Сума під кожним зі стовпчиків не влазить на телефоні — лишаємо самі стовпчики й підписи
-     днів, а числа читаються з тултіпа. Обрізане число читалось би як ІНШЕ число. */
-  .wd-val { display: none; }
-  .wd-bar-wrap { height: 72px; }
-}
 
 /* §HABITS — «зʼявилось / замовкло». Дві половини, і кожна вміє не рендеритись, тож
    `:only-child` обов'язковий: без нього та, що лишилась, сідає в половину ширини й читається

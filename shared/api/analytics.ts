@@ -205,8 +205,13 @@ export interface IncomeAnalytics {
   period: { from: number; to: number; preset: string };
   total: number; prev_total: number; delta_pct: number | null;
   sources: { category_id: number | null; name: string; color: string | null; amount: number; n: number; pct: number }[];
-  monthly: { month: string; income: number }[];
-  stability: { cv_pct: number | null; label: string };
+  /** `top`: the month's largest sources (up to 3), so a jumpy month says WHICH payment moved. */
+  monthly: { month: string; income: number; top: { name: string; amount: number }[] }[];
+  /**
+   * `label` is the localised word; `level` is the machine value. The client used to compare the
+   * LABEL with Ukrainian words, so on an English screen every income read «moderate».
+   */
+  stability: { cv_pct: number | null; label: string; level: "stable" | "moderate" | "volatile" | null };
 }
 
 // Cashflow-календар: очікувані списання по днях + стартова подушка (для проєкції балансу).

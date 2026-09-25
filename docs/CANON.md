@@ -254,6 +254,9 @@ The client never derives it.
   `budget-memory.test.ts`.
 - **§BUDGET-ZERO — limit 0 is a PLAN.** Row exists = envelope; removal is `DELETE
   /budgets/:categoryId`; negative → 400; `ratio` is binary, no bar, no rollover; an empty field ≠ 0.
+- **§ENV-STATE — one verdict per envelope on screen:** `shared/envelope.ts` `envelopeState` —
+  over / full / warn / ok by the PRINTED percentage (100% = «вичерпано», never «перевищено»);
+  the grid and «Потребує уваги» both read it. Held by `envelope-state.test.ts`.
 - **§BUDGET-FORECAST:** `projected` from the same `projectSpend`; `lumpy` exposed. The
   `budget_forecast` notification: not before the 10th, not when `ratio ≥ 0.9`, not for lumps,
   only from 110% + 200 ₴, once per envelope per month.

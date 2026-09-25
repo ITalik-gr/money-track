@@ -13,6 +13,7 @@
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/index.ts";
 import { formatMinor } from "../../lib/format.ts";
+import { daysInMonth, localMidnight, localParts, nowUnix } from "../../../shared/time.ts";
 import { useGetCompareQuery } from "../../store/api.ts";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { Select } from "../ui/Select.tsx";
@@ -23,12 +24,13 @@ import { DeltaChip, monthLong, type Cur, type MoverRow, type Movers } from "./sh
 // користувач — «а що змінилось із березня?». Бекенд той самий `/analytics/compare`
 // (він від початку приймає дві незалежні пари меж), тож канон і фільтри спільні.
 /** Межі календарного місяця за зсувом назад від поточного. */
+/** Kyiv months (§APP_TZ); `m` is 0-based. */
 export function monthBounds(back: number): { from: number; to: number; label: string; y: number; m: number } {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
-  const from = Math.floor(d.getTime() / 1000);
-  const to = Math.floor(new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59).getTime() / 1000);
-  return { from, to, label: `${monthLong(d.getMonth())} ${d.getFullYear()}`, y: d.getFullYear(), m: d.getMonth() };
+  const now = localParts(nowUnix());
+  const from = localMidnight(now.y, now.m - back, 1);
+  const p = localParts(from);
+  const to = localMidnight(p.y, p.m + 1, 1) - 1;
+  return { from, to, label: `${monthLong(p.m - 1)} ${p.y}`, y: p.y, m: p.m - 1 };
 }
 
 export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }) {
@@ -62,10 +64,10 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
   const sameMonth = A.y === B.y && A.m === B.m;
   // ⚠️ Поточний місяць ще не завершився — порівнювати його з повним місяцем нечесно.
   // Не ховаємо дані (користувач свідомо обрав), але кажемо це прямо, як у прогнозах.
-  const now = new Date();
-  const partial = [A, B].filter((x) => x.y === now.getFullYear() && x.m === now.getMonth());
-  const elapsedDays = now.getDate();
-  const monthDays = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const now = localParts(nowUnix());
+  const partial = [A, B].filter((x) => x.y === now.y && x.m === now.m - 1);
+  const elapsedDays = now.d;
+  const monthDays = daysInMonth(now.y, now.m);
 
   return (
     <section>
@@ -92,7 +94,7 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
 
       {!sameMonth && partial.length > 0 && (
         <p className="mc-note">
-          {t("stats.compareMonth.partial", { month: monthLong(now.getMonth()), elapsed: elapsedDays, total: monthDays })}
+          {t("stats.compareMonth.partial", { month: monthLong(now.m - 1), elapsed: elapsedDays, total: monthDays })}
         </p>
       )}
 

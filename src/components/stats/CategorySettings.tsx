@@ -23,6 +23,7 @@ import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
 import { baseSign } from "../../lib/currency.ts";
 import { Icon } from "../ui/Icon.tsx";
+import { CategoryIcon } from "../ui/CategoryIcon.tsx";
 import { CategoryModal } from "../planning/CategoryModal.tsx";
 import type { CategoryOverview } from "../../../shared/api/analytics.ts";
 
@@ -68,17 +69,34 @@ export function CategorySettings({ data, monthView }: { data: CategoryOverview; 
   const impMeta = IMPORTANCE_META[data.importance as Importance] as (typeof IMPORTANCE_META)[Importance] | undefined;
   const limitDirty = limit.trim() !== "" && limit !== String(current ?? "");
 
+  // C3: an income category has no importance and no envelope, and the card used to render an EMPTY
+  // body for it. Its look (name, colour, icon) applies to every category, so it is the first row
+  // and the card is never empty; with nothing at all to show, there is no card.
+  if (!category && data.is_income) return null;
+
   return (
     <section>
       <div className="section-head">
         <h2>{t("catset.title")}</h2>
-        {category && (
-          <button className="btn sm" onClick={() => setEditing(true)}>
-            <Icon name="edit" size={14} />{t("catset.edit")}
-          </button>
-        )}
       </div>
       <div className="card setform">
+        {category && (
+          <div className="setform-row">
+            <div className="setform-lbl">
+              <span className="setform-name">{t("catset.look")}</span>
+              <span className="setform-hint">{t("catset.lookHint")}</span>
+            </div>
+            <div className="setform-ctrl">
+              <span className="catset-look">
+                <span className="catset-look-ico" style={{ background: category.color ?? "var(--muted)" }}><CategoryIcon slug={category.icon} size={16} /></span>
+                {category.name}
+              </span>
+              <button className="btn sm" onClick={() => setEditing(true)}>
+                <Icon name="edit" size={14} />{t("catset.edit")}
+              </button>
+            </div>
+          </div>
+        )}
         {!data.is_income && (
           <div className="setform-row">
             <div className="setform-lbl">

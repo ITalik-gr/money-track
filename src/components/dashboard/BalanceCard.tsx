@@ -7,6 +7,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { baseSign } from "../../lib/currency.ts";
 import { useCountUp } from "../../lib/useCountUp.ts";
 import { useT } from "../../i18n/index.ts";
+import { currencyCode } from "../../../shared/currency.ts";
 
 // Власні кошти великою sans-цифрою (гібрид, DESIGN.md §2) + швидкі дії (DeliFin R1).
 export function BalanceCard() {
@@ -49,11 +50,13 @@ export function BalanceCard() {
       {/* The breakdown is shown only when it says something the hero does not: one bucket in the
           display currency IS the hero. Each chip stays in its OWN currency — that is the fact the
           hero deliberately dissolves, and repeating the total here would just say it twice. */}
+      {/* D1: each chip NAMES its currency (UAH / USD / EUR) — three identical «≈ у валюті» labels
+          left the reader to decode which one was which from a sign in small type. */}
       {others.length > 1 && (
-        <div className="bal-chips">
+        <div className="bal-chips" aria-label={t("bal.byCurrency")}>
           {others.map((x) => (
             <div key={x.currency_code} className="bal-chip">
-              <span className="label">{t("bal.inCurrency")}</span>
+              <span className="label">{currencyCode(x.currency_code)}</span>
               <Money minor={x.own} currency={x.currency_code} decimals={false} />
             </div>
           ))}

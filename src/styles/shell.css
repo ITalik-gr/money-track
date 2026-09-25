@@ -259,6 +259,9 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
    first heading is a child of the page, not of a section. */
 section > .section-head:first-child { margin-top: 26px; }
 .section-head .label { margin-left: auto; }
+/* A switch in a heading (category merchants: period / all time) sits right, like a label would. */
+.section-head > .seg { margin-left: auto; }
+.section-head > .seg ~ .label { margin-left: 0; }
 .section-head a.label:hover { color: var(--accent); }
 /* Дія в заголовку секції — праворуч і компактна (не переважає 15px h2) */
 .section-head > .btn { margin-left: auto; }

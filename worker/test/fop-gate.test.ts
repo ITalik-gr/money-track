@@ -8,6 +8,7 @@ import { tax } from "../routes/api/tax.ts";
 import { migratedDb, testEnv, freezeTime } from "./harness.ts";
 import { seed, seedRareTables, FROZEN_NOW_ISO } from "./fixture.ts";
 import { fopAvailable } from "../lib/finance/tax.ts";
+import { mcp } from "../routes/mcp.ts";
 
 /** Every path the ФОП surface declares, with its method — taken from the Hono instance itself. */
 function declaredRoutes(): { method: string; path: string }[] {
@@ -59,4 +60,24 @@ test("§FOP-GATE: a demo session is not the owner", () => {
   assert.equal(fopAvailable({}), false);
   assert.equal(fopAvailable({ IS_OWNER: false }), false);
   assert.equal(fopAvailable({ IS_OWNER: true }), true);
+});
+
+test("§FOP-GATE: the MCP server does not describe the ФОП tool to a non-owner's assistant", async (t) => {
+  t.after(freezeTime(FROZEN_NOW_ISO));
+  const db = migratedDb();
+  seed(db);
+  const init = async (env: Record<string, unknown>) => {
+    const res = await mcp.request("/", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    }, env);
+    return ((await res.json()) as { result: { instructions: string } }).result.instructions;
+  };
+  const stranger = await init({ ...testEnv(db), IS_OWNER: false });
+  assert.doesNotMatch(stranger, /ФОП|get_tax_status/);
+  // The rest of the guidance is still there — the gate removes one paragraph, not the manual.
+  assert.match(stranger, /get_finance_snapshot/);
+  assert.match(stranger, /WHOLE CURRENCY UNITS/);
+  assert.match(await init(testEnv(db)), /get_tax_status/);
 });

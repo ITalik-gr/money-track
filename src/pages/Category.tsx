@@ -18,6 +18,7 @@ import { CHART_ANIM } from "../lib/motion.ts";
 import { DeltaChip } from "../components/stats/shared.tsx";
 import { baseSign } from "../lib/currency.ts";
 import { importanceMeta } from "../lib/importance.ts";
+import { localMidnight, localMonthStart } from "../../shared/time.ts";
 
 /**
  * §CATEGORY-PAGE — one category, linkable.
@@ -39,23 +40,19 @@ const monthShort = dateFmt({ month: "short" });
 const monthLabel = (m: string) => {
   // The month comes from an explicit `YYYY-MM` key, never from a timestamp: formatting a period
   // boundary in the local zone puts the end of June into July (CLAUDE.md, "month of a chart").
-  const [y, mm] = m.split("-");
-  return monthShort.format(new Date(Number(y), Number(mm) - 1, 1));
+  return monthShort.format(new Date(`${m}-15T12:00:00Z`));
 };
 
 /**
  * The bounds of a `YYYY-MM` key, for the drill under the trend.
  *
- * Local midnight, matching `rangeFrom` above and `startOfMonthUnix`: the key itself was built in
- * Kyiv by the server (§APP_TZ), and re-deriving it from a timestamp here is the mistake that puts
+ * Kyiv midnight (§APP_TZ), matching `rangeFrom` below and `startOfMonthUnix`: the key itself was
+ * built in Kyiv by the server, and re-deriving it from a timestamp here is the mistake that puts
  * the end of June into July.
  */
 function monthBounds(ym: string): [number, number] {
   const [y, m] = ym.split("-").map(Number);
-  return [
-    Math.floor(new Date(y, m - 1, 1).getTime() / 1000),
-    Math.floor(new Date(y, m, 1).getTime() / 1000) - 1,
-  ];
+  return [localMidnight(y, m, 1), localMidnight(y, m + 1, 1) - 1];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -83,10 +80,9 @@ const RANGES = ["month", "quarter", "year", "all"] as const;
 type Range = typeof RANGES[number];
 
 function rangeFrom(r: Range, now: number): number {
-  const d = new Date(now * 1000);
   if (r === "month") return startOfMonthUnix();
-  if (r === "quarter") return Math.floor(new Date(d.getFullYear(), d.getMonth() - 2, 1).getTime() / 1000);
-  if (r === "year") return Math.floor(new Date(d.getFullYear(), d.getMonth() - 11, 1).getTime() / 1000);
+  if (r === "quarter") return localMonthStart(now, -2);
+  if (r === "year") return localMonthStart(now, -11);
   return 0; // all — the server clamps to the first transaction anyway
 }
 
@@ -101,6 +97,7 @@ export function Category() {
   // a number stands for a set of operations you can actually name, so it is the one that should
   // open (asked for after the chart went live).
   const [openMonth, setOpenMonth] = useState<string | null>(null);
+  const [mScope, setMScope] = useState<"period" | "all">("period");
 
   const { data, isError, error, refetch } = useGetCategoryOverviewQuery({ id, from, to });
   const { data: spark } = useGetSparkQuery();
@@ -119,6 +116,10 @@ export function Category() {
   if (isError) return <ErrorNote error={error} what={t("nav.categories")} onRetry={refetch} />;
   if (!data) return null;
 
+  const periodMerch = drill?.merchants ?? [];
+  const periodMax = Math.max(1, ...periodMerch.map((x) => Math.abs(x.spent)));
+  // A quiet window has no period merchants: the block then shows all time rather than vanishing.
+  const merchScope = mScope === "period" && periodMerch.length > 0 ? "period" : data.top_merchants.length > 0 ? "all" : "period";
   const impLabel = importanceMeta(data.importance)?.labelKey;
   const rangeLabel = t(`cat.range.${range}` as "cat.range.month");
   const chart = data.trend.map((m) => ({ ...m, label: monthLabel(m.month), spent: Math.round(m.spent / 100) }));
@@ -130,6 +131,7 @@ export function Category() {
   // "Nothing in this window" and "nothing ever" are different sentences, and telling them apart is
   // the entire bug report. `lifetime` is window-independent precisely so this check is possible.
   const emptyWindow = total === 0 && data.lifetime.n > 0;
+  const never = data.lifetime.n === 0;
 
   return (
     <>
@@ -147,7 +149,9 @@ export function Category() {
             uk and en AGREE, and both were missing it. A key built at runtime is invisible to it by
             construction — which is the general lesson, not just this line.
           */}
-          <div className="sub">{impLabel ? t(impLabel) : ""}</div>
+          {/* C3: importance is a SPENDING scale — «Бажане» under «Зарплата» was a word about the
+              wrong kind of money. An income category says what it is instead. */}
+          <div className="sub">{inc ? t("cat.incomeKind") : impLabel ? t(impLabel) : ""}</div>
         </div>
         <div className="page-head-actions">
           <div className="seg">
@@ -169,108 +173,116 @@ export function Category() {
         </p>
       )}
 
-      <div className="cat-page-stats">
-        {/* The level FIRST: it is the answer to "how much does this cost me", which is the reason
-            anyone opens a category. The period total is secondary — it depends on today's date. */}
-        {/* §CAT-PAGE: the canonical level is spend-only and rolls up, so it exists for exactly one
-            case — a top-level expense category. Everywhere else the lifetime average answers the
-            same question honestly instead of quoting a number about a DIFFERENT category. */}
-        <div className="card merchant-stat">
-          <div className="label">
-            {data.level ? t("cat.levelLabel") : t("cat.perActiveMonth")}
-            <InfoTip>
-              {/* Both of these are MONTHLY by definition and deliberately ignore the range (the
-                  canon is month-defined, §CAT-PAGE). The tile beside them follows the range, so
-                  the difference has to be stated — two tiles side by side, one of which quietly
-                  answers about a different period, is the confusion this page already had once. */}
-              {data.level
-                ? (data.level.fixed ? t("cat.levelFixed") : t("cat.levelVariable"))
-                : t("cat.perActiveMonthHint")}
-              {" "}{t("cat.levelLabelHint")}
-            </InfoTip>
-          </div>
-          <div className="merchant-stat-v num-hero">
-            {data.level
-              ? <Money minor={data.level.level} decimals={false} />
-              : data.lifetime.per_active_month > 0
-                ? <Money minor={data.lifetime.per_active_month} decimals={false} />
-                : "—"}
-          </div>
-          <div className="merchant-stat-sub">
-            {data.level
-              ? t("cat.levelMonths", { n: data.level.active_months })
-              : t("cat.levelMonths", { n: data.lifetime.active_months })}
-          </div>
-        </div>
-        <div className="card merchant-stat">
-          {/*
-            The label carries the RANGE (2026-08-21). It used to read «За цей місяць», hardcoded,
-            while the selector above it could be set to a year or to all time — so the tile stated
-            one period and counted another, and the owner reported exactly that: «міняю на весь
-            час, а воно все одно показує що за місяць». A label that can go out of step with its
-            own number should not be able to: it is now built from the same state as the query.
-          */}
-          <div className="label">{t(inc ? "cat.periodEarned" : "cat.periodSpent", { range: rangeLabel })}</div>
-          <div className="merchant-stat-v num-hero"><Money minor={total} decimals={false} /></div>
-          {/* §E1: the split is the useful half — a big month made of one purchase means something
-              different from the same month made of forty. */}
-          {total > 0 && (
-            <div className="merchant-stat-sub">
-              {t("cat.recurringShare", { pct: Math.round((data.recurring / total) * 100) })}
-            </div>
-          )}
-        </div>
-        {/* Два питання, які сторінка досі не ставила — і які просять протилежних дій. */}
-        {data.avg_check && (
+      {/* A category nothing has ever landed in says so in ONE line (C3, seen on «Повернення»): the
+          tiles printed «— · за 0 активних місяців» over an empty 24-month chart. */}
+      {never ? (
+        <div className="card cat-empty-note">{t(inc ? "cat.neverIncome" : "cat.neverSpend")}</div>
+      ) : (
+        <div className="cat-page-stats">
+          {/* The level FIRST: it is the answer to "how much does this cost me", which is the reason
+              anyone opens a category. The period total is secondary — it depends on today's date. */}
+          {/* §CAT-PAGE: the canonical level is spend-only and rolls up, so it exists for exactly one
+              case — a top-level expense category. Everywhere else the lifetime average answers the
+              same question honestly instead of quoting a number about a DIFFERENT category. */}
           <div className="card merchant-stat">
             <div className="label">
-              {t("cat.avgCheck")}
-              <InfoTip>{t("cat.avgCheckHint")}</InfoTip>
+              {data.level ? t("cat.levelLabel") : t("cat.perActiveMonth")}
+              <InfoTip>
+                {/* Both of these are MONTHLY by definition and deliberately ignore the range (the
+                    canon is month-defined, §CAT-PAGE). The tile beside them follows the range, so
+                    the difference has to be stated — two tiles side by side, one of which quietly
+                    answers about a different period, is the confusion this page already had once. */}
+                {data.level
+                  ? (data.level.fixed ? t("cat.levelFixed") : t("cat.levelVariable"))
+                  : t("cat.perActiveMonthHint")}
+                {" "}{t("cat.levelLabelHint")}
+              </InfoTip>
             </div>
-            <div className="merchant-stat-v num-hero"><Money minor={data.avg_check.now} decimals={false} /></div>
-            <div className="merchant-stat-sub">
-              {/* The COUNT is shown beside the delta on purpose: a category that grew did so
-                  either through more charges or through dearer ones, and only these two numbers
-                  together say which. */}
-              {data.avg_check.prev != null
-                ? <>
-                    <DeltaChip a={data.avg_check.now} b={data.avg_check.prev} />
-                    {" "}{t("cat.avgCheckOps", { n: data.avg_check.n, prev: data.avg_check.prev_n })}
-                  </>
-                : t("cat.avgCheckOpsOnly", { n: data.avg_check.n })}
-            </div>
-          </div>
-        )}
-        {data.year_ago && (
-          <div className="card merchant-stat">
-            <div className="label">
-              {t("cat.yearAgo")}
-              <InfoTip>{t("cat.yearAgoHint")}</InfoTip>
-            </div>
-            <div className="merchant-stat-v num-hero"><Money minor={data.year_ago.spent} decimals={false} /></div>
-            <div className="merchant-stat-sub">
-              {/* The trend chart above holds these very numbers; nobody can read one August
-                  against another off a line with 24 points, which is why this is a figure. */}
-              <DeltaChip a={total} b={data.year_ago.spent} goodUp={inc} />
-            </div>
-          </div>
-        )}
-        {data.budget && (
-          <div className="card merchant-stat">
-            <div className="label">{t("cat.budgetLabel")}</div>
             <div className="merchant-stat-v num-hero">
-              <Money minor={data.budget.spent} decimals={false} /> / <Money minor={data.budget.amount} decimals={false} />
+              {data.level
+                ? <Money minor={data.level.level} decimals={false} />
+                : data.lifetime.per_active_month > 0
+                  ? <Money minor={data.lifetime.per_active_month} decimals={false} />
+                  : "—"}
             </div>
-            {/* The projection only when it says something the pair above does not — see EnvelopeGrid
-                for why a lump carries no forecast worth showing. */}
-            {!data.budget.lumpy && data.budget.projected > data.budget.amount && (
-              <div className="merchant-stat-sub neg">
-                {t("cat.budgetProjected", { pct: Math.round((data.budget.projected / data.budget.amount) * 100) })}
+            <div className="merchant-stat-sub">
+              {data.level
+                ? t("cat.levelMonths", { n: data.level.active_months })
+                : t("cat.levelMonths", { n: data.lifetime.active_months })}
+            </div>
+          </div>
+          <div className="card merchant-stat">
+            {/*
+              The label carries the RANGE (2026-08-21). It used to read «За цей місяць», hardcoded,
+              while the selector above it could be set to a year or to all time — so the tile stated
+              one period and counted another, and the owner reported exactly that: «міняю на весь
+              час, а воно все одно показує що за місяць». A label that can go out of step with its
+              own number should not be able to: it is now built from the same state as the query.
+            */}
+            <div className="label">{t(inc ? "cat.periodEarned" : "cat.periodSpent", { range: rangeLabel })}</div>
+            <div className="merchant-stat-v num-hero"><Money minor={total} decimals={false} /></div>
+            {/* §E1: the split is the useful half — a big month made of one purchase means something
+                different from the same month made of forty. */}
+            {/* C3: the recurring split is detected on the SPEND side (§E1) — under a salary it read
+                «0% регулярні» about the most regular money there is. The count instead. */}
+            {total > 0 && (
+              <div className="merchant-stat-sub">
+                {inc ? (data.avg_check ? t("cat.lifeOps", { n: data.avg_check.n }) : null) : t("cat.recurringShare", { pct: Math.round((data.recurring / total) * 100) })}
               </div>
             )}
           </div>
-        )}
-      </div>
+          {/* Два питання, які сторінка досі не ставила — і які просять протилежних дій. */}
+          {data.avg_check && (
+            <div className="card merchant-stat">
+              <div className="label">
+                {t(inc ? "cat.avgReceipt" : "cat.avgCheck")}
+                <InfoTip>{t(inc ? "cat.avgReceiptHint" : "cat.avgCheckHint")}</InfoTip>
+              </div>
+              <div className="merchant-stat-v num-hero"><Money minor={data.avg_check.now} decimals={false} /></div>
+              <div className="merchant-stat-sub">
+                {/* The COUNT is shown beside the delta on purpose: a category that grew did so
+                    either through more charges or through dearer ones, and only these two numbers
+                    together say which. */}
+                {data.avg_check.prev != null
+                  ? <>
+                      <DeltaChip a={data.avg_check.now} b={data.avg_check.prev} />
+                      {" "}{t("cat.avgCheckOps", { n: data.avg_check.n, prev: data.avg_check.prev_n })}
+                    </>
+                  : t("cat.avgCheckOpsOnly", { n: data.avg_check.n })}
+              </div>
+            </div>
+          )}
+          {data.year_ago && (
+            <div className="card merchant-stat">
+              <div className="label">
+                {t("cat.yearAgo")}
+                <InfoTip>{t("cat.yearAgoHint")}</InfoTip>
+              </div>
+              <div className="merchant-stat-v num-hero"><Money minor={data.year_ago.spent} decimals={false} /></div>
+              <div className="merchant-stat-sub">
+                {/* The trend chart above holds these very numbers; nobody can read one August
+                    against another off a line with 24 points, which is why this is a figure. */}
+                <DeltaChip a={total} b={data.year_ago.spent} goodUp={inc} />
+              </div>
+            </div>
+          )}
+          {data.budget && (
+            <div className="card merchant-stat">
+              <div className="label">{t("cat.budgetLabel")}</div>
+              <div className="merchant-stat-v num-hero">
+                <Money minor={data.budget.spent} decimals={false} /> / <Money minor={data.budget.amount} decimals={false} />
+              </div>
+              {/* The projection only when it says something the pair above does not — see EnvelopeGrid
+                  for why a lump carries no forecast worth showing. */}
+              {!data.budget.lumpy && data.budget.projected > data.budget.amount && (
+                <div className="merchant-stat-sub neg">
+                  {t("cat.budgetProjected", { pct: Math.round((data.budget.projected / data.budget.amount) * 100) })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/*
         §CAT-PAGE — "there is nothing in THIS window, but the category is not empty".
@@ -287,8 +299,6 @@ export function Category() {
         </div>
       )}
 
-      {/* §CAT-SETTINGS — importance, envelope and name, where the category is being looked at. */}
-      <CategorySettings data={data} monthView={range === "month"} />
 
       {/* §CAT-PAGE — the whole history, so the page can be read without choosing a window at all. */}
       {data.lifetime.n > 0 && (
@@ -318,26 +328,38 @@ export function Category() {
         </section>
       )}
 
-      {/* Who this category actually IS — over the whole history, not the chosen window, so it
-          stays informative on a page opened during a quiet month. */}
-      {data.top_merchants.length > 0 && (
+      {/* C1 (2026-09-25): ONE merchants block with a period / all-time switch. There were two —
+          «Мерчанти» (the chosen window, at the bottom) and «Основні мерчанти» (all time, higher
+          up) — and nothing on screen said why the same names appeared twice with other numbers.
+          All time stays a choice because it keeps the page informative in a quiet month. */}
+      {(periodMerch.length > 0 || data.top_merchants.length > 0) && (
         <section>
           <div className="section-head">
-            <h2>{t("cat.topMerchantsTitle")}</h2>
-            <span className="label">
-              {data.top_merchants[0] && data.top_merchants[0].share_pct >= 40
-                // Concentration is only worth naming when there IS any: below this the honest
-                // reading is "spread out", and a leading share of 11% dressed as a headline
-                // would be the app manufacturing a finding.
-                ? t("cat.topMerchantsConcentrated", { name: data.top_merchants[0].merchant, pct: data.top_merchants[0].share_pct })
-                : t("cat.topMerchantsHint")}
-            </span>
+            <h2>{t(inc ? "cat.payersTitle" : "cat.merchantsTitle")}</h2>
+            {periodMerch.length > 0 && data.top_merchants.length > 0 && (
+              <div className="seg" role="tablist" aria-label={t("cat.merchantsTitle")}>
+                <button type="button" role="tab" aria-selected={merchScope === "period"} className={`seg-btn ${merchScope === "period" ? "active" : ""}`} onClick={() => setMScope("period")}>{t("cat.merchPeriod")}</button>
+                <button type="button" role="tab" aria-selected={merchScope === "all"} className={`seg-btn ${merchScope === "all" ? "active" : ""}`} onClick={() => setMScope("all")}>{t("cat.merchAll")}</button>
+              </div>
+            )}
+            {merchScope === "all" && data.top_merchants[0] && data.top_merchants[0].share_pct >= 40 && (
+              // Concentration is only worth naming when there IS any: below this the honest
+              // reading is "spread out", and a leading share of 11% dressed as a headline would be
+              // the app manufacturing a finding.
+              <span className="label">{t("cat.topMerchantsConcentrated", { name: data.top_merchants[0].merchant, pct: data.top_merchants[0].share_pct })}</span>
+            )}
           </div>
-          <div className="card flush"><div className="trows">
-            {data.top_merchants.map((m) => (
-              <MerchTrow key={m.merchant} name={m.merchant} spent={Math.abs(m.spent)} barPct={m.share_pct}
-                sub={<>{m.share_pct}% · {t("cat.merchantOps", { n: m.n })}</>} spark={spark} />
-            ))}
+          <div className="card flush"><div className="ilist">
+            {merchScope === "all"
+              ? data.top_merchants.map((m) => (
+                <MerchTrow key={m.merchant} name={m.merchant} spent={Math.abs(m.spent)} barPct={m.share_pct}
+                  sub={<>{m.share_pct}% · {t("cat.merchantOps", { n: m.n })}</>} spark={spark} />
+              ))
+              : periodMerch.slice(0, 12).map((m) => (
+                <MerchTrow key={m.merchant} name={m.merchant} spent={Math.abs(m.spent)} spark={spark}
+                  barPct={(Math.abs(m.spent) / periodMax) * 100}
+                  sub={t("cat.merchantOps", { n: m.n })} />
+              ))}
           </div></div>
         </section>
       )}
@@ -393,50 +415,52 @@ export function Category() {
         </section>
       )}
 
-      <section>
-        <div className="section-head"><h2>{t("cat.trendTitle")}</h2></div>
-        <div className="card chart-card">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={chart} margin={{ left: Y_AXIS_LEFT_MARGIN, top: 8, right: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
-              {/* Width auto: a hard-coded axis width clips the label the moment an amount gains a
-                  digit, and a clipped number is indistinguishable from a real one. */}
-              <YAxis {...Y_AXIS} tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CTooltip />} cursor={{ fill: "var(--surface-2)" }} />
-              <Bar
-                dataKey="spent" fill={data.color ?? "var(--accent)"} radius={[4, 4, 0, 0]} {...CHART_ANIM}
-                cursor="pointer"
-                // Toggle: the second click on the same bar closes it. A drill that can only be
-                // opened leaves the page permanently taller than the reader asked for.
-                // Recharts types the handler around its own mouse event; the datum rides on
-                // `payload`, so it is read here rather than typed at the boundary.
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                onClick={(d: any) => {
-                  const m = (d?.payload?.month ?? d?.month) as string | undefined;
-                  setOpenMonth((cur) => (m && cur !== m ? m : null));
-                }}
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {openMonth && (
-          <div className="card cat-month-drill">
-            <div className="cat-month-head">
-              <b>{monthLabel(openMonth)}</b>
-              <span className="label">
-                {monthLoading ? t("common.loading") : t("cat.monthOps", { n: monthRows?.length ?? 0 })}
-              </span>
-              <button className="cat-empty-cta" onClick={() => setOpenMonth(null)}>{t("cat.monthClose")}</button>
-            </div>
-            {/* Not gated on `monthLoading`: an empty list and a loading list must look different
-                (CLAUDE.md — «вантажиться» і «даних справді нема» — різні екрани), and the header
-                above already says which of the two this is. */}
-            {!monthLoading && <TransactionList rows={monthRows ?? []} empty={t("cat.monthEmpty")} />}
+      {!never && (
+        <section>
+          <div className="section-head"><h2>{t("cat.trendTitle")}</h2></div>
+          <div className="card chart-card">
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={chart} margin={{ left: Y_AXIS_LEFT_MARGIN, top: 8, right: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
+                {/* Width auto: a hard-coded axis width clips the label the moment an amount gains a
+                    digit, and a clipped number is indistinguishable from a real one. */}
+                <YAxis {...Y_AXIS} tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
+                <Tooltip content={<CTooltip />} cursor={{ fill: "var(--surface-2)" }} />
+                <Bar
+                  dataKey="spent" fill={data.color ?? "var(--accent)"} radius={[4, 4, 0, 0]} {...CHART_ANIM}
+                  cursor="pointer"
+                  // Toggle: the second click on the same bar closes it. A drill that can only be
+                  // opened leaves the page permanently taller than the reader asked for.
+                  // Recharts types the handler around its own mouse event; the datum rides on
+                  // `payload`, so it is read here rather than typed at the boundary.
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                  onClick={(d: any) => {
+                    const m = (d?.payload?.month ?? d?.month) as string | undefined;
+                    setOpenMonth((cur) => (m && cur !== m ? m : null));
+                  }}
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
-        )}
-      </section>
+
+          {openMonth && (
+            <div className="card cat-month-drill">
+              <div className="cat-month-head">
+                <b>{monthLabel(openMonth)}</b>
+                <span className="label">
+                  {monthLoading ? t("common.loading") : t("cat.monthOps", { n: monthRows?.length ?? 0 })}
+                </span>
+                <button className="cat-empty-cta" onClick={() => setOpenMonth(null)}>{t("cat.monthClose")}</button>
+              </div>
+              {/* Not gated on `monthLoading`: an empty list and a loading list must look different
+                  (CLAUDE.md — «вантажиться» і «даних справді нема» — різні екрани), and the header
+                  above already says which of the two this is. */}
+              {!monthLoading && <TransactionList rows={monthRows ?? []} empty={t("cat.monthEmpty")} />}
+            </div>
+          )}
+        </section>
+      )}
 
       {/*
         «З чого складається» (2026-08-21). The chips that used to be here named the sub-categories
@@ -458,7 +482,8 @@ export function Category() {
         lands. Each renders nothing when the evidence cannot carry it, so on a thin category the
         page simply stays as it was.
       */}
-      <CategoryShapeBlocks id={id} from={from} to={to} hasBudget={data.budget != null} />
+      {/* Importance, weekday and month-end projection are questions about SPENDING (C3). */}
+      {!inc && <CategoryShapeBlocks id={id} from={from} to={to} hasBudget={data.budget != null} />}
 
       {/*
         §CAT-SUBS — «з них підписки». A subscription is not the category «Підписки»: internet sits
@@ -476,14 +501,14 @@ export function Category() {
                 : t("cat.subsMonthly")}
             </span>
           </div>
-          <div className="card sub-charge-list">
+          <div className="card flush"><div className="ilist">
             {data.subscriptions.items.map((p) => (
               <Link key={p.id} className="sub-charge-row" to={`/subs/${p.id}`}>
                 <span>{p.title}</span>
                 <Money minor={p.monthly_base} decimals={false} />
               </Link>
             ))}
-          </div>
+          </div></div>
         </section>
       )}
 
@@ -534,18 +559,8 @@ export function Category() {
         </section>
       )}
 
-      {!!drill?.merchants.length && (
-        <section>
-          <div className="section-head"><h2>{t("cat.merchantsTitle")}</h2></div>
-          <div className="card flush"><div className="trows">
-            {drill.merchants.slice(0, 12).map((m) => (
-              <MerchTrow key={m.merchant} name={m.merchant} spent={Math.abs(m.spent)} spark={spark}
-                barPct={(Math.abs(m.spent) / Math.max(1, ...drill.merchants.map((x) => Math.abs(x.spent)))) * 100}
-                sub={t("cat.merchantOps", { n: m.n })} />
-            ))}
-          </div></div>
-        </section>
-      )}
+      {/* §CAT-SETTINGS — last on the page (C2): it is what you change after reading the rest. */}
+      <CategorySettings data={data} monthView={range === "month"} />
     </>
   );
 }
@@ -560,7 +575,7 @@ function MerchTrow({ name, spent, barPct, sub, spark }: {
   const series = spark?.merchants[name];
   return (
     <Link className="trow" to={`/merchant/${encodeURIComponent(name)}`}>
-      <span className="trow-name"><span>{name}</span></span>
+      <span className="trow-name" title={name}><span>{name}</span></span>
       <span className="trow-bar"><span style={{ width: `${Math.min(100, barPct)}%`, background: "var(--accent)" }} /></span>
       {series && (
         <span className="trow-spark">

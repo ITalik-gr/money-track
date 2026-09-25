@@ -18,23 +18,23 @@
  * WHAT IS ALLOWED: `getUTC*` (the parts of an instant, zone-free), and `Date.UTC(...)` arithmetic
  * over parts that are ALREADY local — which is what the helpers in `time.ts` are built from.
  *
- * The client is deliberately NOT scanned: in the browser the runtime's zone IS the reader's, so
- * `new Date().getMonth()` there is the right question asked the right way.
+ * THE CLIENT IS SCANNED TOO (since 2026-09-25, UI_PASS F2). It used to be exempt on the theory
+ * that the browser's zone IS the reader's — but the months the client asks for are compared with
+ * months the SERVER grouped in Kyiv, so a device in any other zone asked for the wrong month in its
+ * first and last hours (the dashboard's attention card, the 6-month cashflow, «this vs last
+ * month»). The calendar now lives in `shared/time.ts` for both sides. On the client one more shape
+ * is refused: `new Date(y, m, d)` — a wall time in the BROWSER's zone; only literal dates (weekday
+ * and month-name labels, `new Date(2021, 0, 3 + i)`) and `Date.UTC(...)` pass.
  */
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 
-const ROOT = "worker";
+const ROOTS = ["worker", "src", "shared"];
 
 /**
  * Exemptions, each citing a FACT — the same discipline `check-currency.mjs` keeps, and for the
  * same reason: an exemption outlives its reason silently unless the reason is written next to it.
  */
-const OK = {
-  // The module that OWNS the conversion. Its two-pass `localWallTime` has to read the parts of a
-  // candidate instant to discover the offset; that is the whole mechanism this rule protects.
-  "lib/finance/time.ts": "the §APP_TZ implementation itself",
-};
+const OK = {};
 
 /** Local date-part readers. `getUTC…` is excluded by the negative lookbehind on `UTC`. */
 const RE = /\.get(?!UTC)(FullYear|Month|Date|Day|Hours|Minutes|Seconds)\s*\(\s*\)/g;
@@ -62,22 +62,25 @@ const KEY_RE = [
 
 /** Exemptions for the KEY rule — each names the fact it rests on, like every other one here. */
 const KEY_OK = {
-  "lib/finance/money.ts": "`rateDayKey` — the date a bank PUBLISHED a rate, not an event in the reader's day",
-  "lib/finance/networth.ts": "the series point is built at a UTC month end and keyed the same way",
-  "lib/ai/receipt.ts": "an R2 object prefix, read by nobody as a calendar",
+  "worker/lib/finance/money.ts": "`rateDayKey` — the date a bank PUBLISHED a rate, not an event in the reader's day",
+  "worker/lib/finance/networth.ts": "the series point is built at a UTC month end and keyed the same way",
+  "worker/lib/ai/receipt.ts": "an R2 object prefix, read by nobody as a calendar",
   // §DIGEST-HOUR made the cron hourly, and `infraDue`/`markInfraRan` mark «this UTC day's
   // infrastructure pass has run». Deliberately UTC and deliberately NOT the reader's day: the
   // infrastructure half is not addressed to anybody — nobody reads it as a calendar, and the
   // rates snapshot it guards is keyed the same way (`networth.ts`, exempted two lines up).
-  "lib/platform/cron.ts": "the infra pass's own day marker — UTC on both sides, read by no reader",
+  "worker/lib/platform/cron.ts": "the infra pass's own day marker — UTC on both sides, read by no reader",
 };
 
-function tsFiles(dir, prefix = "") {
+/** A local-zone wall time built on the client: `new Date(y, m, …)` with a non-literal first part. */
+const CTOR_RE = /new Date\((?!\s*Date\.UTC|\s*\d)[^,()]*(?:\([^()]*\))?[^,()]*,/g;
+
+function tsFiles(dir) {
   const out = [];
-  for (const e of readdirSync(join(ROOT, dir || "."), { withFileTypes: true })) {
-    const rel = prefix ? `${prefix}/${e.name}` : e.name;
-    if (e.isDirectory()) { if (e.name !== "test") out.push(...tsFiles(join(dir, e.name), rel)); }
-    else if (/\.ts$/.test(e.name) && !e.name.endsWith(".test.ts")) out.push(rel);
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const rel = `${dir}/${e.name}`;
+    if (e.isDirectory()) { if (e.name !== "test") out.push(...tsFiles(rel)); }
+    else if (/\.tsx?$/.test(e.name) && !/\.test\.tsx?$/.test(e.name)) out.push(rel);
   }
   return out;
 }
@@ -88,13 +91,25 @@ function stripComments(src) {
 }
 
 const problems = [];
-for (const file of tsFiles("")) {
-  const code = stripComments(readFileSync(join(ROOT, file), "utf8"));
+for (const file of ROOTS.flatMap((r) => tsFiles(r))) {
+  const code = stripComments(readFileSync(file, "utf8"));
+  if (!file.startsWith("worker/")) {
+    code.split("\n").forEach((line, i) => {
+      for (const m of line.matchAll(CTOR_RE)) {
+        problems.push(
+          `${file}:${i + 1}: builds a wall time in the BROWSER's zone.\n` +
+          `    §APP_TZ: use localMidnight/localWallTime (shared/time.ts) — the server's calendar is Kyiv.\n` +
+          `    ${line.trim().slice(0, 110)}`,
+        );
+        void m;
+      }
+    });
+  }
   if (!Object.hasOwn(KEY_OK, file)) {
     code.split("\n").forEach((line, i) => {
       for (const m of KEY_RE.flatMap((re) => [...line.matchAll(re)])) {
         problems.push(
-          `${ROOT}/${file}:${i + 1}: builds a date KEY in UTC.\n` +
+          `${file}:${i + 1}: builds a date KEY in UTC.\n` +
           `    §APP_TZ: use localYmd()/localYm() — a key compared against a Kyiv-grouped column is\n` +
           `    off by a day for the three hours after midnight, with no error anywhere.\n` +
           `    ${line.trim().slice(0, 110)}`,
@@ -107,8 +122,9 @@ for (const file of tsFiles("")) {
   code.split("\n").forEach((line, i) => {
     for (const m of line.matchAll(RE)) {
       problems.push(
-        `${ROOT}/${file}:${i + 1}: reads ${m[0]} from the runtime clock.\n` +
-        `    §APP_TZ: the worker runs in UTC. Use localParts/localYmd/localMonthStart (lib/finance/time.ts),\n` +
+        `${file}:${i + 1}: reads ${m[0]} from the runtime clock.\n` +
+        `    §APP_TZ: the worker runs in UTC and the browser in any zone. Use localParts/localYmd/\n` +
+        `    localMonthStart (shared/time.ts),\n` +
         `    or getUTC${m[1]}() when you genuinely mean the instant and not the calendar.\n` +
         `    ${line.trim().slice(0, 110)}`,
       );
@@ -121,6 +137,6 @@ if (problems.length) {
   process.exit(1);
 }
 console.log(
-  `✓ C12 §APP_TZ: no local date parts read and no UTC date keys in ${ROOT}/ ` +
+  `✓ C12 §APP_TZ: no local date parts, browser-zone wall times or UTC date keys in ${ROOTS.join("/, ")}/ ` +
   `(${Object.keys(OK).length + Object.keys(KEY_OK).length} exemptions, each with its reason in the script)`,
 );

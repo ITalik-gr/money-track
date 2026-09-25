@@ -6,6 +6,7 @@ import { Select } from "../ui/Select.tsx";
 import type { SavingsGoal, GoalKind, AutofillKind, GoalBody } from "../../store/api.ts";
 import { getBaseCurrency } from "../../lib/currency.ts";
 import { currencySign } from "../../../shared/currency.ts";
+import { localMidnight, localYmd } from "../../../shared/time.ts";
 
 const PALETTE = ["#2e6be6", "#127c86", "#1f6e4c", "#7a3e9d", "#c2417a", "#b23a2e", "#c9871a", "#0e7490"];
 
@@ -23,7 +24,7 @@ const AUTOFILL_OPTIONS = (t: (k: TranslationKey) => string) => [
 ];
 
 const toDateInput = (unix: number | null | undefined) =>
-  unix ? new Date(unix * 1000).toISOString().slice(0, 10) : "";
+  unix ? localYmd(unix) : ""; // the Kyiv day (§APP_TZ)
 
 // Створення / редагування цілі-накопичення. Прогрес: або ручний (сума), або привʼязка
 // до банки — тоді її баланс = прогрес автоматично.
@@ -90,7 +91,7 @@ export function GoalModal({ goal, defaultAccountId, defaultName, onClose }: {
       target_amount: Math.round(Number(target.replace(",", ".")) * 100),
       account_id: accountId,
       current_amount: accountId ? 0 : Math.round(Number(current.replace(",", ".") || 0) * 100),
-      deadline: deadline ? Math.floor(new Date(deadline).getTime() / 1000) : null,
+      deadline: deadline ? localMidnight(...(deadline.split("-").map(Number) as [number, number, number])) : null,
       color, note: note.trim() || undefined,
       kind,
       autofill_kind: auto,

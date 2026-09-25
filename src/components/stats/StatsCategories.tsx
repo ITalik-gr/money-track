@@ -11,6 +11,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { localMidnight, localMonthStart, localQuarterStart, localWeekStart, localYearStart, nowUnix } from "../../../shared/time.ts";
 import { useT } from "../../i18n/index.ts";
 import { formatMinor, formatDate } from "../../lib/format.ts";
 import {
@@ -49,7 +50,7 @@ export function CategoryBreakdown({ rows, from, to, currency, sign }: {
       <div key={`${id}-${i}`}>
         <button type="button" className={`trow ${open ? "open" : ""} ${secondaryStyle ? "muted-row" : ""}`}
           onClick={() => id != null && setOpenId(open ? null : id)}>
-          <span className="trow-name"><span className="d" style={{ background: color }} /><span>{e.category_name ?? noCat}</span></span>
+          <span className="trow-name" title={e.category_name ?? noCat}><span className="d" style={{ background: color }} /><span>{e.category_name ?? noCat}</span></span>
           <span className="trow-bar"><span style={{ width: `${Math.min(p, 100)}%`, background: color }} /></span>
           {series && (
             <span className="trow-spark">
@@ -65,7 +66,7 @@ export function CategoryBreakdown({ rows, from, to, currency, sign }: {
   };
 
   return (
-    <div className="card flush"><div className="trows">
+    <div className="card flush"><div className="ilist">
       {primary.slice(0, 9).map((e, i) => bar(e, i, false))}
       {secondary.length > 0 && (
         <div className="cat-secondary">
@@ -122,7 +123,6 @@ export function CatDrill({ category, from, to, currency, sign }: { category: num
   const subMax = Math.max(...subs.map((s) => s.spent), 1);
   const mMax = Math.max(...data.merchants.map((m) => m.spent), 1);
   const txs = data.transactions ?? [];
-  const txTotal = txs.reduce((a, t) => a + Math.abs(t.amount), 0);
   const hasSubs = subs.length > 0;
   const hasMerch = data.merchants.length > 0;
   return (
@@ -159,7 +159,10 @@ export function CatDrill({ category, from, to, currency, sign }: { category: num
       {/* §R2-ST5(в): самі операції зрізу з переходом на транзакцію. */}
       {txs.length > 0 && (
         <div className="cat-drill-block cat-drill-txs">
-          <div className="label">{t("stats.catdrill.txs", { count: txs.length, plus: txs.length >= 60 ? "+" : "", total: formatMinor(txTotal, { decimals: false }), sign })}</div>
+          {/* Count only. The total used to be summed HERE from each operation's own amount — in its
+              own currency — and printed with the display sign: «18 105 $» for 18 105 ₴ of rent. The
+              category's canonical total is on the row this panel opens from. */}
+          <div className="label">{t("stats.catdrill.txsN", { count: txs.length, plus: txs.length >= 60 ? "+" : "" })}</div>
           <DrillTxList txs={txs} />
         </div>
       )}
@@ -187,7 +190,7 @@ export function AvgCheckByCategory({ rows, sign }: { rows: Overview["byCategory"
       <div className="card flush"><div className="catbars">
         {items.map((it, i) => (
           <div key={i} className="catbar">
-            <span className="cb-name"><span className="d" style={{ background: it.color }} />{it.name}</span>
+            <span className="cb-name" title={it.name}><span className="d" style={{ background: it.color }} /><span>{it.name}</span></span>
             <span className="cb-track"><span className="cb-fill" style={{ width: `${(it.avg / max) * 100}%`, background: it.color }} /></span>
             <span className="cb-val">{formatMinor(it.avg, { decimals: false })} {sign}</span>
             <span className="cb-pct">{t("stats.avgCheck.nTx", { n: it.n })}</span>
@@ -203,38 +206,21 @@ export function AvgCheckByCategory({ rows, sign }: { rows: Overview["byCategory"
 // unitKey — i18n key (not resolved text), so the caller stays reactive to a live language switch.
 export type UnitKey = "stats.unit.week" | "stats.unit.month" | "stats.unit.quarter" | "stats.unit.year";
 export function calPeriods(range: RangeKey, mode: "calendar" | "rolling"): { curFrom: number; curTo: number; prevFrom: number; prevTo: number; unitKey: UnitKey } {
-  const now = new Date();
-  const nowS = Math.floor(now.getTime() / 1000);
+  const nowS = nowUnix();
   if (mode === "rolling") {
     const days = RANGES[range].days;
     const curFrom = nowS - days * 86400;
     const unitKey = ({ week: "stats.unit.week", month: "stats.unit.month", quarter: "stats.unit.quarter", year: "stats.unit.year" } as const)[range];
     return { curFrom, curTo: nowS, prevFrom: curFrom - days * 86400, prevTo: curFrom, unitKey };
   }
-  let curStart: Date, prevStart: Date, unitKey: UnitKey;
-  if (range === "week") {
-    const dow = (now.getDay() + 6) % 7; // Пн=0
-    curStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dow);
-    prevStart = new Date(curStart); prevStart.setDate(prevStart.getDate() - 7);
-    unitKey = "stats.unit.week";
-  } else if (range === "month") {
-    curStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    prevStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    unitKey = "stats.unit.month";
-  } else if (range === "quarter") {
-    const q = Math.floor(now.getMonth() / 3);
-    curStart = new Date(now.getFullYear(), q * 3, 1);
-    prevStart = new Date(now.getFullYear(), q * 3 - 3, 1);
-    unitKey = "stats.unit.quarter";
-  } else {
-    curStart = new Date(now.getFullYear(), 0, 1);
-    prevStart = new Date(now.getFullYear() - 1, 0, 1);
-    unitKey = "stats.unit.year";
-  }
-  const curFrom = Math.floor(curStart.getTime() / 1000);
+  // Kyiv periods (§APP_TZ) — the same helpers the server bounds its presets with.
+  const [curFrom, prevFrom, unitKey]: [number, number, UnitKey] =
+    range === "week" ? [localWeekStart(nowS), localWeekStart(nowS, -1), "stats.unit.week"]
+    : range === "month" ? [localMonthStart(nowS), localMonthStart(nowS, -1), "stats.unit.month"]
+    : range === "quarter" ? [localQuarterStart(nowS), localQuarterStart(nowS, -1), "stats.unit.quarter"]
+    : [localYearStart(nowS), localYearStart(nowS, -1), "stats.unit.year"];
   const curTo = nowS;
   const elapsed = curTo - curFrom; // чесний MTD: попередній період беремо такої ж довжини
-  const prevFrom = Math.floor(prevStart.getTime() / 1000);
   return { curFrom, curTo, prevFrom, prevTo: prevFrom + elapsed, unitKey };
 }
 
@@ -251,10 +237,10 @@ export function PeriodCompare({ range, mode, ym, currency, sign }: {
   const { curFrom, curTo, prevFrom, prevTo, unitKey } = useMemo(() => {
     if (!ym) return calPeriods(range, mode);
     const [y, m] = ym.split("-").map(Number);
-    const edge = (yy: number, mm: number) => Math.floor(+new Date(yy, mm, 1) / 1000);
+    const edge = (mm: number) => localMidnight(y, mm, 1); // Kyiv month edges (§APP_TZ)
     return {
-      curFrom: edge(y, m - 1), curTo: edge(y, m),
-      prevFrom: edge(y, m - 2), prevTo: edge(y, m - 1),
+      curFrom: edge(m), curTo: edge(m + 1),
+      prevFrom: edge(m - 1), prevTo: edge(m),
       unitKey: "stats.unit.month" as UnitKey,
     };
   }, [range, mode, ym]);

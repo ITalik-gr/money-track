@@ -88,3 +88,17 @@ test("a purchase after 21:00 Kyiv lands on the day the reader spent it", async (
     assert.equal((after.get("2026-05-12") ?? 0) - (before.get("2026-05-12") ?? 0), 0);
   } finally { restore(); }
 });
+
+test("the client's month bounds are Kyiv's, whatever zone the browser is in (UI_PASS F2)", async () => {
+  // 23:30 UTC on 31 August = 02:30 on 1 September in Kyiv. The client used to build bounds with
+  // `new Date(y, m, 1)` in the BROWSER's zone; `shared/time.ts` is what it calls now.
+  const { localMonthStart, localParts, daysInMonth } = await import("../../shared/time.ts");
+  const lateUtc = Math.floor(Date.parse("2026-08-31T23:30:00Z") / 1000);
+  assert.equal(localYm(lateUtc), "2026-09");
+  assert.equal(localMonthStart(lateUtc), Math.floor(Date.parse("2026-08-31T21:00:00Z") / 1000));
+  assert.equal(localMonthStart(lateUtc, -5), Math.floor(Date.parse("2026-03-31T21:00:00Z") / 1000));
+  const p = localParts(lateUtc);
+  assert.deepEqual([p.y, p.m, p.d], [2026, 9, 1]);
+  assert.equal(daysInMonth(2026, 2), 28);
+  assert.equal(daysInMonth(2028, 2), 29);
+});

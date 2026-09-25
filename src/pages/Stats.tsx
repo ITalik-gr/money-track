@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useT } from "../i18n/index.ts";
 import { dateFmt } from "../i18n/locale.ts";
+import { localDayStart, localMidnight, localMonthStart, localQuarterStart, localYearStart } from "../../shared/time.ts";
 import { useSearchParams } from "react-router-dom";
 import {
   useGetCashProjectionQuery, useGetCurrenciesQuery, useGetOverviewQuery, useGetPeriodModeQuery, useSetPeriodModeMutation,
@@ -20,14 +21,14 @@ import { AiInsightCard } from "../components/advisor/AiInsightCard.tsx";
 import { HoverTip } from "../components/ui/HoverTip.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
-import { WeekdaySpend } from "../components/stats/WeekdaySpend.tsx";
+import { SpendTiming } from "../components/stats/SpendTiming.tsx";
 import { Habits } from "../components/stats/Habits.tsx";
 import { FactLabel, RANGES, labelFor, type Cur, type RangeKey } from "../components/stats/shared.tsx";
 import { StatsPeriodBar, curYm } from "../components/stats/StatsPeriodBar.tsx";
 import { ClickableKpis, ImportanceBreakdown, SpendingPatterns } from "../components/stats/StatsOverview.tsx";
 import { FxCostCard } from "../components/stats/FxCostCard.tsx";
 import { AvgCheckByCategory, CategoryBreakdown, PeriodCompare } from "../components/stats/StatsCategories.tsx";
-import { DeeperAnalytics, TopSpendDays, toCumulative } from "../components/stats/StatsTrends.tsx";
+import { toCumulative } from "../components/stats/StatsTrends.tsx";
 import { SpendingShape } from "../components/stats/StatsShape.tsx";
 import { AccountsBlock, EventsBlock, MerchantsBlock } from "../components/stats/StatsMerchants.tsx";
 import { MonthCompare } from "../components/stats/StatsCompare.tsx";
@@ -64,14 +65,11 @@ type TabKey = keyof typeof TABS;
 // §1b: повна довжина періоду в днях (для прогнозу «на кінець»). Ковзний = фіксовані вікна.
 function periodLength(range: RangeKey, mode: "calendar" | "rolling", from: number): number {
   if (mode === "rolling") return RANGES[range].days;
-  const d = new Date(from * 1000);
   if (range === "week") return 7;
-  if (range === "month") return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  if (range === "quarter") {
-    const q = Math.floor(d.getMonth() / 3);
-    return Math.round((+new Date(d.getFullYear(), q * 3 + 3, 1) - +new Date(d.getFullYear(), q * 3, 1)) / 86400000);
-  }
-  return Math.round((+new Date(d.getFullYear() + 1, 0, 1) - +new Date(d.getFullYear(), 0, 1)) / 86400000);
+  // Kyiv calendar (§APP_TZ); rounding absorbs the one 23/25-hour day of a DST switch.
+  const next = range === "month" ? localMonthStart(from, 1) : range === "quarter" ? localQuarterStart(from, 1) : localYearStart(from, 1);
+  const start = range === "month" ? localMonthStart(from) : range === "quarter" ? localQuarterStart(from) : localYearStart(from);
+  return Math.round((next - start) / 86400);
 }
 
 // §i18n: NEVER `new Intl.*` inline — a formatter built at module scope freezes the locale it was
@@ -108,9 +106,8 @@ export function Stats() {
   const ymBounds = useMemo(() => {
     if (!ym) return null;
     const [y, m] = ym.split("-").map(Number);
-    // Local wall-clock month edges, not UTC: the server's own boundaries are Kyiv days (§APP_TZ),
-    // and a UTC edge would pull three hours of the neighbouring month into the window.
-    return { from: Math.floor(+new Date(y, m - 1, 1) / 1000), to: Math.floor(+new Date(y, m, 1) / 1000) };
+    // Kyiv month edges (§APP_TZ) — the server's own boundaries; neither UTC nor the browser's zone.
+    return { from: localMidnight(y, m, 1), to: localMidnight(y, m + 1, 1) };
   }, [ym]);
 
   const [currency, setCurrency] = useState<Cur>(null); // null = rolled up into the display base
@@ -158,10 +155,7 @@ export function Stats() {
    * has no business paying for one.
    */
   const projectsAhead = mode === "calendar" && !ym && days < periodLen;
-  const untilTs = useMemo(() => {
-    const d = new Date(from * 1000);
-    return Math.floor(+new Date(d.getFullYear(), d.getMonth(), d.getDate() + periodLen) / 1000) - 1;
-  }, [from, periodLen]);
+  const untilTs = useMemo(() => localDayStart(from, periodLen) - 1, [from, periodLen]);
   const { data: projection } = useGetCashProjectionQuery(
     { to, until: untilTs, currency }, { skip: !projectsAhead },
   );
@@ -170,7 +164,7 @@ export function Stats() {
   const projected = data && mode === "calendar" && days < periodLen && days >= periodLen * 0.4
     ? Math.round(avgDay * periodLen) : null;
   // A month label a person reads, in their own locale — never a raw `2026-07`.
-  const ymLabel = ym ? monthLongFmt.format(new Date(Number(ym.slice(0, 4)), Number(ym.slice(5)) - 1, 1)) : null;
+  const ymLabel = ym ? monthLongFmt.format(new Date(`${ym}-15T12:00:00Z`)) : null;
   const periodNote = mode === "calendar"
     ? t(({ week: "stats.period.week", month: "stats.period.month", quarter: "stats.period.quarter", year: "stats.period.year" } as const)[range])
     : t("stats.period.rolling", { days: RANGES[range].days });
@@ -307,7 +301,9 @@ export function Stats() {
                   <div className="section-head"><h2>{t("stats.trends.title")}</h2><span className="label">{t("stats.trends.sub")}</span></div>
                   <div className="card cashflow"><CashflowChart rows={rows} height={240} /></div>
                 </section>
-                <TopSpendDays series={data.series} sign={sign} from={from} to={to} currency={currency} />
+                {/* ST3: where the money COMES from sits right under income vs spend — it was the last
+                    block of the tab, below eight blocks about spending. */}
+                <IncomeBreakdown preset={range} from={ymBounds?.from} to={ymBounds?.to} currency={currency} sign={sign} />
                 <section>
                   <div className="section-head">
                     <h2>{t("stats.cumulative.title")}</h2>
@@ -325,9 +321,9 @@ export function Stats() {
                     </p>
                   )}
                 </section>
-                <WeekdaySpend preset={range} from={ymBounds?.from} to={ymBounds?.to} currency={currency} />
+                {/* ST2: one «when» block instead of five (top days, patterns, weekdays). */}
+                <SpendTiming series={data.series} sign={sign} from={from} to={to} currency={currency} />
                 {!ym && <Habits />}
-                <DeeperAnalytics series={data.series} sign={sign} from={from} to={to} currency={currency} />
                 {/* §SHAPE: what the period is MADE of — cheque sizes, what falls outside every
                     envelope, and what has no category at all. */}
                 <SpendingShape from={from} to={to} currency={currency} sign={sign} />
@@ -335,7 +331,6 @@ export function Stats() {
                     much went somewhere new. Beside §SHAPE because both describe the period rather
                     than its size. */}
                 <SpendProfileBlock from={from} to={to} sign={sign} />
-                <IncomeBreakdown preset={range} from={ymBounds?.from} to={ymBounds?.to} currency={currency} sign={sign} />
               </>
             )}
 

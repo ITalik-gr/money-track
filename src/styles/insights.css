@@ -61,21 +61,19 @@
 .is-leg b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
 
 /* ---- §MOMENTUM: a run, with the shape that justifies the claim ------------ */
-.mo-list { padding: var(--sp-2) var(--sp-3); }
 .mo-row {
   display: grid; grid-template-columns: minmax(0, 1fr) 74px auto auto;
   align-items: center; gap: var(--sp-3);
-  padding: 9px 8px; border-bottom: 1px solid var(--line);
+  padding: 9px 12px; border-radius: var(--radius-sm);
   color: inherit; text-decoration: none;
 }
-.mo-row:last-child { border-bottom: none; }
-.mo-row:hover { background: var(--surface-2); border-radius: var(--radius-sm); }
+.mo-row:hover { background: var(--surface-2); }
 .mo-name {
   display: inline-flex; align-items: center; gap: 8px; min-width: 0;
   font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .mo-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
-.mo-spark { width: 74px; height: 22px; display: block; }
+.mo-name > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mo-run { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
 .mo-delta {
   font-family: var(--font-num); font-variant-numeric: tabular-nums;
@@ -93,7 +91,15 @@
 }
 
 /* ---- §FLOOR: the cost of changing nothing --------------------------------- */
-.floor-card { padding: 18px 20px; }
+.floor-card { padding: 18px 20px; container-type: inline-size; }
+/* A3: at full width the card is two columns — the answer and its bar on the left, what it is made
+   of and how it moved on the right. Narrow, it stays one column. */
+.mb-grid { display: grid; grid-template-columns: 1fr; gap: 0 32px; }
+.mb-main, .mb-side { min-width: 0; }
+@container (min-width: 760px) {
+  .mb-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
+  .mb-side > .mb-block:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+}
 /* One bar on the income's length (UI_PASS S8): fixed · uneven · free. Fixed is ink, never green
    (a share of income taken by fixed costs is not «good» on its own terms); uneven is the same ink
    lighter (real money, not an error); free is the pale remainder. */
@@ -137,12 +143,17 @@
 .cm-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 6px; margin-top: var(--sp-2); }
 .cm-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
 .cm-col-v { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; color: var(--ink-2); }
-.cm-col-track { width: 100%; max-width: 34px; height: 52px; display: flex; align-items: flex-end; border-radius: var(--radius-xs); background: var(--surface-2); overflow: hidden; }
+.cm-col-track { position: relative; width: 100%; max-width: 34px; height: 64px; display: flex; align-items: flex-end; border-radius: var(--radius-xs); background: var(--surface-2); overflow: hidden; }
 .cm-col-track i { display: block; width: 100%; border-radius: inherit; background: var(--ink-2); transform-origin: bottom; }
 .cm-col-track i.warn { background: var(--warn); }
 .cm-col-track i.neg { background: var(--neg); }
 .cm-col-track i.idle { background: var(--ink-2); }
 .cm-col-m { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
+/* The 70% mark on every column: above it fixed costs leave little room for decisions. */
+.cm-safe { position: absolute; left: -3px; right: -3px; height: 0; border-top: 1.5px dashed var(--warn); pointer-events: none; }
+.cm-safe-key { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-xs); color: var(--muted); }
+.cm-safe-key i { width: 14px; border-top: 1.5px dashed var(--warn); }
+.cm-say { margin: var(--sp-3) 0 0; font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.5; }
 /* ---- §INCOME-RHYTHM ---------------------------------------------------------- */
 .rhythm-card { padding: 18px 20px; }
 .rh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: var(--sp-3); margin-top: var(--sp-3); }

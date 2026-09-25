@@ -1,4 +1,5 @@
 import type { BusinessOverview, TaxStatus } from "../../store/api.ts";
+import { localMonthStart, localParts, localYm, localYmd, nowUnix } from "../../../shared/time.ts";
 
 /**
  * A fictional business, for judging the screen when there is no real one behind it.
@@ -25,23 +26,19 @@ const daysAgo = (n: number) => Math.floor(Date.now() / 1000) - n * 86_400;
 
 /** 'YYYY-MM-DD' n days from today — the format every date field on this page carries. */
 function ymd(offsetDays: number): string {
-  const d = new Date(Date.now() + offsetDays * 86_400_000);
-  return d.toISOString().slice(0, 10);
+  return localYmd(nowUnix() + offsetDays * 86_400);
 }
 
 /** 'YYYY-MM' for n months back, oldest first when mapped over a range. */
 function ym(back: number): string {
-  const d = new Date();
-  d.setMonth(d.getMonth() - back);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return localYm(localMonthStart(nowUnix(), -back));
 }
 
 function quarterLabels(n: number): string[] {
   const out: string[] = [];
-  const d = new Date();
   for (let i = n - 1; i >= 0; i--) {
-    const m = new Date(d.getFullYear(), d.getMonth() - i * 3, 1);
-    out.push(`${m.getFullYear()}-Q${Math.floor(m.getMonth() / 3) + 1}`);
+    const p = localParts(localMonthStart(nowUnix(), -i * 3));
+    out.push(`${p.y}-Q${Math.floor((p.m - 1) / 3) + 1}`);
   }
   return out;
 }

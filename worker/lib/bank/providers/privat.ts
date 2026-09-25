@@ -33,6 +33,7 @@ const DAY = 24 * 60 * 60;
 
 export const privatProvider: BankProvider = {
   id: "privat",
+  secret: "privat_credentials",
   label: "PrivatBank (ФОП)",
   mode: "poll",
 

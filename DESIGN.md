@@ -72,7 +72,9 @@ proportion bar · modal = bottom sheet on mobile, centred dialog on desktop · e
 `Select` instead of native `<select>` · `Range` (`.rng`) instead of native range · `.disclose` —
 the ONE disclosure control (not `<details>`) · `ErrorNote` / `.err-note` for failures ·
 `EmptyCard` for an empty block · skeletons (`.skeleton`) · `.btn.sm` / `.btn.xs` for sizes ·
-`.judge-suggest` for every Jev/AI proposal.
+`.judge-suggest` for every Jev/AI proposal · **§ROW-LIST** `.ilist` — the one list of rows inside a
+card: inset 6px from the card edge, rounded rows, inset separators hidden beside a hovered/opened
+row (lint C22); a table (`.ledger.rows`, the notification feed) runs edge to edge instead.
 
 ## 5. References (what we took)
 
@@ -158,6 +160,11 @@ Standing rules distilled from the log up to 2026-09-21 (the full history is in g
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-25 | One styled checkbox/radio app-wide (17px, 5px radius, white tick on accent); an instant-save on/off setting is a `.switch`, a picker is a checkbox. Tooltips open on tap and on keyboard focus (`HoverTip`), a flipped tip anchors by `right`/`bottom` and flips on its measured size; prose tips are `max-content` ≤ 300px. | T2/T3/F5/F6: OS checkboxes in both themes; tips that did not exist on phones or for keyboards; prose wrapped one word per line near the edge. |
+| 2026-09-25 | A drill is the open row's lower half: the row loses its bottom radius, the panel continues its tone with no border, inner blocks are captioned sections (no card in a card). Statistics → Trends has ONE «when» block (facts · weekday/day-of-month switch · priciest days as chips · one drill slot). «Форма витрат» leads with its one sentence. | ST1/ST2/ST4: «a grey box pasted under a row»; five similar day blocks; the biggest block of the tab for one fact. |
+| 2026-09-25 | Dashboard main column = this month then the long view (forecast full width → free/pulse → envelopes → 6-month flow → capital); upcoming charges in the rail. Balance chips are labelled by currency code. «Місячний мінімум» is two columns at full width, its trend has a 70% line and a sentence saying what the share means. | D1/D2/A2/A3 from the owner's review. |
+| 2026-09-25 | §ROW-LIST `.ilist` replaces every hand-made list (category / merchant trend rows, «Потребує уваги», accounts, «Що росте», linked operations, knowledge docs): rows inset from the card, rounded, separators inset 12px and faded out on both sides of a hovered/open row. C22 refuses a hand-drawn separator between hoverable rows. | Owner, screens 4, 5, 11, 13: a rounded fill touching square lines, and a padding strip over the first hovered row of a flush card. Not seen live yet. |
+| 2026-09-25 | Dashboard (UI_PASS S11): «Потребує уваги» card tops the rail (one row per thing to fix, tone on the icon only, links to where it is fixed; «all clear» only when every source answered); «Цілі» mini in the rail; the forecast card carries the month's cumulative line. `.dash-pair` splits by `@container` on `.dash-main` (≥ 620px), not by the window; the rail is 300px below 1320px. | Owner: dashboard behind the app. Live at 1100px the window-based pair left ~190px halves and hid the month-pulse names. |
 | 2026-09-25 | Hover everywhere (UI_PASS S2–S9): every chart segment, column and sparkline answers a hover through `HoverTip` + `TipBody` (label with colour · value · one line of context); native `title` tips replaced. `HoverTip` flips at the viewport edge and hides on `null`. Shared dark-tip vocabulary: `.tip-kv`, `.tip-sec`, `.tip-big`, `.tip-muted`, `.tip-pos/neg`. | Owner: «далеко не всюди при ховері показується інфа». Not seen live yet. |
 | 2026-09-25 | `.trow` trend rows (spend by category, top merchants, category page merchants): name over bar, amount over share · count, a 112×32 area sparkline between that is hoverable per month (the running month says so). | The liked 58×20 sparkline could not be read or pointed at. Not seen live yet. |
 | 2026-09-25 | Cumulative flow: summary line «Зараз · на кінець періоду», a dashed «today» tick, and a tooltip that says what moved the day (actual: spent · received · day net · since start; forecast: plans by NAME, income by name or usual payday, everyday spend, expected total). API: `CashProjectionDay.items` + `payday`. | «тіки накопичено пише при ховері, не зрозуміло що це». Not seen live yet. |

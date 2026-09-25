@@ -5,6 +5,7 @@ import { baseSign } from "../../lib/currency.ts";
 import { useCountUp } from "../../lib/useCountUp.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
+import { Skeleton } from "../ui/Skeleton.tsx";
 import { useT } from "../../i18n/index.ts";
 
 function pct(cur: number, prev: number): number | null {
@@ -13,7 +14,7 @@ function pct(cur: number, prev: number): number | null {
 }
 
 function KpiTile({
-  title, kind, valueMinor, prevMinor, deltaPct, prevLabel, info, unknown,
+  title, kind, valueMinor, prevMinor, deltaPct, prevLabel, info, unknown, loading,
 }: {
   title: string;
   kind: "spend" | "income";
@@ -24,6 +25,8 @@ function KpiTile({
   info: string;
   /** The request failed. A tile that prints 0 ₴ says «ти нічого не витратив», which is a claim. */
   unknown?: boolean;
+  /** No answer YET. «0 ₴» while loading is the same claim as on failure, only shorter-lived. */
+  loading?: boolean;
 }) {
   // spend: зростання — погано (черв.); income: зростання — добре (зел.)
   const goodWhenUp = kind === "income";
@@ -43,7 +46,7 @@ function KpiTile({
         <span className="kpi-info"><InfoTip>{info}</InfoTip></span>
       </div>
       <div className="kpi-num num-hero">
-        {unknown ? "—" : (
+        {loading ? <Skeleton w={120} h={30} /> : unknown ? "—" : (
           <>
             {formatMinor(Math.round(animVal), { decimals: false })}
             <span className="cur">{baseSign()}</span>
@@ -51,12 +54,12 @@ function KpiTile({
         )}
       </div>
       <div className="kpi-foot">
-        {!unknown && deltaPct !== null && (
+        {!unknown && !loading && deltaPct !== null && (
           <span className={`delta ${good ? "up" : "down"}`}>
             {up ? "↑" : "↓"} {Math.abs(deltaPct).toFixed(1)}%
           </span>
         )}
-        <span>{unknown ? "" : `${prevLabel}: ${formatMinor(prevMinor, { decimals: false })} ${baseSign()}`}</span>
+        <span>{unknown || loading ? "" : `${prevLabel}: ${formatMinor(prevMinor, { decimals: false })} ${baseSign()}`}</span>
       </div>
     </div>
   );
@@ -80,14 +83,15 @@ export function KpiRow() {
   // defect as `BalanceCard`, one row below it. The tiles keep their shape (the row must not
   // collapse) and say they have no answer.
   const failed = !!error;
+  const loading = !data && !error;
 
   return (
     <>
       <div className="kpi-row">
         <KpiTile title={rolling ? t("kpi.spent30") : t("kpi.spentMonth")} kind="spend" valueMinor={spend} prevMinor={prevSpend} deltaPct={pct(spend, prevSpend)} prevLabel={prevLabel}
-          info={t("kpi.spendInfo")} unknown={failed} />
+          info={t("kpi.spendInfo")} unknown={failed} loading={loading} />
         <KpiTile title={rolling ? t("kpi.income30") : t("kpi.incomeMonth")} kind="income" valueMinor={income} prevMinor={prevIncome} deltaPct={pct(income, prevIncome)} prevLabel={prevLabel}
-          info={t("kpi.incomeInfo")} unknown={failed} />
+          info={t("kpi.incomeInfo")} unknown={failed} loading={loading} />
       </div>
       <ErrorNote error={error} what={t("kpi.spendInfo")} onRetry={refetch} />
     </>

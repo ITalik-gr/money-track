@@ -19,6 +19,7 @@ import {
 } from "../store/api.ts";
 import type { Category } from "../../shared/types.ts";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
+import { localMidnight } from "../../shared/time.ts";
 
 // §11.4: згортувана секція фільтра. Заголовок-кнопка + шеврон; активний фільтр
 // у згорнутій секції позначається крапкою, щоб не загубився.
@@ -42,10 +43,12 @@ function FilterSection({ id, title, open, active, onToggle, children }: {
 }
 
 // yyyy-mm-dd (для <input type=date>) ↔ unix-секунди.
+// Kyiv days (§APP_TZ): the filter must cut where the server's day ends, not the browser's.
 function dateToUnix(s: string, endOfDay = false): number | undefined {
-  if (!s) return undefined;
-  const d = new Date(s + (endOfDay ? "T23:59:59" : "T00:00:00"));
-  return Number.isNaN(d.getTime()) ? undefined : Math.floor(d.getTime() / 1000);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return undefined;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return endOfDay ? localMidnight(y, mo, d + 1) - 1 : localMidnight(y, mo, d);
 }
 
 export function Transactions() {

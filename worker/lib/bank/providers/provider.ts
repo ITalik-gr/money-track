@@ -10,6 +10,7 @@
 // normalises in its fetch path and again in its webhook path will eventually disagree with
 // itself, and the disagreement shows up months later as money that does not add up.
 import type { AppDb } from "../../platform/db-shim.ts";
+import type { SecretName } from "../../platform/secrets.ts";
 
 /** Canonical account, provider-agnostic. Mirrors the `accounts` table. */
 export interface CanonicalAccount {
@@ -98,8 +99,24 @@ export interface StatementFetch {
   isRateLimit(e: unknown): boolean;
 }
 
+/**
+ * The bank REFUSED the credential (HTTP 401/403) — as opposed to being slow, down or rate-limited.
+ *
+ * One class for every provider, so the code that records the outcome does not learn each bank's
+ * error shape: a token that expired after it was saved must turn the Settings status from
+ * «verified» to «not verified» (§BANK-CRED), or a person whose sync silently stopped has no clue why.
+ */
+export class CredentialRefused extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "CredentialRefused";
+  }
+}
+
 export interface BankProvider {
   id: string;
+  /** The `user_secrets` row that holds this provider's credential — marked when the bank refuses it. */
+  secret?: SecretName;
   /** Shown in the UI when linking a connection. */
   label: string;
   mode: ProviderMode;

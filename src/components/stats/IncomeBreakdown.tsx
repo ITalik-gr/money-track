@@ -1,16 +1,17 @@
 import { useGetIncomeAnalyticsQuery } from "../../store/api.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
-import { HoverTip } from "../ui/HoverTip.tsx";
+import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
-import { useT, type TranslationKey } from "../../i18n/index.ts";
+import { useT } from "../../i18n/index.ts";
 
 // §1 Аналітика доходу: джерела (по категоріях), стабільність (варіативність 6 міс) і
 // дельта проти минулого періоду. Зведено в ₴. Дзеркалить канон Статистики.
 const FALLBACK = ["#12805c", "#2e6be6", "#7a3e9d", "#c9871a", "#127c86", "#6b7a74"];
-const stabTone: Record<string, string> = { стабільний: "pos", помірний: "warn", нестабільний: "neg" };
-// Сервер (P3.4, ще не локалізовано) віддає лейбл стабільності Ukrainian-словом — мапимо
-// на ключ перекладу для показу, порівняння в описі нижче лишаються по сирому значенню.
-const stabLabelKey: Record<string, TranslationKey> = { стабільний: "inc.stabStable", помірний: "inc.stabModerate", нестабільний: "inc.stabUnstable" };
+// ST5: tone and words from the server's machine `level`. They used to be looked up by the LOCALISED
+// label against Ukrainian words, so an English screen always said «moderate».
+const stabTone = { stable: "pos", moderate: "warn", volatile: "neg" } as const;
+const stabLabelKey = { stable: "inc.stabStable", moderate: "inc.stabModerate", volatile: "inc.stabUnstable" } as const;
+const stabDescKey = { stable: "inc.descStable", moderate: "inc.descModerate", volatile: "inc.descUnstable" } as const;
 
 export function IncomeBreakdown({ preset, from, to, currency, sign }: {
   preset: string; from?: number; to?: number; currency: number | null; sign: string;
@@ -34,7 +35,15 @@ export function IncomeBreakdown({ preset, from, to, currency, sign }: {
   const srcMax = Math.max(...data.sources.map((s) => s.amount), 1);
   const monMax = Math.max(...data.monthly.map((m) => m.income), 1);
   const delta = data.delta_pct;
-  const tone = stabTone[data.stability.label] ?? "";
+  const level = data.stability.level;
+  const tone = level ? stabTone[level] : "";
+  // What the spread MEANS, in money: the weakest and the strongest complete month (the running one
+  // is half a month and would always be «the weakest»).
+  const complete = data.monthly.slice(0, -1).filter((m) => m.income > 0);
+  const weakest = complete.length >= 2 ? complete.reduce((a, b) => (b.income < a.income ? b : a)) : null;
+  const strongest = complete.length >= 2 ? complete.reduce((a, b) => (b.income > a.income ? b : a)) : null;
+  const mLabel = (ym: string) => monthShort(Number(ym.split("-")[1]) - 1);
+  const money = (m: number) => `${formatMinor(m, { decimals: false })} ${sign}`;
 
   return (
     <section>
@@ -42,7 +51,7 @@ export function IncomeBreakdown({ preset, from, to, currency, sign }: {
         <h2>{t("inc.title")}</h2>
         <span className="label">{t("inc.subtitle")}</span>
       </div>
-      <div className="stats-2col">
+      <div className="inc-grid">
         <div className="card deep-card">
           <div className="inc-head">
             <div>
@@ -75,23 +84,31 @@ export function IncomeBreakdown({ preset, from, to, currency, sign }: {
             </HoverTip>
           </div>
           <div className="inc-stab">
-            <span className={`stab-badge ${tone}`}>{stabLabelKey[data.stability.label] ? t(stabLabelKey[data.stability.label]) : data.stability.label}</span>
+            <span className={`stab-badge ${tone}`}>{level ? t(stabLabelKey[level]) : data.stability.label}</span>
             {data.stability.cv_pct != null && <span className="muted" style={{ fontSize: 12.5 }}>{t("inc.stabDispersion", { pct: data.stability.cv_pct })}</span>}
           </div>
           <div className="inc-months">
-            {data.monthly.map((m, i) => (
-              <HoverTip key={i} content={<><div className="tip-lbl">{monthShort(Number(m.month.split("-")[1]) - 1)}</div><div className="r">{formatMinor(m.income, { decimals: false })} {sign}</div></>}>
-                <div className="im-col">
-                  <div className="im-bar-wrap"><div className="im-bar" style={{ height: `${(m.income / monMax) * 100}%` }} /></div>
-                  <span className="im-lbl">{monthShort(Number(m.month.split("-")[1]) - 1)}</span>
-                </div>
-              </HoverTip>
-            ))}
+            {data.monthly.map((m, i) => {
+              const running = i === data.monthly.length - 1;
+              return (
+                // ST5: the tip says WHAT arrived that month — a jumpy month is only useful once it
+                // names the payment that was missing or doubled.
+                <HoverTip key={m.month} content={<TipBody label={<>{mLabel(m.month)}{running ? ` · ${t("spark.running")}` : ""}</>} value={money(m.income)}
+                  sub={m.top.length ? <>{m.top.map((s) => <div key={s.name}>{s.name} · {money(s.amount)}</div>)}</> : t("inc.noneThisPeriod")} />}>
+                  <div className={`im-col${running ? " running" : ""}`}>
+                    <span className="im-val">{m.income > 0 ? formatMinor(m.income, { decimals: false }) : "—"}</span>
+                    <div className="im-bar-wrap"><div className="im-bar" style={{ height: `${(m.income / monMax) * 100}%` }} /></div>
+                    <span className="im-lbl">{mLabel(m.month)}</span>
+                  </div>
+                </HoverTip>
+              );
+            })}
           </div>
           <p className="deep-desc">
-            {data.stability.label === "стабільний" ? t("inc.descStable") :
-             data.stability.label === "нестабільний" ? t("inc.descUnstable") :
-             t("inc.descModerate")}
+            {level ? t(stabDescKey[level]) : t("inc.descModerate")}
+            {weakest && strongest && weakest.month !== strongest.month && (
+              <> {t("inc.range", { low: money(weakest.income), lowM: mLabel(weakest.month), high: money(strongest.income), highM: mLabel(strongest.month) })}</>
+            )}
           </p>
         </div>
       </div>

@@ -5,6 +5,7 @@ import { HRYVNIA } from "../../../shared/currency.ts";
 import { useMarkTaxPaidMutation, useLazyGetTaxPaymentCandidatesQuery } from "../../store/api.ts";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
+import { localYmd } from "../../../shared/time.ts";
 
 /**
  * §TAX-DUE — «paid» is a LINK to the operation that paid it, never a bare checkbox.
@@ -53,7 +54,7 @@ export function MarkPaid({ obligationId }: { obligationId: number }) {
       )}
       {data?.candidates.map((c) => (
         <button key={c.id} className="fop-paid-row" disabled={saving} onClick={() => settle(c.id)}>
-          <span className="fop-paid-when">{new Date(c.time * 1000).toISOString().slice(0, 10)}</span>
+          <span className="fop-paid-when">{localYmd(c.time)}</span>
           <span className="fop-paid-who">{c.merchant ?? t("fop.paidNoName")}</span>
           {/* §TAX-UAH — the candidate query only ever returns hryvnia rows, and the amount is
               printed in the currency it was paid in, not in the reader's base. */}

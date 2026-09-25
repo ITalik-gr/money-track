@@ -21,6 +21,7 @@ import { HoverTip, TipBody } from "../components/ui/HoverTip.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 import { signFor } from "../lib/currency.ts";
+import { localMidnight, localYmd, nowUnix } from "../../shared/time.ts";
 
 const rDate = dateFmt({ day: "numeric", month: "short" });
 const rDateTime = dateFmt({ day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -39,11 +40,11 @@ function periodLabel(r: ReportListItem): string {
   return `${label} · ${rangeLabel(r.period_from, r.period_to)}`;
 }
 
-/** `YYYY-MM-DD` → unix опівночі ЛОКАЛЬНОГО дня. Користувач обирає дати у своєму поясі, і саме
- *  так їх треба інтерпретувати — інакше вечірні операції останнього дня випадають зі звіту. */
+/** `YYYY-MM-DD` → unix of that day's KYIV midnight (§APP_TZ) — the day the server groups by, so the
+ *  evening rows of the last day stay in the report wherever the browser is. */
 function dayStartUnix(iso: string): number {
   const [y, m, d] = iso.split("-").map(Number);
-  return Math.floor(new Date(y, m - 1, d).getTime() / 1000);
+  return localMidnight(y, m, d);
 }
 
 // Дельта-чіп у стилі Статистики: зростання витрат — червоне, спад — зелене.
@@ -68,9 +69,9 @@ export function Reports() {
   const isLoading = queueing || (jobs?.items ?? []).some(
     (j) => j.kind === "report" && (j.status === "queued" || j.status === "running"),
   );
-  // Локальна «сьогодні», не `toISOString()`: у Києві ввечері UTC-дата вже вчорашня, і `max`
-  // на інпуті мовчки забороняв би вибрати сьогоднішній день.
-  const today = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  // Kyiv «today», not `toISOString()`: late in the evening the UTC date is already yesterday's,
+  // and `max` on the input would silently forbid picking today.
+  const today = localYmd(nowUnix());
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -264,7 +265,7 @@ export function ReportDetail() {
                     const isNew = hasCatDetail && (c.prev_uah ?? 0) === 0 && c.amount_uah !== 0;
                     return (
                       <div key={i} className="catbar">
-                        <span className="cb-name" title={c.note ?? undefined}><span className="d" style={{ background: barColor(i), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} />{c.name}</span>
+                        <span className="cb-name" title={c.note ? `${c.name} — ${c.note}` : c.name}><span className="d" style={{ background: barColor(i), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} /><span>{c.name}</span></span>
                         <span className="cb-track"><span className="cb-fill" style={{ width: `${(Math.abs(c.amount_uah) / catMax) * 100}%`, background: barColor(i) }} /></span>
                         <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} {sign}</span>
                         <span className="cb-pct">{isNew ? <span className="cmp-delta new">{t("stats.compare.newLabel")}</span> : <Delta pct={c.delta_pct} />}</span>

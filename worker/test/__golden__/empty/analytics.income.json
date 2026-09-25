@@ -13,7 +13,8 @@
     "monthly": [],
     "stability": {
       "cv_pct": null,
-      "label": "мало даних"
+      "label": "мало даних",
+      "level": null
     }
   }
 }

@@ -15,6 +15,8 @@ import { QuickBar } from "../components/dashboard/QuickBar.tsx";
 import { SetupNudge } from "../components/dashboard/SetupNudge.tsx";
 import { PrefsHint } from "../components/dashboard/PrefsHint.tsx";
 import { McpHint } from "../components/dashboard/McpHint.tsx";
+import { AttentionCard } from "../components/dashboard/AttentionCard.tsx";
+import { GoalsMini } from "../components/dashboard/GoalsMini.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { useGetMeQuery, useGetTransactionsQuery } from "../store/api.ts";
@@ -62,17 +64,16 @@ export function Dashboard() {
 
       {/* Основна аналітика (широка колонка) + рейл швидкого погляду (вузька) */}
       <div className="dash">
+        {/* D2 (2026-09-25): the column reads as a story — this month (where it closes, what is
+            free, where it went, the envelopes), then the long view (six months of flow, capital).
+            The forecast got the full width: in half a pair its month line was a thumbnail. Upcoming
+            charges moved to the rail — a short list that looks ahead sits with «Потребує уваги». */}
         <div className="dash-main">
-          <CashflowCard />
+          <ForecastCard />
           <div className="dash-pair">
             <SafeToSpend />
             <MonthPulse />
           </div>
-          <div className="dash-pair">
-            <ForecastCard />
-            <UpcomingSubs />
-          </div>
-          <CapitalTrendCard />
           <section>
             <div className="section-head">
               <h2>{t("dash.envelopeBudgets")}</h2>
@@ -80,11 +81,16 @@ export function Dashboard() {
             </div>
             <EnvelopeGrid />
           </section>
+          <CashflowCard />
+          <CapitalTrendCard />
         </div>
 
         <aside className="dash-rail">
+          <AttentionCard />
+          <UpcomingSubs />
           <HealthMini />
           <CreditBanner />
+          <GoalsMini />
           <section>
             <div className="section-head">
               <h2>{t("dash.recent")}</h2>

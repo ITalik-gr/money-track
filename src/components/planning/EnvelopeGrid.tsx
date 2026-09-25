@@ -4,6 +4,7 @@ import { useGetBudgetStatusQuery, useGetCategoriesQuery } from "../../store/api.
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { Money } from "../ui/Money.tsx";
 import { useT } from "../../i18n/index.ts";
+import { envelopeState } from "../../../shared/envelope.ts";
 
 /**
  * Envelopes: every budgeted category is a pocket that empties as you spend (§8).
@@ -56,12 +57,13 @@ export function EnvelopeGrid() {
     <div className="env-list">
       {envelopes.map((e) => {
         // §BUDGET-ZERO: an envelope deliberately set to nothing is binary — the promise held or it
-        // did not. `ratio >= 1` rather than `> 1` here, because the canon reports a broken zero
-        // envelope as exactly 1: there is no "how far over" when the limit is nothing.
+        // did not. §ENV-STATE: the verdict is shared with «Потребує уваги»; «full» (printed 100%)
+        // wears the warn colour and says «вичерпано», never «перевищено».
         const zero = e.amount === 0;
         const pct = Math.round(e.ratio * 100);
-        const over = zero ? e.spent > 0 : e.ratio > 1;
-        const state = over ? "over" : zero ? "ok" : pct >= 80 ? "warn" : "ok";
+        const verdict = envelopeState(e);
+        const over = verdict === "over";
+        const state = verdict === "full" ? "warn" : verdict;
         const bar = state === "over" ? "var(--neg)" : state === "warn" ? "var(--warn)" : e.color;
         const remain = e.amount - e.spent;
         // The forecast line earns its space only when it says something the bar does not: the
@@ -110,6 +112,7 @@ export function EnvelopeGrid() {
                 {/* «ще 0 ₴» about an envelope that was never meant to hold anything is true and
                     empty; what matters is whether anything was spent at all. */}
                 {zero ? (over ? t("eg.zeroSpentAnyway") : t("eg.zeroKept"))
+                  : verdict === "full" ? <>{t("eg.full")}</>
                   : remain >= 0 ? <>{t("eg.left")} <Money minor={remain} decimals={false} /></>
                     : <>{t("eg.exceeded")}</>}
               </span>

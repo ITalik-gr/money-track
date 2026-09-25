@@ -1,4 +1,6 @@
-import { useGetForecastQuery } from "../../store/api.ts";
+import { useGetForecastQuery, useGetOverviewQuery, useGetCashProjectionQuery } from "../../store/api.ts";
+import { CumulativeChart } from "../stats/CumulativeChart.tsx";
+import { toCumulative } from "../stats/StatsTrends.tsx";
 import { Money } from "../ui/Money.tsx";
 import { formatMinor } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
@@ -11,6 +13,18 @@ import { baseSign } from "../../lib/currency.ts";
 export function ForecastCard() {
   const t = useT();
   const { data: f } = useGetForecastQuery();
+  // §CASH-PROJ on the dashboard (UI_PASS S11): the month as a line — facts to today, then the
+  // named plans and the usual spending day by day — with the same hover as Statistics. The window
+  // comes from the forecast's OWN month bounds (Kyiv, server-side), so the two cannot disagree
+  // about where the month ends. Explicit bounds, not `preset: "month"`: under the rolling period
+  // mode that preset is the last 30 days, and a rolling window cannot meet a month-end forecast.
+  const { data: month } = useGetOverviewQuery(
+    { from: f?.monthStart ?? 0, to: f?.now ?? 0, bucket: "day", currency: null }, { skip: !f },
+  );
+  const until = f ? f.monthStart + f.daysInMonth * 86400 - 1 : 0;
+  const { data: projection } = useGetCashProjectionQuery(
+    { to: f?.now ?? 0, until, currency: null }, { skip: !f || f.daysRemaining <= 0 },
+  );
   if (!f) return null;
 
   const paceRatio = f.projectedSpend > 0 ? Math.min(f.spend / f.projectedSpend, 1) : 0;
@@ -52,6 +66,13 @@ export function ForecastCard() {
           <span>{t("common.spent")} <b><Money minor={f.spend} decimals={false} /></b></span>
           <span className="muted">{t("fc.pace", { pace: formatMinor(f.pace, { decimals: false }) })}</span>
         </div>
+
+        {month && month.series.length >= 2 && (
+          <div className="fc-flow">
+            <div className="label">{t("fc.flow")}</div>
+            <CumulativeChart rows={toCumulative(month.series, projection)} sign={baseSign()} height={180} />
+          </div>
+        )}
 
         {f.upcomingPlanned > 0 && (
           <div className="fc-upcoming">

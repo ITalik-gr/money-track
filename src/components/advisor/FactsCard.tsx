@@ -11,11 +11,12 @@ import {
   useGetFactsQuery, useAddFactMutation, useConfirmFactMutation, useDeleteFactMutation,
   useGetCategoriesQuery, type Fact,
 } from "../../store/api.ts";
+import { localMidnight, localYmd } from "../../../shared/time.ts";
 
 // §A1 (AI 4.0): шар фактів про світ. Користувач пише факт («метро подорожчало 8→30 ₴»),
 // система його пам'ятає, пояснює й — ЯКЩО підтверджено — рахує з ним (burn/runway).
 // ⚠️ Гейт підтвердження: факт із коригуванням суми НЕ рухає числа, поки не «Застосувати».
-const iso = (u: number) => new Date(u * 1000).toISOString().slice(0, 10);
+const iso = (u: number) => localYmd(u); // the Kyiv day (§APP_TZ)
 const dayStr = (u: number) => new Date(u * 1000).toLocaleDateString(localeTag(getLocale()), { day: "numeric", month: "short", year: "numeric" });
 
 function effectLabel(f: Fact): string | null {
@@ -132,7 +133,8 @@ function FactForm({ onDone }: { onDone: () => void }) {
       if (kind === "multiplier") { adjust_kind = "multiplier"; adjust_value = n; }
       else { adjust_kind = "delta_minor"; adjust_value = Math.round(n * 100); } // ₴ → копійки
     }
-    const fromUnix = Math.floor(new Date(`${from}T00:00:00Z`).getTime() / 1000);
+    const [fy, fm, fd] = from.split("-").map(Number);
+    const fromUnix = localMidnight(fy, fm, fd);
     try {
       // Ручний факт: користувач сам ввів число → confirm=true (сам себе підтвердив).
       await addFact({ text: text.trim(), category_id: categoryId, effective_from: fromUnix, adjust_kind, adjust_value, confirm: true }).unwrap();

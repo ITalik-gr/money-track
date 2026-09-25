@@ -1,5 +1,6 @@
 // Money is minor units (копійки) everywhere; format only for display.
 import { dateFmt, numFmt } from "../i18n/locale.ts";
+import { localMonthStart, nowUnix } from "../../shared/time.ts";
 
 // The symbol table moved to `shared/currency.ts` (§BASE-CUR): the worker prints signs too — in
 // the deterministic advice and in the notification feed — and two tables would have disagreed
@@ -53,6 +54,7 @@ export function weekdayShort(dow: number): string {
   return dateFmt({ weekday: "short" }).format(new Date(2021, 7, 1 + dow));
 }
 
-export function startOfMonthUnix(d = new Date()): number {
-  return Math.floor(new Date(d.getFullYear(), d.getMonth(), 1).getTime() / 1000);
+/** The Kyiv month's first second (§APP_TZ) — never the browser's own zone. */
+export function startOfMonthUnix(): number {
+  return localMonthStart(nowUnix());
 }

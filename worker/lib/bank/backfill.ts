@@ -12,7 +12,7 @@
 import type { Env } from "../../env.ts";
 import { getState, setState } from "../finance/repo.ts";
 import { upsertCanonicalTx } from "../../repo/ingest.ts";
-import { bankCredential } from "./credentials.ts";
+import { bankCredential, noteCredential } from "./credentials.ts";
 import { getProvider } from "./providers/index.ts";
 import { recordSync } from "../../repo/connections.ts";
 
@@ -133,6 +133,7 @@ export async function stepBackfill(env: Env): Promise<StepResult | null> {
         await upsertCanonicalTx(env.DB, tx, { source: providerId, onConflict: "refresh" });
       }
       await recordSync(env.DB, providerId, provider.label, { ok: true });
+      await noteCredential(env.DB, providerId);
     } catch (e) {
       if (provider.statement.isRateLimit(e)) {
         return { done: false, retry: true, progress: cursor.idx, total: cursor.total };
@@ -144,6 +145,7 @@ export async function stepBackfill(env: Env): Promise<StepResult | null> {
         ok: false,
         error: e instanceof Error ? e.message : String(e),
       });
+      await noteCredential(env.DB, providerId, e);
       throw e;
     }
   }

@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 // Through the wiring module, so registering the fake also registers the real ones — the loop must
 // keep working in a registry that holds more than one bank.
 import "../lib/bank/providers/index.ts";
-import { registerProvider, type CanonicalTx } from "../lib/bank/providers/provider.ts";
+import { CredentialRefused, registerProvider, type CanonicalTx } from "../lib/bank/providers/provider.ts";
 import { startBackfill, stepBackfill, CURSOR_KEY } from "../lib/bank/backfill.ts";
 import { nextPollAt, pollOnce } from "../lib/bank/poll.ts";
 import { getState } from "../lib/finance/repo.ts";
@@ -24,12 +24,13 @@ interface Call { account: string; from: number; to: number; currency: number }
 
 class FakeRateLimit extends Error {}
 
-function installFakeBank(opts: { rows?: (call: Call) => CanonicalTx[]; failWith?: () => never } = {}) {
+function installFakeBank(opts: { rows?: (call: Call) => CanonicalTx[]; failWith?: () => never; secret?: "mono_token" } = {}) {
   const calls: Call[] = [];
   registerProvider({
     id: "fake",
     label: "Fake Bank",
     mode: "poll",
+    secret: opts.secret,
     statement: {
       pacing: { maxWindowSec: WINDOW, minGapMs: GAP_MS },
       async fetch(_credential, account, from, to, currency) {
@@ -197,6 +198,36 @@ test("poll: a bank that does not push is asked, one account per pass", async (t)
       assert.equal(await pollOnce(env), null);
     });
 
+  } finally {
+    restore();
+  }
+});
+
+test("§BANK-CRED: a token the bank refuses after it was saved stops reading as verified", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const db = migratedDb();
+    seed(db);
+    const env = fakeBankEnv(db);
+    // Saved and verified at save time — what `putSecret` writes for a token that worked then.
+    db.raw.prepare("INSERT INTO user_secrets (name, ciphertext, iv, updated_at, last_ok_at) VALUES ('mono_token', 'x', 'y', 1, 1)").run();
+    const status = () => db.raw.prepare("SELECT last_ok_at FROM user_secrets WHERE name = 'mono_token'").get() as { last_ok_at: number | null };
+
+    // An outage says nothing about the token.
+    installFakeBank({ secret: "mono_token", failWith: () => { throw new Error("bank is down"); } });
+    await startBackfill(env);
+    await assert.rejects(stepBackfill(env));
+    assert.equal(status().last_ok_at, 1);
+
+    // A 401 does.
+    installFakeBank({ secret: "mono_token", failWith: () => { throw new CredentialRefused("fake -> 401"); } });
+    await assert.rejects(stepBackfill(env), CredentialRefused);
+    assert.equal(status().last_ok_at, null, "a refused token must not stay «verified»");
+
+    // …and the first success after one marks it verified again.
+    installFakeBank({ secret: "mono_token" });
+    await stepBackfill(env);
+    assert.ok(status().last_ok_at! > 1);
   } finally {
     restore();
   }

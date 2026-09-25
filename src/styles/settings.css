@@ -572,9 +572,8 @@
 /* §A5: «Корпус знань» — картка рейла Порадника (завантаження й редагування PDF/MD).
    Її сусідка по рейлу, «Індекс здоровʼя», живе в `advisor.css` (шов C8, 2026-09-10). */
 .corpus-card { padding: 18px 20px; }
-.corpus-list { display: flex; flex-direction: column; gap: 2px; }
-.corpus-doc { display: flex; gap: 9px; border-top: 1px solid var(--line); }
-.corpus-doc:first-child { border-top: none; }
+.corpus-list.ilist { margin: 0 -10px; padding: 0; }
+.corpus-doc { display: flex; gap: 9px; }
 .corpus-doc > svg { color: var(--muted); flex-shrink: 0; margin-top: 2px; }
 .corpus-doc-title { font-size: var(--fs-md); color: var(--ink); font-weight: 500; }
 .corpus-doc-sum { font-size: var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top: 2px; }
@@ -584,7 +583,7 @@
    Падінг по боках + рівний відʼємний маргін: підсвітка ховера ширша за текст (він не
    впирається в її край), але сам текст лишається вирівняним по контенту картки. Без цього
    бекграунд ішов рівно по тексту й читався як обрізаний. */
-.corpus-doc { width: calc(100% + 20px); margin: 0 -10px; text-align: left; background: none; border: none; border-top: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; color: inherit; font: inherit; align-items: center; padding: 9px 10px; }
+.corpus-doc { width: 100%; text-align: left; background: none; border: none; border-radius: var(--radius-sm); cursor: pointer; color: inherit; font: inherit; align-items: center; padding: 9px 10px; }
 .corpus-doc:hover { background: var(--surface-2); }
 .corpus-doc > svg:last-child { margin-left: auto; transform: rotate(-90deg); color: var(--muted); }
 .corpus-doc.off { opacity: 0.5; }
@@ -602,7 +601,6 @@
 .doc-modal .doc-body.over { border-color: var(--neg); }
 .doc-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .doc-toggle { display: flex; align-items: center; gap: 6px; margin-left: auto; white-space: nowrap; font-size: var(--fs-sm); color: var(--ink-2); }
-.doc-toggle input { width: auto; }
 
 /* Підписки: річна вартість, топ-найдорожчі, детект «мертвих» */
 .sub-hero-year { margin-top: 4px; color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }

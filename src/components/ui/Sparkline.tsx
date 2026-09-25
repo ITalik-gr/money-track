@@ -10,8 +10,12 @@ const monthOf = (ym: string) => new Date(`${ym}-15T12:00:00Z`);
 
 // Міні-тренд 6 міс у рядку списку (категорії/мерчанти). Крихітний SVG-polyline + крапка-кінець,
 // колір кінцевої крапки за трендом (зростання витрат = neg, спад = pos). Без осей/підписів.
-export function Sparkline({ values, color = "var(--muted)", width = 58, height = 20, goodUp = false, area = false, months, sign }: {
+export function Sparkline({ values, color = "var(--muted)", width = 58, height = 20, goodUp = false, area = false, months, sign, floor0 = false, running = true }: {
   values: number[]; color?: string; width?: number; height?: number; goodUp?: boolean;
+  /** Baseline at 0 instead of the minimum — for a claim about SIZE, where a min baseline turns a 2% wobble into a cliff. */
+  floor0?: boolean;
+  /** The last month is still running (`/analytics/spark`). False for series of complete months only. */
+  running?: boolean;
   /**
    * `YYYY-MM` per value, oldest first. Given, the sparkline becomes READABLE: the point under the
    * cursor is marked and a tip says the month, the amount (minor units, with `sign`) and the change
@@ -41,7 +45,7 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
     return <svg className="spark" width={width} height={height} aria-hidden />;
   }
   const max = Math.max(...clean);
-  const min = Math.min(...clean);
+  const min = floor0 ? 0 : Math.min(...clean);
   const range = max - min || 1;
   /**
    * ⚠️ The x range is INSET by `pad`, like the y range (2026-08-27).
@@ -78,13 +82,13 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
   const tip = (i: number) => {
     const v = clean[i];
     const prev = i > 0 ? clean[i - 1] : null;
-    const running = i === clean.length - 1;
-    const pct = prev != null && prev > 0 && !running ? Math.round(((v - prev) / prev) * 100) : null;
+    const isRunning = running && i === clean.length - 1;
+    const pct = prev != null && prev > 0 && !isRunning ? Math.round(((v - prev) / prev) * 100) : null;
     // Tone from the VALUE's meaning (DESIGN §6): more spending is red unless `goodUp`.
     const tone = pct == null || pct === 0 ? "tip-muted" : (pct > 0) === goodUp ? "tip-pos" : "tip-neg";
     return (
       <>
-        <div className="tip-lbl">{fmtMonth.format(monthOf(months[i]))}{running ? ` · ${t("spark.running")}` : ""}</div>
+        <div className="tip-lbl">{fmtMonth.format(monthOf(months[i]))}{isRunning ? ` · ${t("spark.running")}` : ""}</div>
         <div className="tip-big">{formatMinor(v, { decimals: false })} {sign}</div>
         {pct != null && (
           <div className={tone}>{pct > 0 ? "+" : pct < 0 ? "−" : ""}{Math.abs(pct)}% {t("spark.vsMonth", { month: fmtShort.format(monthOf(months[i - 1])) })}</div>
@@ -93,16 +97,32 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
     );
   };
 
+  // Pointer events, not mouse ones: a tap on a phone picks the point under the finger (F5), and
+  // the tap does not fall through to a row link — asking the chart is not choosing the row.
+  const pick = (e: React.PointerEvent<HTMLSpanElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const px = ((e.clientX - r.left) / r.width) * width;
+    setHover(Math.max(0, Math.min(clean.length - 1, Math.round((px - pad) / stepX))));
+  };
   return (
     <HoverTip content={hover != null ? tip(hover) : null}>
       <span
         className="spark-hit"
-        onMouseMove={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          const px = ((e.clientX - r.left) / r.width) * width;
-          setHover(Math.max(0, Math.min(clean.length - 1, Math.round((px - pad) / stepX))));
+        // Keyboard (F6): focus shows the running month, arrows walk the months.
+        tabIndex={0}
+        role="img"
+        aria-label={`${fmtMonth.format(monthOf(months[clean.length - 1]))}: ${formatMinor(last, { decimals: false })} ${sign ?? ""}`}
+        onPointerMove={(e) => { if (e.pointerType === "mouse") pick(e); }}
+        onPointerDown={(e) => { if (e.pointerType !== "mouse") pick(e); }}
+        onPointerLeave={(e) => { if (e.pointerType === "mouse") setHover(null); }}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        onFocus={() => setHover((h) => h ?? clean.length - 1)}
+        onBlur={() => setHover(null)}
+        onKeyDown={(e) => {
+          if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+          e.preventDefault();
+          setHover((h) => Math.max(0, Math.min(clean.length - 1, (h ?? clean.length - 1) + (e.key === "ArrowLeft" ? -1 : 1))));
         }}
-        onMouseLeave={() => setHover(null)}
       >
         {svg}
       </span>

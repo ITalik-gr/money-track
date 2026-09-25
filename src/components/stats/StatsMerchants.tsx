@@ -37,11 +37,11 @@ export function MerchantsBlock({ data, sign, merchMax }: {
     <section>
       <div className="section-head"><h2>{t("stats.merchants.title")}</h2><InfoTip>{t("stats.merchants.tip")}</InfoTip><span className="label">{t("stats.byCategory.click")}</span></div>
       {data.byMerchant.length ? (
-        <div className="card flush"><div className="trows">
+        <div className="card flush"><div className="ilist">
           {data.byMerchant.slice(0, 7).map((m, i) => (
             <Link key={i} to={`/merchant/${encodeURIComponent(m.merchant)}`} className="trow has-lead">
               <span className="trow-lead"><MerchantLogo merchant={m.merchant} color="var(--accent)" fallbackLabel={m.merchant} /></span>
-              <span className="trow-name"><span>{m.merchant}</span></span>
+              <span className="trow-name" title={m.merchant}><span>{m.merchant}</span></span>
               <span className="trow-bar"><span style={{ width: `${(m.spent / merchMax) * 100}%`, background: "var(--accent)" }} /></span>
               {spark?.merchants[m.merchant] && (
                 <span className="trow-spark">
@@ -90,7 +90,7 @@ export function EventsBlock({ data, from, to, currency, sign }: {
           return (
             <div key={e.event_id}>
               <button type="button" className={`catbar catbar-btn ${isOpen ? "open" : ""}`} onClick={() => setOpen(isOpen ? null : e.event_id)}>
-                <span className="cb-name"><span className="d" style={{ background: e.event_color ?? "var(--accent)" }} />{e.event_name}</span>
+                <span className="cb-name" title={e.event_name}><span className="d" style={{ background: e.event_color ?? "var(--accent)" }} /><span>{e.event_name}</span></span>
                 <span className="cb-track"><span className="cb-fill" style={{ width: `${(e.spent / max) * 100}%`, background: e.event_color ?? "var(--accent)" }} /></span>
                 <span className="cb-val">
                   {formatMinor(e.spent, { decimals: false })} {sign}
@@ -118,7 +118,7 @@ export function AccountsBlock({ data, from, to, currency, sign }: {
   return (
     <section>
       <div className="section-head"><h2>{t("stats.accounts.title")}</h2><InfoTip>{t("stats.accounts.tip")}</InfoTip><span className="label">{t("stats.accounts.click")}</span></div>
-      <div className="card flush"><div className="mrows">
+      <div className="card flush"><div className="ilist">
         {data.byAccount.map((a, i) => {
           const key = a.account_id ?? String(i);
           const isOpen = open === key;

@@ -117,15 +117,17 @@ export async function buildIncomeAnalytics(
   now = Math.floor(Date.now() / 1000),
 ): Promise<IncomeAnalytics> {
   const { from, to, prevFrom, prevTo } = bounds;
-  const analyticsRepo = await import("../../repo/analytics.ts");
+  const analyticsRepo = await import("../../repo/income.ts");
 
-  const [sources, curTot, prevTot, monthly] = await Promise.all([
+  const chartFrom = localMonthStart(now, -5);
+  const [sources, curTot, prevTot, monthly, bySource] = await Promise.all([
     analyticsRepo.incomeBySource(db, locale, v, { from, to }),
     analyticsRepo.incomeTotal(db, v, { from, to }),
     analyticsRepo.incomeTotal(db, v, { from: prevFrom, to: prevTo }),
     // Six COMPLETE months for §INCOME-CV (the same window as §FLOW-SERIES, so the card and the health
     // index / income rhythm quote one number), plus the current month for the chart.
     analyticsRepo.monthlyIncome(db, v, now, { from: localMonthStart(now, -6), to: now }),
+    analyticsRepo.monthlyIncomeBySource(db, locale, v, now, { from: chartFrom, to: now }),
   ]);
 
   const total = curTot?.income ?? 0;
@@ -147,8 +149,15 @@ export async function buildIncomeAnalytics(
   const byM = new Map(monthly.map((r) => [r.m, r.income]));
   const cv = incomeCv(covered.map((k) => Math.max(0, byM.get(k) ?? 0)));
   const cvPct = cv == null ? null : Math.round(cv * 100);
-  const label = st(locale, cvPct == null ? "stabilityUnknown"
-    : cvPct <= 15 ? "stabilityStable" : cvPct <= 40 ? "stabilityModerate" : "stabilityVolatile");
+  const level = cvPct == null ? null : cvPct <= 15 ? "stable" as const : cvPct <= 40 ? "moderate" as const : "volatile" as const;
+  const label = st(locale, level == null ? "stabilityUnknown"
+    : level === "stable" ? "stabilityStable" : level === "moderate" ? "stabilityModerate" : "stabilityVolatile");
+  const topBy = new Map<string, { name: string; amount: number }[]>();
+  for (const r of bySource) {
+    const list = topBy.get(r.m) ?? [];
+    if (list.length < 3 && r.amount > 0) list.push({ name: r.name ?? st(locale, "other"), amount: r.amount });
+    topBy.set(r.m, list);
+  }
 
   return {
     period: { from, to, preset: preset as IncomeAnalytics["period"]["preset"] },
@@ -156,7 +165,7 @@ export async function buildIncomeAnalytics(
     sources: srcRows,
     // The chart keeps its six calendar months (five complete + the current one); the seventh, oldest
     // row was fetched for the CV only.
-    monthly: monthly.filter((r) => r.m >= localYm(localMonthStart(now, -5))).map((r) => ({ month: r.m, income: r.income })),
-    stability: { cv_pct: cvPct, label },
+    monthly: monthly.filter((r) => r.m >= localYm(chartFrom)).map((r) => ({ month: r.m, income: r.income, top: topBy.get(r.m) ?? [] })),
+    stability: { cv_pct: cvPct, label, level },
   };
 }

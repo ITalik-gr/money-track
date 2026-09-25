@@ -39,8 +39,23 @@ export const mcp = new Hono<{ Bindings: Env }>();
  */
 const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
-/** What the model is told this server is for, once, at connection time. */
-const INSTRUCTIONS = [
+/**
+ * What the model is told this server is for, once, at connection time.
+ *
+ * Built per connection because the ФОП paragraph is §FOP-GATE-d: `get_tax_status` is already kept
+ * out of `tools/list` for a non-owner, and instructions that still describe it announced a hidden
+ * module to every user's assistant (UI_PASS FOP1).
+ */
+function instructions(fop: boolean): string {
+  return [
+    ...INSTRUCTIONS_HEAD,
+    ...(fop ? ["", ...INSTRUCTIONS_FOP] : []),
+    "",
+    ...INSTRUCTIONS_UNITS,
+  ].join("\n");
+}
+
+const INSTRUCTIONS_HEAD = [
   "Money Track — the user's own personal finance ledger (bank transactions, categories, budgets,",
   "subscriptions, goals). Every figure comes from their real data.",
   "",
@@ -50,15 +65,19 @@ const INSTRUCTIONS = [
   "Use `query_spend` for totals over a period and `find_transactions` for individual operations.",
   "Call `list_categories` when unsure of a category's exact name — filtering by a name the user",
   "does not have returns nothing, which reads as 'you have no such spending'.",
-  "",
+];
+
+const INSTRUCTIONS_FOP = [
   "If the user is a sole trader (ФОП), `get_tax_status` answers what they owe, when, and how much",
   "of the annual income ceiling is left. Its figures are HRYVNIA whatever currency the other tools",
   "answer in, because the state levies in hryvnia — never convert them.",
-  "",
+];
+
+const INSTRUCTIONS_UNITS = [
   "AMOUNTS ARE WHOLE CURRENCY UNITS across every tool here (a `_uah` suffix is historical and",
   "does NOT mean hryvnia — each answer states its own `currency` code). Never convert an amount",
   "into another currency, and never restate one with a different sign than the stated code.",
-].join("\n");
+];
 
 const SNAPSHOT_TOOL = {
   name: "get_finance_snapshot",
@@ -163,7 +182,7 @@ async function handleRpc(env: Env, req: RpcRequest): Promise<unknown | null> {
         protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "money-track", title: "Money Track", version: "1.0.0" },
-        instructions: INSTRUCTIONS,
+        instructions: instructions(await fopVisible(env)),
       });
     }
 

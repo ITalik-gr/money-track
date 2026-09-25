@@ -8,6 +8,7 @@ import { InfoTip } from "../ui/InfoTip.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { baseSign, getBaseCurrency } from "../../lib/currency.ts";
+import { daysInMonth, localMonthStart, localParts, localYmd } from "../../../shared/time.ts";
 
 // Cashflow-календар: місячна сітка очікуваних списань (підписки/розстрочки) по днях +
 // проєкція ліквідної подушки «наперед» → видно провали ліквідності. Дані — /analytics/cashflow-calendar.
@@ -112,19 +113,19 @@ export function CashflowCalendar() {
   if (error) return <ErrorNote error={error} what={t("cfcal.title")} onRetry={refetch} />;
   if (!data) return <div className="card empty">{t("cfcal.calculating")}</div>;
 
-  const base = new Date(data.now * 1000);
-  const shown = new Date(base.getFullYear(), base.getMonth() + offset, 1);
-  const y = shown.getFullYear(), mo = shown.getMonth();
-  const todayStr = `${base.getFullYear()}-${pad(base.getMonth() + 1)}-${pad(base.getDate())}`;
-  const daysIn = new Date(y, mo + 1, 0).getDate();
-  const lead = (new Date(y, mo, 1).getDay() + 6) % 7; // Пн-перший
+  // Kyiv calendar (§APP_TZ): the server keys `byDate` by the Kyiv day. `mo` is 0-based.
+  const shown = localParts(localMonthStart(data.now, offset));
+  const y = shown.y, mo = shown.m - 1;
+  const todayStr = localYmd(data.now);
+  const daysIn = daysInMonth(y, mo + 1);
+  const lead = (new Date(Date.UTC(y, mo, 1)).getUTCDay() + 6) % 7; // Пн-перший
   const monthTotal = Array.from({ length: daysIn }, (_, i) => byDate.get(`${y}-${pad(mo + 1)}-${pad(i + 1)}`)?.total ?? 0).reduce((a, b) => a + b, 0);
   const maxDay = Math.max(1, ...Array.from(byDate.values()).map((v) => v.total));
 
   // Leading and trailing days of the NEIGHBOURING months are drawn muted rather than left as
   // holes: a calendar whose first row starts in mid-air reads as a broken grid, and the reader
   // needs to see that the 1st is a Tuesday relative to something.
-  const prevDays = new Date(y, mo, 0).getDate();
+  const prevDays = daysInMonth(y, mo);
   const trail = (7 - ((lead + daysIn) % 7)) % 7;
   const cells: { d: number; out: boolean }[] = [
     ...Array.from({ length: lead }, (_, i) => ({ d: prevDays - lead + 1 + i, out: true })),
@@ -151,7 +152,7 @@ export function CashflowCalendar() {
           <button className="cf-nav-btn" disabled={offset <= 0} onClick={() => setOffset((o) => o - 1)} aria-label={t("cfcal.prevMonthAria")}>
             <Icon name="chevron" size={16} />
           </button>
-          <span className="cf-month">{monthFmt.format(shown)}</span>
+          <span className="cf-month">{monthFmt.format(Date.UTC(y, mo, 15, 12))}</span>
           <button className="cf-nav-btn next" disabled={offset >= MAX_OFFSET} onClick={() => setOffset((o) => o + 1)} aria-label={t("cfcal.nextMonthAria")}>
             <Icon name="chevron" size={16} />
           </button>

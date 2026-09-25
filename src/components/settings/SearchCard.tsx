@@ -45,7 +45,7 @@ export function SearchCard() {
 
       <label className="fop-check">
         <input
-          type="checkbox"
+          type="checkbox" role="switch" className="switch"
           checked={!!data?.enabled}
           disabled={saving}
           onChange={async (e) => {

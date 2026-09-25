@@ -17,6 +17,9 @@
 // single-user history to stay compatible with, and the owner's own key belongs in `user_secrets`
 // like everyone else's. Add the line here, not a new global binding.
 import type { Env } from "../../env.ts";
+import type { AppDb } from "../platform/db-shim.ts";
+import { markVerified } from "../platform/secrets.ts";
+import { CredentialRefused, getProvider } from "./providers/provider.ts";
 
 /** The credential, or `null` when this user has not linked this bank. */
 export function bankCredential(env: Env, providerId: string): string | null {
@@ -27,4 +30,17 @@ export function bankCredential(env: Env, providerId: string): string | null {
   // the record cannot silently stop syncing the one bank that already works.
   if (providerId === "mono" && env.MONO_TOKEN) return env.MONO_TOKEN;
   return null;
+}
+
+/**
+ * Records what the bank said about the credential (§BANK-CRED): `e` omitted = it answered, a
+ * `CredentialRefused` = it refused. Any other failure (outage, rate limit, a parse error) says
+ * nothing about the token and changes nothing — «the bank is down» must not read as «your token
+ * is bad». Called by every path that talks to a bank: backfill, poll, account sync, webhook.
+ */
+export async function noteCredential(db: AppDb, providerId: string, e?: unknown): Promise<void> {
+  const name = getProvider(providerId)?.secret;
+  if (!name) return;
+  if (e === undefined) await markVerified(db, name, true);
+  else if (e instanceof CredentialRefused) await markVerified(db, name, false);
 }

@@ -2,7 +2,7 @@
 // X-Token header. Rate limit: client-info & statement max 1 req / 60s — callers pace
 // backfill; the webhook keeps us live so we rarely poll. Docs: api.monobank.ua/docs
 
-import type { CanonicalTx } from "./providers/provider.ts";
+import { CredentialRefused, type CanonicalTx } from "./providers/provider.ts";
 
 const BASE = "https://api.monobank.ua";
 
@@ -85,6 +85,7 @@ export function monoToCanonical(
 async function monoGet<T>(token: string, path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { headers: { "X-Token": token } });
   if (res.status === 429) throw new MonoRateLimit();
+  if (res.status === 401 || res.status === 403) throw new CredentialRefused(`mono ${path} -> ${res.status}`);
   if (!res.ok) {
     throw new Error(`mono ${path} -> ${res.status}: ${await res.text()}`);
   }
@@ -121,6 +122,7 @@ export async function setWebhook(token: string, webHookUrl: string): Promise<voi
     headers: { "X-Token": token, "Content-Type": "application/json" },
     body: JSON.stringify({ webHookUrl }),
   });
+  if (res.status === 401 || res.status === 403) throw new CredentialRefused(`set webhook -> ${res.status}`);
   if (!res.ok) throw new Error(`set webhook -> ${res.status}: ${await res.text()}`);
 }
 

@@ -18,6 +18,7 @@ import { IMPORTANCE_META, type Importance } from "../../lib/importance.ts";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 import { Money } from "../ui/Money.tsx";
+import { baseSign } from "../../lib/currency.ts";
 
 export function CategoryShapeBlocks({ id, from, to, hasBudget }: {
   id: number; from: number; to: number;
@@ -129,28 +130,26 @@ export function CategoryShapeBlocks({ id, from, to, hasBudget }: {
           </div>
           <div className="card" style={{ padding: 16 }}>
             {wd && (
-              <div className="wd-grid">
-                {ordered.map((d) => {
-                  const weekend = d.dow === 0 || d.dow === 6;
-                  return (
-                    <div key={d.dow} className={`wd-col${weekend ? " weekend" : ""}`}>
+              <div className="wd-bars">
+                {ordered.map((d) => (
+                  // The same chart as Statistics → «Коли ти витрачаєш» (ST2): typical day as the
+                  // height, the numbers in the tip instead of a cramped label under every bar.
+                  <HoverTip key={d.dow} content={<TipBody label={weekdayShort(d.dow)} value={<>{formatMinor(d.typical, { decimals: false })} {baseSign()}</>}
+                    sub={t("wd.barTitle", { n: d.n, days: d.days })} />}>
+                    <div className="wd-col static">
                       <div className="wd-bar-wrap">
                         {/* A day carried by ONE payment is drawn differently rather than hidden:
                             it is still true, just not about behaviour. */}
-                        <div
-                          className={`wd-bar${d.lumpy ? " lumpy" : ""}${d.dow === wd.busiest ? " busiest" : ""}`}
-                          style={{ height: `${Math.round((d.typical / max) * 100)}%` }}
-                          title={t("wd.barTitle", { n: d.n, days: d.days })}
-                        />
+                        <div className={`wd-bar${d.lumpy ? " lumpy" : ""}${d.dow === wd.busiest ? " busiest" : ""}`}
+                          style={{ transform: `scaleY(${Math.max(0.02, d.typical / max)})` }} />
                       </div>
-                      <div className="wd-val num-mono">{formatMinor(d.typical, { decimals: false })}</div>
-                      <div className="wd-label label">{weekdayShort(d.dow)}</div>
+                      <span className="wd-lbl">{weekdayShort(d.dow)}</span>
                     </div>
-                  );
-                })}
+                  </HoverTip>
+                ))}
               </div>
             )}
-            <div className="wd-foot">
+            <div className="when-foot">
               {wd?.busiest != null && <span>{t("wd.busiest", { day: weekdayShort(wd.busiest) })}</span>}
               {data.dom?.busiest != null && (
                 <span className="muted">
