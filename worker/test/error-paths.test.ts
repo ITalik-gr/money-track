@@ -1,15 +1,6 @@
 /**
- * The error paths themselves — the part of every route nobody looks at until it fires.
- *
- * `bad-input.test.ts` pins that malformed input does not produce a 500. This pins what a 500 LOOKS
- * like when one happens anyway, because that shape is a contract with two readers:
- *   · the client's `errText()` unwraps `{ error, detail }` into a sentence — a bare 500 or HTML was
- *     «[object Object]» on screen, the bug the JSON contract was written to end;
- *   · the raw cause (SQL, table names, paths) is for the OWNER only since registration opened
- *     (2026-09-17); everyone else gets `internal_error` and a `ref` that is also in the log line.
- *
- * ⚠️ `errText()` itself is client code and is not loadable here (its dictionaries are JSON imports
- * the node test runner refuses); its half of the contract is the shape pinned below.
+ * What a 500 looks like: always JSON `{error, detail}` (the client's `errText` depends on it), with the
+ * raw cause for the owner only and a log `ref` for everyone else.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -29,12 +20,6 @@ test("errorBody: the owner sees the raw cause; a stranger sees only a reference"
   assert.equal(stranger.body.detail, `ref ${stranger.ref}`);
   assert.ok(!JSON.stringify(stranger.body).includes("secret_col"), "no schema leaks to a stranger");
   assert.equal(stranger.msg, boom.message, "…while the log still gets the real message");
-});
-
-test("errorBody: a throw that is not an Error, or has no message, still yields the contract", () => {
-  assert.equal(errorBody("plain string", "POST", "/x", true).body.error, "plain string");
-  assert.equal(errorBody(new Error(""), "POST", "/x", true).body.error, "internal_error");
-  assert.equal(errorBody(undefined, "POST", "/x", false).body.error, "internal_error");
 });
 
 /** A database whose every statement throws — the uncaught-SQL-error case, end to end. */

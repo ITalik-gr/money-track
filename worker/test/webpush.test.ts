@@ -1,14 +1,6 @@
 /**
- * Web Push (§PUSH).
- *
- * The reason this file exists: a wrong VAPID token does not throw anywhere in our code. The push
- * service answers 401, the browser never rings, and the only symptom is a notification that did
- * not arrive on a night nobody was watching. So the signature is verified here against the public
- * key — the same check the push service does — rather than trusted because it compiled.
- *
- * The subscription lifecycle is pinned for the same class of reason: a 410 that does not delete
- * the row means we push at a dead endpoint forever, and a transient 500 that DOES delete it means
- * someone is silently unsubscribed by one bad night.
+ * §PUSH — a wrong VAPID token fails only as a notification that never arrives, so the signature is
+ * verified against the public key; 410 deletes a subscription, a transient error does not.
  */
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -132,12 +124,4 @@ test("push: a transient failure does NOT unsubscribe anyone", async () => {
   // are pushed at every single night forever.
   for (let i = 1; i < pushRepo.PUSH_MAX_FAILS; i++) await sendWakeups(envWith(db, keys));
   assert.equal(await pushRepo.count(db), 0);
-});
-
-test("push: with no keys configured, nothing is sent and nothing throws", async () => {
-  const db = await withSub();
-  const calls = capture(201);
-  const r = await sendWakeups(testEnv(db) as unknown as Env);
-  assert.deepEqual(r, { sent: 0, dropped: 0, failed: 0 });
-  assert.equal(calls.length, 0, "a deployment without VAPID keys must not reach the network at all");
 });

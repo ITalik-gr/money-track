@@ -1,23 +1,8 @@
 /**
- * Characterization tests for the INTEGRATION entry points — CSV import and the setup status the
- * first-run checklist reads.
+ * Golden DB state for CSV import and the setup status — the paths that put other people's data into
+ * the database.
  *
- * Same reason as `ingest.test.ts`, one step removed from the bank: these are the paths that put
- * OTHER people's data into the database, and nothing else in the suite touched them. They were
- * among the last files still holding inline SQL (`ARCHITECTURE.md` §5), and the rule for that tail
- * is that no query moves until something can prove the path still works. This file is that proof
- * for `import.ts` and `setup.ts` — both went to `repo/` the moment it went green.
- *
- * What each scenario is actually pinning down, so a later reader can tell a bug from a change:
- *  - the ACCOUNT decides the currency, never the file. A statement exported in one currency and
- *    imported into an account in another would otherwise store amounts under the wrong code, and
- *    the canon converts by `currency_code` — the error would surface as a wrong total, months on.
- *  - `duplicates` is counted BEFORE writing. "Imported 0 of 300" after the fact reads as a
- *    failure when it is the correct answer.
- *  - the id is a content hash, so re-importing an overlapping export is a no-op rather than
- *    double-counted money. This is the one that must never regress silently.
- *  - a bad row is SKIPPED with a reason, not fatal: a statement with one broken line still
- *    imports the other 299.
+ * Re-record only for a deliberate change: `UPDATE_GOLDEN=1 npm test`.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

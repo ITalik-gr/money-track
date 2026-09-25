@@ -216,7 +216,7 @@ export function seed(db: MemDb): void {
 
 /** The custom category the cascade scenarios delete, and its sub-category. */
 export const CASCADE_CAT = 900;
-export const CASCADE_SUBCAT = 901;
+const CASCADE_SUBCAT = 901;
 /** Where those scenarios reassign to — an ordinary seeded category (Кафе). */
 export const CASCADE_TARGET = 2;
 
@@ -277,8 +277,8 @@ export function seedCategoryCascade(db: MemDb): void {
 /** The event the planning scenarios patch, delete and read. */
 export const EVENT_ID = 700;
 /** Its plan line item, and the stored report the delete scenario removes. */
-export const EVENT_PLANNED_ID = 710;
-export const REPORT_ID = 720;
+const EVENT_PLANNED_ID = 710;
+const REPORT_ID = 720;
 
 /**
  * Extra rows for the planning surface — events, plan line items and a stored AI report.

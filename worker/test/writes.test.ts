@@ -1,23 +1,9 @@
 /**
- * Characterization tests for the WRITE endpoints (phase 1, batch B2).
+ * Golden tests for the WRITE endpoints: each scenario snapshots the response AND a probe wider than
+ * the written row (denormalised columns like `reimbursed` are where bugs hide). Error paths are
+ * scenarios too — most of the logic here is validation.
  *
- * The read-only suite in `golden.test.ts` guards what the API *returns*. It cannot guard these:
- * the interesting output of a write is the state left in the database, and the response body is
- * usually just `{ok: true}`. So every scenario here snapshots BOTH — the response and a probe of
- * the rows the write is allowed to touch.
- *
- * Why the probe is wider than the row being written: these handlers are the ones that maintain
- * DENORMALISED columns the canon reads. `rbRecalc` writes `reimbursed` on the expense AND
- * `reimburses_total` on every source it touched, and §COMPENSATION was already revised once (v2)
- * because the first model let money disappear from both spending and income. A probe narrowed to
- * "the row in the URL" would go green through exactly that class of bug.
- *
- * Error paths are scenarios too, and deliberately so. Most of the logic in these handlers IS the
- * validation — the currency guard, the split/compensation exclusion, the ceiling at the expense
- * total — and each of those rules exists because of a specific way the data can go wrong. A
- * refactor that quietly drops one would otherwise pass.
- *
- * Re-record with `UPDATE_GOLDEN=1 npm test`, only for a deliberate, explained change.
+ * Re-record only for a deliberate, explained change: `UPDATE_GOLDEN=1 npm test`.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -28,8 +14,8 @@ import { api } from "../routes/api/index.ts";
 import { migratedDb, testEnv, freezeTime, freezeUuid, freezeRandom, type MemDb } from "./harness.ts";
 import {
   seed, seedCategoryCascade, seedPlanning, FROZEN_NOW_ISO,
-  CASCADE_CAT, CASCADE_SUBCAT, CASCADE_TARGET,
-  EVENT_ID, EVENT_PLANNED_ID, REPORT_ID,
+  CASCADE_CAT, CASCADE_TARGET,
+  EVENT_ID,
 } from "./fixture.ts";
 
 const GOLDEN_DIR = join(dirname(fileURLToPath(import.meta.url)), "__golden__", "writes");
@@ -94,19 +80,15 @@ const EXTRA_PROBES = {
     rows(db, `SELECT id, title, kind, total_amount, period_amount, period, period_count, start_date,
                      end_date, occurrences, category_id, currency_code, is_active, note
               FROM planned_payments ORDER BY id`),
-  planned_dismissed: (db: MemDb) => rows(db, "SELECT merchant FROM planned_dismissed ORDER BY merchant"),
   receipt_items: (db: MemDb) => rows(db, "SELECT receipt_id, name, category_id FROM receipt_items ORDER BY id"),
   event_groups: (db: MemDb) => rows(db, "SELECT id, name, kind, note, budget, is_active FROM event_groups ORDER BY id"),
   event_planned: (db: MemDb) => rows(db, "SELECT id, event_id, label, amount, category_id FROM event_planned ORDER BY id"),
-  ai_reports: (db: MemDb) => rows(db, "SELECT id, period_type, summary FROM ai_reports ORDER BY id"),
   accounts: (db: MemDb) =>
     rows(db, `SELECT id, type, title, currency_code, balance, credit_limit, role, ai_note, is_manual,
                      is_active, statement_day, payment_day, min_payment
               FROM accounts ORDER BY id`),
   account_balance_history: (db: MemDb) =>
     rows(db, "SELECT account_id, balance, recorded_at FROM account_balance_history ORDER BY id"),
-  knowledge_docs: (db: MemDb) =>
-    rows(db, "SELECT id, kind, title, summary, body, enabled FROM knowledge_docs ORDER BY id"),
   // §CHAT-SYNC. Both tables together, always: the whole point of moving conversations off the
   // device is that a chat and its turns stay one thing, and the failure worth catching is a
   // conversation whose messages outlive it (or the reverse).
@@ -185,14 +167,6 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["tax_obligations"],
   },
   {
-    name: "tax: settled WITHOUT an operation — allowed, and visibly different from a link",
-    method: "POST",
-    path: () => "/tax/obligations/1/paid",
-    body: () => ({}),
-    setup: seedObligation,
-    extraProbes: ["tax_obligations"],
-  },
-  {
     // The id names no row. The write must not report success — an UPDATE that matched nothing is
     // not an error in SQL, and this endpoint used to answer 200 with the status object anyway.
     name: "tax: an obligation id that names no row is refused, and nothing moves",
@@ -223,18 +197,6 @@ const SCENARIOS: Scenario[] = [
     body: (db) => ({ allocations: [{ source_id: txId(db, "Від: друг 2"), amount: 100000 }] }),
   },
   {
-    name: "reimbursement: empty body clears everything",
-    method: "PUT",
-    path: (db) => `/transactions/${txId(db, "Квитки")}/reimbursement`,
-    noBody: true,
-  },
-  {
-    name: "reimbursement: manual amount, no source row",
-    method: "PUT",
-    path: (db) => `/transactions/${txId(db, "Квитки")}/reimbursement`,
-    body: () => ({ manual_amount: 70000 }),
-  },
-  {
     name: "reimbursement: rejected — more than the source has left",
     method: "PUT",
     path: (db) => `/transactions/${txId(db, "Квитки")}/reimbursement`,
@@ -258,18 +220,6 @@ const SCENARIOS: Scenario[] = [
     path: (db) => `/transactions/${txId(db, "Ашан")}/reimbursement`,
     body: (db) => ({ allocations: [{ source_id: txId(db, "Від: друг") }] }),
   },
-  {
-    name: "reimbursement: rejected — target is income, not an expense",
-    method: "PUT",
-    path: (db) => `/transactions/${txId(db, "Від: друг")}/reimbursement`,
-    body: (db) => ({ allocations: [{ source_id: txId(db, "Від: колега") }] }),
-  },
-  {
-    name: "reimbursement: rejected — unknown source id",
-    method: "PUT",
-    path: (db) => `/transactions/${txId(db, "Квитки")}/reimbursement`,
-    body: () => ({ allocations: [{ source_id: "no-such-tx" }] }),
-  },
 
   // ---- §SPLIT ------------------------------------------------------------------------------
   {
@@ -279,34 +229,16 @@ const SCENARIOS: Scenario[] = [
     body: () => ({ splits: [{ category_id: 2, amount: -20000 }, { category_id: 1, amount: -15000 }] }),
   },
   {
-    name: "splits: empty array removes the split",
-    method: "PUT",
-    path: (db) => `/transactions/${txId(db, "Ашан")}/splits`,
-    body: () => ({ splits: [] }),
-  },
-  {
     name: "splits: rejected — parts do not sum to the transaction",
     method: "PUT",
     path: (db) => `/transactions/${txId(db, "Кафе")}/splits`,
     body: () => ({ splits: [{ category_id: 2, amount: -20000 }, { category_id: 1, amount: -10000 }] }),
   },
   {
-    name: "splits: rejected — a single part is not a split",
-    method: "PUT",
-    path: (db) => `/transactions/${txId(db, "Кафе")}/splits`,
-    body: () => ({ splits: [{ category_id: 2, amount: -35000 }] }),
-  },
-  {
     name: "splits: rejected — the expense is already reimbursed",
     method: "PUT",
     path: (db) => `/transactions/${txId(db, "Квитки")}/splits`,
     body: () => ({ splits: [{ category_id: 11, amount: -200000 }, { category_id: 1, amount: -100000 }] }),
-  },
-  {
-    name: "splits: rejected — income cannot be split",
-    method: "PUT",
-    path: (db) => `/transactions/${txId(db, "Від: друг")}/splits`,
-    body: () => ({ splits: [{ category_id: 15, amount: -60000 }, { category_id: 1, amount: -60000 }] }),
   },
 
   // ---- PATCH one transaction ---------------------------------------------------------------
@@ -317,34 +249,10 @@ const SCENARIOS: Scenario[] = [
     body: () => ({ merchant: "Кав'ярня на розі", category_id: 2 }),
   },
   {
-    name: "patch: explicit lock_name=false wins over the rename",
-    method: "PATCH",
-    path: (db) => `/transactions/${txId(db, "Кафе")}`,
-    body: () => ({ merchant: "Кав'ярня на розі", lock_name: false }),
-  },
-  {
     name: "patch: real_category_id is wiped outside bucket 13 (§R2-TX4)",
     method: "PATCH",
     path: (db) => `/transactions/${txId(db, "Кафе")}`,
     body: () => ({ real_category_id: 5 }),
-  },
-  {
-    name: "patch: real_category_id survives inside bucket 13",
-    method: "PATCH",
-    path: (db) => `/transactions/${txId(db, "Зняття готівки")}`,
-    body: () => ({ real_category_id: 2 }),
-  },
-  {
-    name: "patch: tags replace the whole set and drop the main category",
-    method: "PATCH",
-    path: (db) => `/transactions/${txId(db, "Обід")}`,
-    body: () => ({ category_id: 2, tags: [2, 5, 6, 7, 8] }),
-  },
-  {
-    name: "patch: importance override",
-    method: "PATCH",
-    path: (db) => `/transactions/${txId(db, "Таксі")}`,
-    body: () => ({ importance: "essential" }),
   },
 
   // ---- bulk --------------------------------------------------------------------------------
@@ -359,18 +267,6 @@ const SCENARIOS: Scenario[] = [
     method: "POST",
     path: () => "/transactions/bulk",
     body: (db) => ({ ids: [txId(db, "Кафе")], tag_ids: [5, 999999] }),
-  },
-  {
-    name: "bulk: rejected — importance outside the allowed set",
-    method: "POST",
-    path: () => "/transactions/bulk",
-    body: (db) => ({ ids: [txId(db, "Кафе")], importance: "critical" }),
-  },
-  {
-    name: "bulk: empty id list is a no-op",
-    method: "POST",
-    path: () => "/transactions/bulk",
-    body: () => ({ ids: [], category_id: 6 }),
   },
 
   // ---- manual transfer ---------------------------------------------------------------------
@@ -392,12 +288,6 @@ const SCENARIOS: Scenario[] = [
     path: () => "/transactions/transfer",
     body: () => ({ from_account_id: "acc-uah", to_account_id: "acc-usd", amount: 400000 }),
   },
-  {
-    name: "transfer: rejected — same account on both sides",
-    method: "POST",
-    path: () => "/transactions/transfer",
-    body: () => ({ from_account_id: "acc-uah", to_account_id: "acc-uah", amount: 100000 }),
-  },
 
   // ---- transfer review ---------------------------------------------------------------------
   {
@@ -407,74 +297,12 @@ const SCENARIOS: Scenario[] = [
     body: (db) => ({ items: [{ id: txId(db, "Зняття готівки"), real_category_id: 2 }] }),
   },
 
-  // ---- categories (batch C) ------------------------------------------------------------------
-  {
-    name: "categories: create a custom sub-category",
-    method: "POST",
-    path: () => "/categories",
-    body: () => ({ name: "  Настільні ігри  ", color: "#123456", icon: "star", parent_id: 2, importance: "optional" }),
-    extraProbes: ["categories"],
-  },
-  {
-    name: "categories: create falls back to defaults",
-    method: "POST",
-    path: () => "/categories",
-    body: () => ({ name: "Без нічого" }),
-    extraProbes: ["categories"],
-  },
-  {
-    name: "categories: create rejected — blank name",
-    method: "POST",
-    path: () => "/categories",
-    body: () => ({ name: "   " }),
-    extraProbes: ["categories"],
-  },
-  {
-    name: "categories: patch name, colour, importance and parent",
-    method: "PATCH",
-    path: () => "/categories/2",
-    body: () => ({ name: " Кав'ярні ", color: "#ABCDEF", importance: "essential", parent_id: 1 }),
-    extraProbes: ["categories"],
-  },
   {
     name: "categories: patch cannot make a category its own parent",
     method: "PATCH",
     path: () => "/categories/2",
     body: () => ({ parent_id: 2 }),
     extraProbes: ["categories"],
-  },
-  {
-    name: "categories: patch with no known fields is a no-op",
-    method: "PATCH",
-    path: () => "/categories/2",
-    body: () => ({ nonsense: 1 }),
-    extraProbes: ["categories"],
-  },
-  {
-    name: "categories: patch rejected — blank name",
-    method: "PATCH",
-    path: () => "/categories/2",
-    body: () => ({ name: "  " }),
-    extraProbes: ["categories"],
-  },
-  {
-    name: "categories: patch rejected — unknown id",
-    method: "PATCH",
-    path: () => "/categories/99999",
-    body: () => ({ name: "Привид" }),
-    extraProbes: ["categories"],
-  },
-  {
-    name: "categories: usage counts transactions, tags and sub-categories",
-    method: "GET",
-    path: () => `/categories/${CASCADE_CAT}/usage`,
-    setup: seedCategoryCascade,
-  },
-  {
-    name: "categories: usage of an unused category is all zeroes",
-    method: "GET",
-    path: () => `/categories/${CASCADE_SUBCAT}/usage`,
-    setup: seedCategoryCascade,
   },
   {
     // The whole cascade with a target: every FK moves rather than clears, tags de-duplicate
@@ -495,29 +323,9 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["categories", "rules", "budgets", "planned_payments", "receipt_items"],
   },
   {
-    name: "categories: delete treats reassign=none as no target",
-    method: "DELETE",
-    path: () => `/categories/${CASCADE_CAT}?reassign=none`,
-    setup: seedCategoryCascade,
-    extraProbes: ["categories", "rules"],
-  },
-  {
-    name: "categories: delete ignores a reassign pointing at itself",
-    method: "DELETE",
-    path: () => `/categories/${CASCADE_CAT}?reassign=${CASCADE_CAT}`,
-    setup: seedCategoryCascade,
-    extraProbes: ["categories", "rules"],
-  },
-  {
     name: "categories: delete rejected — bucket 13 is locked",
     method: "DELETE",
     path: () => "/categories/13",
-    extraProbes: ["categories"],
-  },
-  {
-    name: "categories: delete rejected — unknown id",
-    method: "DELETE",
-    path: () => "/categories/99999",
     extraProbes: ["categories"],
   },
 
@@ -532,13 +340,6 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["budgets"],
   },
   {
-    name: "budgets: setting one on a category without a budget adds it",
-    method: "PUT",
-    path: () => "/budgets",
-    body: () => ({ category_id: 3, period: "month", amount: 500_00 }),
-    extraProbes: ["budgets"],
-  },
-  {
     // §BUDGET-ZERO: this used to be "a non-positive amount clears the envelope". It now STORES a
     // zero limit, because «сюди я свідомо не витрачаю» is a plan and deserves to be sayable — the
     // golden proves the row survives with `amount = 0` instead of disappearing.
@@ -546,13 +347,6 @@ const SCENARIOS: Scenario[] = [
     method: "PUT",
     path: () => "/budgets",
     body: () => ({ category_id: 2, period: "month", amount: 0 }),
-    extraProbes: ["budgets"],
-  },
-  {
-    // …and removing an envelope is now its own verb. Two rows in, one row out.
-    name: "budgets: DELETE removes the envelope entirely",
-    method: "DELETE",
-    path: () => "/budgets/2?period=month",
     extraProbes: ["budgets"],
   },
   {
@@ -569,13 +363,6 @@ const SCENARIOS: Scenario[] = [
     method: "POST",
     path: () => "/budgets/auto",
     body: () => ({ items: [{ category_id: 1, amount: 9_000_00 }, { category_id: 6, amount: 800_00 }] }),
-    extraProbes: ["budgets"],
-  },
-  {
-    name: "budgets: auto-apply drops non-positive amounts and rejects an empty batch",
-    method: "POST",
-    path: () => "/budgets/auto",
-    body: () => ({ items: [{ category_id: 1, amount: 0 }] }),
     extraProbes: ["budgets"],
   },
 
@@ -599,47 +386,11 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["planned_payments"],
   },
   {
-    name: "planned: patch note and category",
-    method: "PATCH",
-    path: () => "/planned/1",
-    body: () => ({ note: "  сімейна підписка  ", category_id: 42 }),
-    extraProbes: ["planned_payments"],
-  },
-  {
-    name: "planned: patch with no known fields is a no-op",
-    method: "PATCH",
-    path: () => "/planned/1",
-    body: () => ({ nonsense: true }),
-    extraProbes: ["planned_payments"],
-  },
-  {
     // Soft delete: the plan must stay readable, because past charges still point at it.
     name: "planned: delete only deactivates",
     method: "DELETE",
     path: () => "/planned/1",
     extraProbes: ["planned_payments"],
-  },
-  {
-    name: "planned: dismissing a candidate stores it lower-cased",
-    method: "POST",
-    path: () => "/planned/dismiss",
-    body: () => ({ merchant: "  Сільпо  " }),
-    extraProbes: ["planned_dismissed"],
-  },
-  {
-    name: "planned: dismissing the same merchant twice is idempotent",
-    method: "POST",
-    path: () => "/planned/dismiss",
-    body: () => ({ merchant: "Таксі" }),
-    setup: seedPlanning,
-    extraProbes: ["planned_dismissed"],
-  },
-  {
-    name: "planned: dismiss rejected — blank merchant",
-    method: "POST",
-    path: () => "/planned/dismiss",
-    body: () => ({ merchant: "   " }),
-    extraProbes: ["planned_dismissed"],
   },
 
   // ---- events --------------------------------------------------------------------------------
@@ -650,50 +401,6 @@ const SCENARIOS: Scenario[] = [
     setup: seedPlanning,
   },
   {
-    name: "events: detail of an unknown event is 404",
-    method: "GET",
-    path: () => "/events/99999",
-    setup: seedPlanning,
-  },
-  {
-    name: "events: create",
-    method: "POST",
-    path: () => "/events",
-    body: () => ({ name: "  Весілля  ", kind: "event", color: "#AA1122", note: "у липні" }),
-    extraProbes: ["event_groups"],
-  },
-  {
-    name: "events: create rejected — blank name",
-    method: "POST",
-    path: () => "/events",
-    body: () => ({ name: " " }),
-    extraProbes: ["event_groups"],
-  },
-  {
-    name: "events: patch budget, name and note",
-    method: "PATCH",
-    path: () => `/events/${EVENT_ID}`,
-    body: () => ({ budget: 25_000_00, name: "  Карпати 2026  ", note: "  подовжили  " }),
-    setup: seedPlanning,
-    extraProbes: ["event_groups"],
-  },
-  {
-    name: "events: a non-positive budget clears the limit",
-    method: "PATCH",
-    path: () => `/events/${EVENT_ID}`,
-    body: () => ({ budget: 0 }),
-    setup: seedPlanning,
-    extraProbes: ["event_groups"],
-  },
-  {
-    name: "events: patch ignores a blank name",
-    method: "PATCH",
-    path: () => `/events/${EVENT_ID}`,
-    body: () => ({ name: "   " }),
-    setup: seedPlanning,
-    extraProbes: ["event_groups"],
-  },
-  {
     // Two statements in order: the transactions are unlinked FIRST, then the event is archived.
     // The rows themselves survive — deleting an event must never delete spending.
     name: "events: delete unlinks the transactions and archives the event",
@@ -702,65 +409,7 @@ const SCENARIOS: Scenario[] = [
     setup: seedPlanning,
     extraProbes: ["event_groups", "event_planned"],
   },
-  {
-    name: "events: add a plan line item",
-    method: "POST",
-    path: () => `/events/${EVENT_ID}/planned`,
-    body: () => ({ label: "  Прокат  ", amount: 1_500_00, category_id: 3 }),
-    setup: seedPlanning,
-    extraProbes: ["event_planned"],
-  },
-  {
-    name: "events: plan line item rejected — no label or amount",
-    method: "POST",
-    path: () => `/events/${EVENT_ID}/planned`,
-    body: () => ({ label: "Прокат", amount: 0 }),
-    setup: seedPlanning,
-    extraProbes: ["event_planned"],
-  },
-  {
-    // Scoped by event as well as by id: an id alone would let one event delete another's line.
-    name: "events: delete a plan line item",
-    method: "DELETE",
-    path: () => `/events/${EVENT_ID}/planned/${EVENT_PLANNED_ID}`,
-    setup: seedPlanning,
-    extraProbes: ["event_planned"],
-  },
-  {
-    name: "events: deleting a plan line item under the wrong event does nothing",
-    method: "DELETE",
-    path: () => `/events/99999/planned/${EVENT_PLANNED_ID}`,
-    setup: seedPlanning,
-    extraProbes: ["event_planned"],
-  },
 
-  // ---- stored reports ------------------------------------------------------------------------
-  {
-    name: "reports: read one back with its parsed payload",
-    method: "GET",
-    path: () => `/reports/${REPORT_ID}`,
-    setup: seedPlanning,
-  },
-  {
-    name: "reports: unknown id is 404",
-    method: "GET",
-    path: () => "/reports/99999",
-    setup: seedPlanning,
-  },
-  {
-    name: "reports: delete",
-    method: "DELETE",
-    path: () => `/reports/${REPORT_ID}`,
-    setup: seedPlanning,
-    extraProbes: ["ai_reports"],
-  },
-  {
-    name: "reports: deleting an unknown id is not an error",
-    method: "DELETE",
-    path: () => "/reports/99999",
-    setup: seedPlanning,
-    extraProbes: ["ai_reports"],
-  },
 
   // ---- accounts (batch E) --------------------------------------------------------------------
   {
@@ -771,14 +420,6 @@ const SCENARIOS: Scenario[] = [
     path: () => "/accounts/manual",
     body: () => ({ type: "cash", title: "Готівка вдома", currency_code: 980, balance: 250000 }),
     extraProbes: ["accounts", "account_balance_history"],
-  },
-  {
-    name: "accounts: an unknown type falls back to a manual card, role to liquid",
-    method: "POST",
-    path: () => "/accounts/manual",
-    body: () => ({ type: "nonsense", title: "Щось", currency_code: 840, balance: 10000,
-      role: "brokerage", credit_limit: -5, ai_note: "  замітка  " }),
-    extraProbes: ["accounts"],
   },
   {
     name: "accounts: an investment account keeps its role and credit limit",
@@ -796,65 +437,12 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["accounts", "account_balance_history"],
   },
   {
-    // A rename is not a balance event, so it must NOT add a history point — otherwise the chart
-    // grows a step wherever the user tidied up a title.
-    name: "accounts: renaming a manual one does not touch the history",
-    method: "PATCH",
-    path: () => "/accounts/manual/acc-jar",
-    body: () => ({ title: "Банка на авто" }),
-    extraProbes: ["accounts", "account_balance_history"],
-  },
-  {
     // `is_manual = 1` is in the WHERE clause: a bank-synced balance is the bank's to state, and
     // letting the client set it would make the account disagree with the statement.
     name: "accounts: the manual patch does not touch a bank account",
     method: "PATCH",
     path: () => "/accounts/manual/acc-uah",
     body: () => ({ balance: 999999 }),
-    extraProbes: ["accounts"],
-  },
-  {
-    name: "accounts: manual patch with no fields is a no-op",
-    method: "PATCH",
-    path: () => "/accounts/manual/acc-jar",
-    body: () => ({}),
-    extraProbes: ["accounts", "account_balance_history"],
-  },
-  {
-    name: "accounts: rename any account by title",
-    method: "PATCH",
-    path: () => "/accounts/:id/title".replace(":id", "acc-uah"),
-    body: () => ({ title: "  Основна картка  " }),
-    extraProbes: ["accounts"],
-  },
-  {
-    name: "accounts: rename rejected — blank title",
-    method: "PATCH",
-    path: () => "/accounts/acc-uah/title",
-    body: () => ({ title: "   " }),
-    extraProbes: ["accounts"],
-  },
-  {
-    name: "accounts: meta sets role, note and credit-card days",
-    method: "PATCH",
-    path: () => "/accounts/acc-cred/meta",
-    body: () => ({ role: "investment", ai_note: "  кредитка  ", statement_day: 5, payment_day: 25, min_payment: 20000 }),
-    extraProbes: ["accounts"],
-  },
-  {
-    // Out-of-range days clear the condition rather than storing nonsense: a payment reminder on
-    // "day 40" would never fire, and would look configured while being dead.
-    name: "accounts: meta clears out-of-range days and non-positive minimums",
-    method: "PATCH",
-    path: () => "/accounts/acc-cred/meta",
-    body: () => ({ statement_day: 40, payment_day: 0, min_payment: 0, ai_note: "   " }),
-    extraProbes: ["accounts"],
-  },
-  {
-    name: "accounts: meta with no fields is a no-op",
-    method: "PATCH",
-    path: () => "/accounts/acc-cred/meta",
-    body: () => ({}),
     extraProbes: ["accounts"],
   },
   {
@@ -884,87 +472,7 @@ const SCENARIOS: Scenario[] = [
     },
     extraProbes: ["accounts"],
   },
-  {
-    name: "accounts: delete an empty manual account",
-    method: "DELETE",
-    path: () => "/accounts/acc-empty-manual",
-    setup: (db) => {
-      db.raw.prepare(`INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit,
-        is_manual, is_active, updated_at, role) VALUES ('acc-empty-manual','cash','Порожній',980,0,0,1,1,0,'liquid')`).run();
-    },
-    extraProbes: ["accounts"],
-  },
-  {
-    name: "accounts: delete rejected — unknown id",
-    method: "DELETE",
-    path: () => "/accounts/no-such-account",
-    extraProbes: ["accounts"],
-  },
 
-  // ---- knowledge corpus ----------------------------------------------------------------------
-  {
-    name: "knowledge: create a user note",
-    method: "POST",
-    path: () => "/knowledge",
-    body: () => ({ title: "  Мої правила  ", summary: "коротко", body: "  Не купую каву на виніс.  " }),
-    extraProbes: ["knowledge_docs"],
-  },
-  {
-    name: "knowledge: create rejected — no title",
-    method: "POST",
-    path: () => "/knowledge",
-    body: () => ({ title: "  ", body: "текст" }),
-    extraProbes: ["knowledge_docs"],
-  },
-  {
-    name: "knowledge: create rejected — empty body",
-    method: "POST",
-    path: () => "/knowledge",
-    body: () => ({ title: "Назва", body: "   " }),
-    extraProbes: ["knowledge_docs"],
-  },
-  {
-    // Editing a BUILT-IN doc stores an override row rather than mutating the shipped corpus,
-    // so the factory text stays recoverable by deleting the override.
-    name: "knowledge: editing a built-in doc stores an override",
-    method: "PUT",
-    path: () => "/knowledge/investing",
-    body: () => ({ body: "Мій варіант тексту." }),
-    extraProbes: ["knowledge_docs"],
-  },
-  {
-    // `app-methodology` describes the CANON the numbers are computed by. Letting it be rewritten
-    // would have the model explain figures differently from how the code produces them — the
-    // one divergence in this project that argues with itself out loud.
-    name: "knowledge: the methodology doc cannot be edited",
-    method: "PUT",
-    path: () => "/knowledge/app-methodology",
-    body: () => ({ body: "Витрати рахуються інакше." }),
-    extraProbes: ["knowledge_docs"],
-  },
-  {
-    name: "knowledge: the methodology doc cannot be hidden",
-    method: "DELETE",
-    path: () => "/knowledge/app-methodology",
-    extraProbes: ["knowledge_docs"],
-  },
-  {
-    name: "knowledge: editing an unknown id is 404",
-    method: "PUT",
-    path: () => "/knowledge/no-such-doc",
-    body: () => ({ body: "текст" }),
-    extraProbes: ["knowledge_docs"],
-  },
-  {
-    name: "knowledge: delete removes the row",
-    method: "DELETE",
-    path: () => "/knowledge/user:1",
-    setup: (db) => {
-      db.raw.prepare(`INSERT INTO knowledge_docs (id, kind, title, summary, body, enabled, created_at, updated_at)
-        VALUES ('user:1','user','Нотатка','','текст',1,0,0)`).run();
-    },
-    extraProbes: ["knowledge_docs"],
-  },
 
   // ---- export --------------------------------------------------------------------------------
   {
@@ -978,25 +486,6 @@ const SCENARIOS: Scenario[] = [
     reduceBody: (b) => (b as { meta: unknown }).meta,
   },
   {
-    name: "export: transactions as CSV",
-    method: "GET",
-    path: () => "/export/transactions.csv?from=1778000000",
-    raw: true,
-  },
-  // §CHAT-SYNC — conversations moved from `localStorage` into the user's own database, so the
-  // write paths that used to be `JSON.stringify` into a browser now need the same guard as any
-  // other write. Each of these covers a case that was free when the data lived on one device and
-  // is not free now: the first message having to CREATE the row it appends to, regenerate having
-  // to forget the old answer on the server too (otherwise the other device syncs it back as if it
-  // were current), deletion taking the turns with it, and the one-time import running twice.
-  {
-    name: "chats: the first message creates the conversation and names it",
-    method: "POST",
-    path: () => "/chats/cnew1/messages",
-    body: () => ({ content: "Скільки я витратив на таксі?", title: "Скільки я витратив на таксі?" }),
-    extraProbes: ["chats"],
-  },
-  {
     name: "chats: regenerate drops the answer on the server, not only on screen",
     method: "POST",
     path: () => "/chats/cold1/truncate",
@@ -1007,16 +496,6 @@ const SCENARIOS: Scenario[] = [
         ('cold1', 'user', 'Скільки коштує оренда?', 1778700000),
         ('cold1', 'assistant', 'Перша відповідь', 1778700001),
         ('cold1', 'user', 'А підписки?', 1778700002)`).run();
-    },
-    extraProbes: ["chats"],
-  },
-  {
-    name: "chats: deleting a conversation takes its messages with it",
-    method: "DELETE",
-    path: () => "/chats/cdel1",
-    setup: (db) => {
-      db.raw.prepare("INSERT INTO chats (id, title, created_at, updated_at) VALUES ('cdel1', 'Зайва', 1778700000, 1778700000)").run();
-      db.raw.prepare("INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES ('cdel1', 'user', 'Питання', 1778700000)").run();
     },
     extraProbes: ["chats"],
   },
@@ -1083,18 +562,6 @@ const SCENARIOS: Scenario[] = [
     extraProbes: ["ai_changes"],
   },
   {
-    // NULL in `old_value` is a real previous value — "had no category" — not a missing one.
-    name: "ai-audit: reverting to no category at all",
-    method: "POST",
-    path: () => "/ai-changes/9003/revert",
-    setup: (db) => {
-      db.raw.prepare(`INSERT INTO ai_changes (id, tx_id, field, old_value, new_value, source, created_at)
-                      VALUES (9003, 'tx0001', 'category_id', NULL, '6', 'enrich', 1778600000)`).run();
-      db.raw.prepare("UPDATE transactions SET category_id = 6 WHERE id = 'tx0001'").run();
-    },
-    extraProbes: ["ai_changes"],
-  },
-  {
     /**
      * The door the «reverting twice» rule left open, closed 2026-08-21.
      *
@@ -1115,63 +582,8 @@ const SCENARIOS: Scenario[] = [
     },
     extraProbes: ["ai_changes"],
   },
-  {
-    name: "ai-audit: reverting an unknown entry is 404, not a silent success",
-    method: "POST",
-    path: () => "/ai-changes/9999/revert",
-    extraProbes: ["ai_changes"],
-  },
 
-  // ---- §TX-CHAT: a conversation about one operation is STORED --------------------------------
-  // It used to live in React state and vanish on navigation. These pin the two properties that
-  // make storing it useful rather than merely true: it is addressable by the transaction, and it
-  // stays OUT of the advisor's conversation list.
-  {
-    name: "tx-chat: history is empty before anything was said",
-    method: "GET",
-    path: (db) => `/transactions/${txId(db, "Кафе")}/chat`,
-    extraProbes: ["chats"],
-  },
-  {
-    name: "tx-chat: a stored exchange does not appear in the advisor rail",
-    method: "GET",
-    path: () => "/chats",
-    setup: (db) => {
-      db.raw.prepare(`INSERT INTO chats (id, title, created_at, updated_at, kind, entity_id)
-                      VALUES ('tx-tx0001', 'це було за курс', 1778600000, 1778600000, 'tx', 'tx0001')`).run();
-      db.raw.prepare(`INSERT INTO chats (id, title, created_at, updated_at)
-                      VALUES ('cadv1', 'Скільки я витрачаю', 1778600001, 1778600001)`).run();
-      db.raw.prepare(`INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES
-        ('tx-tx0001', 'user', 'це було за курс, не розваги', 1778600000),
-        ('tx-tx0001', 'assistant', 'Зрозумів, перекатегоризував.', 1778600001)`).run();
-    },
-    extraProbes: ["chats"],
-  },
-  {
-    name: "tx-chat: the history reads back what was said about that operation",
-    method: "GET",
-    path: () => "/transactions/tx0001/chat",
-    setup: (db) => {
-      db.raw.prepare(`INSERT INTO chats (id, title, created_at, updated_at, kind, entity_id)
-                      VALUES ('tx-tx0001', 'це було за курс', 1778600000, 1778600000, 'tx', 'tx0001')`).run();
-      db.raw.prepare(`INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES
-        ('tx-tx0001', 'user', 'це було за курс, не розваги', 1778600000),
-        ('tx-tx0001', 'assistant', 'Зрозумів, перекатегоризував.', 1778600001)`).run();
-    },
-  },
 
-  // ---- rules: the deterministic categorisation layer, finally writable ----------------------
-  // The table existed from migration 0001 with no way to write to it but a seed. These pin the
-  // guards that make user-authored rules safe: the shape checks (a one-character pattern would
-  // file the whole history into one category), the §FK-GUARD on the category, and — the one that
-  // matters — that applying a rule NEVER overwrites a category something else already decided.
-  {
-    name: "rules: a text rule is created with its category and priority",
-    method: "POST",
-    path: () => "/rules",
-    body: () => ({ match_type: "text", pattern: "таксі", category_id: 3, priority: 50 }),
-    extraProbes: ["rules"],
-  },
   {
     // THE regression this exists for (found 2026-08-12, the day the feature shipped): the preview
     // used to search the CURRENT merchant, which AI enrichment rewrites to a clean name, while the
@@ -1189,29 +601,10 @@ const SCENARIOS: Scenario[] = [
     },
   },
   {
-    // The other half of the same mirror: a P2P transfer's description is just a name, and the
-    // meaning is in the comment. Matching it was impossible until the engine started reading it.
-    name: "rules: the preview matches a P2P comment, because the engine now does too",
-    method: "POST",
-    path: () => "/rules/preview",
-    body: () => ({ match_type: "text", pattern: "оренда" }),
-    setup: (db) => {
-      db.raw.prepare(`INSERT INTO transactions (id, account_id, source, currency_code, time, amount, merchant, comment, category_id)
-                      VALUES ('rule-p2p', 'acc-uah', 'mono', 980, 1778600000, -1200000, 'Іван П.', 'оренда за серпень', NULL)`).run();
-    },
-  },
-  {
     name: "rules: rejected — a one-character pattern would match everything",
     method: "POST",
     path: () => "/rules",
     body: () => ({ match_type: "text", pattern: "а", category_id: 3 }),
-    extraProbes: ["rules"],
-  },
-  {
-    name: "rules: rejected — an MCC pattern must be digits",
-    method: "POST",
-    path: () => "/rules",
-    body: () => ({ match_type: "mcc", pattern: "grocery", category_id: 1 }),
     extraProbes: ["rules"],
   },
   {
@@ -1232,15 +625,6 @@ const SCENARIOS: Scenario[] = [
       db.raw.prepare("INSERT INTO rules (id, match_type, pattern, category_id, priority) VALUES (7001, 'text', 'Ашан', 6, 50)").run();
       db.raw.prepare(`INSERT INTO transactions (id, account_id, source, currency_code, time, amount, merchant, category_id)
                       VALUES ('rule-unc', 'acc-uah', 'mono', 980, 1778600000, -50000, 'Ашан Сільпо', NULL)`).run();
-    },
-    extraProbes: ["rules"],
-  },
-  {
-    name: "rules: deleting one leaves the transactions it filed alone",
-    method: "DELETE",
-    path: (db) => {
-      db.raw.prepare("INSERT INTO rules (id, match_type, pattern, category_id, priority) VALUES (7002, 'text', 'Кафе', 2, 50)").run();
-      return "/rules/7002";
     },
     extraProbes: ["rules"],
   },

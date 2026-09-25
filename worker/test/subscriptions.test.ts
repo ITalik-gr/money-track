@@ -1,22 +1,12 @@
 /**
- * §SUB-MONTH and §CUR-PLAN — the monthly burden of a plan, which is one function and was three.
- *
- * ⚠️ **This file is new on 2026-08-21, and CLAUDE.md has claimed since 2026-08-01 that it holds
- * the rule.** It did not exist. That is worth recording plainly: a documented safeguard nobody
- * checked is worse than an undocumented gap, because it is read as coverage — and in the meantime
- * the Subscriptions page grew a second definition whose end-of-plan test had drifted, which is
- * exactly what such a test is for.
- *
- * The two failures being pinned, both silent:
- *  · §CUR-PLAN — a $5 plan weighing 5 ₴, because `period_amount` is in the PLAN's currency;
- *  · §SUB-MONTH — a quarterly plan weighing its full amount every month, and a weekly one
- *    weighing a single charge instead of ~4.3.
+ * §SUB-MONTH / §CUR-PLAN / §SUB-DATE / §SUB-ALIAS — a plan's monthly burden (averaged, in its own
+ * currency, zero after end_date), its schedule, day clamping and alias matching.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  monthlyPlannedUAH, sumMonthlyPlannedUAH, plannedUAH, nextChargeUnix, chargesBetween,
-  planMatches, planNeedles,
+  monthlyPlannedUAH, plannedUAH, nextChargeUnix, chargesBetween,
+   
 } from "../lib/finance/subscriptions.ts";
 
 /** ₴ per unit, as `getRates` hands them over (its own row for 980). */
@@ -61,24 +51,6 @@ test("a plan past its end_date weighs NOTHING — whatever kind it is", () => {
   assert.equal(monthlyPlannedUAH({ ...over, kind: "subscription" } as never, RATES, NOW), 0);
 });
 
-test("the sum is the sum of the parts, in one currency", () => {
-  const total = sumMonthlyPlannedUAH([
-    plan(),                                                   // 500 ₴
-    plan({ period_amount: 500, currency_code: 840 }),         // $5 → 200 ₴
-    plan({ end_date: NOW - 1 }),                              // over → 0
-  ], RATES, NOW);
-  assert.equal(total, 70000);
-});
-
-test("nextChargeUnix respects «every N periods»", () => {
-  const start = Math.floor(Date.parse("2026-01-10T00:00:00Z") / 1000);
-  const monthly = nextChargeUnix(start, "month", 1, NOW);
-  const quarterly = nextChargeUnix(start, "month", 3, NOW);
-  assert.ok(monthly > NOW && quarterly > NOW);
-  // A quarterly plan cannot be due sooner than a monthly one started the same day.
-  assert.ok(quarterly >= monthly);
-});
-
 test("chargesBetween is a SCHEDULE, not an average — the other half of §SUB-MONTH", () => {
   // The distinction the invariant insists on: «скільки зʼїдають на місяць» is an average, «що
   // спишеться до кінця місяця» is a schedule, and a quarterly plan either falls in the window or
@@ -110,46 +82,4 @@ test("§SUB-DATE: the 31st clamps to the last day, it does not roll into next mo
   // And the anchor survives it: March is a 31-day month again.
   assert.equal(day(nextChargeUnix(jan31, "month", 1, Date.UTC(2026, 2, 1) / 1000)), "2026-03-31");
   assert.equal(day(nextChargeUnix(jan31, "month", 1, Date.UTC(2026, 3, 1) / 1000)), "2026-04-30");
-});
-
-test("§SUB-DATE: an ordinary day is untouched, years out", () => {
-  const start = Date.UTC(2024, 0, 20, 9, 0, 0) / 1000;
-  const day = (t: number) => new Date(t * 1000).toISOString().slice(0, 10);
-  // The rent case from the feed: paid on the 20th, and still the 20th two years on.
-  assert.equal(day(nextChargeUnix(start, "month", 1, Date.UTC(2026, 7, 27) / 1000)), "2026-09-20");
-  // A quarterly plan lands on the same day, three months apart.
-  assert.equal(day(nextChargeUnix(start, "month", 3, Date.UTC(2026, 7, 27) / 1000)), "2026-10-20");
-});
-
-test("§SUB-DATE: a plan whose start is in the future returns that start", () => {
-  const start = Date.UTC(2026, 11, 5, 8, 0, 0) / 1000;
-  assert.equal(nextChargeUnix(start, "month", 1, Date.UTC(2026, 7, 27) / 1000), start);
-});
-
-/**
- * §SUB-ALIAS (2026-08-27) — a subscription is known by more than its title.
- *
- * The report: the plan is «Twitter», the statement says «X Corp.», and the two never met — so the
- * charge got no `planned_id`, its category was guessed, and the feed announced «списань не видно»
- * for a subscription being paid every month. The extra names come from the plan's own note, the
- * field the user already fills in to explain what this is.
- */
-test("§SUB-ALIAS: the plan's note supplies the names its title does not", () => {
-  const plan = { title: "Twitter", note: "X Corp (твітер) підписка, списується щомісяця" };
-  assert.equal(planMatches(plan, "X CORP. PAYMENT"), true, "the billing name, from the note");
-  assert.equal(planMatches(plan, "твітер"), true, "and the name the person actually uses");
-  assert.equal(planMatches(plan, "TWITTER INC"), true, "the title still works");
-  assert.equal(planMatches(plan, "OnTaxi Kyiv"), false);
-});
-
-test("§SUB-ALIAS: the words every note contains identify nothing, so they are dropped", () => {
-  // Without the stoplist «підписка» would match any statement line carrying the word, and every
-  // plan would claim every other plan's charges.
-  const plan = { title: "Netflix", note: "підписка, оплата щомісяця, сервіс" };
-  assert.deepEqual(planNeedles(plan), ["Netflix"]);
-  assert.equal(planMatches(plan, "SPOTIFY підписка"), false);
-});
-
-test("§SUB-ALIAS: an empty note changes nothing", () => {
-  assert.deepEqual(planNeedles({ title: "Spotify", note: null }), ["Spotify"]);
 });

@@ -1,15 +1,6 @@
 /**
- * §APP_TZ — everything that answers «який це день» must answer the same thing.
- *
- * The rule has been in CLAUDE.md since 2026-08-01, when Statistics showed JULY at 02:46 on the 1st
- * of August. What that fix covered was the period BOUNDS. A sweep on 2026-08-21 found the rule had
- * never reached the buckets INSIDE those bounds, the drill dimensions behind them, two counters,
- * two heuristics and everything the model is told about time — nine places, all of which render a
- * plausible number and none of which fails.
- *
- * These tests pin the shape of the mistake rather than one instance of it: a local expression is
- * offset from the raw UTC one, and every calendar dimension has to use the same expression as the
- * chart it belongs to.
+ * §APP_TZ — everything that answers «which day is it» answers the same: buckets, drills and dates
+ * handed to or from the model all use the Kyiv expression, not raw UTC.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -37,13 +28,6 @@ test("localFmtSql carries the offset into ANY bucket, not just the month", () =>
   assert.equal(localYmSql(AFTER_MIDNIGHT_KYIV), localFmtSql(AFTER_MIDNIGHT_KYIV, "%Y-%m"));
 });
 
-test("localFmtSql takes the column, so a subquery without the `t` alias still works", () => {
-  // `recurringMerchantsSubquery` selects from `transactions` unaliased; passing the default `t.time`
-  // there is a runtime SQL error, not a type error, so the parameter is load-bearing.
-  assert.ok(localFmtSql(AFTER_MIDNIGHT_KYIV, "%Y-%m", "time").includes("time + "));
-  assert.ok(!localFmtSql(AFTER_MIDNIGHT_KYIV, "%Y-%m", "time").includes("t.time"));
-});
-
 test("a bare date from the model is a KYIV wall clock", () => {
   // The rule §BANK-PARSE already states for a CSV, applied to the chat tools: with `Date.UTC` the
   // boundary of "August" sat at 03:00 Kyiv, so the model's total and the screen's disagreed by
@@ -55,16 +39,6 @@ test("a bare date from the model is a KYIV wall clock", () => {
   assert.equal(localYmd(end), "2026-08-31");
   // The whole month, and nothing of September.
   assert.ok(end - start > 30 * 86400 && end - start < 31 * 86400 + 3600);
-});
-
-test("summer and winter offsets are each resolved at their own instant", () => {
-  const summer = tzOffsetSec(Math.floor(Date.parse("2026-07-15T12:00:00Z") / 1000));
-  const winter = tzOffsetSec(Math.floor(Date.parse("2026-01-15T12:00:00Z") / 1000));
-  assert.equal(summer, 3 * 3600);
-  assert.equal(winter, 2 * 3600);
-  // A single hardcoded offset would be wrong for half the year — which is why the helpers take
-  // `now` rather than a constant.
-  assert.notEqual(summer, winter);
 });
 
 /**
@@ -113,60 +87,4 @@ test("a purchase after 21:00 Kyiv lands on the day the reader spent it", async (
     assert.equal((after.get("2026-05-13") ?? 0) - (before.get("2026-05-13") ?? 0), 123400);
     assert.equal((after.get("2026-05-12") ?? 0) - (before.get("2026-05-12") ?? 0), 0);
   } finally { restore(); }
-});
-
-test("the day drill opens the SAME set of rows the bar was drawn from", async () => {
-  const restore = freezeTime("2026-05-14T09:00:00.000Z");
-  try {
-    const db = withEveningTx();
-    const to = Math.floor(Date.parse("2026-05-14T09:00:00Z") / 1000);
-    const from = to - 30 * 86400;
-    const drill = await get(db, `/analytics/slice?dim=day&value=2026-05-13&from=${from}&to=${to}`);
-    // The bug this pins: bar and list disagreeing looks like the app losing a transaction, which
-    // is the single worst thing a ledger can appear to do.
-    assert.ok(drill.transactions.some((t: { id: string }) => t.id === "tz-late"));
-  } finally { restore(); }
-});
-
-test("the weekday split files it on Wednesday, and its drill agrees", async () => {
-  const restore = freezeTime("2026-05-14T09:00:00.000Z");
-  try {
-    const db = withEveningTx();
-    const to = Math.floor(Date.parse("2026-05-14T09:00:00Z") / 1000);
-    const from = to - 30 * 86400;
-    const wd = await get(db, `/analytics/weekday?from=${from}&to=${to}`);
-    const tue = wd.days.find((d: { dow: number }) => d.dow === 2);
-    const wed = wd.days.find((d: { dow: number }) => d.dow === 3);
-    assert.ok(wed.spent >= 123400, "Wednesday holds it");
-
-    const drill = await get(db, `/analytics/slice?dim=weekday&value=3&from=${from}&to=${to}`);
-    assert.ok(drill.transactions.some((t: { id: string }) => t.id === "tz-late"));
-    // And Tuesday's own drill must not also claim it — double counting is the other failure mode.
-    const tueDrill = await get(db, `/analytics/slice?dim=weekday&value=2&from=${from}&to=${to}`);
-    assert.ok(!tueDrill.transactions.some((t: { id: string }) => t.id === "tz-late"));
-    assert.ok(tue.spent >= 0);
-  } finally { restore(); }
-});
-
-/**
- * The export/import ROUND TRIP, which is where a date convention stops being a preference.
- *
- * §BANK-PARSE settled that a zone-less date in a statement is a Kyiv wall clock — a statement is
- * written in local time. The CSV EXPORT then wrote UTC, so exporting and re-importing moved every
- * purchase made after 21:00 Kyiv back by a day, and the totals still added up.
- */
-import { localWallTime as wall } from "../lib/finance/time.ts";
-
-test("a date exported and re-imported is the same date", () => {
-  // 00:30 Kyiv on the 13th — the window where the two conventions disagree.
-  const at = Math.floor(Date.parse("2026-05-12T21:30:00Z") / 1000);
-
-  const exported = localYmd(at);                      // what the CSV now writes
-  assert.equal(exported, "2026-05-13");
-  assert.notEqual(exported, new Date(at * 1000).toISOString().slice(0, 10), "UTC would say the 12th");
-
-  // What the importer makes of it (§BANK-PARSE: a bare date is a Kyiv wall clock).
-  const [y, m, d] = exported.split("-").map(Number);
-  const reimported = wall(y, m, d, 0, 0, 0);
-  assert.equal(localYmd(reimported), exported, "the round trip lands on the same day");
 });

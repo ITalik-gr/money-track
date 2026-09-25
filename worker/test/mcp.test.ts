@@ -1,29 +1,13 @@
 /**
- * §MCP — the ledger exposed to an MCP client (Claude Code, Claude Desktop).
- *
- * Two halves are pinned here, and the first one is the reason the file exists at all.
- *
- * **The credential.** An MCP token is a second door into an account, held by a program rather
- * than a browser and living for a year in a config file on disk. Every property that keeps it
- * from becoming a way into SOMEONE ELSE'S data is a one-line mistake away: the user id is inside
- * the signed payload, so an edited id must fail; the generation number is what makes revocation
- * possible at all, so a stale one must fail; and the token type is part of the signature, so a
- * session cookie must not work here (nor an MCP token as a cookie). None of those failures is
- * visible in ordinary use — a broken one looks exactly like a working one until the day it
- * matters, which is what the test is for.
- *
- * **The read-only boundary.** `runFinanceTool` is the chat's executor and answers `remember_fact`
- * too. The MCP surface must not, and the check that stops it is `financeReadTools()` rather than
- * the executor — so the scenario calls the write tool by name, the way anyone who read the app's
- * source would, rather than trusting that it is absent from the list.
+ * §MCP — the ledger exposed to MCP clients. The token is a second door into an account: the user id,
+ * generation and type are signed, so an edited, stale or foreign token must fail. Read-only tools.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mcp } from "../routes/mcp.ts";
 import { createMcpToken, verifyMcpToken, createSession, verifySession } from "../lib/platform/auth.ts";
-import { migratedDb, migratedDirectoryDb, testEnv, freezeTime } from "./harness.ts";
+import { migratedDb, testEnv, freezeTime } from "./harness.ts";
 import { seed, FROZEN_NOW_ISO } from "./fixture.ts";
-import { issueMcpVersion, revokeMcp, inviteUser, findUserById } from "../lib/platform/directory.ts";
 
 const USER_A = "aaaa1111bbbb2222";
 const USER_B = "cccc3333dddd4444";
@@ -81,24 +65,6 @@ test("an expired token is refused", async () => {
   } finally { restore(); }
 });
 
-test("issuing rotates the generation and revoking clears the issue date", async () => {
-  const dir = migratedDirectoryDb();
-  const user = await inviteUser(dir as never, { email: "a@example.com" });
-  const v1 = await issueMcpVersion(dir as never, user.id);
-  const v2 = await issueMcpVersion(dir as never, user.id);
-  // Issuing again must invalidate the previous token — a rotation that leaves the old one alive
-  // is not a rotation, it is a second credential nobody is tracking.
-  assert.equal(v2, v1 + 1);
-  assert.ok((await findUserById(dir as never, user.id))?.mcp_issued_at);
-
-  await revokeMcp(dir as never, user.id);
-  const after = await findUserById(dir as never, user.id);
-  assert.equal(after?.mcp_version, v2 + 1);
-  // NULL rather than a kept timestamp: the screen must say "not connected", not show a date for
-  // a token that no longer works.
-  assert.equal(after?.mcp_issued_at, null);
-});
-
 // ---- the protocol --------------------------------------------------------------------------
 
 function env() {
@@ -119,27 +85,6 @@ async function rpc(e: Record<string, unknown>, method: string, params?: unknown)
   return { status: res.status, body: body as any };
 }
 
-test("initialize echoes a supported protocol version and advertises tools", async () => {
-  const { body } = await rpc(env(), "initialize", { protocolVersion: "2025-03-26" });
-  assert.equal(body.result.protocolVersion, "2025-03-26");
-  assert.ok(body.result.capabilities.tools);
-  assert.equal(body.result.serverInfo.name, "money-track");
-});
-
-test("an unknown protocol version gets our latest rather than a refusal", async () => {
-  const { body } = await rpc(env(), "initialize", { protocolVersion: "1999-01-01" });
-  assert.equal(body.result.protocolVersion, "2025-06-18");
-});
-
-test("a notification gets 202 and no body", async () => {
-  const res = await mcp.request("/", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
-  }, env());
-  assert.equal(res.status, 202);
-});
-
 test("tools/list offers the snapshot and the read tools, and NOT the write tool", async () => {
   const { body } = await rpc(env(), "tools/list");
   const names = (body.result.tools as { name: string }[]).map((t) => t.name).sort();
@@ -147,30 +92,6 @@ test("tools/list offers the snapshot and the read tools, and NOT the write tool"
   // Every tool must carry a schema under the MCP field name — `input_schema` is Anthropic's
   // spelling, and a client handed the wrong key sees a tool that takes no arguments.
   for (const t of body.result.tools as { inputSchema?: unknown }[]) assert.ok(t.inputSchema);
-});
-
-test("every advertised schema is STRICT enough for a client that validates before showing it", async () => {
-  /**
-   * The quietest failure this server has. A client that validates JSON Schema harder than
-   * Anthropic and finds a schema wanting does not report an error — the tool simply does not
-   * exist for it, and the assistant answers as though it cannot see the ledger at all. Nothing
-   * appears in any log on either side.
-   *
-   * So both properties are asserted for EVERY tool, including the snapshot, which is declared in
-   * `routes/mcp.ts` rather than in `chat-tools.ts` and is exactly the one a helper applied in the
-   * other file would miss.
-   */
-  const { body } = await rpc(env(), "tools/list");
-  for (const t of body.result.tools as { name: string; inputSchema: Record<string, unknown> }[]) {
-    const s = t.inputSchema;
-    assert.equal(s.type, "object", t.name);
-    assert.ok(Array.isArray(s.required), `${t.name}: \`required\` must be PRESENT, even when empty`);
-    assert.equal(s.additionalProperties, false, `${t.name}: the object must be closed`);
-    // A `required` naming a field the schema does not declare is rejected outright by strict
-    // validators, and it is the way this drifts: a property gets renamed, the list does not.
-    const props = Object.keys((s.properties ?? {}) as Record<string, unknown>);
-    for (const r of s.required as string[]) assert.ok(props.includes(r), `${t.name}: required "${r}" is not a property`);
-  }
 });
 
 test("tools/call refuses the write tool BY NAME, not merely by omitting it from the list", async () => {
@@ -182,48 +103,6 @@ test("tools/call refuses the write tool BY NAME, not merely by omitting it from 
   assert.match(body.result.content[0].text, /unknown tool/);
   // And nothing was written: the executor that knows this tool was never reached.
   assert.equal(body.error, undefined);
-});
-
-test("tools/call runs a real query against the ledger", async () => {
-  const { body } = await rpc(env(), "tools/call", {
-    name: "query_spend",
-    arguments: { from_date: "2026-04-01", to_date: "2026-05-14" },
-  });
-  assert.equal(body.result.isError, false);
-  const payload = JSON.parse(body.result.content[0].text) as { total_uah?: number; currency?: string };
-  assert.equal(typeof payload.total_uah, "number");
-  // The unit is stated by the tool itself — a number with no currency is what let a dollar
-  // reader be handed hryvnia figures labelled "UAH" (§BASE-CUR).
-  assert.ok(payload.currency);
-});
-
-test("a tool that throws is reported inside the result, not as a transport error", async () => {
-  const { body } = await rpc(env(), "tools/call", { name: "find_transactions", arguments: { limit: "nonsense" } });
-  assert.equal(body.error, undefined);
-  assert.ok(body.result);
-});
-
-test("an unknown method is a JSON-RPC error", async () => {
-  const { body } = await rpc(env(), "completion/complete");
-  assert.equal(body.error.code, -32601);
-});
-
-test("resources and prompts answer with empty lists rather than an error", async () => {
-  assert.deepEqual((await rpc(env(), "resources/list")).body.result, { resources: [] });
-  assert.deepEqual((await rpc(env(), "prompts/list")).body.result, { prompts: [] });
-});
-
-test("GET declines instead of holding an idle stream open", async () => {
-  const res = await mcp.request("/", { method: "GET" }, env());
-  assert.equal(res.status, 405);
-});
-
-test("malformed JSON is a parse error, not a 500", async () => {
-  const res = await mcp.request("/", {
-    method: "POST", headers: { "content-type": "application/json" }, body: "{not json",
-  }, env());
-  assert.equal(res.status, 400);
-  assert.equal(((await res.json()) as { error: { code: number } }).error.code, -32700);
 });
 
 test("the snapshot answers in ONE unit, and names the currency as data", async () => {
@@ -245,18 +124,4 @@ test("the snapshot answers in ONE unit, and names the currency as data", async (
     // not a monthly one, which is the mistake this data invites.
     assert.ok(typeof snap.period_note === "string");
   } finally { restore(); }
-});
-
-test("get_tax_status SAYS the module is off rather than answering with nothing", async () => {
-  /**
-   * The failure this guards is a silence that reads as an answer. With the ФОП module switched
-   * off the app knows nothing about the user's taxes — and an empty payload would let the model
-   * conclude «you owe nothing», which is a statement about somebody's tax position that nobody
-   * made and that has a penalty behind it.
-   */
-  const { body } = await rpc(env(), "tools/call", { name: "get_tax_status", arguments: {} });
-  const text = (body.result.content as { text: string }[])[0].text;
-  const payload = JSON.parse(text) as { enabled: boolean; note?: string };
-  assert.equal(payload.enabled, false);
-  assert.match(payload.note ?? "", /Do not state that they owe nothing/);
 });

@@ -1,21 +1,9 @@
 /**
- * Characterization ("golden") tests for the read-only API surface.
+ * Characterization (golden) tests for the read-only API: they assert the numbers are the SAME as
+ * before, not that they are right.
  *
- * These do NOT assert that the numbers are correct. They assert that the numbers are the SAME as
- * before — which is the only question a behaviour-preserving refactor is allowed to ask. The
- * structural work this guards (pulling ~179 raw queries out of the route layer into a repository,
- * then splitting the routes by domain) touches money math that four separate production bugs have
- * already proved is easy to break silently. `tsc` cannot see into a SQL string; the SQL linter
- * only checks that a query mentioning the canon also carries STATS_JOINS. Nothing until now
- * checked what the endpoints actually return.
- *
- * Recording a new baseline (only ever with a deliberate, reviewed behaviour change):
- *
- *     UPDATE_GOLDEN=1 npm test
- *
- * A diff here means one of two things, and telling them apart is the entire job: either the
- * refactor changed a number (a regression — revert it), or a behaviour change was intended (say
- * so, then re-record). Never re-record to make a red test green.
+ * Re-record only for a deliberate, reviewed change: `UPDATE_GOLDEN=1 npm test`. Never re-record to
+ * make a red test green.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

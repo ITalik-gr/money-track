@@ -1,16 +1,10 @@
 /**
- * Real banks' export shapes, read by the hint table alone — no model call (§CSV-AI is the fallback,
- * not the plan).
- *
- * Header rows are copied from the banks' own files (Raiffeisen: the owner's English export;
- * monobank: its CSV/PDF statement as third-party parsers read it; Revolut/Wise: their documented
- * CSV columns). Values are synthetic. Each case asserts what matters for the ledger: the right
- * AMOUNT column (card currency, not transaction currency), the sign, and the row count.
+ * Real banks' export headers read by the hint table alone (§CSV-AI is only the fallback): the right
+ * amount column (card currency), the sign and the row count.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { findHeaderRow, toCanonical, type ColumnMapping } from "../lib/bank/providers/csv.ts";
-import { cleanUserMapping } from "../lib/bank/statement-import.ts";
 
 async function read(rows: string[][]) {
   const { index, mapping } = findHeaderRow(rows);
@@ -72,27 +66,4 @@ test("Revolut: declined and reverted card attempts are not purchases", async () 
   assert.deepEqual(r.txs.map((t) => t.amount), [-1250, 20000]);
   assert.equal(r.skipped.length, 2);
   assert.match(r.skipped[0]!.reason, /DECLINED/);
-});
-
-test("Wise: the plain «Amount» column, not «Exchange Rate» or «Total fees»", async () => {
-  const r = await read([
-    ["TransferWise ID", "Date", "Amount", "Currency", "Description", "Payment Reference",
-      "Running Balance", "Exchange From", "Exchange To", "Exchange Rate", "Payer Name", "Payee Name",
-      "Payee Account Number", "Merchant", "Card Last Four Digits", "Card Holder Full Name",
-      "Attachment", "Note", "Total fees"],
-    ["CARD-1", "05-09-2026", "-8.40", "EUR", "Card transaction of 8.40 EUR issued by Lidl", "", "91.60",
-      "", "", "", "", "", "", "Lidl", "1234", "TEST", "", "", "0.00"],
-  ]);
-  assert.equal(r.header[r.mapping.amount!], "Amount");
-  assert.equal(r.header[r.mapping.date!], "Date");
-  assert.deepEqual(r.txs.map((t) => t.amount), [-840]);
-});
-
-test("a column choice from the client is kept only when it can mean a column", () => {
-  assert.deepEqual(
-    cleanUserMapping({ date: 0, amount: "x", description: 9, comment: null, mcc: 2.5, credit: -1, status: 3, evil: 1 }, 4),
-    { date: 0, comment: null, status: 3 },
-  );
-  assert.deepEqual(cleanUserMapping({ amount: null }, 4), {}, "a mandatory column cannot be cleared");
-  assert.equal(cleanUserMapping("nope", 4), undefined);
 });

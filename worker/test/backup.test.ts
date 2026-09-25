@@ -1,15 +1,6 @@
 /**
- * Backup and restore.
- *
- * Restore is the only operation in the app that deletes data on purpose, and the failure mode is
- * not "it errored" — it is "it half-worked", leaving a database that is neither the backup nor
- * what was there before. So the cases here are the ones where it would be tempting to let it
- * proceed: a file from another app, a file from a newer schema, a value SQLite cannot store, and
- * a file whose tables no longer all exist.
- *
- * The `SqlStorage` adapter below is deliberately thin. `restoreDump` takes the raw storage and a
- * transaction runner as ARGUMENTS precisely so the destructive logic can be exercised without a
- * Durable Object — the same shape `import-legacy.ts` uses.
+ * §BACKUP restore — the only intentional erase. It must never half-work: a foreign file, a newer
+ * schema or an unstorable value is refused before anything is deleted.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

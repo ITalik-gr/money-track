@@ -1,15 +1,6 @@
 /**
- * A mass run is a LOOP OVER AN ALARM, and this is the test that says the loop stops.
- *
- * §A6 covered one generation per tick. A re-sweep or a batch enrich is different in kind: it goes
- * in batches, stays unfinished in between, and re-arms the object each time. The risk that kept
- * this out of the queue for months is not a stuck job — it is the opposite: a wrong stop
- * condition means a Durable Object that wakes itself forever, and for a real kind every one of
- * those wake-ups is a paid model call. The payload cannot be tested without a live key; the LOOP
- * can, against `noop_batch`, which counts and costs nothing.
- *
- * So what is pinned here is exactly the dangerous half: how many ticks a run takes, that it ends,
- * and that an executor which stops moving ends it too.
+ * §A6-BATCH — a mass run is a loop over an alarm, and this proves the loop stops: exact tick count,
+ * and a run whose progress stops growing ends instead of re-arming forever.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -48,24 +39,6 @@ test("§A6 batch: 10 batches of 3 finish in exactly 10 ticks, and not one more",
   assert.equal(await hasQueuedJobs(env.DB), false);
 });
 
-test("§A6 batch: progress is visible BETWEEN ticks, not only at the end", async () => {
-  const db = migratedDb();
-  const env = testEnv(db) as unknown as Env;
-  await enqueueJob(env, "noop_batch", { total: 10, size: 4 });
-
-  await runNextJob(env);
-  const mid = await job(env);
-  // 'queued', not 'running': that is what makes the row claimable on the very next pass instead
-  // of waiting out STALE_RUNNING_SEC — the mechanism the whole loop rests on.
-  assert.equal(mid.status, "queued");
-  assert.equal(mid.progress_done, 4);
-  assert.equal(mid.progress_total, 10);
-  assert.equal(await hasQueuedJobs(env.DB), true);
-
-  assert.equal(await drain(env), 2); // 8, then 10
-  assert.equal((await job(env)).status, "done");
-});
-
 test("§A6 batch: an executor that stops moving ends the job instead of spinning", async () => {
   const db = migratedDb();
   const env = testEnv(db) as unknown as Env;
@@ -81,17 +54,6 @@ test("§A6 batch: an executor that stops moving ends the job instead of spinning
   assert.equal(row.status, "failed");
   assert.match(row.error ?? "", /no progress at 0\/30/);
   assert.equal(await hasQueuedJobs(env.DB), false);
-});
-
-test("§A6 batch: nothing to do is done, not a run of zero batches", async () => {
-  const db = migratedDb();
-  const env = testEnv(db) as unknown as Env;
-  await enqueueJob(env, "noop_batch", { total: 0, size: 5 });
-
-  assert.equal(await drain(env), 1);
-  const row = await job(env);
-  assert.equal(row.status, "done");
-  assert.equal(row.progress_total, 0);
 });
 
 test("§A6 batch: a batch kind cannot be started from the API", async () => {

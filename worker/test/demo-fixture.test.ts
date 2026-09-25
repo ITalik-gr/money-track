@@ -1,21 +1,6 @@
 /**
- * The demo fixture must fit the taxonomy the migrations actually build.
- *
- * WHY THIS EXISTS. `worker/demo/dataset.json` is a dump of the owner's object and it carries NO
- * `categories` table — the sandbox relies on the seeded taxonomy that migrations 0002/0005 create.
- * So a category id in the fixture is a reference into a table maintained somewhere else entirely,
- * and nothing connected the two.
- *
- * Then migration 0047 (§SUBS-CAT) removed «Підписки». On a fresh demo object the delete succeeds —
- * the object is empty, so every guard passes — and the dump then arrives carrying two
- * `receipt_items` rows filed under the id that had just been removed. Result: `GET /demo` answered
- * **503 for every visitor**, with `[demo] seed failed: FOREIGN KEY constraint failed` in the logs
- * and nothing on the page saying which row or which table. Found by curling the deploy, not by the
- * build — 811 tests were green.
- *
- * ⚠️ The rule this pins is not «12 is gone». It is that **a taxonomy migration and a fixture that
- * references the taxonomy are one change**, and the fixture is the half nobody remembers. The
- * check is mechanical so the next one cannot be forgotten either.
+ * The demo dump carries no `categories` table, so every category id in it must exist after the
+ * migrations. Migration 0047 once broke this and `/demo` answered 503 to every visitor.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

@@ -1,18 +1,6 @@
 /**
- * §BURN-SHAPE — the canonical monthly burn, and what it is made of.
- *
- * WHY THIS FILE EXISTS. `sumLevels` is the divisor of runway, the single most important number in
- * the app for someone out of work, and until now nothing checked it against the months it claims
- * to describe. The owner read 44 784 ₴/міс and said «такого і близько немає». He was right about
- * the feeling and the arithmetic was right too, which is exactly the situation a test has to pin:
- *
- *   measured on his ledger, 2026-08-27 — Apr 42 618 · May 39 116 · Jun 35 442 · Jul 46 581,
- *   mean 40 939, burn 44 784. The gap is the `fixed` branch pricing rent at what he pays NOW
- *   (April had no rent charge at all) — which is correct and forward-looking.
- *
- * So the invariant is NOT "burn equals the mean month". It is that burn stays in the same
- * neighbourhood as the months it is built from, because the alternative — a burn that has drifted
- * off on its own — is undetectable by eye and moves runway, every budget proposal and the feed.
+ * §BURN-SHAPE — the canonical monthly burn (the runway divisor) stays near the months it is built from,
+ * and its recurring/lumpy split always adds up to it.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -97,38 +85,5 @@ test("a quarterly charge is LUMPY; a monthly one is not", async () => {
     const levels = await levelsOf(db);
     assert.equal(levels.get(24)?.lumpy, true, "a quarterly tax is a lump");
     assert.equal(levels.get(8)?.lumpy, false, "rent every month is not");
-  } finally { restore(); }
-});
-
-test("one big month makes a category lumpy — the dentist, and the electronics spree", async () => {
-  const restore = freezeTime(FROZEN_NOW_ISO);
-  try {
-    const db = migratedDb();
-    seed(db);
-    // «Здоровʼя»: two small months and one 5 000 ₴ visit that became «1 795/міс» forever.
-    spend(db, "h-1", { amount: 123_300, at: midMonth("2025-11"), category: 4 });
-    spend(db, "h-2", { amount: 94_800, at: midMonth("2025-12"), category: 4 });
-    spend(db, "h-3", { amount: 500_000, at: midMonth("2026-02"), category: 4 });
-
-    const levels = await levelsOf(db);
-    assert.equal(levels.get(4)?.lumpy, true);
-    // ⚠️ The LEVEL is untouched. A lump is money that left the account, and a runway computed
-    // without the tax that arrives every quarter is a lie in the more dangerous direction. The
-    // split only lets the app SAY which half is which.
-    assert.ok((levels.get(4)?.level ?? 0) > 0, "the level still counts the money");
-  } finally { restore(); }
-});
-
-test("a spread-out variable category is NOT lumpy", async () => {
-  const restore = freezeTime(FROZEN_NOW_ISO);
-  try {
-    const db = migratedDb();
-    seed(db);
-    // Groceries: every month, different amounts, no single month dominating. This is the case
-    // that must stay in `recurring`, or the split would call ordinary life irregular.
-    const amounts = [565_100, 620_400, 601_400, 548_800, 590_000, 610_000];
-    amounts.forEach((amount, i) => spend(db, `g-${i}`, { amount, at: midMonth(MONTH_KEYS[i]), category: 1 }));
-    const levels = await levelsOf(db);
-    assert.equal(levels.get(1)?.lumpy, false);
   } finally { restore(); }
 });

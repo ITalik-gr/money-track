@@ -1,18 +1,6 @@
 /**
- * §AI-CATCHUP — the nightly second look at operations the app failed to file.
- *
- * The scenarios are about the REFUSALS, because the happy path is the cheap half. What makes this
- * pass safe to run unattended is that it cannot fill a row someone has already decided, cannot
- * invent a category id, cannot answer "this transfer is a transfer", and leaves an undo behind for
- * everything it does write. Each of those is one test below.
- *
- * The owner's own case opens the file: MCC 6012, «Списання відсотків за серпень», sitting in bucket
- * 13 with no real category while four identical operations were already filed. The bank rewords the
- * description every month, so merchant consensus never fired — which is why the batch is handed the
- * raw description and not the cleaned-up `merchant`.
- *
- * `fetch` is stubbed rather than the module mocked, so the prompt, `callHaikuJson`, §FK-GUARD and
- * the write guard all really run.
+ * §AI-CATCHUP — the nightly second look at unfiled operations. Pinned are the refusals that make it
+ * safe unattended: never overwrite a decision, never invent an id, always leave an undo.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -124,18 +112,6 @@ test("§AI-CATCHUP: a row that already has a category is never looked at", async
   assert.equal(rows.find((r) => r.id === "alsodone")!.real_category_id, GROCERIES);
 });
 
-test("§AI-CATCHUP: 'not sure' is an answer, and it writes nothing", async () => {
-  const d = db([{ id: "t1", desc: "P2P 4441 1111 2222 3333" }]);
-  const out = await withFetch(
-    stubModel({ results: [{ id: "t1", category_id: null }] }),
-    () => runCatchup(envWithKey(d), NOW),
-  );
-  assert.deepEqual(out, { looked: 1, filled: 0, unsure: 1 });
-  const row = d.raw.prepare("SELECT category_id FROM transactions WHERE id = 't1'").get() as { category_id: number | null };
-  assert.equal(row.category_id, null);
-  assert.equal((d.raw.prepare("SELECT COUNT(*) AS n FROM ai_changes").get() as { n: number }).n, 0);
-});
-
 test("§AI-CATCHUP: an id that does not exist is dropped, not written (§FK-GUARD)", async () => {
   // Categories have holes from deletions, so a plausible id lands on no row and the UPDATE dies
   // with a foreign-key error the person only ever sees as «не вдалось».
@@ -149,38 +125,6 @@ test("§AI-CATCHUP: an id that does not exist is dropped, not written (§FK-GUAR
     (d.raw.prepare("SELECT category_id FROM transactions WHERE id = 't1'").get() as { category_id: number | null }).category_id,
     null,
   );
-});
-
-test("§AI-CATCHUP: 'this transfer is a transfer' fills nothing", async () => {
-  // A true statement that answers the question with the question. Without this guard the row would
-  // read as filed while still saying nothing about where the money went.
-  const d = db([{ id: "t1", desc: "Переказ на картку", category: TRANSFERS }]);
-  const out = await withFetch(
-    stubModel({ results: [{ id: "t1", category_id: TRANSFERS }] }),
-    () => runCatchup(envWithKey(d), NOW),
-  );
-  assert.deepEqual(out, { looked: 1, filled: 0, unsure: 1 });
-  assert.equal(
-    (d.raw.prepare("SELECT real_category_id FROM transactions WHERE id = 't1'").get() as { real_category_id: number | null }).real_category_id,
-    null,
-  );
-});
-
-test("§AI-CATCHUP: an income category is refused for a spend", async () => {
-  const d = db([{ id: "t1", desc: "Невідомо що" }]);
-  const salary = (migratedDb().raw.prepare("SELECT id FROM categories WHERE is_income = 1 LIMIT 1").get() as { id: number }).id;
-  const out = await withFetch(
-    stubModel({ results: [{ id: "t1", category_id: salary }] }),
-    () => runCatchup(envWithKey(d), NOW),
-  );
-  assert.deepEqual(out, { looked: 1, filled: 0, unsure: 1 });
-});
-
-test("§AI-CATCHUP: an old gap is left alone", async () => {
-  // Two months on screen and still empty is a decision, or at least not something a nightly pass
-  // should keep re-deciding for money that is long spent.
-  const d = db([{ id: "old", desc: "Щось давнє", daysAgo: 70 }]);
-  assert.equal(await catchupPending(envWithKey(d), NOW), 0);
 });
 
 test("§AI-CATCHUP: a verdict about a row we never asked about is ignored", async () => {

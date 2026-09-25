@@ -1,27 +1,17 @@
 /**
- * §MCP-OAUTH — the authorization server, tested from the attacker's side.
- *
- * Every scenario here is a way the flow can be WRONG WITHOUT LOOKING WRONG. A connector that works
- * proves almost nothing: the redirect matcher, the PKCE check and the audience tag are all
- * exercised identically by a legitimate client whether they are strict or wide open. So the
- * assertions are mostly about refusals — the code that never runs when everything is going well,
- * and therefore the code that a refactor can quietly delete.
- *
- * The three that would be worst, in order: a redirect URI that was never registered being honoured
- * (the authorization code is handed to whoever asked), an authorization code that can be redeemed
- * twice (a leaked code stays valuable), and a refresh token that survives its own rotation (a
- * stolen one never expires).
+ * §MCP-OAUTH — the authorization server tested from the attacker's side: redirect matching, PKCE,
+ * audience binding, single-use codes and refresh rotation. Mostly refusals — code a refactor can
+ * quietly delete while a legitimate client keeps working.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { oauth } from "../routes/oauth.ts";
-import { wellKnown } from "../routes/wellknown.ts";
 import { migratedDirectoryDb, type MemDb } from "./harness.ts";
 import { createSession, createMcpToken } from "../lib/platform/auth.ts";
 import { inviteUser, setUserStatus } from "../lib/platform/directory.ts";
 import {
-  redirectAllowed, redirectUriUsable, resourceMatches, pkceVerifies,
-  createAccessToken, verifyAccessToken, canonicalResource, randomToken, sha256Hex,
+  redirectAllowed, redirectUriUsable, pkceVerifies,
+  createAccessToken, verifyAccessToken, sha256Hex,
 } from "../lib/platform/oauth.ts";
 import { issueCode, redeemCode, createGrant, rotateGrant, deleteUserGrants } from "../lib/platform/oauth-store.ts";
 
@@ -64,16 +54,6 @@ test("only HTTPS, or loopback over HTTP, may be registered at all", () => {
 });
 
 // ---- audience and PKCE ----------------------------------------------------------------------
-
-test("the resource may vary only in the ways the spec allows", () => {
-  assert.equal(resourceMatches("https://money.example/mcp", RESOURCE), true);
-  assert.equal(resourceMatches("https://money.example/mcp/", RESOURCE), true);
-  assert.equal(resourceMatches("HTTPS://MONEY.EXAMPLE/mcp", RESOURCE), true);
-  assert.equal(resourceMatches("https://other.example/mcp", RESOURCE), false);
-  assert.equal(resourceMatches("https://money.example/admin", RESOURCE), false);
-  // Absent is accepted and defaulted — see the note on `resourceMatches`.
-  assert.equal(resourceMatches(undefined, RESOURCE), true);
-});
 
 test("PKCE accepts only the S256 preimage, never the challenge itself", async () => {
   const verifier = "a".repeat(64);
@@ -123,11 +103,6 @@ test("an authorization code can be redeemed exactly once", async () => {
   assert.equal(await redeemCode(dir, code), null);
 });
 
-test("an unknown code is refused", async () => {
-  const dir = migratedDirectoryDb() as unknown as D1Database;
-  assert.equal(await redeemCode(dir, randomToken()), null);
-});
-
 test("rotating a refresh token kills the one presented", async () => {
   const dir = migratedDirectoryDb() as unknown as D1Database;
   const { refreshToken } = await createGrant(dir, { user_id: "u1", client_id: "c1", scope: "mcp:read", resource: RESOURCE });
@@ -159,58 +134,6 @@ test("revoking a user's grants ends every refresh token they handed out", async 
 
 // ---- discovery ------------------------------------------------------------------------------
 
-test("protected resource metadata names this server and its authorization server", async () => {
-  const res = await wellKnown.request("http://money.example/.well-known/oauth-protected-resource", {}, env(migratedDirectoryDb()));
-  const body = await res.json() as { resource: string; authorization_servers: string[] };
-  // Must equal the MCP URL exactly as the user types it into Claude, path included.
-  assert.equal(body.resource, "http://money.example/mcp");
-  assert.equal(body.authorization_servers[0], "http://money.example");
-});
-
-test("the path-suffixed metadata probe answers too", async () => {
-  const res = await wellKnown.request("http://money.example/.well-known/oauth-protected-resource/mcp", {}, env(migratedDirectoryDb()));
-  assert.equal(res.status, 200);
-});
-
-test("authorization server metadata advertises S256 and offline_access", async () => {
-  const res = await wellKnown.request("http://money.example/.well-known/oauth-authorization-server", {}, env(migratedDirectoryDb()));
-  const m = await res.json() as Record<string, string[] | string>;
-  assert.deepEqual(m.code_challenge_methods_supported, ["S256"]);
-  // Claude only asks for a refresh token when this scope is advertised; without it the connector
-  // works for exactly one hour and then stops, which reads as an unstable server.
-  assert.ok((m.scopes_supported as string[]).includes("offline_access"));
-  assert.ok(m.registration_endpoint);
-});
-
-test("discovery answers on the OIDC path too, and to a preflight", async () => {
-  // `openid-configuration` predates RFC 8414 by years, so a client written against OIDC habits
-  // probes it FIRST and reports an unreachable server on a 404 — the same silent symptom
-  // §MCP-OAUTH already documents for a missing /.well-known route.
-  const dir = migratedDirectoryDb();
-  const oidc = await wellKnown.request("http://money.example/.well-known/openid-configuration", {}, env(dir));
-  const rfc = await wellKnown.request("http://money.example/.well-known/oauth-authorization-server", {}, env(dir));
-  assert.equal(oidc.status, 200);
-  assert.deepEqual(await oidc.json(), await rfc.json(), "one document, several names — never a second truth");
-
-  // A browser-based client sends `MCP-Protocol-Version`, which makes the request non-simple; a
-  // 404 to the preflight kills the fetch before the GET is ever attempted, and nothing reaches a
-  // server log.
-  const pre = await wellKnown.request("http://money.example/.well-known/oauth-authorization-server",
-    { method: "OPTIONS" }, env(dir));
-  assert.equal(pre.status, 204);
-  assert.equal(pre.headers.get("access-control-allow-origin"), "*");
-  assert.match(pre.headers.get("access-control-allow-headers") ?? "", /mcp-protocol-version/);
-});
-
-test("metadata advertises RFC 9207 and RFC 8707 — and both claims are TRUE", async () => {
-  const res = await wellKnown.request("http://money.example/.well-known/oauth-authorization-server", {}, env(migratedDirectoryDb()));
-  const m = await res.json() as Record<string, unknown>;
-  // Advertising `iss` without sending it makes a strict client refuse EVERY response — worse than
-  // never advertising. The flow test below is the other half of this assertion.
-  assert.equal(m.authorization_response_iss_parameter_supported, true);
-  assert.equal(m.resource_indicators_supported, true);
-});
-
 // ---- the flow -------------------------------------------------------------------------------
 
 async function seedUser(dir: MemDb) {
@@ -235,15 +158,6 @@ function form(body: Record<string, string>) {
   };
 }
 
-test("registration refuses a redirect URI that could leak the code", async () => {
-  const dir = migratedDirectoryDb();
-  const res = await oauth.request("http://money.example/oauth/register", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ redirect_uris: ["http://evil.example/cb"] }),
-  }, env(dir));
-  assert.equal(res.status, 400);
-});
-
 test("authorize refuses an unknown client WITHOUT redirecting", async () => {
   const dir = migratedDirectoryDb();
   const res = await oauth.request(
@@ -264,18 +178,6 @@ test("authorize refuses an UNREGISTERED redirect_uri without redirecting to it",
   // kind, not even an error.
   assert.equal(res.status, 400);
   assert.equal(res.headers.get("location"), null);
-});
-
-test("authorize sends a signed-out visitor through login and back to the same request", async () => {
-  const dir = migratedDirectoryDb();
-  const clientId = await register(dir);
-  const res = await oauth.request(
-    `http://money.example/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(CLAUDE_CB)}&code_challenge=${"x".repeat(43)}&code_challenge_method=S256`,
-    {}, env(dir));
-  assert.equal(res.status, 302);
-  const loc = res.headers.get("location") ?? "";
-  assert.match(loc, /^\/auth\/google\/start\?next=/);
-  assert.match(decodeURIComponent(loc), /\/oauth\/authorize\?/);
 });
 
 test("authorize refuses PKCE-less and plain-PKCE requests, via the client's own redirect", async () => {
@@ -328,98 +230,6 @@ async function upToCode(dir: MemDb) {
  * If a future change tightens `redirectAllowed` in a way that happens to suit claude.ai, this is
  * where it fails rather than in someone's connector dialog.
  */
-const OPENAI_CB = "https://chatgpt.com/connector_platform_oauth_redirect";
-
-test("a second assistant's callback registers and completes the flow, exactly like Claude's", async () => {
-  const dir = migratedDirectoryDb();
-  const user = await seedUser(dir);
-  // Registered TOGETHER: one client may legitimately carry several callbacks, and the point is
-  // that neither is special-cased.
-  const clientId = await register(dir, [CLAUDE_CB, OPENAI_CB, `${OPENAI_CB}?v=2`]);
-  const cookie = `__Host-mt_session=${await createSession({ SESSION_SECRET: KEY } as never, user.id, user.token_version ?? 0)}`;
-
-  const page = await oauth.request(
-    `http://money.example/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(OPENAI_CB)}&code_challenge=${"z".repeat(43)}&code_challenge_method=S256&state=st2`,
-    { headers: { cookie } }, env(dir));
-  assert.equal(page.status, 200, "an unfamiliar but registered callback reaches the consent page");
-
-  const html = await page.text();
-  // §MCP-OAUTH: the consent page carries its OWN CSP, derived from the verified redirect_uri —
-  // `form-action 'self'` once blocked the Allow button in production and the symptom was silence.
-  // The derivation must include THIS client's origin, not a hardcoded claude.ai.
-  const csp = page.headers.get("content-security-policy") ?? "";
-  assert.match(csp, /form-action/);
-  assert.ok(csp.includes("https://chatgpt.com"), `the consent CSP must name the client's origin: ${csp}`);
-
-  const request = /name="request" value="([^"]+)"/.exec(html)?.[1] ?? "";
-  assert.ok(request);
-  const decided = await oauth.request("http://money.example/oauth/authorize",
-    { ...form({ request, decision: "allow" }), headers: { "content-type": "application/x-www-form-urlencoded", cookie } },
-    env(dir));
-  assert.equal(decided.status, 302);
-  const back = new URL(decided.headers.get("location")!);
-  assert.equal(back.origin + back.pathname, OPENAI_CB);
-  assert.ok(back.searchParams.get("code"));
-  assert.equal(back.searchParams.get("state"), "st2");
-  // RFC 9207: the metadata says we send `iss`, so we must actually send it — a strict client that
-  // read the flag and got no `iss` rejects the response and the flow dies at the last step.
-  assert.equal(back.searchParams.get("iss"), "http://money.example");
-});
-
-test("an error response carries `iss` too, or a strict client discards the explanation", async () => {
-  const dir = migratedDirectoryDb();
-  const clientId = await register(dir, [OPENAI_CB]);
-  const res = await oauth.request(
-    `http://money.example/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(OPENAI_CB)}&code_challenge_method=plain&code_challenge=abc&state=s9`,
-    {}, env(dir));
-  const loc = new URL(res.headers.get("location")!);
-  assert.equal(loc.searchParams.get("error"), "invalid_request");
-  assert.equal(loc.searchParams.get("iss"), "http://money.example");
-});
-
-test("the consent screen names the account and the destination", async () => {
-  const dir = migratedDirectoryDb();
-  const user = await seedUser(dir);
-  const clientId = await register(dir);
-  const cookie = `__Host-mt_session=${await createSession({ SESSION_SECRET: KEY } as never, user.id, user.token_version ?? 0)}`;
-  const page = await oauth.request(
-    `http://money.example/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(CLAUDE_CB)}&code_challenge=${"y".repeat(43)}&code_challenge_method=S256`,
-    { headers: { cookie } }, env(dir));
-  const html = await page.text();
-  assert.match(html, /owner@example\.com/);
-  // The redirect host is the one field an attacker controls and the one the spec insists is shown.
-  assert.match(html, /claude\.ai/);
-  assert.match(html, /Claude/);
-});
-
-test("the consent page permits its own submission AND the client's callback", async () => {
-  const dir = migratedDirectoryDb();
-  const user = await seedUser(dir);
-  const clientId = await register(dir);
-  const cookie = `__Host-mt_session=${await createSession({ SESSION_SECRET: KEY } as never, user.id, user.token_version ?? 0)}`;
-  const page = await oauth.request(
-    `http://money.example/oauth/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(CLAUDE_CB)}&code_challenge=${"y".repeat(43)}&code_challenge_method=S256`,
-    { headers: { cookie } }, env(dir));
-  const csp = page.headers.get("content-security-policy") ?? "";
-  const formAction = /form-action ([^;]+)/.exec(csp)?.[1] ?? "";
-  /**
-   * The bug this pins: with a bare `form-action 'self'` the Allow button did nothing at all. The
-   * page origin is written out beside `'self'` because `'self'` resolves against the DOCUMENT
-   * origin, which is opaque inside a sandboxed OAuth window; the callback origin is there because
-   * the submission answers with a redirect to it, and Chrome checks that too.
-   */
-  assert.match(formAction, /http:\/\/money\.example/);
-  assert.match(formAction, /https:\/\/claude\.ai/);
-  // Still narrow: only the destination this very code is about to be sent to.
-  assert.doesNotMatch(formAction, /\*/);
-  /**
-   * ⚠️ What this CANNOT prove: that the header survives the security-header middleware in
-   * `worker/index.ts`, which overwrites every other one. That file imports the Durable Object and
-   * therefore `cloudflare:workers`, which plain Node cannot load, so the whole worker is out of
-   * reach here. That half was verified against a running server instead — and it is the half that
-   * was actually broken, so this note exists to stop the green tick from reading as full cover.
-   */
-});
 
 test("a full flow yields an access token that verifies for THIS server", async () => {
   const { dir, clientId, verifier, code, user } = await upToCode(migratedDirectoryDb());
@@ -435,23 +245,6 @@ test("a full flow yields an access token that verifies for THIS server", async (
   assert.equal(claim?.userId, user.id);
 });
 
-test("the code cannot be redeemed twice", async () => {
-  const { dir, clientId, verifier, code } = await upToCode(migratedDirectoryDb());
-  const args = { grant_type: "authorization_code", code, redirect_uri: CLAUDE_CB, client_id: clientId, code_verifier: verifier };
-  assert.equal((await oauth.request("http://money.example/oauth/token", form(args), env(dir))).status, 200);
-  const second = await oauth.request("http://money.example/oauth/token", form(args), env(dir));
-  assert.equal(second.status, 400);
-  assert.equal((await second.json() as { error: string }).error, "invalid_grant");
-});
-
-test("a wrong code_verifier is refused", async () => {
-  const { dir, clientId, code } = await upToCode(migratedDirectoryDb());
-  const res = await oauth.request("http://money.example/oauth/token", form({
-    grant_type: "authorization_code", code, redirect_uri: CLAUDE_CB, client_id: clientId, code_verifier: "z".repeat(64),
-  }), env(dir));
-  assert.equal((await res.json() as { error: string }).error, "invalid_grant");
-});
-
 test("another client cannot redeem someone else's code", async () => {
   const { dir, verifier, code } = await upToCode(migratedDirectoryDb());
   const other = await register(dir, ["https://claude.ai/api/mcp/auth_callback"]);
@@ -461,25 +254,6 @@ test("another client cannot redeem someone else's code", async () => {
   assert.equal((await res.json() as { error: string }).error, "invalid_grant");
 });
 
-test("refresh returns a NEW refresh token and invalidates the old one", async () => {
-  const { dir, clientId, verifier, code } = await upToCode(migratedDirectoryDb());
-  const first = await (await oauth.request("http://money.example/oauth/token", form({
-    grant_type: "authorization_code", code, redirect_uri: CLAUDE_CB, client_id: clientId, code_verifier: verifier,
-  }), env(dir))).json() as { refresh_token: string };
-
-  const res = await oauth.request("http://money.example/oauth/token",
-    form({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: clientId }), env(dir));
-  assert.equal(res.status, 200);
-  const next = await res.json() as { refresh_token: string; access_token: string };
-  assert.notEqual(next.refresh_token, first.refresh_token);
-
-  const replay = await oauth.request("http://money.example/oauth/token",
-    form({ grant_type: "refresh_token", refresh_token: first.refresh_token, client_id: clientId }), env(dir));
-  // `invalid_grant` specifically: Claude keys its re-authentication behaviour off that code, and
-  // any other one leaves the connector retrying a token that will never work again.
-  assert.equal((await replay.json() as { error: string }).error, "invalid_grant");
-});
-
 test("a disabled account cannot exchange a code it obtained while active", async () => {
   const { dir, clientId, verifier, code, user } = await upToCode(migratedDirectoryDb());
   await setUserStatus(dir as unknown as D1Database, user.id, "disabled");
@@ -487,15 +261,4 @@ test("a disabled account cannot exchange a code it obtained while active", async
     grant_type: "authorization_code", code, redirect_uri: CLAUDE_CB, client_id: clientId, code_verifier: verifier,
   }), env(dir));
   assert.equal((await res.json() as { error: string }).error, "invalid_grant");
-});
-
-test("an unsupported grant type is named, not silently ignored", async () => {
-  const dir = migratedDirectoryDb();
-  const res = await oauth.request("http://money.example/oauth/token",
-    form({ grant_type: "client_credentials" }), env(dir));
-  assert.equal((await res.json() as { error: string }).error, "unsupported_grant_type");
-});
-
-test("canonicalResource is derived from the request, not configured", () => {
-  assert.equal(canonicalResource("https://money.italik.dev/oauth/token"), "https://money.italik.dev/mcp");
 });

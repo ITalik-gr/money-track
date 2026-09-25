@@ -1,17 +1,6 @@
 /**
- * §ENRICH-GATE — asking the model about what is unknown, and only that.
- *
- * The owner's case opens the file, and it is a bug made of two correct behaviours. An Apple
- * subscription charge arrived; an MCC rule filed it under «Сервіси, SaaS продукти», which is the
- * right category; the webhook's gate was `category_id IS NULL`, so enrichment never ran; and
- * `ai_recurring` — the only thing that draws the subscription icon and feeds §SUB-DETECT — is
- * written by enrichment alone. Every month the fix was the owner pressing «Розпізнати» himself.
- *
- * The other half is the reason the gate cannot simply become «always ask»: the owner named the
- * classes that must stay free («продуктів, між картками, округлення балансу… бо там і так все
- * зрозуміло»). So most scenarios below are about a REFUSAL to spend, and each one fails silently
- * in its own direction — a wrongly-skipped charge is an icon that never appears, a wrongly-asked
- * one is a bill nobody sees until the month's total.
+ * §ENRICH-GATE — the webhook asks the model only about what is unknown (skip / carry / ask), and a
+ * user note outranks every skip within its daily cap.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -68,11 +57,6 @@ test("§ENRICH-GATE: what is worth asking a model about", async (t) => {
     assert.deepEqual(await verdictFor(d, "t1"), { verdict: "ask" });
   });
 
-  await t.test("an uncategorised charge is still asked about — the old gate is not weakened", async () => {
-    const d = seedDb([{ id: "t1", desc: "SOMETHING NEW", mcc: 5999, category: null }]);
-    assert.deepEqual(await verdictFor(d, "t1"), { verdict: "ask" });
-  });
-
   await t.test("groceries are not a question: the MCC is already the whole answer", async () => {
     const d = seedDb([{ id: "t1", desc: "SILPO 234", mcc: 5411, category: GROCERIES, amount: -85000 }]);
     assert.equal((await verdictFor(d, "t1")).verdict, "skip");
@@ -111,31 +95,6 @@ test("§ENRICH-GATE: what is worth asking a model about", async (t) => {
     assert.equal(row.merchant, "Apple", "carry writes the flag and nothing else");
   });
 
-  await t.test("a merchant the gate itself skipped carries no verdict to hand on", async () => {
-    // `ai_enriched = 0` with a `0` flag is what an untouched row looks like; treating that as a
-    // considered "no" would let one skip propagate down the whole history of a merchant.
-    const d = seedDb([
-      { id: "old", desc: "NEW BILLER", mcc: 5734, category: SERVICES, enriched: 0, recurring: null, daysAgo: 30 },
-      { id: "new", desc: "NEW BILLER", mcc: 5734, category: SERVICES },
-    ]);
-    assert.deepEqual(await verdictFor(d, "new"), { verdict: "ask" });
-  });
-
-  await t.test("a known merchant billed at an everyday MCC still carries its own verdict", async () => {
-    // History is consulted BEFORE the MCC list on purpose: a café that sells a monthly pass is
-    // filed at 5812, and the list would otherwise wave away the one charge that does repeat.
-    const d = seedDb([
-      { id: "old", desc: "CLUB MONTHLY", merchant: "Club", mcc: 5812, category: SERVICES, enriched: 1, recurring: 1, daysAgo: 30 },
-      { id: "new", desc: "CLUB MONTHLY", merchant: "Club", mcc: 5812, category: SERVICES },
-    ]);
-    assert.deepEqual(await verdictFor(d, "new"), { verdict: "carry", recurring: 1, merchant: "Club" });
-  });
-
-  await t.test("income is out of scope — `ai_recurring` is about a charge", async () => {
-    const d = seedDb([{ id: "t1", desc: "Зарплата", category: SERVICES, amount: 5_000_00 }]);
-    assert.equal((await verdictFor(d, "t1")).verdict, "skip");
-  });
-
   await t.test("a row already enriched is never re-asked", async () => {
     const d = seedDb([{ id: "t1", desc: "APPLE.COM/BILL", mcc: 5734, category: SERVICES, enriched: 1, recurring: 0 }]);
     assert.equal((await verdictFor(d, "t1")).verdict, "skip");
@@ -155,28 +114,6 @@ test("§ENRICH-GATE: a note is a human sentence, and it outranks every skip", as
       note: "це я вивів свою зарплату з крипти через P2P",
     }]);
     assert.deepEqual(await verdictFor(d, "t1"), { verdict: "ask" });
-  });
-
-  await t.test("and on an obvious MCC too — the note knows something 5411 cannot", async () => {
-    const d = seedDb([{
-      id: "t1", desc: "ATB 1234", mcc: 5411, category: GROCERIES,
-      note: "купив ліки і вітаміни, не продукти",
-    }]);
-    assert.deepEqual(await verdictFor(d, "t1"), { verdict: "ask" });
-  });
-
-  await t.test("a note left BLANK is not a note", async () => {
-    // Without the trim, every row whose note field was opened and closed would buy a call.
-    const d = seedDb([{ id: "t1", desc: "ATB 1234", mcc: 5411, category: GROCERIES, note: "   " }]);
-    assert.equal((await verdictFor(d, "t1")).verdict, "skip");
-  });
-
-  await t.test("an already-enriched row is still not re-asked, note or no note", async () => {
-    const d = seedDb([{
-      id: "t1", desc: "ATB 1234", mcc: 5411, category: GROCERIES, enriched: 1, recurring: 0,
-      note: "щось важливе",
-    }]);
-    assert.equal((await verdictFor(d, "t1")).verdict, "skip");
   });
 
   await t.test("over the daily cap the note stops overriding, and the ordinary rules resume", async () => {

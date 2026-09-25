@@ -1,19 +1,6 @@
 /**
- * §0a — the unit the model is TOLD about must be the unit it is GIVEN.
- *
- * `moneyUnitDirective` said "minor units" while every payload it accompanies is in WHOLE units:
- * `collectFinanceSnapshot`'s context divides each amount by 100, and so do the chat tools
- * (`Math.round(r.amt / 100)`). A model handed a general instruction and a specific field believes
- * the field — which is exactly the reasoning that directive was written from — so here the
- * INSTRUCTION was the false half, and a model obeying it understated everything 100×: 12 500 ₴ of
- * rent read as ₴125.
- *
- * It survived twelve audits because both readings are plausible sentences about money and the
- * model often sanity-checks its way back to the right order of magnitude — intermittent, not
- * absent, which is the hardest kind to notice and the easiest kind to disbelieve.
- *
- * This file is the pin the ROADMAP card asked for: the claim is checked AGAINST A REAL SNAPSHOT,
- * not against another sentence. Restating the directive in a test would only pin the typo.
+ * §0a / §AI-UNIT — the unit the model is TOLD about is the unit it is GIVEN (whole units). The
+ * directive once said «minor units» over whole-unit payloads, a silent 100× understatement.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

@@ -1,21 +1,8 @@
 /**
- * Characterization tests for the INGEST path — the monobank webhook.
+ * Golden DB state after the monobank webhook — the path with no user on the other end, where a
+ * mistake is a transaction that silently never arrives.
  *
- * Why this file exists separately from `writes.test.ts`: everything in that suite is reached by
- * the user pressing something, so a mistake there shows up as a wrong screen. This path has no
- * user on the other end. A mistake here shows up as **a transaction that silently never arrives**
- * — no error, no red snapshot, just money missing from a report weeks later. That asymmetry is
- * exactly why the last inline queries in the route layer are still un-migrated (ARCHITECTURE.md,
- * phase 1 tail): they must not be moved until something can prove the path still works.
- *
- * These tests are that something. They are deliberately about the DATABASE STATE, not the
- * response: the webhook answers `ok` to almost everything on purpose, because monobank retries
- * forever otherwise — so the response says nothing at all about whether the event was stored.
- *
- * Not covered, and deliberately: transfer pairing, AI enrichment and the Telegram alert. All
- * three are best-effort branches wrapped in `try/catch`, and all three are skipped when no API
- * key is present — which is the case in `testEnv`. Their absence is what keeps these tests fast
- * and deterministic; their behaviour is covered where it is decided, not here.
+ * Re-record only for a deliberate change: `UPDATE_GOLDEN=1 npm test`.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

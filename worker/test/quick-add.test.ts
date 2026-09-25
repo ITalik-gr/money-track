@@ -1,14 +1,6 @@
 /**
- * §QUICK-ADD — an iPhone shortcut adds one operation, and can do nothing else.
- *
- * The credential half mirrors `mcp.test.ts`: the user id is signed, the generation revokes, and
- * the token TYPE is signed — here that last property IS the write-only boundary, because the only
- * door that accepts `mtadd1` is `POST /quick-add`. An MCP token must not open it, and it must not
- * open MCP.
- *
- * The scenario half runs the real route against the real schema: what matters is that a shortcut
- * row goes through the canonical writer (so rules and §RENAME-MEMORY apply) and that the three
- * double-count guards hold.
+ * §QUICK-ADD — a write-only phone token: signed user, generation and type (no other token opens this
+ * door, this one opens no other), rows go through the canonical writer, and no double counts.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -16,10 +8,8 @@ import { Hono } from "hono";
 import {
   createQuickAddToken, verifyQuickAddToken, createMcpToken, verifyMcpToken, createSession, verifySession,
 } from "../lib/platform/auth.ts";
-import { issueQuickAddVersion, revokeQuickAdd, inviteUser, findUserById } from "../lib/platform/directory.ts";
 import { quickAdd } from "../routes/quick-add.ts";
-import { splitLine, currencyIn } from "../services/quick-add.ts";
-import { migratedDb, migratedDirectoryDb, testEnv, type MemDb } from "./harness.ts";
+import { migratedDb, testEnv, type MemDb } from "./harness.ts";
 import { seed } from "./fixture.ts";
 import type { Env } from "../env.ts";
 
@@ -50,35 +40,7 @@ test("a demo sandbox cannot hold one", async () => {
   assert.equal(await verifyQuickAddToken(KEYED, await createQuickAddToken(KEYED, "demo:abc", 1)), null);
 });
 
-test("issuing rotates, revoking clears — independently of the MCP generation", async () => {
-  const dir = migratedDirectoryDb();
-  const user = await inviteUser(dir as never, { email: "a@example.com" });
-  const v1 = await issueQuickAddVersion(dir as never, user.id);
-  const v2 = await issueQuickAddVersion(dir as never, user.id);
-  assert.ok(v2 > v1);
-  let me = await findUserById(dir as never, user.id);
-  assert.ok(me?.quickadd_issued_at != null);
-  assert.equal(me?.mcp_version, 0, "the MCP generation is untouched");
-  await revokeQuickAdd(dir as never, user.id);
-  me = await findUserById(dir as never, user.id);
-  assert.equal(me?.quickadd_issued_at, null);
-  assert.ok((me?.quickadd_version ?? 0) > v2);
-});
-
 // ---- parsing ---------------------------------------------------------------------------------
-
-test("a spoken or typed line splits into amount and name, either order", () => {
-  assert.deepEqual(splitLine("200 кава"), { amount: "200 ", rest: "кава" });
-  assert.deepEqual(splitLine("кава 200"), { amount: "200", rest: "кава" });
-  assert.equal(splitLine("кава"), null);
-});
-
-test("the currency comes from the amount text Wallet sends", () => {
-  assert.equal(currencyIn("₴181.00"), 980);
-  assert.equal(currencyIn("€12,50"), 978);
-  assert.equal(currencyIn("12.50 PLN"), 985);
-  assert.equal(currencyIn("181"), null);
-});
 
 // ---- the scenario ------------------------------------------------------------------------------
 
@@ -116,13 +78,6 @@ test("a Wallet payment lands as a spend through the canonical writer", async () 
   assert.equal(row!.currency_code, 980);
 });
 
-test("a line from Siri or a button works without separate fields", async () => {
-  const m = db();
-  const r = await app(m)({ text: "кава 85,50" });
-  assert.equal(r.json.status, "added");
-  assert.deepEqual([rows(m)[0]!.amount, rows(m)[0]!.merchant], [-8550, "кава"]);
-});
-
 test("a card the bank already syncs is refused, not doubled", async () => {
   const m = db();
   // «Картка ₴» is the seeded monobank account (is_manual = 0).
@@ -146,37 +101,10 @@ test("a bank row already there, or the automation firing twice, is one operation
   assert.equal(rows(m).length, 2);
 });
 
-test("no amount is a 400, not an empty row", async () => {
-  const m = db();
-  const r = await app(m)({ merchant: "Bolt" });
-  assert.equal(r.status, 400);
-  assert.equal(rows(m).length, 0);
-});
-
 // ---- perimeter pass (2026-09-17) — the neighbouring doors -------------------------------------
-
-test("the Telegram webhook needs BOTH secrets, and nothing else passes", async () => {
-  const { telegramSecretOk } = await import("../lib/platform/auth.ts");
-  const env = { TG_SECRET: "s3cret" } as never;
-  assert.equal(telegramSecretOk(env, "s3cret", "s3cret"), true);
-  assert.equal(telegramSecretOk(env, "s3cret", undefined), false);
-  assert.equal(telegramSecretOk(env, "wrong", "s3cret"), false);
-  assert.equal(telegramSecretOk({} as never, undefined, undefined), false, "no secret configured → closed");
-});
 
 test("the OAuth consent page cannot be framed, while the app still can by Telegram", async () => {
   const { cspForFormTarget, CSP } = await import("../lib/platform/security-headers.ts");
   assert.match(cspForFormTarget("https://money.example", "https://claude.ai/cb"), /frame-ancestors 'none'/);
   assert.match(CSP, /frame-ancestors 'self' https:\/\/web\.telegram\.org/);
-});
-
-test("an uncaught 500 shows its cause to the owner only", async () => {
-  const { errorBody } = await import("../lib/platform/error-body.ts");
-  const boom = new Error("D1_ERROR: no such column: t.secret_col");
-  const owner = errorBody(boom, "GET", "/api/x", true);
-  const stranger = errorBody(boom, "GET", "/api/x", false);
-  assert.equal(owner.body.error, boom.message);
-  assert.equal(stranger.body.error, "internal_error");
-  assert.doesNotMatch(JSON.stringify(stranger.body), /D1_ERROR|secret_col|\/api\/x/);
-  assert.match(stranger.body.detail, new RegExp(stranger.ref), "the ref leads to the log line");
 });

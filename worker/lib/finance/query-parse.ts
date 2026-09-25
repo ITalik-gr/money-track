@@ -15,7 +15,7 @@
  *    language (the caller passes names resolved through `catNameSql`);
  *  · amounts are whole units of the row's own currency, like the panel's `amin`/`amax`.
  *
- * Pure: no database, so every phrase is pinned by `query-parse.test.ts` in both languages.
+ * Pure: no database — a phrase can be pinned by a unit test without a fixture.
  */
 import type { ParsedQuery, ParsedQueryChip } from "../../../shared/api/transactions.ts";
 import {

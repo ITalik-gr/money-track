@@ -1,21 +1,6 @@
 /**
- * §BASE-CUR, the exhaustive half: EVERY money figure the API returns must be in the reader's base.
- *
- * Why this exists rather than another dozen hand-written assertions. The display currency works by
- * changing what one function returns (`getRates`) and leaving forty call sites alone — so a leak is
- * never a crash and never a type error. It is one field, on one screen, still in hryvnia, sitting
- * next to a dollar sign. Reported from the live app as "a lot of places still show hryvnia,
- * especially Statistics", and that report is the only reason the first pass was known to be
- * incomplete: nothing in the build could tell.
- *
- * THE INVARIANT THAT MAKES THIS MECHANICAL. `ratesInBase(stored, X)` is `ratesInBase(stored, 980)`
- * divided by the rate of X — every entry, uniformly. So for a fixture where $1 = ₴2, EVERY money
- * number in EVERY response must be exactly half of what it is in hryvnia. Not "roughly", not "for
- * the fields we remembered to check": half. A field that comes back identical is either not money
- * or is a bug, and the only maintained artifact here is the list saying which.
- *
- * ⚠️ The list below is the deliverable. Adding a name to it is a claim that the field is NOT money
- * (a count, a ratio, an id, a timestamp), and that claim is reviewable. Silence is not.
+ * §BASE-CUR, exhaustively: every money field in every response halves when the base does. A leak is
+ * never a crash — it is one field still in hryvnia next to a dollar sign.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -174,7 +159,7 @@ const ENDPOINTS: string[] = [
   // ⚠️ `/insights/momentum` is listed and covers NOTHING on this fixture: no category moves the
   // same way for three complete months, so it answers `rows: []` and every assertion about it
   // holds vacuously — the same trap §FX-COST fell into when the fixture had no foreign purchase.
-  // Its money is exercised by `insights.test.ts`, which builds a ledger that CONTAINS a run.
+  // No suite builds a ledger that CONTAINS a run, so its currency is currently unchecked.
   "/insights/momentum",
   "/notifications", "/facts",
   "/analytics/overview", "/analytics/overview?preset=week", "/analytics/overview?preset=quarter",
@@ -198,7 +183,6 @@ function fixture(): MemDb {
   seedRareTables(db);
   return db;
 }
-
 
 test("§BASE-CUR sweep: every money field halves when the base does", async (t) => {
   const restore = freezeTime(FROZEN_NOW_ISO);

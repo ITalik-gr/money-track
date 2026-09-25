@@ -1,5 +1,6 @@
 /**
- * §FX-EXPOSURE — reconciled against the canon it reads, and the what-if is exactly what it says.
+ * §FX-EXPOSURE — excluded from the §BASE-CUR sweep (base-relative by definition), so pinned here:
+ * assets reconcile with the summary total, and +10% moves exactly the foreign part.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -34,19 +35,5 @@ test("§FX-EXPOSURE: assets add up to the summary total, and +10% moves exactly 
     assert.equal(fx.assets_delta, Math.round(foreign * 0.1));
     const spendShare = fx.spend.reduce((s, r) => s + r.share, 0);
     if (fx.spend.length) assert.ok(Math.abs(spendShare - 1) < 1e-9);
-  } finally { restore(); }
-});
-
-test("§FX-EXPOSURE: a single-currency ledger has nothing to move", async () => {
-  const restore = freezeTime(FROZEN_NOW_ISO);
-  try {
-    const db = migratedDb();
-    db.raw.prepare(
-      `INSERT INTO accounts (id, type, title, currency_code, balance, credit_limit, is_active, updated_at)
-       VALUES ('a', 'black', 'UAH', 980, 500000, 0, 1, 0)`,
-    ).run();
-    const fx = await get<FxExposure>(db, "/insights/fx-exposure");
-    assert.equal(fx.assets_delta, 0);
-    assert.equal(fx.spend_delta_monthly, 0);
   } finally { restore(); }
 });

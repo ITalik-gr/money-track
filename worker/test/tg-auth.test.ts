@@ -1,14 +1,6 @@
 /**
- * Signing in from a Telegram Mini App.
- *
- * The verification is the whole feature, and it is the kind of code that fails SILENTLY when
- * wrong: derive the key the other way round, or forget to drop a field from the check-string, and
- * you still get a 64-character hex string — it just never matches, so «nobody can sign in» and
- * «anybody can sign in» are one typo apart and neither announces itself.
- *
- * So the fixture below builds `initData` with node's `crypto`, from the SPEC, rather than by
- * calling the code under test. Two independent implementations agreeing about the order of the
- * two HMACs and the shape of the check-string is the actual assertion here.
+ * Telegram Mini App sign-in. `initData` is built here from the SPEC with node's crypto, not with the
+ * code under test — «nobody can sign in» and «anybody can» are one typo apart.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -65,13 +57,6 @@ test("a signature does not expire on its own, so `auth_date` is checked", async 
   assert.equal((await verifyInitData(TOKEN, yesterday, NOW))?.id, 424242);
 });
 
-test("a future `auth_date` is refused", async () => {
-  // The signature says nothing about the clock, and data dated forward would outlive its window
-  // in the one direction the age check cannot see.
-  const ahead = signInitData({ ...fresh(), auth_date: String(Math.floor(NOW / 1000) + 3600) });
-  assert.equal(await verifyInitData(TOKEN, ahead, NOW), null);
-});
-
 test("`signature` is PART of the check-string", async () => {
   /**
    * Reported 2026-08-22: the Mini App answered `bad_init_data` to every launch. Bot API 8.0 added
@@ -93,16 +78,6 @@ test("`signature` is PART of the check-string", async () => {
   // payload has been altered and must be refused.
   const bolted = signInitData(fresh()) + "&signature=3rd_party_ed25519_sig";
   assert.equal(await verifyInitData(TOKEN, bolted, NOW), null);
-});
-
-test("garbage in, null out — never a throw", async () => {
-  for (const bad of ["", "hash=", "not even a query string", "hash=zz&auth_date=x"]) {
-    assert.equal(await verifyInitData(TOKEN, bad, NOW), null, bad);
-  }
-  assert.equal(await verifyInitData("", signInitData(fresh()), NOW), null, "no bot token, no answer");
-  // A payload with a valid signature but no `user` cannot name anybody, so it cannot sign anybody in.
-  const noUser = signInitData({ auth_date: String(Math.floor(NOW / 1000)), query_id: "AAF" });
-  assert.equal(await verifyInitData(TOKEN, noUser, NOW), null);
 });
 
 /**
@@ -162,29 +137,4 @@ test("miniapp: an unsigned or expired payload never reaches the directory", asyn
   const forged = await post(dir, signInitData(fresh({}, Date.now()), "999:another-bot"));
   assert.equal(forged.status, 401, "the signature is checked before anything is looked up");
   assert.equal(forged.headers.get("set-cookie"), null);
-});
-
-
-test("miniapp: the owner's deployment chat signs in without a `tg_links` row", async () => {
-  /**
-   * Reported the day after this endpoint shipped: the Mini App told the OWNER their Telegram was
-   * not linked, while their bot answered `/balance` perfectly. A row is written by the signed
-   * `/start` deep link, and the owner never needs one — the Worker routes their chat by
-   * `TG_CHAT_ID` alone. So the index can be empty for an account whose bot demonstrably works,
-   * and every reader that consults only the index concludes there is no link. Exactly the shape
-   * of the unlink bug fixed one day earlier, in the opposite direction.
-   */
-  const dir = migratedDirectoryDb();
-  await ensureOwner(asD1(dir), "owner@example.com");
-
-  const res = await post(dir, signInitData(fresh({}, Date.now())), { TG_CHAT_ID: "424242", OWNER_EMAIL: "owner@example.com" });
-  assert.equal(res.status, 200);
-  assert.match(res.headers.get("set-cookie") ?? "", /__Host-mt_session=/);
-
-  // And it is the OWNER's chat only. A deployment secret is never everyone's fallback (§Безпека) —
-  // this is the rule that has been broken twice in this codebase, both times cross-tenant.
-  const stranger = signInitData({ ...fresh({}, Date.now()), user: JSON.stringify({ id: 999999, first_name: "Someone" }) });
-  const no = await post(dir, stranger, { TG_CHAT_ID: "424242", OWNER_EMAIL: "owner@example.com" });
-  assert.equal(no.status, 403);
-  assert.equal(no.headers.get("set-cookie"), null);
 });

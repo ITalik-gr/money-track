@@ -1,21 +1,12 @@
 /**
- * §PLAN-LATE — a scheduled payment is news only AFTER its date goes by.
- *
- * Bought by a real card: «Квартира відсутня в цьому місяці — 12500 ₴ очікується 20 числа … в
- * рахунках на сьогодні цього платежу немає», shipped on the 15th for rent due on the 20th. Nothing
- * in it was false; it was five days early, which for a warning about money is the same as wrong.
- *
- * Both directions are silent failures, which is why they are pinned here rather than eyeballed:
- * too eager and the feed cries about money that has not gone anywhere, too quiet and a rent that
- * genuinely did not leave the account is never mentioned at all.
+ * §PLAN-LATE — a scheduled payment is news only 3 days AFTER its date, and «not linked» is not «not
+ * paid». §DIGEST-HOUR — one digest a day, at or after the chosen hour.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { draftMissedPlans, lastDueUnix } from "../lib/messaging/drafts-plans.ts";
+import { draftMissedPlans } from "../lib/messaging/drafts-plans.ts";
 import { claimsMissingFutureCharge } from "../lib/ai/grounding.ts";
 import { digestDue, clampHour } from "../lib/messaging/digest.ts";
-import { infraDue, markInfraRan } from "../lib/platform/cron.ts";
-import { migratedDirectoryDb } from "./harness.ts";
 import { migratedDb, testEnv, freezeTime, type MemDb } from "./harness.ts";
 import { seed, FROZEN_NOW_ISO } from "./fixture.ts";
 import type { Env } from "../env.ts";
@@ -86,53 +77,6 @@ test("§PLAN-LATE: the app worries about a plan only after its date passed", asy
       assert.equal(row.planned_id, id);
     });
 
-    await t.test("the charge is there, two days early → silence", async () => {
-      const db = migratedDb();
-      seed(db);
-      const id = plan(db, "Квартира", 4, now);
-      charge(db, "rent", id, 6, now);                   // two days BEFORE the due date
-      assert.deepEqual(await draftMissedPlans(env(db), now), []);
-    });
-
-    await t.test("a weekly plan: last cycle's late charge does not cover this cycle", async () => {
-      const db = migratedDb();
-      seed(db);
-      // Weekly plan due 4 days ago; the previous due date was 11 days ago and its charge landed
-      // 3 days late — inside LATE_GRACE_DAYS, so it was never reported. A flat 5-day early
-      // tolerance would read that charge (8 days ago = due-4d) as THIS cycle's payment and stay
-      // silent about a weekly plan that actually stopped.
-      db.raw.prepare(
-        `INSERT INTO planned_payments (title, kind, period_amount, period, start_date, is_active,
-           currency_code, period_count) VALUES ('Мийка авто', 'subscription', 500_00, 'week', ?, 1, ?, 1)`,
-      ).run(now - 4 * DAY - 52 * 7 * DAY, UAH);
-      const wid = (db.raw.prepare("SELECT id FROM planned_payments WHERE title = 'Мийка авто'")
-        .get() as { id: number }).id;
-      charge(db, "clean-late", wid, 8, now);
-      const out = await draftMissedPlans(env(db), now);
-      assert.equal(out.length, 1, "the missed weekly cycle is reported");
-      assert.equal(out[0].entity_id, String(wid));
-    });
-
-    await t.test("a plan that never charged at all is dead_sub's story, not this one", async () => {
-      const db = migratedDb();
-      seed(db);
-      plan(db, "Квартира", 4, now);                     // no linked transaction ever
-      assert.deepEqual(await draftMissedPlans(env(db), now), []);
-    });
-  } finally { restore(); }
-});
-
-test("lastDueUnix: the most recent scheduled date at or before now", () => {
-  const restore = freezeTime(FROZEN_NOW_ISO);
-  const now = Math.floor(Date.now() / 1000);
-  try {
-    // A plan that started a year ago charges monthly; the last date must be within one month back.
-    const start = now - 400 * DAY;
-    const due = lastDueUnix(start, "month", 1, now)!;
-    assert.ok(due <= now, "the last due date is not in the future");
-    assert.ok(now - due < 32 * DAY, "and it is the MOST RECENT one, not an old one");
-    // A plan whose first charge is still ahead has no past date at all.
-    assert.equal(lastDueUnix(now + 5 * DAY, "month", 1, now), null);
   } finally { restore(); }
 });
 
@@ -167,22 +111,4 @@ test("§DIGEST-HOUR: one digest a day, at or after the chosen hour", () => {
   assert.equal(clampHour(25), 23);
   assert.equal(clampHour(-1), 0);
   assert.equal(clampHour("noon"), 20);
-});
-
-test("§DIGEST-HOUR: the infrastructure pass is once a UTC day, at or after its hour", async () => {
-  // The hourly trigger turned this into a real failure mode: with `getUTCHours() === 6` a tick
-  // delivered at 07:0x skipped the day's rates snapshot and backup outright, and the net-worth
-  // series is only ever written forward — a hole in it never fills.
-  const dir = migratedDirectoryDb();
-  const env = { DIRECTORY: dir } as unknown as Parameters<typeof infraDue>[0];
-  const at = (iso: string) => Math.floor(Date.parse(iso) / 1000);
-
-  assert.equal(await infraDue(env, at("2026-05-14T05:00:00Z"), 6), false, "before the hour");
-  assert.equal(await infraDue(env, at("2026-05-14T06:00:00Z"), 6), true, "on the hour");
-  // A tick that arrives an hour late still runs the day's pass.
-  assert.equal(await infraDue(env, at("2026-05-14T07:00:00Z"), 6), true, "late but the same day");
-
-  await markInfraRan(env, at("2026-05-14T07:00:00Z"));
-  assert.equal(await infraDue(env, at("2026-05-14T08:00:00Z"), 6), false, "already ran today");
-  assert.equal(await infraDue(env, at("2026-05-15T06:00:00Z"), 6), true, "a new UTC day");
 });

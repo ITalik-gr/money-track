@@ -1,25 +1,6 @@
 /**
- * Tests for the canonical money definitions (E1).
- *
- * Why these and not something easier. Every case below is a rule that ALREADY BROKE in
- * production, on real data, and was caught by eye:
- *
- *   §SPLIT       — `amountSum` started using `EFF_AMOUNT`, five queries kept their old shape, and
- *                  Statistics silently went blank (`no such column: sp.amount`).
- *   §REFUND      — a cancelled purchase ("Скасування. <merchant>") counted as INCOME while the
- *                  purchase itself stayed a full expense, inflating BOTH sides of the report.
- *   §COMPENSATION— v1 excluded a whole incoming transfer from income and capped it at the
- *                  expense, so when the transfer was larger than the expense the remainder
- *                  existed in neither spending nor income. Money simply vanished.
- *
- * The point of a test here is that these are SQL strings: `tsc` cannot see inside them, and the
- * SQL linter only checks that a query mentioning the canon also carries `STATS_JOINS`. Nothing
- * checked what the numbers actually come out as.
- *
- * The module under test is imported directly — the fixture runs the REAL exported SQL. A test
- * that re-declared the expressions would only prove the copy agrees with itself.
- *
- * Run: `npm test` (Node's built-in runner and SQLite — no test dependencies to keep current).
+ * The canonical money definitions (§SPLIT, §REFUND, §COMPENSATION, §APP_TZ, transfers, FX).
+ * Every case is a rule that already broke on real data and was caught only by eye.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

@@ -1,11 +1,6 @@
 /**
- * §CYR-CASE — Cyrillic text is matched in every case a bank or a person writes it.
- *
- * SQLite folds case for ASCII only, so `LOWER('Київстар')` stays `'Київстар'` and a `LIKE` on a
- * lower-cased Cyrillic term finds nothing capitalised. Three places learned that one at a time
- * (`linkPlanHistory`, then `consensusCategory` and `findSimilar`), and a fourth — the plan search's
- * own `likeVariants` — built the spellings but left out UPPER CASE, which is how banks write.
- * Lint C16 now refuses `LOWER(…) LIKE`; these tests pin that the replacement actually matches.
+ * §CYR-CASE — SQLite folds ASCII only, so `LOWER(…) LIKE` misses capitalised Cyrillic. Lint C16
+ * refuses the idiom; these pin that the replacement (`likeVariants`) actually matches.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

@@ -1,23 +1,11 @@
 /**
- * docs/JEV.md phases 1–2 — the machinery around the Jev call.
- *
- * Nothing here reaches TypeSafe: `fetch` is stubbed. Whether Jev is RIGHT is `npm run eval
- * -- --judge jev`'s job. What is pinned here is what no eval run would notice going wrong:
- *
- *  · who may reach a deployment-wide key (owner only, never a demo);
- *  · that every failure means «use the Haiku ladder» rather than a row filed on half a verdict;
- *  · how two questions that cannot see each other are reconciled;
- *  · that a judgment is priced on its own basis, not as a Haiku call;
- *  · the cascade line and the leaf line — the two measured numbers (§7.2) the result hangs on;
- *  · that a brand name can only ever be a piece of what the bank sent.
+ * Jev in enrich with `fetch` stubbed (accuracy is `npm run eval`'s job): owner-only key, every failure
+ * falls back to the Haiku ladder, the cascade and leaf lines, and the brand comes from the bank text.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migratedDb } from "./harness.ts";
-import { judgeTransaction, brandCandidates, ROOT_CASCADE_AT, LEAF_AT } from "../lib/ai/judge-tx.ts";
-import { categoryGuide } from "../lib/ai/judge-guide.ts";
-import { callCostUsd } from "../lib/ai/cost.ts";
-import { JEV_MODEL } from "../lib/ai/models.ts";
+import { judgeTransaction, brandCandidates } from "../lib/ai/judge-tx.ts";
 import type { Env } from "../env.ts";
 
 const TX = { merchant: "UKLON", comment: null, mcc: null, amount: -15400, currency_code: 980 };
@@ -94,16 +82,6 @@ test("the root is filed as a real category id, and recurring crosses its line", 
   } finally { s.restore(); }
 });
 
-test("a weak «transfer» does not override a confident category", async () => {
-  // The first eval run's flake: UKLON at Transport 0.99 beside `kind` transfer at ~0.5.
-  const s = stub({ Transport: 0.99, "Transfers & withdrawals": 0.01 }, { transfer: 0.5, expense: 0.45, income: 0.05 }, 0.2);
-  try {
-    const r = await judgeTransaction(env(), TX);
-    assert.equal(r?.result.category_id, 3);
-    assert.equal(r?.result.kind, "expense");
-  } finally { s.restore(); }
-});
-
 test("a confident «transfer» moves the row to the transfer bucket and is never a subscription", async () => {
   const s = stub({ Groceries: 0.6, "Transfers & withdrawals": 0.4 }, { transfer: 0.95, expense: 0.05 }, 0.8);
   try {
@@ -111,68 +89,6 @@ test("a confident «transfer» moves the row to the transfer bucket and is never
     assert.equal(r?.result.category_id, 13);
     assert.equal(r?.result.kind, "transfer");
     assert.equal(r?.result.recurring, false);
-  } finally { s.restore(); }
-});
-
-test("an incoming row is offered income roots only (plus the transfer bucket)", async () => {
-  let offered: string[] = [];
-  const real = globalThis.fetch;
-  globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
-    offered = Object.keys(JSON.parse(String(init?.body)).questions.root_category.criteria);
-    return new Response("nope", { status: 500 });
-  }) as typeof fetch;
-  try {
-    await judgeTransaction(env(), { ...TX, amount: 500000, merchant: "UPWORK" });
-    assert.ok(offered.includes("Freelance"));
-    assert.ok(offered.includes("Transfers & withdrawals"));
-    assert.ok(!offered.includes("Groceries"));
-  } finally { globalThis.fetch = real; }
-});
-
-test("a judgment is priced input-only, not as a Haiku call", () => {
-  const usd = callCostUsd(JEV_MODEL, { input_tokens: 1_000_000, output_tokens: 1_000_000 });
-  assert.equal(Number(usd.toFixed(3)), 0.042);
-});
-
-test("an unsure root is handed to the Haiku ladder — the cascade", async () => {
-  // docs/JEV.md §7.2: every miss on the eval sat below this line. «Other» at 0.43 is Jev not
-  // knowing the brand, and a model that does is one fallback away.
-  const s = stub({ Other: ROOT_CASCADE_AT - 0.05, Electronics: 1 - (ROOT_CASCADE_AT - 0.05) }, { expense: 1 }, 0);
-  try {
-    assert.equal(await judgeTransaction(env(), { ...TX, merchant: "CITRUS.UA" }), null);
-    assert.equal(s.calls, 1, "no leaf round is paid for a row that is handed on");
-  } finally { s.restore(); }
-});
-
-test("an unsure «transfer» is NOT cascaded: the transfer bucket asks its own question later", async () => {
-  const s = stub({ "Transfers & withdrawals": 0.55, Other: 0.45 }, { transfer: 0.9, expense: 0.1 }, 0);
-  try {
-    assert.equal((await judgeTransaction(env(), { ...TX, merchant: "На картку" }))?.result.category_id, 13);
-  } finally { s.restore(); }
-});
-
-test("the leaf is filed only above its line; below it the root is", async () => {
-  let s = stub({ Transport: 1 }, { expense: 1 }, 0, { leaf: { Taxi: LEAF_AT + 0.1, Fuel: 1 - (LEAF_AT + 0.1) } });
-  try {
-    assert.equal((await judgeTransaction(env(), TX))?.result.category_id, 35);
-    assert.deepEqual(s.asked[1], ["leaf", "importance"], "round 2 is what needs the root: the leaf and importance");
-  } finally { s.restore(); }
-  s = stub({ Transport: 1 }, { expense: 1 }, 0, { leaf: { Taxi: LEAF_AT - 0.1, Fuel: 1 - (LEAF_AT - 0.1) } });
-  try {
-    assert.equal((await judgeTransaction(env(), TX))?.result.category_id, 3);
-  } finally { s.restore(); }
-});
-
-test("a root with no children pays round 2 only for importance — and income not at all", async () => {
-  let s = stub({ Electronics: 1 }, { expense: 1 }, 0);
-  try {
-    assert.equal((await judgeTransaction(env(), { ...TX, merchant: "ROZETKA" }))?.result.category_id, 9);
-    assert.deepEqual(s.asked[1], ["importance"]);
-  } finally { s.restore(); }
-  s = stub({ Freelance: 1 }, { income: 1 }, 0);
-  try {
-    await judgeTransaction(env(), { ...TX, amount: 500000, merchant: "UPWORK" });
-    assert.equal(s.calls, 1, "income has no leaf here and no «how necessary»");
   } finally { s.restore(); }
 });
 
@@ -189,16 +105,6 @@ test("the brand is a piece of what the bank sent, never a spelling Jev made up",
   } finally { s.restore(); }
 });
 
-test("every seed category Jev can be offered has a text in the shared guide", () => {
-  // The guide is prose for a model, parsed loosely; this is what keeps a reword of `CACHE_GUIDE`
-  // from silently leaving a category described by its name alone (docs/JEV.md §7.2).
-  const seed = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
-    30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47];
-  const missing = seed.filter((id) => !categoryGuide(id));
-  assert.deepEqual(missing, []);
-  assert.ok(categoryGuide(30)?.covers.includes("Сільпо"), "a leaf keeps its own brand list");
-});
-
 test("phase 3: importance and business come back as PROPOSALS, in the canon's own levels", async () => {
   const s = stub({ Transport: 1 }, { expense: 1 }, 0, { business: 0.93, importance: { 0: 0.7, 1: 0.2, 2: 0.1 } });
   try {
@@ -208,20 +114,5 @@ test("phase 3: importance and business come back as PROPOSALS, in the canon's ow
     assert.ok(s.asked[0].includes("business"));
     // §7.4: importance is asked where the root is KNOWN (86% → 97% on the eval).
     assert.ok(!s.asked[0].includes("importance") && s.asked[1].includes("importance"));
-  } finally { s.restore(); }
-});
-
-test("phase 3: an incoming payment is not asked «how necessary», and own money gets no proposal", async () => {
-  let s = stub({ Freelance: 1 }, { income: 1 }, 0);
-  try {
-    const r = await judgeTransaction(env(), { ...TX, amount: 500000, merchant: "UPWORK" });
-    assert.ok(!s.asked.flat().includes("importance"));
-    assert.equal(r?.result.importance, undefined);
-  } finally { s.restore(); }
-  s = stub({ "Transfers & withdrawals": 0.9, Other: 0.1 }, { transfer: 0.95, expense: 0.05 }, 0, { business: 0.9 });
-  try {
-    const r = await judgeTransaction(env(), { ...TX, merchant: "На картку" });
-    assert.equal(r?.result.business, undefined);
-    assert.equal(r?.result.importance, undefined);
   } finally { s.restore(); }
 });

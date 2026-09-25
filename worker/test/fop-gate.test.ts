@@ -1,14 +1,6 @@
 /**
- * §FOP-GATE — the ФОП module answers the owner and nobody else, while it is unfinished.
- *
- * Hidden on the owner's call (2026-09-20: «ФОП там ще і близько поки не так як я планував»), so
- * this is a product decision with an expiry, not a permission model. It is pinned by a test
- * anyway, and pinned as a CLASS: the gate is one middleware over `/tax/*`, and the failure it
- * exists to catch is the twentieth route being mounted outside the prefix — which a list of
- * nineteen hand-written paths would not notice.
- *
- * The list below is therefore READ FROM THE ROUTER, not typed out: a route added tomorrow is
- * tested tomorrow, or this test fails because the two disagree.
+ * §FOP-GATE — the unfinished ФОП module answers the owner only. The route list is read from the
+ * router, so a route mounted tomorrow is tested tomorrow.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

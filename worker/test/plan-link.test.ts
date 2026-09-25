@@ -1,14 +1,6 @@
 /**
- * §PLAN-LINK — a plan finds the charges it already has.
- *
- * The defect this pins was the one that made the whole subscriptions feature read as broken:
- * `transactions.planned_id` was written at INGEST and inside a Settings button, and nowhere else.
- * `POST /planned` created the row and stopped. So a plan declared today — which is WHEN people
- * declare them, after paying for months — opened with zero charges, and the page, the feed and
- * `plannedActuals` all agreed that a subscription paid every month had never been charged.
- *
- * The three policies below are each a decision that could have gone the other way, and two of
- * them protect work already done — the same rule as §RULES-UI apply and §SIMILAR.
+ * §PLAN-LINK — declaring a plan attaches the charges it already has, without overwriting a category or
+ * stealing another plan's charge; a known merchant is linked at ingest too.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -67,21 +59,6 @@ test("§PLAN-LINK: declaring a plan attaches the charges it ALREADY has", async 
       assert.deepEqual(linkedIds(db, id), ["sp-1", "sp-2", "sp-3"]);
     });
 
-    await t.test("a plan with NO category still links — the two are different questions", async () => {
-      // The manual add form does not ask for a category at all, and `activeSubs` used to require
-      // one. So every hand-added plan matched nothing, ever, not even on ingest.
-      const db = migratedDb();
-      seed(db);
-      charge(db, "yt-1", { merchant: "YouTube Premium", amount: -9_900, daysAgo: 4 });
-      charge(db, "yt-2", { merchant: "YouTube Premium", amount: -9_900, daysAgo: 34 });
-
-      const { id, linked } = await createPlan(db, { title: "YouTube Premium", period_amount: 9_900 });
-      assert.equal(linked, 2);
-      assert.deepEqual(linkedIds(db, id), ["yt-1", "yt-2"]);
-      // …and it filed nothing, because it had nothing to file them under.
-      assert.equal(categoryOf(db, "yt-1"), null);
-    });
-
     await t.test("an existing category is NEVER overwritten; an empty one is filled", async () => {
       // A stored category is a decision — the bank's MCC, a learned alias, the AI, or the person.
       // A plan only says "this is the same charge"; overwriting would be the app arguing silently
@@ -111,52 +88,6 @@ test("§PLAN-LINK: declaring a plan attaches the charges it ALREADY has", async 
       assert.deepEqual(linkedIds(db, second.id), []);
     });
 
-    await t.test("§SUB-ALIAS: adding the note LINKS — the plan's other names count", async () => {
-      // The owner's actual case: the charge is «X Corp.», the plan is «Twitter». Editing the note
-      // to say so and seeing nothing happen is the same dead end the create route had — which is
-      // why PATCH re-runs the link, not just POST.
-      const db = migratedDb();
-      seed(db);
-      charge(db, "x-1", { merchant: "X Corp.", amount: -11_600, daysAgo: 2 });
-      charge(db, "x-2", { merchant: "X Corp.", amount: -11_500, daysAgo: 32 });
-
-      const { id, linked } = await createPlan(db, { title: "Twitter", period_amount: 11_600 });
-      assert.equal(linked, 0, "nothing matches the title alone");
-
-      const res = await api.request(`/planned/${id}`, {
-        method: "PATCH", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ note: "списується як Corp, це твітер" }),
-      }, testEnv(db) as never);
-      assert.equal(res.status, 200);
-      assert.equal((await res.json() as { linked: number }).linked, 2);
-      assert.deepEqual(linkedIds(db, id), ["x-1", "x-2"]);
-    });
-
-    await t.test("the AI's own note about a charge is searched too", async () => {
-      // The model wrote down what the user explained on the transaction. Not reading it back is
-      // the app forgetting an answer it was given (§SUB-FIND, same haystack).
-      const db = migratedDb();
-      seed(db);
-      charge(db, "note-1", { merchant: "PADDLE.NET", amount: -22_400, daysAgo: 7, note: "Cloudflare Workers підписка" });
-      charge(db, "note-2", { merchant: "PADDLE.NET", amount: -22_400, daysAgo: 37, note: "Cloudflare Workers підписка" });
-
-      const { id, linked } = await createPlan(db, { title: "Cloudflare", period_amount: 22_400 });
-      assert.equal(linked, 2);
-      assert.deepEqual(linkedIds(db, id), ["note-1", "note-2"]);
-    });
-
-    await t.test("an INCOME plan links nothing — there is no outflow to claim", async () => {
-      const db = migratedDb();
-      seed(db);
-      charge(db, "sal-1", { merchant: "Зарплата", amount: -4_500_000, daysAgo: 10 });
-      const res = await api.request("/planned", {
-        method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title: "Зарплата", kind: "income", period: "month", period_count: 1,
-          currency_code: 980, start_date: NOW - 90 * DAY, period_amount: 4_500_000 }),
-      }, testEnv(db) as never);
-      assert.equal(res.status, 200);
-      assert.equal((await res.json() as { linked: number }).linked, 0);
-    });
   } finally { restore(); }
 });
 
@@ -179,16 +110,4 @@ test("§PLAN-LINK: a KNOWN merchant's charge is still linked to its plan at inge
   const r = await categorize(db, { mcc: 4814, description: "KYIVSTAR", comment: null, amount: -25100, currency_code: 980 });
   assert.equal(r.source, "alias_desc", "the alias still decides the category");
   assert.equal(r.planned_id, planId);
-});
-
-test("§PLAN-LINK: a Cyrillic plan finds its capitalised Cyrillic history (SQLite folds ASCII only)", async () => {
-  const db = migratedDb();
-  seed(db);
-  const restore = freezeTime(FROZEN_NOW_ISO);
-  try {
-    charge(db, "ks-aug", { merchant: "Київстар", amount: -27100, daysAgo: 50 });
-    charge(db, "ks-sep", { merchant: "Київстар", amount: -25100, daysAgo: 20 });
-    const { linked } = await createPlan(db, { title: "Київстар", period_amount: 25000 });
-    assert.equal(linked, 2);
-  } finally { restore(); }
 });

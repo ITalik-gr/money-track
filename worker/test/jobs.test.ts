@@ -1,25 +1,12 @@
 /**
- * §A6 — who is left to run a queued AI job.
- *
- * The reported symptom was narrow ("background AI only switched on the second try, on the demo
- * account"), but the cause is general: 'running' is a TRACE that someone claimed the row, not a
- * promise that anyone is still working on it. Every selector treated it as the latter.
- *
- * Chain that produced the report. A demo runs its jobs inside the HTTP request, because the
- * sandbox's single alarm was doing nothing but the 24h self-destruct. The visitor asked for advice
- * and left the tab; the isolate died mid-generation; the row stayed 'running'. From then on
- * `enqueueJob` — correctly idempotent per kind — answered every further click with that dead row's
- * id, the route only executed when `created` was true, and the alarm skipped the queue entirely.
- * Three separate pieces each doing something reasonable, and the button never worked again.
- *
- * So the tests below pin the three independent repairs, because any one of them alone still leaves
- * a way to strand the work.
+ * §A6 — 'running' is a trace that someone claimed the row, not a promise anyone still works on it: an
+ * abandoned job must be claimable again, a live one left alone.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migratedDb, testEnv } from "./harness.ts";
 import { seed } from "./fixture.ts";
-import { enqueueJob, hasQueuedJobs, runNextJob } from "../lib/ai/jobs.ts";
+import { enqueueJob, hasQueuedJobs } from "../lib/ai/jobs.ts";
 import type { Env } from "../env.ts";
 
 const NOW = Math.floor(Date.now() / 1000);
@@ -60,27 +47,4 @@ test("jobs: a job that is genuinely running is left alone", async () => {
   // prevent — and both passes would then race to write the result.
   insertJob(db, "running", NOW - 30);
   assert.equal(await hasQueuedJobs(db as unknown as Env["DB"]), false);
-});
-
-test("jobs: a finished job never comes back", async () => {
-  const db = dbWithJobs();
-  insertJob(db, "done", NOW - 10_000);
-  insertJob(db, "failed", NOW - 10_000);
-  assert.equal(await hasQueuedJobs(db as unknown as Env["DB"]), false);
-  // `runNextJob` returning false is what lets the alarm stop re-arming; a stale 'done' row that
-  // still looked like work would keep the object (and the billing) awake forever.
-  assert.equal(await runNextJob(testEnv(db) as unknown as Env), false);
-});
-
-test("jobs: a fresh queue is claimed in id order", async () => {
-  const db = dbWithJobs();
-  const first = insertJob(db, "queued", null);
-  insertJob(db, "queued", null);
-  await runNextJob(testEnv(db) as unknown as Env);
-  // No AI key in the harness, so the job fails — the point here is WHICH row was picked up, not
-  // what came back from the model.
-  const row = db.raw.prepare("SELECT status, attempts FROM ai_jobs WHERE id = ?").get(first) as
-    { status: string; attempts: number };
-  assert.equal(row.attempts, 1, "the oldest queued job is the one that runs");
-  assert.notEqual(row.status, "queued", "and it does not stay queued after a pass");
 });

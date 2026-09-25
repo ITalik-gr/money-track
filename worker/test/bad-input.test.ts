@@ -1,18 +1,6 @@
 /**
- * Garbage in a query string must not become a 500 — or, worse, a plausible zero.
- *
- * Found on 2026-08-21 by a security-shaped pass over the endpoints added that night. Two of them
- * answered `500` to `?months=abc`, and two more answered `200` with `{from: null, spend: 0}`,
- * which reads on screen as «нічого не витрачено».
- *
- * The cause is one idiom used thirty-one times across the analytics surface:
- * `Number(url.searchParams.get(x) ?? d)`. `??` catches null and undefined; it does not catch
- * `NaN`, and `Number("abc")` IS a value. So the fallback never fires and the NaN travels — into
- * `localMonthStart`, where it throws, or into a bind, where it quietly matches nothing.
- *
- * ⚠️ The endpoints below are the ones a stale bookmark or a hand-edited URL actually reaches. The
- * assertion is deliberately weak — «not 500, and the window is real» — because the point is the
- * CLASS, not any one endpoint's numbers.
+ * Garbage in a query string is never a 500 or a plausible zero (`Number(x ?? d)` lets NaN through),
+ * and a write against a missing id is refused rather than reported as done.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

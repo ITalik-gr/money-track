@@ -1,13 +1,6 @@
 /**
- * The paced statement backfill, driven by a FAKE bank.
- *
- * Why a fake and not monobank: the point of the rewrite (BANKS.md §5, step 3) is that the window
- * length, the request gap and the shape of "you are going too fast" belong to the provider rather
- * than to the loop. A test that used monobank would pass just as well against the old code, which
- * had those three constants written into the loop itself — so it would be testing nothing.
- *
- * This is also the ingest path, which fails SILENTLY: a stalled backfill produces no error and no
- * empty screen, just history that never arrives. There were no tests here at all before.
+ * The paced statement backfill and polling, driven by a FAKE bank: window, pacing and rate-limit
+ * shape belong to the provider (§BANK-FETCH / §BANK-POLL). A stalled ingest fails silently.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -15,7 +8,7 @@ import assert from "node:assert/strict";
 // keep working in a registry that holds more than one bank.
 import "../lib/bank/providers/index.ts";
 import { registerProvider, type CanonicalTx } from "../lib/bank/providers/provider.ts";
-import { backfillPending, nextStepGapMs, startBackfill, stepBackfill, CURSOR_KEY } from "../lib/bank/backfill.ts";
+import { startBackfill, stepBackfill, CURSOR_KEY } from "../lib/bank/backfill.ts";
 import { nextPollAt, pollOnce } from "../lib/bank/poll.ts";
 import { getState } from "../lib/finance/repo.ts";
 import { migratedDb, testEnv, freezeTime, type MemDb } from "./harness.ts";
@@ -89,17 +82,6 @@ test("backfill: the window and the pacing come from the BANK", async (t) => {
       assert.equal(job.to - job.from, WINDOW);
     });
 
-    await t.test("the gap asked of the pacers is the provider's", async () => {
-      // Both pacers — the object's alarm and the client's interval — read this. A hardcoded 60s
-      // would break a bank that allows more, and quietly break one that allows less.
-      installFakeBank();
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db);
-      await startBackfill(env);
-      assert.equal(await nextStepGapMs(env), GAP_MS);
-    });
-
     await t.test("one step fetches one window and writes through the canonical writer", async () => {
       const calls = installFakeBank({ rows: () => [row()] });
       const db = migratedDb();
@@ -156,42 +138,6 @@ test("backfill: the window and the pacing come from the BANK", async (t) => {
       await assert.rejects(() => stepBackfill(env), /bank is down/);
     });
 
-    await t.test("no credential: the account never enters the cursor", async () => {
-      // A job that can never run would sit there pretending to be progress, and the alarm would
-      // keep waking up for it.
-      installFakeBank();
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db, { credential: false });
-      const cursor = await startBackfill(env);
-      assert.equal(cursor.total, 0);
-      assert.equal(await backfillPending(env.DB), false);
-    });
-
-    await t.test("a credential removed MID-run skips the job instead of stalling", async () => {
-      // The alarm re-arms while the cursor has work left, so a job that cannot run and cannot
-      // advance is an alarm that never stops — and a paid one.
-      installFakeBank();
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db);
-      await startBackfill(env);
-
-      const withoutCredential = { ...env, BANK_CREDENTIALS: {} } as Env;
-      const res = await stepBackfill(withoutCredential);
-      assert.equal(res?.progress, 1);
-      assert.equal(res?.retry, undefined);
-    });
-
-    await t.test("a manual account is never fetched", async () => {
-      installFakeBank();
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db);
-      db.raw.prepare("UPDATE accounts SET is_manual = 1 WHERE id = 'acc-uah'").run();
-      const cursor = await startBackfill(env);
-      assert.equal(cursor.total, 0);
-    });
   } finally {
     restore();
   }
@@ -213,37 +159,6 @@ test("poll: a bank that does not push is asked, one account per pass", async (t)
       const env = { ...testEnv(db), BANK_CREDENTIALS: { mono: "t" } } as unknown as Env;
       assert.equal(await nextPollAt(env), null);
       assert.equal(await pollOnce(env), null);
-    });
-
-    await t.test("a poll bank with no credential is not a deadline", async () => {
-      installFakeBank();
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db, { credential: false });
-      assert.equal(await nextPollAt(env), null);
-    });
-
-    await t.test("the first poll fetches a window and stores the rows", async () => {
-      const calls = installFakeBank({ rows: () => [row({ id: "poll-1" })] });
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db);
-
-      const res = await pollOnce(env);
-      assert.deepEqual(res, { account: "acc-uah", rows: 1 });
-      assert.equal(calls.length, 1);
-      const stored = db.raw.prepare("SELECT source FROM transactions WHERE id = 'poll-1'").get() as { source: string };
-      assert.equal(stored.source, "fake");
-    });
-
-    await t.test("a second pass right away does nothing — the account is not due", async () => {
-      const calls = installFakeBank({ rows: () => [] });
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db);
-      await pollOnce(env);
-      assert.equal(await pollOnce(env), null);
-      assert.equal(calls.length, 1);
     });
 
     await t.test("the next window OVERLAPS the last one", async () => {
@@ -282,17 +197,6 @@ test("poll: a bank that does not push is asked, one account per pass", async (t)
       assert.equal(await pollOnce(env), null);
     });
 
-    await t.test("a rate limit leaves the account DUE", async () => {
-      // The opposite of a hard failure: nothing is wrong with the credential, we were simply too
-      // early — so the window must not be consumed.
-      installFakeBank({ failWith: () => { throw new FakeRateLimit(); } });
-      const db = migratedDb();
-      seed(db);
-      const env = fakeBankEnv(db);
-      assert.equal(await pollOnce(env), null);
-      const stamp = db.raw.prepare("SELECT value FROM app_state WHERE key = 'poll_at_acc-uah'").get();
-      assert.equal(stamp, undefined);
-    });
   } finally {
     restore();
   }

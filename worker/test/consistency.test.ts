@@ -1,17 +1,6 @@
 /**
- * The canon's central CLAIM, made testable: one definition of spending, so every screen agrees.
- *
- * `golden.test.ts` pins what each endpoint returns; it cannot notice that two of them have started
- * describing the same money differently, because both goldens would simply be re-recorded. That is
- * the failure mode this project keeps paying for — §CUR-PLAN, §SUB-MONTH, §REFUND and the budget
- * push were all ONE concept computed in two places, and each was found by a person noticing two
- * numbers about the same thing rather than by a test.
- *
- * So these assert RELATIONSHIPS, not values. They survive a fixture change, and they fail exactly
- * when a breakdown stops reconciling with the total it is a breakdown of.
- *
- * Verified on 2026-08-12 while auditing the statistics: all of the identities below already held.
- * That is the result worth recording — the suite exists to keep them holding.
+ * The canon's central claim — one definition of spending, so every screen agrees. These assert
+ * RELATIONSHIPS (breakdowns reconcile with totals), which goldens cannot see.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -183,7 +172,6 @@ test("canon: monthly history's current month is the month preset", async () => {
     assert.equal(current?.income, o.summary.income, "last trend point vs month total (income)");
   } finally { restore(); }
 });
-
 
 /**
  * §0.2 second pass (2026-08-27) — the on-screen blocks the MCP surface cannot see.

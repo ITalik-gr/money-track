@@ -1,21 +1,7 @@
 /**
- * The bulk-enrich system prefix stays above Haiku's prompt-cache minimum.
- *
- * WHY A TEST AND NOT A COMMENT. There already WAS a comment — `prompt.ts` has said «cross Haiku's
- * 4096-token cache minimum» since the guide was written. The prefix drifted to 4 078 tokens
- * anyway, eighteen short, and stayed there: the API does not error, does not warn and does not
- * degrade, it simply bills the full input every time. `scripts/eval-ai.mjs` found it in its first
- * run, by reading `usage` on 49 real calls. This is the deterministic half of that finding — the
- * eval costs money and needs a key, and a rule that can only be checked by paying will not be
- * checked («Перевірка > інструкція»).
- *
- * WHY CHARACTERS AND NOT TOKENS. Counting tokens honestly means asking Anthropic, which makes this
- * a network test and defeats the purpose. So the bound is in characters, converted with a ratio
- * MEASURED against the real tokenizer rather than guessed: the 2026-09-18 prefix was 9 619
- * characters and 4 078 Haiku tokens, i.e. **2.36 characters per token** on this specific mix of
- * English instructions, Ukrainian merchant names and Latin brands. Different text would tokenize
- * differently, which is why the floor below carries a deliberate margin instead of sitting exactly
- * on the line.
+ * The bulk-enrich system prefix stays above Haiku's 4096-token cache minimum. Below it the API bills
+ * full input every call without any error; the prefix once drifted 18 tokens short.
+ * Characters, not tokens: 2.36 chars/token was measured on the real tokenizer (2026-09-18).
  */
 import test from "node:test";
 import assert from "node:assert/strict";
