@@ -360,3 +360,27 @@ export async function listExpiredDemoSessions(db: D1Database, now = Math.floor(D
 export async function deleteDemoSession(db: D1Database, demoId: string): Promise<void> {
   await db.prepare("DELETE FROM demo_sessions WHERE demo_id = ?").bind(demoId).run();
 }
+
+// ---- §JEV-SHARED — the owner's TypeSafe key, used by accounts without their own -----------------
+
+/** One judgment that went out on the SHARED key. Best-effort: a failed count must not fail the call. */
+export async function recordSharedJev(db: D1Database, userId: string, day: string, inputTokens: number): Promise<void> {
+  await db.prepare(
+    `INSERT INTO jev_usage (user_id, day, calls, input_tokens) VALUES (?, ?, 1, ?)
+     ON CONFLICT(user_id, day) DO UPDATE SET calls = calls + 1, input_tokens = input_tokens + excluded.input_tokens`,
+  ).bind(userId, day, inputTokens).run();
+}
+
+/** Shared-key use since `fromDay` (inclusive), per user, newest-heaviest first. */
+export async function sharedJevUsage(
+  db: D1Database, fromDay: string, today: string,
+): Promise<{ user_id: string; email: string | null; calls: number; input_tokens: number; today_calls: number; today_tokens: number }[]> {
+  const res = await db.prepare(
+    `SELECT j.user_id, u.email, SUM(j.calls) AS calls, SUM(j.input_tokens) AS input_tokens,
+            SUM(CASE WHEN j.day = ? THEN j.calls ELSE 0 END) AS today_calls,
+            SUM(CASE WHEN j.day = ? THEN j.input_tokens ELSE 0 END) AS today_tokens
+     FROM jev_usage j LEFT JOIN users u ON u.id = j.user_id
+     WHERE j.day >= ? GROUP BY j.user_id ORDER BY input_tokens DESC`,
+  ).bind(today, today, fromDay).all<{ user_id: string; email: string | null; calls: number; input_tokens: number; today_calls: number; today_tokens: number }>();
+  return res.results ?? [];
+}

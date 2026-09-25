@@ -127,16 +127,18 @@ export function Advisor() {
 
       {tab === "state" && (
         <div className="advisor-state">
-          {/* A2 (2026-09-25): «Місячний мінімум» full width; «Як приходить дохід» and «Валютна
-              експозиція» side by side under it. */}
+          {/* A2 (2026-09-25): «Місячний мінімум» full width; «Як приходить дохід» | «Валютна
+              експозиція» under it; «Після надходження» full width; the calendar; and last, side by
+              side, what the adviser KNOWS — facts and the knowledge corpus (owner: they sat a
+              screen apart with an empty half beside each). */}
           <HealthIndexCard />
           <NetworthCard />
           <SpendFloorCard />
           <IncomeRhythmCard />
           <FxExposureCard />
           <PaydayCard />
-          <FactsCard />
           <CashflowCalendar />
+          <FactsCard />
           <KnowledgeCorpusCard />
         </div>
       )}

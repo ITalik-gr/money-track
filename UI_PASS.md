@@ -237,7 +237,7 @@
 
 ### Settings
 
-- [ ] **SE1. Rebuild Settings from scratch for the current app.** It is bulky: everything is dumped
+- [x] ~~**SE1. Rebuild Settings from scratch for the current app.**~~ — DONE 2026-09-25 on the owner's go-ahead («діли і на таби, і на блоки; неважливе видали, об'єднай»): tabs Загальне · Банки й дані · Сповіщення й доступ · AI · Адмін (owner); every tab split into captioned blocks (`SetBlock`). Merged: bank keys + linked banks + «Стан бази» → one card; «Вийти» + «Вийти всюди» → one card. Folded: a finished first-run checklist is one line. Removed from users' view: the «Обслуговування» tab (repair buttons → owner's «Адмін»). Moved: AI key and semantic search → AI; MCP / quick-add → Сповіщення й доступ. Old `?tab=users|maintenance` links land in «Адмін». Seen live. Original notes: It is bulky: everything is dumped
   there. Remove what is not needed, shrink, merge; sort into tabs and blocks that match the app as
   it is now. Needs an inventory first (every card, who uses it, owner-only or not) and a proposed
   tab map for the owner's yes before moving anything.
@@ -267,6 +267,10 @@
 - Seen live on the local `/demo` at 1184px: dashboard, Stats → categories, Subscriptions + a plan page, an operation page, Advisor → state, dark theme on the dashboard. Not seen: the ФОП flag in the editor (the demo has no ФОП), the AI insight card with a real answer (demo AI is limited), phone widths.
 
 ## Log
+
+- 2026-09-25 — owner: (1) §JEV-SHARED — Jev for every account: the user's own TypeSafe key (`user_secrets.jev_api_key`, verified on save, field in Settings → AI) or the owner's `JEV_API_KEY` otherwise (never in a demo). Each judgment on the lent key is counted in the directory (`jev_usage`, **migration directory/0012 — run `npm run db:dir:migrate:remote` before deploy**); the owner sees today / month / all time (requests · tokens · $) and per-account use in Settings → Адмін → «Jev на твоєму ключі». Privacy: users' operation text now goes to TypeSafe — said on the AI key card and in CLAUDE.md. Tests: `judge-tx.test.ts` (non-owner reaches TypeSafe, the counter equals the requests). (2) Settings gaps: «Загальне» and «AI» are one grid each (per-block grids balanced separately and left holes), both key cards and search full width, the first-run line full width; measured column difference ≤ 60px on every tab. check (561) green.
+
+- 2026-09-25 — owner follow-up: (1) weekday chart — rent paid on Sunday the 20th made «Sunday» the priciest day and «weekends eat a noticeable share»: new §WEEKDAY-HABIT figures on `/analytics/weekday` (plan-linked operations and the lump that carries a day left out, both reported), the chart / busiest day / weekend share read them, the tip names the one-off; the open-bar style no longer hides the hatch. Golden: only added fields; `weekday-habit.test.ts`. (2) Advisor: «Факти» | «Корпус знань» side by side, equal height; «Після надходження» full width. (3) SE1 Settings rebuilt (see SE1). (4) Dark theme analysed → ROADMAP card, nothing changed. (5) New-user readiness: owner resources gated (AI key / mono token per user, Jev + TG chat owner-only, ФОП hidden); fixed the global error toast printing the endpoint name («generateAdvice: …») and the «no AI key» hint pointing at a renamed tab — it now links to Settings → AI. check (560) + build green; seen live.
 
 - 2026-09-25 — Batch 2 done: T1–T4, D1–D2, ST1–ST6, A1–A3, C1–C3, P1; B1 blocked (owner-only page), SE1 inventory + proposal written. `npm run check` + `npm run build` green. Seen live on the local demo at 1372px: dashboard, Stats (categories, trends), Advisor → Стан, category pages (expense, income, never-used). Not seen: phones, dark theme, /business.
 - 2026-09-25 — Batch 3 done (F1–F7, FOP1); `npm run check` (558 tests) + `npm run build` green. Not seen live: phones, throttled load, demo ФОП sweep.

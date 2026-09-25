@@ -10,7 +10,9 @@
         "n": 3,
         "days": 13,
         "typical": 112415,
-        "lumpy": true
+        "lumpy": true,
+        "habit_typical": 20108,
+        "lump": 1200000
       },
       {
         "dow": 1,
@@ -18,7 +20,9 @@
         "n": 4,
         "days": 13,
         "typical": 26000,
-        "lumpy": true
+        "lumpy": true,
+        "habit_typical": 10615,
+        "lump": 200000
       },
       {
         "dow": 2,
@@ -26,7 +30,9 @@
         "n": 4,
         "days": 13,
         "typical": 106762,
-        "lumpy": true
+        "lumpy": true,
+        "habit_typical": 14454,
+        "lump": 1200000
       },
       {
         "dow": 3,
@@ -34,7 +40,9 @@
         "n": 3,
         "days": 13,
         "typical": 18585,
-        "lumpy": true
+        "lumpy": true,
+        "habit_typical": 8200,
+        "lump": 135000
       },
       {
         "dow": 4,
@@ -42,7 +50,9 @@
         "n": 4,
         "days": 13,
         "typical": 12338,
-        "lumpy": false
+        "lumpy": false,
+        "habit_typical": 12338,
+        "lump": 0
       },
       {
         "dow": 5,
@@ -50,7 +60,9 @@
         "n": 4,
         "days": 13,
         "typical": 101831,
-        "lumpy": true
+        "lumpy": true,
+        "habit_typical": 9523,
+        "lump": 1200000
       },
       {
         "dow": 6,
@@ -58,10 +70,18 @@
         "n": 5,
         "days": 13,
         "typical": 29131,
-        "lumpy": false
+        "lumpy": false,
+        "habit_typical": 29131,
+        "lump": 0
       }
     ],
     "busiest": 6,
-    "weekend_share_pct": 35
+    "weekend_share_pct": 35,
+    "habit": {
+      "busiest": 6,
+      "weekend_share_pct": 47,
+      "planned": 0,
+      "lumps": 3935000
+    }
   }
 }

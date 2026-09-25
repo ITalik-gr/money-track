@@ -5,7 +5,7 @@
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
 > In production (`https://money.italik.dev`). Migrations: `finance` to **0055**, `directory` to
-> **0011**. Lints **C1–C22**.
+> **0012**. Lints **C1–C22**.
 
 ## Documents
 
@@ -44,7 +44,7 @@ run `graphify update .`.
 One **Cloudflare Worker (Hono) + a Durable Object per user (SQLite) + D1 `directory` + R2 +
 Vectorize**. Monobank (webhook + backfill), CSV import, Privat ФОП polling. React 19 + RTK Query +
 React Router 7 + Recharts, Vite + PWA. AI: **Haiku 4.5** bulk, **Sonnet 5** user-facing (and enrich
-when the user wrote a note); **Jev (TypeSafe)** first for judgments, owner-only. Telegram bot + Mini
+when the user wrote a note); **Jev (TypeSafe)** first for judgments, for everyone (§JEV-SHARED). Telegram bot + Mini
 App. UI uk/en.
 
 Scripts: `dev` · `build` · `check` · `deploy` · `db:migrate:local|remote` · `db:dir:migrate:*` ·
@@ -82,8 +82,9 @@ localhost, so CSP bugs reproduce only on another host.
 - Answer currency is the reader's (§BASE-CUR): client uses `baseSign()`, never a literal `₴`.
 - Calendar is Kyiv (§APP_TZ): no `new Date(x).getMonth()` for period bounds.
 - No `.prepare()` in `routes/*` / `services/*`; **no second definition of the same number.**
-- A resource that looks global (`MONO_TOKEN`, `ANTHROPIC_API_KEY`, `TG_CHAT_ID`, `JEV_API_KEY`…)
-  is the OWNER's — `env.IS_OWNER` gate; its UI controls disappear for others too.
+- A resource that looks global (`MONO_TOKEN`, `ANTHROPIC_API_KEY`, `TG_CHAT_ID`…)
+  is the OWNER's — `env.IS_OWNER` gate; its UI controls disappear for others too. The one
+  deliberate exception is `JEV_API_KEY` (§JEV-SHARED).
 - Secrets only in Worker secrets. Every API shape declared once in `shared/api/`.
 - A literal route is declared ABOVE a parameterised one. A route outside `/api/*` must be in
   `assets.run_worker_first`, else the SPA shell answers.
@@ -134,7 +135,10 @@ by a later rule for the same selector · C21 a clickable div/span/li has a role 
 - §AI-EVAL: `npm run eval` measures the model (accuracy, ask rate and cost together); never
   re-record the baseline to go green.
 
-**Jev** — `AI_JUDGE = "jev"`, owner key only. Enrich, §SUB-REVIEW, §F2, §AI-CATCHUP and §CSV-AI ask
+**Jev** — `AI_JUDGE = "jev"`. §JEV-SHARED (owner's decision 2026-09-25): every account uses its own
+TypeSafe key (`user_secrets.jev_api_key`) or, without one, the owner's `JEV_API_KEY` (never in a
+demo); each judgment on the lent key is counted in the directory (`jev_usage`, migration 0012) and
+shown to the owner in Settings → Адмін. Enrich, §SUB-REVIEW, §F2, §AI-CATCHUP and §CSV-AI ask
 Jev first and fall back to Claude when it is off, down or below its line; everything generative
 stays on Claude. Measured result: on held-out cases the Jev → Haiku cascade (Jev files only at root
 confidence ≥ 0.8) matches Haiku's accuracy at about a fifth of the cost. §JEV-EVAL: a judgment is
@@ -170,7 +174,7 @@ click writes the real column. The amount never comes from a model.
   §BACKUP: nightly dumps to R2 (14 days); restore is the only intentional erase.
 - Outbound data: §SEARCH-VEC text stays inside Cloudflare, off by default; §TAX-OUT NBU gets only a
   currency + date, watched URLs are checked by `isWatchableUrl()` before and after redirects; Jev
-  receives the owner's transaction text.
+  receives every account's transaction text (§JEV-SHARED; stated on the AI key card).
 - Uncaught 500s show the raw cause to the owner only.
 
 **Business and ФОП** (owner-only while unfinished — §FOP-GATE: `fopAvailable(env)`, 404 elsewhere)

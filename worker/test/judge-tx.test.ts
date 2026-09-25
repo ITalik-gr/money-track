@@ -4,7 +4,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migratedDb } from "./harness.ts";
+import { migratedDb, migratedDirectoryDb } from "./harness.ts";
 import { judgeTransaction, brandCandidates } from "../lib/ai/judge-tx.ts";
 import type { Env } from "../env.ts";
 
@@ -48,12 +48,10 @@ function stub(
   return s;
 }
 
-test("the flag off, a non-owner or a demo never reaches TypeSafe", async () => {
+test("the flag off, no key or a demo never reaches TypeSafe", async () => {
   const s = stub({ Transport: 1 }, { expense: 1 }, 0);
   try {
     assert.equal(await judgeTransaction(env({ AI_JUDGE: undefined }), TX), null);
-    // A deployment-wide key applied to every user is the defect `userCredentials` was fixed for.
-    assert.equal(await judgeTransaction(env({ IS_OWNER: false }), TX), null);
     // demo.ts caps spend in Anthropic dollars and knows nothing about a second provider.
     assert.equal(await judgeTransaction(env({ USER_ID: "demo:abc" }), TX), null);
     assert.equal(await judgeTransaction(env({ JEV_API_KEY: "" }), TX), null);
@@ -114,5 +112,22 @@ test("phase 3: importance and business come back as PROPOSALS, in the canon's ow
     assert.ok(s.asked[0].includes("business"));
     // §7.4: importance is asked where the root is KNOWN (86% → 97% on the eval).
     assert.ok(!s.asked[0].includes("importance") && s.asked[1].includes("importance"));
+  } finally { s.restore(); }
+});
+
+test("§JEV-SHARED: an account without its own key judges on the owner's, and every call is counted", async () => {
+  const s = stub({ Transport: 1 }, { expense: 1 }, 0);
+  const dir = migratedDirectoryDb();
+  try {
+    const shared = env({ IS_OWNER: false, USER_ID: "friend", JEV_SHARED: true, DIRECTORY: dir as unknown as D1Database });
+    await judgeTransaction(shared, TX);
+    await judgeTransaction(shared, TX);
+    assert.ok(s.calls >= 2, "a non-owner reaches TypeSafe now");
+    const row = dir.raw.prepare("SELECT calls, input_tokens FROM jev_usage WHERE user_id = 'friend'").get() as { calls: number; input_tokens: number };
+    // Every request that went out on the lent key is in the counter — no more, no less.
+    assert.deepEqual({ ...row }, { calls: s.calls, input_tokens: s.calls * 1500 });
+    // Their OWN key (or the owner himself) is not a loan and is not counted.
+    await judgeTransaction(env({ IS_OWNER: false, USER_ID: "own", JEV_SHARED: false, DIRECTORY: dir as unknown as D1Database }), TX);
+    assert.equal(dir.raw.prepare("SELECT COUNT(*) AS n FROM jev_usage WHERE user_id = 'own'").get()!.n as number, 0);
   } finally { s.restore(); }
 });

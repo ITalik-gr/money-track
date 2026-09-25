@@ -14,7 +14,12 @@
    heights depend on the account's data (six backups or none, one bank or three). Multi-column
    flows cards down a column instead, so the gaps cannot form. `break-inside: avoid` keeps a card
    whole; `column-span: all` is what `set-full` becomes. */
-.settings-grid { columns: 2; column-gap: 14px; margin-bottom: 18px; }
+/* SE1: a tab is captioned blocks; the block's heading carries the rhythm between them, so the grid
+   itself no longer adds space below. */
+.set-block > .section-head:first-child { margin-top: 22px; }
+.set-block:first-of-type > .section-head:first-child { margin-top: 6px; }
+.set-block > .settings-grid:first-child { margin-top: 16px; }
+.settings-grid { columns: 2; column-gap: 14px; }
 .settings-grid > * { break-inside: avoid; margin-bottom: 14px; }
 .settings-grid > .set-full { column-span: all; padding: 16px; }
 /* A spanner needs its OWN top margin: the `margin-bottom` above belongs to the last card in each
@@ -39,3 +44,16 @@
      `column-span: all` inside a single-column box suppresses the margin trimming above. */
   .settings-grid > .set-full { column-span: none; }
 }
+
+/* SE1: a finished first-run checklist is a single line. */
+.fr-done { flex-direction: row; align-items: center; gap: 10px; }
+.fr-done-mark { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  color: var(--pos); background: color-mix(in srgb, var(--pos) 12%, var(--surface)); }
+.fr-done-t { flex: 1; min-width: 0; font-size: var(--fs-md); color: var(--ink-2); }
+/* The linked banks as the lower half of the bank-key card. */
+.conn-embed { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.conn-db { margin: 10px 0 0; font-variant-numeric: tabular-nums; }
+/* §JEV-SHARED: per-account use of the owner's TypeSafe key. */
+.jevuse-list { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.jevuse-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: baseline; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.jevuse-mail { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -226,9 +226,13 @@ const S = {
   // "не налаштовано на цьому середовищі" and "ANTHROPIC_API_KEY не налаштовано — див. README" —
   // named an environment variable at a person and pointed at a file they will never open.
   // Say where the button is instead.
+  errJevRejected: {
+    uk: "TypeSafe не прийняв цей ключ — перевір, що скопійовано повністю.",
+    en: "TypeSafe refused this key — check that it was copied in full.",
+  },
   errAiKeyMissing: {
-    uk: "Щоб працювали AI-функції, додай свій ключ Anthropic у Налаштуваннях → «Ключі й дані».",
-    en: "AI features need your own Anthropic key — add it in Settings → “Keys & data”.",
+    uk: "Щоб працювали AI-функції, додай свій ключ Anthropic у Налаштуваннях → «AI».",
+    en: "AI features need your own Anthropic key — add it in Settings → “AI”.",
   },
   errTxNotFound: { uk: "Операцію не знайдено", en: "Transaction not found" },
   errBadId: { uk: "Некоректний ідентифікатор", en: "Malformed identifier" },

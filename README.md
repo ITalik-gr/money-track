@@ -93,7 +93,7 @@ flowchart TB
     end
 
     Anthropic["Anthropic API<br/>Haiku / Sonnet"]
-    TypeSafe["TypeSafe Jev<br/>judgments (owner only)"]
+    TypeSafe["TypeSafe Jev<br/>judgments"]
     Mono["Monobank"]
     Claude["Claude Desktop · claude.ai · Claude Code<br/>(MCP client)"]
 

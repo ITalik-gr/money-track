@@ -6,7 +6,7 @@
 import { useT } from "../../i18n/index.ts";
 import { Icon } from "../ui/Icon.tsx";
 import { EmptyCard } from "../ui/EmptyCard.tsx";
-import { useGetConnectionsQuery, useSyncAccountsMutation } from "../../store/api.ts";
+import { useGetConnectionsQuery, useGetSetupStatusQuery, useSyncAccountsMutation } from "../../store/api.ts";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
 import { dateFmt } from "../../i18n/locale.ts";
@@ -14,16 +14,21 @@ import { dateFmt } from "../../i18n/locale.ts";
 /** Proper nouns, so not translated — the same reason `Accounts.tsx` keeps its own copy. */
 const BANK_LABEL: Record<string, string> = { mono: "Monobank", privat: "PrivatBank" };
 
-export function BankConnectionsCard() {
+/**
+ * The linked banks, as the lower half of the «Ключі банків» card (SE1, 2026-09-25): a key and the
+ * connection it feeds were two cards a screen apart, plus a third «Стан бази» card that is now the
+ * one line at the bottom. Rendered INSIDE `CredentialsCard kind="bank"`, so no card of its own.
+ */
+export function BankConnections() {
   const t = useT();
   const { data } = useGetConnectionsQuery();
+  const { data: status } = useGetSetupStatusQuery();
   const [sync, syncState] = useSyncAccountsMutation();
   const connections = data?.connections ?? [];
 
   return (
-    <div className="card set-card">
+    <div className="conn-embed">
       <div className="set-card-h"><Icon name="repeat" size={16} />{t("conn.title")}</div>
-      <p className="set-card-sub">{t("conn.subtitle")}</p>
 
       {/* A bank that has never been synced is not an error — it is the state every new account
           starts in, and saying so is the difference between "set this up" and "something broke". */}
@@ -72,6 +77,12 @@ export function BankConnectionsCard() {
           </div>
         ))}
       </div>
+      {status && (
+        <p className="set-card-sub conn-db">
+          {t("conn.dbLine", { accounts: status.accounts, tx: status.transactions })}
+          {" · "}{status.webhookRegistered ? t("conn.webhookOn") : t("conn.webhookOff")}
+        </p>
+      )}
     </div>
   );
 }

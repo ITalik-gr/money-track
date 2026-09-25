@@ -56,7 +56,7 @@ export interface WeekdayRow { dow: number; spent: number; n: number; biggest: nu
  *     Sundays expensive — it makes Sunday the day rent is due. Same 55% threshold `projectSpend`
  *     uses, so "lumpy" means the same thing in both places.
  */
-export function buildWeekdayAnalytics(rows: WeekdayRow[], from: number, to: number): WeekdayAnalytics {
+export function buildWeekdayAnalytics(rows: WeekdayRow[], from: number, to: number, habitRows?: WeekdayRow[]): WeekdayAnalytics {
   const counts = weekdayCounts(from, to);
   const byDow = new Map(rows.map((r) => [r.dow, r]));
 
@@ -76,10 +76,49 @@ export function buildWeekdayAnalytics(rows: WeekdayRow[], from: number, to: numb
   const weekend = days.filter((d) => d.dow === 0 || d.dow === 6).reduce((sum, d) => sum + d.spent, 0);
   const steady = days.filter((d) => !d.lumpy && d.spent > 0);
 
-  return {
+  const result: WeekdayAnalytics = {
     from, to, days,
     busiest: steady.length ? steady.reduce((best, d) => (d.typical > best.typical ? d : best)).dow : null,
     weekend_share_pct: total > 0 ? Math.round((weekend / total) * 100) : null,
+  };
+  return habitRows ? withHabit(result, habitRows, counts) : result;
+}
+
+/**
+ * §WEEKDAY-HABIT — «when do I spend» as a HABIT, which is the question the Statistics chart asks.
+ *
+ * Owner, 2026-09-25: the chart said Sundays are expensive and «weekends eat a noticeable share» —
+ * because rent (12 500 ₴) was paid on Sunday the 20th. Flagging the day `lumpy` was not enough: the
+ * bar still set the scale and the weekend share still counted the rent. The habit figures leave
+ * out (1) everything attached to a plan — a contract's date is not behaviour — and (2) on a lumpy
+ * day, the one payment that carries it. Both removals are REPORTED (`planned`, `lumps`, `lump` per
+ * day), so the chart can say what it set aside instead of silently shrinking.
+ */
+function withHabit(base: WeekdayAnalytics, habitRows: WeekdayRow[], counts: number[]): WeekdayAnalytics {
+  const byDow = new Map(habitRows.map((r) => [r.dow, r]));
+  let lumps = 0;
+  const days = base.days.map((d) => {
+    const r = byDow.get(d.dow);
+    const spent = r?.spent ?? 0;
+    const biggest = r?.biggest ?? 0;
+    const lumpy = spent > 0 && ((r?.n ?? 0) <= 1 || biggest >= spent * 0.55);
+    const lump = lumpy ? Math.min(biggest, spent) : 0;
+    lumps += lump;
+    const habit = spent - lump;
+    return { ...d, habit_typical: counts[d.dow]! > 0 ? Math.round(habit / counts[d.dow]!) : 0, lump };
+  });
+  const habitTotal = days.reduce((s, d) => s + (d.habit_typical ?? 0) * d.days, 0);
+  const habitWeekend = days.filter((d) => d.dow === 0 || d.dow === 6).reduce((s, d) => s + (d.habit_typical ?? 0) * d.days, 0);
+  const withSpend = days.filter((d) => (d.habit_typical ?? 0) > 0);
+  const unplanned = habitRows.reduce((s, r) => s + r.spent, 0);
+  return {
+    ...base, days,
+    habit: {
+      busiest: withSpend.length ? withSpend.reduce((b, d) => ((d.habit_typical ?? 0) > (b.habit_typical ?? 0) ? d : b)).dow : null,
+      weekend_share_pct: habitTotal > 0 ? Math.round((habitWeekend / habitTotal) * 100) : null,
+      planned: Math.max(0, base.days.reduce((s, d) => s + d.spent, 0) - unplanned),
+      lumps,
+    },
   };
 }
 

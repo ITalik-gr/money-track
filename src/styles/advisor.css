@@ -49,7 +49,10 @@
 .advisor-state > * { min-width: 0; }
 /* Індекс здоров'я, календар потоку і НЕТВОРТ — на всю ширину: це графіки з віссю часу,
    у півколонці підписи місяців зливались, а нетворт узагалі стояв на 50% (фідбек користувача). */
-.advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card, .advisor-state > .floor-card { grid-column: 1 / -1; }
+.advisor-state > .health-card, .advisor-state > .cf-card, .advisor-state > .nw-card, .advisor-state > .floor-card, .advisor-state > .payday-card { grid-column: 1 / -1; }
+/* The last pair (facts | knowledge) stretches to one height — a short card beside a tall one reads
+   as a gap. */
+.advisor-state > .facts-card, .advisor-state > .corpus-card { align-self: stretch; }
 @media (max-width: 760px) { .advisor-state { grid-template-columns: 1fr; } }
 
 /* §ADVICE-LOOP — the row under a suggestion: where it stands, and what came of it.

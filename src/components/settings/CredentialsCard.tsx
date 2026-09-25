@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useState } from "react";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { useT, type TranslationKey } from "../../i18n/index.ts";
@@ -51,6 +52,15 @@ const LABELS: Record<string, {
     docUrl: "https://console.anthropic.com/settings/keys",
     docLabel: "console.anthropic.com",
   },
+  // §JEV-SHARED: optional — without it the app's own TypeSafe key is used, which the card says.
+  jev_api_key: {
+    titleKey: "cred.jevTitle",
+    hintKey: "cred.jevHint",
+    placeholder: "ts_…",
+    steps: ["cred.jevStep1", "cred.jevStep2", "cred.jevStep3"],
+    docUrl: "https://typesafe.ai",
+    docLabel: "typesafe.ai",
+  },
 };
 
 function when(ts: number | null): string {
@@ -71,9 +81,9 @@ function when(ts: number | null): string {
  * NEVER shown back).
  */
 export type CredKind = "bank" | "ai";
-const AI_SECRETS = new Set(["anthropic_api_key"]);
+const AI_SECRETS = new Set(["anthropic_api_key", "jev_api_key"]);
 
-export function CredentialsCard({ kind = "bank" }: { kind?: CredKind } = {}) {
+export function CredentialsCard({ kind = "bank", children }: { kind?: CredKind; children?: ReactNode } = {}) {
   const t = useT();
   const { data, isLoading, error, refetch } = useGetCredentialsQuery();
   const [put, putState] = usePutCredentialMutation();
@@ -100,9 +110,9 @@ export function CredentialsCard({ kind = "bank" }: { kind?: CredKind } = {}) {
   }
 
   return (
-    // Full width (`set-full`) for the BANK card only: it holds several keys side by side with
-    // their step-by-step guides. The AI card holds exactly one and does not need the room.
-    <div className={`card set-card${kind === "bank" ? " set-full" : ""}`}>
+    // Full width for both: each holds two keys side by side with their step-by-step guides (the AI
+    // card gained the TypeSafe key, §JEV-SHARED), and at half width it left a hole beside it.
+    <div className="card set-card set-full">
       <div className="set-card-h">
         <Icon name={kind === "ai" ? "spark" : "settings"} size={16} />
         {kind === "ai" ? t("cred.aiTitle") : t("cred.bankTitle")}
@@ -123,7 +133,8 @@ export function CredentialsCard({ kind = "bank" }: { kind?: CredKind } = {}) {
               <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
                 <strong style={{ fontSize: 14 }}>{title}</strong>
                 <span className="muted" style={{ fontSize: 12 }}>
-                  {s.set ? (s.last_ok_at ? t("cred.verifiedOn", { date: when(s.last_ok_at) }) : t("cred.savedNotVerified")) : t("cred.notSet")}
+                  {s.set ? (s.last_ok_at ? t("cred.verifiedOn", { date: when(s.last_ok_at) }) : t("cred.savedNotVerified"))
+                    : s.name === "jev_api_key" && s.available ? t("cred.jevShared") : t("cred.notSet")}
                 </span>
               </div>
               <p className="set-card-sub" style={{ margin: "4px 0 8px" }}>{hint}</p>
@@ -183,10 +194,13 @@ export function CredentialsCard({ kind = "bank" }: { kind?: CredKind } = {}) {
         <li>{t("cred.factEncrypted")}</li>
         {kind === "ai" && <li>{t("cred.factOwnBilling")}</li>}
         {kind === "ai" && <li>{t("cred.factNoAiKey")}</li>}
+        {/* Said where the key is handed over: with Jev on, operation text leaves for TypeSafe. */}
+        {kind === "ai" && <li>{t("cred.factJev")}</li>}
       </ul>
 
       {note && <p className="set-card-sub" style={{ marginBottom: 0 }}>{note}</p>}
       {failed && <p className="neg" style={{ fontSize: 13, marginBottom: 0 }}>{failed}</p>}
+      {children}
     </div>
   );
 }

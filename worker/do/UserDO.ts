@@ -18,7 +18,7 @@ export class UserDO extends DurableObject<Env> {
   /** `env.DB` replacement for everything running inside this object. */
   readonly db: AppDb;
   private readonly raw: DoDatabase;
-  private credentials: { MONO_TOKEN: string; ANTHROPIC_API_KEY: string; PRIVAT: string } | null = null;
+  private credentials: { MONO_TOKEN: string; ANTHROPIC_API_KEY: string; PRIVAT: string; JEV_API_KEY: string; JEV_SHARED: boolean } | null = null;
   /** null = not looked up yet in this isolate. See `rememberOwner`. */
   private ownerFlag: boolean | null = null;
 
@@ -92,7 +92,7 @@ export class UserDO extends DurableObject<Env> {
     // deliberate product call — a demo with no AI shows less than the app does — and it is the
     // one place strangers can reach our billing, which is why lib/demo.ts caps it in dollars.
     const demoOverride = isDemo
-      ? { ANTHROPIC_API_KEY: this.env.DEMO_ANTHROPIC_KEY || this.env.ANTHROPIC_API_KEY || "", MONO_TOKEN: "" }
+      ? { ANTHROPIC_API_KEY: this.env.DEMO_ANTHROPIC_KEY || this.env.ANTHROPIC_API_KEY || "", MONO_TOKEN: "", JEV_API_KEY: "", JEV_SHARED: false }
       : {};
     return {
       ...this.env,
@@ -569,20 +569,28 @@ export class UserDO extends DurableObject<Env> {
    * The cache is keyed on nothing, because a DO serves exactly one user and `isOwner` is a
    * property of that user — it cannot differ between two requests to the same object.
    */
-  private async userCredentials(isOwner: boolean): Promise<{ MONO_TOKEN: string; ANTHROPIC_API_KEY: string; PRIVAT: string }> {
+  private async userCredentials(isOwner: boolean): Promise<{ MONO_TOKEN: string; ANTHROPIC_API_KEY: string; PRIVAT: string; JEV_API_KEY: string; JEV_SHARED: boolean }> {
     if (!this.credentials) {
       const master = this.env.SECRETS_MASTER_KEY;
-      const [mono, anthropic, privat] = await Promise.all([
+      const [mono, anthropic, privat, jev] = await Promise.all([
         getSecret(this.db, master, "mono_token"),
         getSecret(this.db, master, "anthropic_api_key"),
         getSecret(this.db, master, "privat_credentials"),
+        getSecret(this.db, master, "jev_api_key"),
       ]);
+      // §JEV-SHARED (owner's decision, 2026-09-25): the ONE deployment key lent to everybody — the
+      // user's own TypeSafe key first, the owner's otherwise. Jev is cheap (input-only, cents per
+      // thousand judgments), unlike the Anthropic key above, which stays owner-only. A loan is
+      // flagged (`JEV_SHARED`) so every judgment on it is counted for the owner to see.
+      const deploymentJev = this.env.JEV_API_KEY ?? "";
       this.credentials = {
         MONO_TOKEN: mono ?? (isOwner ? this.env.MONO_TOKEN ?? "" : ""),
         ANTHROPIC_API_KEY: anthropic ?? (isOwner ? this.env.ANTHROPIC_API_KEY ?? "" : ""),
         // NO owner fallback, by rule (§BANK-CRED): a provider added after the single-user era has
         // no history to stay compatible with, so the owner stores their key like everyone else.
         PRIVAT: privat ?? "",
+        JEV_API_KEY: jev ?? deploymentJev,
+        JEV_SHARED: !jev && !!deploymentJev && !isOwner,
       };
     }
     return this.credentials;

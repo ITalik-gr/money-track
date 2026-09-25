@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { useSearchParams } from "react-router";
 import { useT } from "../i18n/index.ts";
@@ -13,7 +13,6 @@ import {
   useGetAiUsageQuery,
   useGetAiModelsQuery,
   useSetAiModelMutation,
-  useGetSetupStatusQuery,
   useGetTranslitFixesQuery,
   useApplyTranslitFixesMutation,
   useGetMeQuery,
@@ -25,7 +24,7 @@ import type { AiTask, AiModelToken } from "../store/api.ts";
 import { CredentialsCard } from "../components/settings/CredentialsCard.tsx";
 import { clearLocalUserData } from "../lib/localdata.ts";
 import { CsvImportCard } from "../components/settings/CsvImportCard.tsx";
-import { BankConnectionsCard } from "../components/settings/BankConnectionsCard.tsx";
+import { BankConnections } from "../components/settings/BankConnections.tsx";
 import { ExportCard } from "../components/settings/ExportCard.tsx";
 import { AiActivityCard } from "../components/settings/AiActivityCard.tsx";
 import { BackupCard } from "../components/settings/BackupCard.tsx";
@@ -39,41 +38,45 @@ import { CurrencyCard } from "../components/settings/CurrencyCard.tsx";
 import { FeedbackCard } from "../components/settings/FeedbackCard.tsx";
 import { PushCard } from "../components/settings/PushCard.tsx";
 import { FeedbackInbox } from "../components/settings/FeedbackInbox.tsx";
+import { JevUsageCard } from "../components/settings/JevUsageCard.tsx";
 
 // Settings used to be one flat stack of ten cards — every screen's worth of configuration on one
 // page, so finding anything meant scrolling and recognising it by shape. Tabs group it the way
 // the rest of the app already groups things (`stat-tabs`, as on Stats and Advisor), and the tab
 // lives in the URL so a link to a specific group survives a reload.
+//
+// SE1 (2026-09-25), owner: «громіздко, не зрозуміло поділено». The tabs now follow what a person
+// comes here to do — about me · where the money comes from · how the app reaches me · the AI — and
+// each tab is split into captioned blocks. Merged: bank key + linked banks + «Стан бази» (one card),
+// sign-out + sign-out-everywhere (one card). Gone from users' view: the «Обслуговування» tab (three
+// one-off repair buttons for old data — now the owner's «Адмін», with the users and the inbox).
 const TABS = {
-  account: "setup.tabAccount",
-  data: "setup.tabData",
+  account: "setup.tabGeneral",
+  data: "setup.tabBanks",
+  channels: "setup.tabChannels",
   ai: "setup.tabAi",
-  maintenance: "setup.tabMaintenance",
-  // Owner-only, filtered out below. Its own tab rather than a card inside "Account": with open
-  // registration this is a list that grows, and a growing table wedged between personal settings
-  // pushes everything the owner actually configures below the fold.
-  users: "setup.tabUsers",
+  // Owner-only, filtered out below.
+  admin: "setup.tabAdmin",
 } as const;
 type SetupTab = keyof typeof TABS;
+/** Old links (`?tab=users`, `?tab=maintenance`) land where their content went. */
+const LEGACY_TAB: Record<string, SetupTab> = { users: "admin", maintenance: "admin" };
 
 export function Setup() {
   const t = useT();
   const [params, setParams] = useSearchParams();
   const raw = params.get("tab");
-  const tab: SetupTab = raw && raw in TABS ? (raw as SetupTab) : "account";
+  const mapped = raw ? LEGACY_TAB[raw] ?? raw : null;
   const setTab = (v: SetupTab) => setParams((p) => { p.set("tab", v); return p; }, { replace: true });
 
-  const { data: status } = useGetSetupStatusQuery(undefined, { pollingInterval: 5000 });
-  const [detectTransfers, transfersState] = useDetectTransfersMutation();
-  const [applySubCats, subCatsState] = useApplySubscriptionCategoriesMutation();
-  const [logout] = useLogoutMutation();
   const { data: me } = useGetMeQuery();
   const isDemo = me?.demo === true; // a sandbox has no account to erase
-  // Owner-only surfaces: the users tab, and inside the Telegram card the one button that
+  // Owner-only surfaces: the admin tab, and inside the Telegram card the one button that
   // reconfigures a GLOBAL resource (the bot's webhook). Everything else about Telegram is now
   // per-user (§D1) — the push target is this user's own linked chat, so hiding the card from
   // them would hide a feature that works for them.
   const isOwner = me?.user?.is_owner === true;
+  const tab: SetupTab = mapped && mapped in TABS && (mapped !== "admin" || isOwner) ? (mapped as SetupTab) : "account";
 
   return (
     <>
@@ -88,7 +91,7 @@ export function Setup() {
         {(Object.keys(TABS) as SetupTab[])
           // A tab nobody but the owner may open must not be visible to anyone else — a 403 behind
           // a tab still promises a feature that does not exist for that person.
-          .filter((k) => k !== "users" || isOwner)
+          .filter((k) => k !== "admin" || isOwner)
           .map((k) => (
             <button key={k} role="tab" aria-selected={tab === k} className={`stat-tab ${tab === k ? "active" : ""}`} onClick={() => setTab(k)}>
               {t(TABS[k])}
@@ -96,118 +99,132 @@ export function Setup() {
           ))}
       </div>
 
-      {/* Профіль і AI-блоки — на всю ширину (текстове поле / перемикачі моделей потребують місця);
-          решта — картки-групи дій у 2-колонковій сітці (§налаштування-layout). */}
+      {/* ONE grid, no sub-blocks (owner, 2026-09-25: «огромні пробіли між блоками»): each block
+          balanced its own two columns, so a short card beside a tall one left a hole the height of
+          the difference. In one flow the columns balance each other: currency + sessions on the
+          left, feedback on the right, the danger zone spanning last. */}
       {tab === "account" && (
-        <div className="settings-grid">
+        <SetBlock>
           <ProfileCard />
           {/* §BASE-CUR: beside the language switch in the shell header, this is the other half of
               "how the app talks to me" — and the half an English-reading visitor notices first. */}
           <CurrencyCard />
-          {/* §D1: адресат тепер персональний, тож картка — для всіх; owner-only лишилась
-              лише реєстрація глобального вебхука (всередині картки). */}
-          <TelegramCard isOwner={isOwner} />
-          {/* Поруч із Telegram, бо відповідають на те саме питання — «скажи мені, коли щось
-              важливе, не змушуючи відкривати застосунок». Людині потрібен щонайбільше один із них. */}
-          <PushCard />
-          {/* Для всіх, включно з демо: людина, яка бачить застосунок уперше, і помічає незрозуміле,
-              а форма, доступна лише після реєстрації, збирає відгуки від тих, хто вже проминув
-              зламане місце. */}
+          <SessionsCard isDemo={isDemo} />
+          {/* For everyone, the demo included: a first-time visitor is exactly who notices what is
+              unclear, and a form behind sign-up only hears from people past the broken part. */}
           <FeedbackCard />
-          {/* Beside the session controls, because it is the same question — which credentials can
-              reach this account — and the revoke buttons should be within one glance of each
-              other. Hidden in the demo: a sandbox lives 24h, so a token minted here would stop
-              working the same day (the server refuses it outright, §MCP). */}
-          {/* §SEARCH-VEC — above the MCP card: both are about where this person's data can
-              be reached from, and this one is the newer promise. */}
-          {!isDemo && <SearchCard />}
-          {!isDemo && <McpCard />}
-          {!isDemo && <QuickAddCard />}
-          {!isDemo && <SessionsCard />}
           {!isDemo && <DangerZone />}
-        </div>
+        </SetBlock>
       )}
 
       {tab === "data" && (
-        <div className="settings-grid">
-          {/* Keys first: every step of the first run needs them, so a page that opened on the
-              checklist would be asking for actions that cannot succeed yet. */}
-          <CredentialsCard kind="bank" />
-          <BankConnectionsCard />
-          <CredentialsCard kind="ai" />
-          <FirstRun />
-          <div className="card set-card">
-            <div className="set-card-h"><Icon name="stats" size={16} />{t("setup.dbState")}</div>
-            <div className="stack" style={{ marginTop: 12 }}>
-              <Status label={t("setup.accountsInDb")} value={status?.accounts ?? "…"} />
-              <Status label={t("setup.txCount")} value={status?.transactions ?? "…"} />
-              <Status label={t("setup.webhookStatus")} value={status?.webhookRegistered ? t("setup.registered") : t("setup.notRegistered")} />
-            </div>
-          </div>
-          <CsvImportCard />
-          {/* Ручний експорт стоїть поруч з імпортом; автоматичні копії — одразу під ним, бо це
-              відповідь на те саме питання «а якщо все зникне», тільки без «якщо я не забуду». */}
-          <ExportCard />
-          {!isDemo && <BackupCard />}
-        </div>
+        <>
+          <SetBlock title={t("setup.blockConnect")}>
+            {/* Keys first: every step of the first run needs them. The checklist folds to one line
+                once it is done. */}
+            <FirstRun />
+            <CredentialsCard kind="bank"><BankConnections /></CredentialsCard>
+          </SetBlock>
+          <SetBlock title={t("setup.blockFiles")}>
+            <CsvImportCard />
+            {/* Manual export beside the import; automatic copies right after it — the same question,
+                «what if it all disappears», without «if I remember». */}
+            <ExportCard />
+            {!isDemo && <BackupCard />}
+          </SetBlock>
+        </>
       )}
 
+      {tab === "channels" && (
+        <>
+          <SetBlock title={t("setup.blockNotify")}>
+            {/* §D1: the recipient is personal, so the card is for everyone; only registering the
+                global webhook stays owner-only (inside the card). Push answers the same question. */}
+            <TelegramCard isOwner={isOwner} />
+            <PushCard />
+          </SetBlock>
+          {/* Hidden in the demo: a sandbox lives 24h, so a token minted here would stop working the
+              same day (the server refuses it outright, §MCP). */}
+          {!isDemo && (
+            <SetBlock title={t("setup.blockAccess")}>
+              <McpCard />
+              <QuickAddCard />
+            </SetBlock>
+          )}
+        </>
+      )}
+
+      {/* Every AI card is full width, stacked: no pair here has matching heights, and a pair that
+          does not match is a hole (owner, 2026-09-25). Keys first, then what the AI costs and what
+          it changed, then search. */}
       {tab === "ai" && (
-        <div className="settings-grid">
+        <SetBlock>
+          <CredentialsCard kind="ai" />
           <AiUsageCard />
           {/* §AI-AUDIT beside the spend card on purpose: one says what the model COST, the other
               what it CHANGED. Those are the two questions people have about an AI in their data. */}
           <AiActivityCard />
-        </div>
+          {!isDemo && <SearchCard />}
+        </SetBlock>
       )}
 
-      {/* Guarded twice: the tab is hidden above, and the content is gated here — a hidden tab is
-          still reachable by typing `?tab=users` into the address bar. */}
-      {tab === "users" && isOwner && (
-        <div className="settings-grid">
-          <UsersCard />
-          <FeedbackInbox />
-        </div>
+      {/* Guarded twice: the tab is hidden above, and `tab` falls back to «account» for anyone else
+          — a hidden tab is still reachable by typing `?tab=admin` into the address bar. */}
+      {tab === "admin" && isOwner && (
+        <>
+          <SetBlock title={t("setup.blockPeople")}>
+            <UsersCard />
+            <FeedbackInbox />
+          </SetBlock>
+          <SetBlock title={t("jevuse.block")}>
+            <JevUsageCard />
+          </SetBlock>
+          <SetBlock title={t("setup.maintenance")}>
+            <MaintenanceCard />
+          </SetBlock>
+        </>
       )}
-
-      {tab === "maintenance" && (
-        <div className="settings-grid">
-          <div className="card set-card">
-            <div className="set-card-h"><Icon name="settings" size={16} />{t("setup.maintenance")}</div>
-            <p className="set-card-sub">{t("setup.maintenanceSub")}</p>
-            <div className="stack">
-              <button
-                className="btn"
-                disabled={transfersState.isLoading}
-                onClick={async () => {
-                  const r = await detectTransfers().unwrap();
-                  toast.success(t("setup.transfersMarked", { n: r.marked }));
-                }}
-              >
-                {t("setup.findTransfers")}
-              </button>
-              <button
-                className="btn"
-                disabled={subCatsState.isLoading}
-                onClick={async () => {
-                  const r = await applySubCats().unwrap();
-                  toast.success(t("setup.subCatsApplied", { n: r.fixed }));
-                }}
-              >
-                {t("setup.applySubCats")}
-              </button>
-              <TranslitFixes />
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div className="set-footer">
-        <button className="btn ghost" onClick={async () => { clearLocalUserData(); await logout(); }}>
-          {t("setup.logout")}
-        </button>
-      </div>
     </>
+  );
+}
+
+/** A captioned group of cards inside a tab (SE1): the caption says what the block is FOR. A tab
+ *  whose cards only balance in one flow is a single block with no caption. */
+function SetBlock({ title, children }: { title?: string; children: ReactNode }) {
+  return (
+    <section className="set-block">
+      {title && <div className="section-head"><h2>{title}</h2></div>}
+      <div className="settings-grid">{children}</div>
+    </section>
+  );
+}
+
+function MaintenanceCard() {
+  const t = useT();
+  const [detectTransfers, transfersState] = useDetectTransfersMutation();
+  const [applySubCats, subCatsState] = useApplySubscriptionCategoriesMutation();
+  return (
+    <div className="card set-card">
+      <div className="set-card-h"><Icon name="settings" size={16} />{t("setup.maintenance")}</div>
+      <p className="set-card-sub">{t("setup.maintenanceSub")}</p>
+      <div className="stack">
+        <button className="btn" disabled={transfersState.isLoading}
+          onClick={async () => {
+            try { const r = await detectTransfers().unwrap(); toast.success(t("setup.transfersMarked", { n: r.marked })); }
+            catch (e) { toast.error(errText(e)); }
+          }}>
+          {t("setup.findTransfers")}
+        </button>
+        <button className="btn" disabled={subCatsState.isLoading}
+          onClick={async () => {
+            try { const r = await applySubCats().unwrap(); toast.success(t("setup.subCatsApplied", { n: r.fixed })); }
+            catch (e) { toast.error(errText(e)); }
+          }}>
+          {t("setup.applySubCats")}
+        </button>
+        <TranslitFixes />
+      </div>
+    </div>
   );
 }
 
@@ -230,15 +247,21 @@ export function Setup() {
  * most afraid to touch. It is an ordinary card now, next to the other account controls; the red
  * card keeps exactly one thing in it, which is what makes red mean something.
  */
-function SessionsCard() {
+function SessionsCard({ isDemo }: { isDemo: boolean }) {
   const t = useT();
   const [logoutAll, logoutAllState] = useLogoutAllMutation();
+  const [logout] = useLogoutMutation();
+  // SE1: «вийти» and «вийти всюди» are one card — the plain sign-out used to be a lone button under
+  // the «Обслуговування» tab, the one place nobody looks for it.
   return (
     <div className="card set-card">
       <div className="set-card-h"><Icon name="settings" size={16} />{t("setup.sessionsTitle")}</div>
       <p className="set-card-sub">{t("setup.logoutAllHint")}</p>
       <div className="stack" style={{ marginTop: 12 }}>
-        <button
+        <button className="btn" onClick={async () => { clearLocalUserData(); await logout(); }}>
+          {t("setup.logout")}
+        </button>
+        {!isDemo && <button
           className="btn"
           disabled={logoutAllState.isLoading}
           onClick={async () => {
@@ -250,7 +273,7 @@ function SessionsCard() {
           }}
         >
           {t("setup.logoutAll")}
-        </button>
+        </button>}
       </div>
     </div>
   );
@@ -345,15 +368,6 @@ function TranslitFixes() {
           </button>
         </>
       )}
-    </div>
-  );
-}
-
-function Status({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="row" style={{ justifyContent: "space-between" }}>
-      <span className="label">{label}</span>
-      <span className="mono">{value}</span>
     </div>
   );
 }

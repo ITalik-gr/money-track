@@ -321,6 +321,15 @@ export interface WeekdaySpend {
    * the headline reads "Sundays cost 4× a Tuesday" off a single standing charge.
    */
   lumpy: boolean;
+  /**
+   * §WEEKDAY-HABIT — the same day as BEHAVIOUR: without operations attached to a plan (rent,
+   * subscriptions — their date is a contract, not a habit) and without the one payment that
+   * carries the day when it is lumpy. `habit_typical` divides by `days`, like `typical`. Present
+   * only on `/analytics/weekday`; `typical` stays the full canon (AI context, projection).
+   */
+  habit_typical?: number;
+  /** The single largest operation taken OUT of the habit figure (0 when none was). */
+  lump?: number;
 }
 export interface WeekdayAnalytics {
   from: number; to: number;
@@ -328,6 +337,8 @@ export interface WeekdayAnalytics {
   /** dow with the highest `typical`, LUMPY DAYS EXCLUDED; null when nothing qualifies. */
   busiest: number | null;
   weekend_share_pct: number | null; // частка сб+нд у витратах вікна
+  /** §WEEKDAY-HABIT: busiest weekday and weekend share on the habit figures (see above). */
+  habit?: { busiest: number | null; weekend_share_pct: number | null; planned: number; lumps: number };
 }
 
 /**

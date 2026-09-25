@@ -430,7 +430,7 @@ function AiPanel({ hasAiKey, accounts, cats, onWrote }: {
             new accounts have no key, and a dead "Parse with AI" is the first thing they would meet. */}
         {!hasAiKey ? (
           <p className="ai-block-hint">
-            {t("add.aiNeedsKey")} <a href="/setup?tab=data">{t("add.aiNeedsKeyCta")} →</a>
+            {t("add.aiNeedsKey")} <a href="/setup?tab=ai">{t("add.aiNeedsKeyCta")} →</a>
           </p>
         ) : (
           <>

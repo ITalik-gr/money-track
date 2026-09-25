@@ -48,7 +48,7 @@ export function McpHint() {
       <Icon name="spark" size={14} />
       <span>
         {t("dash.mcpHintBody")}{" "}
-        <Link to="/setup?tab=account" onClick={dismiss}>{t("dash.mcpHintCta")}</Link>
+        <Link to="/setup?tab=channels" onClick={dismiss}>{t("dash.mcpHintCta")}</Link>
       </span>
       <button type="button" onClick={dismiss} aria-label={t("common.close")}>×</button>
     </div>

@@ -290,6 +290,10 @@ The client never derives it.
 - **§WEEKDAY** (`lib/finance/weekday.ts`): weekday in Kyiv, divided by the number of such days
   (`typical`), `busiest` among non-lump days; the advisor sees the same data. Day of month:
   `buildDomAnalytics` → `GET /analytics/day-of-month`.
+- **§WEEKDAY-HABIT:** the Statistics «when» chart reads the HABIT figures of `/analytics/weekday`:
+  plan-linked operations out (a contract's date is not behaviour), and on a lumpy day the one
+  payment that carries it out; both removals are reported (`habit.planned`, `habit.lumps`,
+  per-day `lump`). `typical` stays the full canon for the AI context and the projection.
 - **§HABITS** (`lib/finance/habits.ts`): new = ≥ 2 of the last 3 full months and 0 of the 3
   before; silent = ≥ 3 of the previous 6 and 0 in the last 2; current month excluded; `monthly`
   averages active months.

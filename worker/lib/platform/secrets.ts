@@ -12,8 +12,8 @@ import type { AppDb } from "./db-shim.ts";
 // `privat_credentials` holds JSON (`{"id","token"}`) because AutoClient needs two values. The
 // name says "credentials", not "token", so the next reader does not assume one opaque string is
 // always one secret — the SHAPE of a bank login is the bank's business (see providers/privat.ts).
-export type SecretName = "mono_token" | "anthropic_api_key" | "privat_credentials";
-export const SECRET_NAMES: SecretName[] = ["mono_token", "anthropic_api_key", "privat_credentials"];
+export type SecretName = "mono_token" | "anthropic_api_key" | "privat_credentials" | "jev_api_key";
+export const SECRET_NAMES: SecretName[] = ["mono_token", "anthropic_api_key", "privat_credentials", "jev_api_key"];
 
 export interface SecretStatus {
   name: SecretName;

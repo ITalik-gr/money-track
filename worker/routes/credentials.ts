@@ -51,6 +51,8 @@ credentials.get("/", async (c) => {
     // No deployment-wide fallback exists for PrivatBank and none ever will (§BANK-CRED): the
     // value is available exactly when this user stored it.
     privat_credentials: undefined,
+    // §JEV-SHARED: the owner's key covers everyone who has not stored one.
+    jev_api_key: c.env.JEV_API_KEY,
   };
   return c.json({
     secrets: statuses.map((s) => ({ ...s, available: s.set || !!envValue[s.name] })),
@@ -81,6 +83,10 @@ credentials.put("/:name", async (c) => {
       const { parseCredential } = await import("../lib/bank/providers/privat.ts");
       await assertWorking(parseCredential(secret));
       ok = true;
+    } else if (name === "jev_api_key") {
+      const { verifyJevKey } = await import("../lib/ai/judge.ts");
+      ok = await verifyJevKey(secret);
+      if (!ok) return c.json({ error: st(await resolveLocale(c.env), "errJevRejected") }, 400);
     } else {
       ok = await verifyAnthropic(secret);
       if (!ok) detail = st(await resolveLocale(c.env), "errAnthropicRejected");

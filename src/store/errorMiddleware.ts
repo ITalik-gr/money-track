@@ -26,7 +26,13 @@ export const apiErrorMiddleware: Middleware = () => (next) => (action) => {
       const last = recent.get(endpoint) ?? 0;
       if (now - last > DEDUP_MS) {
         recent.set(endpoint, now);
-        toast.error(`${endpoint}: ${errText(action.payload)}`);
+        // No endpoint name in front of the text (2026-09-25, before opening the app to friends):
+        // «generateAdvice: …» read as a crash to anyone but the developer. The name still goes
+        // to the console, where the developer looks. A missing AI key is not a failure at all —
+        // it is a step, so its toast links straight to where the key goes.
+        console.warn(`[api] ${endpoint}`, action.payload);
+        const code = (action.payload as { data?: { code?: string } } | undefined)?.data?.code;
+        toast.error(errText(action.payload), code === "no_ai_key" ? "/setup?tab=ai" : undefined);
       }
     }
   }

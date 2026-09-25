@@ -53,12 +53,18 @@ export interface Env extends Omit<Cloudflare.Env, "DB" | "SIGNUP" | "AI_JUDGE"> 
   // unset, demo AI falls back to the regular key (still capped + forced to Haiku).
   DEMO_ANTHROPIC_KEY?: string;
   /**
-   * TypeSafe key for Jev judgments (docs/JEV.md). Deployment-wide and therefore OWNER-ONLY
-   * (`judgeAvailable` in `lib/ai/judge.ts`) until §10 «whose key» is decided.
+   * TypeSafe key for Jev judgments (docs/JEV.md). In `UserDO` it becomes the user's OWN key
+   * (`user_secrets.jev_api_key`) or, without one, the owner's deployment key (§JEV-SHARED).
    * Declared as a plain `string` like `ANTHROPIC_API_KEY`: `wrangler types` reads `.dev.vars` and
    * emits it that way, and an optional here would not extend it. Unset still arrives as falsy.
    */
   JEV_API_KEY: string;
+  /**
+   * §JEV-SHARED — true when `JEV_API_KEY` on this request is the OWNER's deployment key lent to an
+   * account without its own (set in `UserDO`). Every judgment on it is counted in the directory
+   * (`jev_usage`) so the owner can see what the loan costs.
+   */
+  JEV_SHARED?: boolean;
   /**
    * Which judge answers the questions that are judgments (docs/JEV.md): `"jev"` routes enrich,
    * §SUB-REVIEW, §F2, §AI-CATCHUP, §CSV-AI and the search rerank through TypeSafe, anything else

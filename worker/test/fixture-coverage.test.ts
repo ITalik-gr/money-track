@@ -66,6 +66,7 @@ const DIR_EMPTY_OK: Record<string, string> = {
   demo_daily: "demo visit counters, written by the demo route",
   shared_state: "counters; demo caps drive them",
   feedback: "written by a public endpoint",
+  jev_usage: "§JEV-SHARED counter, written per judgment; judge-tx.test.ts drives it",
   migrations: "the migration ledger itself",
   // §MCP-OAUTH: state of a flow in progress, not reference data. A pre-seeded client or a
   // pre-seeded code would be a grant nobody consented to sitting in every test database, and

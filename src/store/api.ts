@@ -18,7 +18,7 @@ import type {
   NotifPrefs, NotifSchedule, NotificationFeed, PlannedRow, Overview, PeriodMode, PriceDrift, ReceiptItemsAnalytics,
   AiChange, AiDetectResult, SubscriptionOverview, AcceptPriceResult, SubStack, BudgetStatusList, CategoryOverview, CategoryShape, PlanFromHabit, TxChatHistory, RuleRow, RulePreview, RuleApplyResult, RecurringCandidate, Reimbursement, ReimbursementUsage, ReportFull, ReportListItem, SafeToSpend,
   SavedFilter, SavingsGoal, SearchResults, SpendingShape, SetupStatus, SliceDrill, SparkData, SpendPatterns,
-  Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, ParsedQuery, TxSplit, UpcomingSubs, AdminUser, WeekdayAnalytics,
+  Summary, TransferReviewRow, TranslitFix, TxDetail, TxRow, ParsedQuery, TxSplit, UpcomingSubs, AdminUser, JevSharedUsage, WeekdayAnalytics,
   AccountHistory, Habits, ChatSummary, ChatDetail, AdminFeedback, FeedbackContact, FeedbackKind,
   BackupList, RestoreResult, PushStatus, PushSendResult, RatesSnapshot,
   SpendProfile, Momentum, IncomeAllocation, SpendFloor, CommittedShare, PaydayEffect, IncomeRhythm, FxExposure,
@@ -662,6 +662,8 @@ export const api = createApi({
       query: () => "/admin/users",
       providesTags: ["AdminUsers"],
     }),
+    // §JEV-SHARED — live (the directory is written on every judgment), so no refresh button.
+    getJevUsage: b.query<JevSharedUsage, void>({ query: () => "/admin/jev-usage" }),
     // Counters normally land once a day from the cron; this is for the moment right after
     // telling somebody "sign up and try it", when a day-old number is the useless one.
     refreshAdminStats: b.mutation<{ ok: boolean; updated: number; failed: string[] }, void>({
@@ -1249,6 +1251,7 @@ export const {
   useAiDetectPlannedMutation,
   useGetSetupStatusQuery,
   useGetAdminUsersQuery,
+  useGetJevUsageQuery,
   useRefreshAdminStatsMutation,
   useInviteUserMutation,
   useSetUserStatusMutation,

@@ -9,6 +9,7 @@ import { idParam } from "./api/_shared.ts";
 import type { Env } from "../env.ts";
 import { deleteUser, findUserById, inviteUser, listUsers, setUserStatus, type UserStatus } from "../lib/platform/directory.ts";
 import type { AdminFeedback } from "../../shared/api/feedback.ts";
+import type { JevSharedUsage } from "../../shared/api/platform.ts";
 
 export const admin = new Hono<{ Bindings: Env; Variables: { userId: string } }>();
 
@@ -85,6 +86,36 @@ admin.post("/users/refresh-stats", async (c) => {
     }
   }
   return c.json({ ok: true, updated, failed });
+});
+
+/**
+ * §JEV-SHARED — what lending the owner's TypeSafe key costs. Read from the directory (`jev_usage`),
+ * written on every judgment that went out on the shared key; the owner's own calls are not in it.
+ */
+admin.get("/jev-usage", async (c) => {
+  const { sharedJevUsage } = await import("../lib/platform/directory.ts");
+  const { localYmd, localMonthStart, nowUnix } = await import("../lib/finance/time.ts");
+  const { callCostUsd } = await import("../lib/ai/cost.ts");
+  const { JEV_MODEL } = await import("../lib/ai/models.ts");
+  const now = nowUnix();
+  const today = localYmd(now);
+  const monthStart = localYmd(localMonthStart(now));
+  const cost = (tokens: number) => callCostUsd(JEV_MODEL, { input_tokens: tokens, output_tokens: 0 }, now);
+  const sum = (rows: { calls: number; input_tokens: number }[]) => {
+    const calls = rows.reduce((s, r) => s + r.calls, 0), input_tokens = rows.reduce((s, r) => s + r.input_tokens, 0);
+    return { calls, input_tokens, cost_usd: cost(input_tokens) };
+  };
+  const [all, month] = await Promise.all([
+    sharedJevUsage(c.env.DIRECTORY, "0000-00-00", today),
+    sharedJevUsage(c.env.DIRECTORY, monthStart, today),
+  ]);
+  return c.json({
+    enabled: !!c.env.JEV_API_KEY,
+    today: sum(month.map((r) => ({ calls: r.today_calls, input_tokens: r.today_tokens }))),
+    month: sum(month),
+    total: sum(all),
+    users: month.map((r) => ({ user_id: r.user_id, email: r.email, calls: r.calls, input_tokens: r.input_tokens, today_calls: r.today_calls, cost_usd: cost(r.input_tokens) })),
+  } satisfies JevSharedUsage);
 });
 
 admin.post("/users/invite", async (c) => {

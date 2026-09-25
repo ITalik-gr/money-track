@@ -82,7 +82,7 @@ export interface AdminUser {
 /** `set` — the user stored their OWN key. `available` — a usable key exists at all (the owner's
  *  comes from deployment secrets, so `set` is false while AI works fine). Gate UI on `available`. */
 export interface CredentialStatus {
-  name: "mono_token" | "anthropic_api_key";
+  name: "mono_token" | "anthropic_api_key" | "privat_credentials" | "jev_api_key";
   set: boolean;
   available: boolean;
   updated_at: number | null;
@@ -158,3 +158,18 @@ export type QuickAddResult =
   /** The card belongs to an account a bank already syncs — the feed will bring this operation. */
   | { ok: true; status: "synced"; account: string | null }
   | { ok: false; error: "amount_required" };
+
+/**
+ * §JEV-SHARED — `GET /admin/jev-usage`: how much of the owner's TypeSafe key other accounts use.
+ * Counts and input tokens only (never what was judged); `cost_usd` is priced by `cost.ts`.
+ */
+export interface JevSharedPeriod { calls: number; input_tokens: number; cost_usd: number }
+export interface JevSharedUsage {
+  /** False when the deployment has no `JEV_API_KEY` — nothing is lent, nothing to count. */
+  enabled: boolean;
+  today: JevSharedPeriod;
+  month: JevSharedPeriod;
+  total: JevSharedPeriod;
+  /** This month, per account, heaviest first. */
+  users: { user_id: string; email: string | null; calls: number; input_tokens: number; cost_usd: number; today_calls: number }[];
+}

@@ -603,9 +603,11 @@ analytics.get("/analytics/weekday", async (c) => {
 
   const curParam = url.searchParams.get("currency");
   const { mult, curFilter } = valueMode(rates, curParam ? Number(curParam) : null);
-  const rows = await analyticsRepo.spendByWeekday(c.env.DB, { mult, curFilter }, { from, to }, now);
-
-  return c.json(buildWeekdayAnalytics(rows, from, to) satisfies WeekdayAnalytics);
+  const [rows, habitRows] = await Promise.all([
+    analyticsRepo.spendByWeekday(c.env.DB, { mult, curFilter }, { from, to }, now),
+    analyticsRepo.spendByWeekday(c.env.DB, { mult, curFilter }, { from, to }, now, true), // §WEEKDAY-HABIT
+  ]);
+  return c.json(buildWeekdayAnalytics(rows, from, to, habitRows) satisfies WeekdayAnalytics);
 });
 
 // §HABITS — the assembly lives in the feature file (`lib/finance/habits.ts`); this is transport

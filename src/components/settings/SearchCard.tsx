@@ -39,7 +39,7 @@ export function SearchCard() {
   const remaining = left ?? data?.remaining ?? 0;
 
   return (
-    <div className="card">
+    <div className="card set-full">
       <div className="section-head"><h3>{t("search.title")}</h3></div>
       <p className="fop-note">{t("search.note")}</p>
 

@@ -48,10 +48,16 @@ export function SpendTiming({ series, sign, from, to, currency }: {
   const isOpen = (dim: NonNullable<Open>["dim"], value: string) => open?.dim === dim && open.value === value;
 
   const days = WEEK.map((dow) => wd.days.find((d) => d.dow === dow)).filter((d): d is NonNullable<typeof d> => !!d);
-  const wdMax = Math.max(...days.map((d) => d.typical), 1);
-  const busiest = wd.busiest != null ? days.find((d) => d.dow === wd.busiest) ?? null : null;
-  const weekendSum = days.filter((d) => d.dow === 0 || d.dow === 6).reduce((s, d) => s + d.spent, 0);
-  const weekendPct = wd.weekend_share_pct;
+  // §WEEKDAY-HABIT: the chart is about behaviour, so bars, the busiest day and the weekend share
+  // come from the habit figures — rent paid on a Sunday is a contract, not a Sunday habit (owner,
+  // 2026-09-25). The full figures stay in each tip. Older payloads without `habit` fall back.
+  const habitOf = (d: typeof days[number]) => d.habit_typical ?? d.typical;
+  const wdMax = Math.max(...days.map(habitOf), 1);
+  const busiestDow = wd.habit ? wd.habit.busiest : wd.busiest;
+  const busiest = busiestDow != null ? days.find((d) => d.dow === busiestDow) ?? null : null;
+  const weekendSum = days.filter((d) => d.dow === 0 || d.dow === 6).reduce((s, d) => s + habitOf(d) * d.days, 0);
+  const weekendPct = wd.habit ? wd.habit.weekend_share_pct : wd.weekend_share_pct;
+  const setAside = wd.habit ? wd.habit.planned + wd.habit.lumps : 0;
 
   // Daily facts exist only when the overview is bucketed by day (week / month presets).
   const daily = series.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket));
@@ -70,7 +76,7 @@ export function SpendTiming({ series, sign, from, to, currency }: {
       <div className="stat-facts" style={{ marginBottom: 12 }}>
         <div className="fact">
           <FactLabel info={<>{t("wd.tip")}</>}>{t("stats.when.busiest")}</FactLabel>
-          <span className="fact-val">{busiest ? <>{weekdayLong(busiest.dow)} · {money(busiest.typical)}</> : "—"}</span>
+          <span className="fact-val">{busiest ? <>{weekdayLong(busiest.dow)} · {money(habitOf(busiest))}</> : "—"}</span>
         </div>
         <div className="fact">
           <FactLabel>{t("stats.when.weekend")}</FactLabel>
@@ -100,22 +106,28 @@ export function SpendTiming({ series, sign, from, to, currency }: {
           <>
             <div className="wd-bars">
               {days.map((d) => (
-                <HoverTip key={d.dow} content={<TipBody label={weekdayLong(d.dow)} value={<>{money(d.typical)} · {t("stats.patterns.typicalDay")}</>}
-                  sub={<>{money(d.spent)} · {Math.round((d.spent / spentTotal) * 100)}{t("stats.patterns.pctOfPeriod")}</>} />}>
+                <HoverTip key={d.dow} content={<TipBody label={weekdayLong(d.dow)} value={<>{money(habitOf(d))} · {t("stats.patterns.typicalDay")}</>}
+                  sub={<>
+                    {(d.lump ?? 0) > 0 && <div>{t("stats.when.lumpTip", { amount: money(d.lump ?? 0) })}</div>}
+                    <div>{t("stats.when.allTip", { amount: money(d.spent) })} · {Math.round((d.spent / spentTotal) * 100)}{t("stats.patterns.pctOfPeriod")}</div>
+                  </>} />}>
                   <button type="button" className={`wd-col ${isOpen("weekday", String(d.dow)) ? "open" : ""}`}
                     onClick={() => toggle({ dim: "weekday", value: String(d.dow), label: t("stats.patterns.wdDrill", { weekday: weekdayLong(d.dow) }) })}>
                     {/* A day carried by one payment (rent) is drawn hatched, not hidden: it is true,
                         just not a habit. */}
                     <div className="wd-bar-wrap">
-                      <div className={`wd-bar${d.lumpy ? " lumpy" : ""}${d.dow === wd.busiest ? " busiest" : ""}`}
-                        style={{ transform: `scaleY(${Math.max(0.02, d.typical / wdMax)})` }} />
+                      <div className={`wd-bar${!wd.habit && d.lumpy ? " lumpy" : ""}${d.dow === busiestDow ? " busiest" : ""}`}
+                        style={{ transform: `scaleY(${Math.max(0.02, habitOf(d) / wdMax)})` }} />
                     </div>
                     <span className="wd-lbl">{weekdayShort(d.dow)}</span>
                   </button>
                 </HoverTip>
               ))}
             </div>
-            <p className="deep-desc">{weekendPct != null && weekendPct >= 40 ? t("stats.patterns.weekendHigh") : t("stats.patterns.weekendLow")}</p>
+            <p className="deep-desc">
+              {weekendPct != null && weekendPct >= 40 ? t("stats.patterns.weekendHigh") : t("stats.patterns.weekendLow")}
+              {setAside > 0 && <> <span className="muted">{t("stats.when.setAside", { amount: money(setAside) })}</span></>}
+            </p>
           </>
         ) : (
           <>

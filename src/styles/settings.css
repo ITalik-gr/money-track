@@ -259,7 +259,6 @@
   .fr-step { grid-template-columns: auto minmax(0, 1fr); }
   .fr-action { grid-column: 2; justify-self: start; }
 }
-.set-footer { display: flex; justify-content: flex-end; }
 
 /* Ключі — картка на всю ширину, два ключі поруч. Кожен ключ = самодостатній блок
    (статус · підказка · інструкція · поле), тож колонка розділена бордером, а не просто gap-ом. */

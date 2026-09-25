@@ -57,6 +57,7 @@ type RunState = { active: StepId | null; failed: StepId | null };
 
 export function FirstRun() {
   const t = useT();
+  const [expanded, setExpanded] = useState(false);
   const { data: status } = useGetSetupStatusQuery(undefined, { pollingInterval: 5000 });
   const { data: creds } = useGetCredentialsQuery();
   const [syncAccounts] = useSyncAccountsMutation();
@@ -146,8 +147,20 @@ export function FirstRun() {
 
   const runnableTodo = STEPS.some((s) => s.runnable && state[s.id] === "todo");
 
+  // SE1 (2026-09-25): a finished checklist is one line. At full size it was the tallest card in
+  // Settings (≈600px) for someone who set the app up months ago; the steps stay one click away.
+  if (allDone && !expanded) {
+    return (
+      <div className="card set-card set-full fr-done">
+        <span className="fr-done-mark"><Icon name="check" size={14} /></span>
+        <span className="fr-done-t">{t("setup.firstRunDoneLine")}</span>
+        <button className="btn ghost sm" onClick={() => setExpanded(true)}>{t("setup.firstRunShow")}</button>
+      </div>
+    );
+  }
+
   return (
-    <div className="card set-card">
+    <div className="card set-card set-full">
       <div className="set-card-h"><Icon name="repeat" size={16} />{t("setup.firstRun")}</div>
       <p className="set-card-sub">{allDone ? t("setup.firstRunAllDone") : t("setup.firstRunSub")}</p>
 

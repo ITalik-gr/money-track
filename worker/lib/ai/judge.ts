@@ -12,6 +12,7 @@ import type { Env } from "../../env.ts";
 import { isDemoEnv } from "../platform/demo.ts";
 import { recordUsage } from "./cost.ts";
 import { JEV_MODEL } from "./models.ts";
+import { localYmd } from "../finance/time.ts";
 
 const API = "https://api.typesafe.ai/v1/systemone";
 
@@ -33,14 +34,15 @@ export interface JudgeUsage { input_tokens: number; output_tokens: number }
 /**
  * Whether judgments are available on THIS request.
  *
- * Owner-only because `JEV_API_KEY` is the OWNER's key (`docs/JEV.md §10`, decided 2026-09-21): a deployment-wide
- * secret, and a deployment-wide secret applied to every user is exactly the defect `UserDO`'s
- * `userCredentials` was fixed for (strangers' ledgers billed to — and sent under — the owner's
- * account). A demo never reaches it at all: `demo.ts` caps spend in Anthropic dollars and knows
- * nothing about a second provider, so an uncapped path is simply closed.
+ * §JEV-SHARED (2026-09-25, reversing the owner-only rule of 2026-09-21 on the owner's decision):
+ * every account has Jev — on its own TypeSafe key if it stored one, on the owner's otherwise
+ * (`UserDO.userCredentials` decides which and sets `JEV_SHARED`). The owner-only rule existed so
+ * strangers' ledgers were not billed to the owner; for Jev the owner accepts the bill (input-only,
+ * cents per thousand) and sees it counted (`jev_usage`, Settings → Адмін). A demo still never
+ * reaches it: `demo.ts` caps spend in Anthropic dollars and knows nothing about a second provider.
  */
 export function judgeAvailable(env: Env): boolean {
-  return !!env.JEV_API_KEY && !!env.IS_OWNER && !isDemoEnv(env);
+  return !!env.JEV_API_KEY && !isDemoEnv(env);
 }
 
 /**
@@ -82,5 +84,28 @@ export async function judge<K extends string>(
   // Same counter as every Anthropic call, so «💸 Витрати на AI» stays the whole bill. The price
   // basis differs (input only), and `cost.ts` carries that as its own row rather than a special case.
   await recordUsage(env, JEV_MODEL, usage);
+  if (env.JEV_SHARED && env.USER_ID) {
+    // Best-effort: a missed count must never fail the judgment it counts.
+    try {
+      const { recordSharedJev } = await import("../platform/directory.ts");
+      await recordSharedJev(env.DIRECTORY, env.USER_ID, localYmd(Math.floor(Date.now() / 1000)), usage.input_tokens);
+    } catch (e) { console.warn("[jev] shared usage not recorded", e); }
+  }
   return { answers: answers as Record<K, JudgeAnswer>, usage };
+}
+
+/**
+ * A stored TypeSafe key is checked before it is saved, like every other credential: one trivial
+ * yes/no question (a few input tokens). `false` only for a key the API REFUSED (401/403); any other
+ * failure throws, so the caller stores the key as «not verified» instead of rejecting a good one.
+ */
+export async function verifyJevKey(key: string): Promise<boolean> {
+  const res = await fetch(API, {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({ model: JEV_MODEL, state: { ping: true }, questions: { ok: { type: "noul", instructions: "Is `ping` true?" } } }),
+  });
+  if (res.status === 401 || res.status === 403) return false;
+  if (!res.ok) throw new Error(`TypeSafe ${res.status}`);
+  return true;
 }
