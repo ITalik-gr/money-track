@@ -1,5 +1,6 @@
 import { useGetSummaryQuery } from "../../store/api.ts";
 import { Money } from "../ui/Money.tsx";
+import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 import { useT } from "../../i18n/index.ts";
 
 // Кредитний ліміт чорної (§5): власне / борг — ніколи не зливаємо. Стиль проекту.
@@ -31,7 +32,10 @@ export function CreditBanner() {
           <span className="credit-v"><Money minor={limit} decimals={false} /></span>
         </div>
       </div>
-      <div className="credit-meter2"><span style={{ width: `${pct}%` }} /></div>
+      <HoverTip content={<TipBody label={t("cb.used")} value={<Money minor={used} decimals={false} />}
+        sub={<>{t("tip.ofLimit", { pct: Math.round(pct) })} · {t("tip.left")} <Money minor={Math.max(0, limit - used)} decimals={false} /></>} />}>
+        <div className="credit-meter2"><span style={{ width: `${pct}%` }} /></div>
+      </HoverTip>
     </div>
   );
 }

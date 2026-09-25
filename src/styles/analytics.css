@@ -152,3 +152,59 @@
 /* «Part of this did not load» — a statement, not a broken slide, so it reads as prose with a way
    out rather than as an error card wedged between two figures. */
 .wr-partial { display: flex; align-items: center; gap: 8px; color: var(--neg); }
+
+/* ---- trend rows (`.trows` / `.trow`) — spend by category, top merchants -------------------------
+   Two lines per row: name over a proportion bar on the left, the amount over its share on the
+   right, and the 6-month sparkline between them at a size you can point at (112×32, was 58×20 and
+   unreadable). The per-row HoverTip that used to carry the count and the average is gone — those
+   are now printed on the row, and the hover belongs to the sparkline, which answers per month. */
+.trows { display: flex; flex-direction: column; padding: 6px; }
+.trow {
+  position: relative; display: grid; width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto minmax(84px, auto);
+  grid-template-areas: "name spark val" "bar spark sub";
+  align-items: center; gap: 6px 18px; padding: 10px 30px 10px 12px;
+  border: none; border-radius: var(--radius-sm); background: none;
+  color: inherit; text-align: left; text-decoration: none; cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out);
+}
+.trow.has-lead { grid-template-columns: auto minmax(0, 1fr) auto minmax(84px, auto); grid-template-areas: "lead name spark val" "lead bar spark sub"; }
+.trows > * + * { border-top: 1px solid var(--line); }
+.trow:hover, .trow.open { background: var(--surface-2); }
+.trow-lead { grid-area: lead; }
+.trow-name { grid-area: name; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; }
+.trow-name > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trow-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.trow-bar { grid-area: bar; display: block; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.trow:hover .trow-bar, .trow.open .trow-bar { background: var(--surface); }
+.trow-bar > span { display: block; height: 100%; min-width: 4px; border-radius: inherit; }
+.trow-spark { grid-area: spark; display: flex; }
+.trow-val { grid-area: val; text-align: right; white-space: nowrap; font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.trow-sub { grid-area: sub; text-align: right; white-space: nowrap; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* The affordance: a caret for a row that opens in place, an arrow for one that leaves the page. */
+.trow::after {
+  content: ""; position: absolute; top: 50%; right: 12px; width: 6px; height: 6px;
+  border-right: 1.6px solid var(--muted); border-bottom: 1.6px solid var(--muted);
+  transform: translateY(-70%) rotate(45deg); opacity: 0.5;
+  transition: transform var(--dur-2) var(--ease-out), opacity var(--dur-1) var(--ease-out);
+}
+.trow.open::after { transform: translateY(-30%) rotate(-135deg); border-color: var(--accent); opacity: 1; }
+a.trow::after { transform: translateY(-50%) rotate(-45deg); }
+.trow:hover::after { opacity: 1; }
+.trow.muted-row .trow-name, .trow.muted-row .trow-val { color: var(--ink-2); font-weight: 500; }
+
+.spark-hit { display: inline-flex; flex-shrink: 0; cursor: crosshair; }
+.spark-guide { stroke: var(--line-strong); stroke-width: 1; }
+
+@media (max-width: 640px) {
+  .trow { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "name val" "bar sub"; gap: 6px 12px; }
+  .trow.has-lead { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "lead name val" "lead bar sub"; }
+  .trow-spark { display: none; }
+}
+
+/* §CASH-PROJ — the cumulative chart's two headline numbers, and its wider tooltip (plan names). */
+.cum-summary { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 10px; font-size: var(--fs-sm); color: var(--muted); }
+.cum-summary b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.cum-summary b.pos { color: var(--pos); }
+.cum-summary b.neg { color: var(--neg); }
+.cum-tip { min-width: 220px; max-width: 280px; }

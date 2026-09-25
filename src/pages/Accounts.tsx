@@ -18,6 +18,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Select } from "../components/ui/Select.tsx";
 import { Skeleton } from "../components/ui/Skeleton.tsx";
 import { Sparkline } from "../components/ui/Sparkline.tsx";
+import { HoverTip, TipBody } from "../components/ui/HoverTip.tsx";
 import { NetworthCard } from "../components/stats/NetworthCard.tsx";
 import { AddAccountModal } from "../components/accounts/AddAccountModal.tsx";
 import { AccountBusinessToggle } from "../components/fop/AccountBusinessToggle.tsx";
@@ -181,6 +182,7 @@ function buildGroups(src: Account[], rates: Record<string, number>, t: ReturnTyp
 }
 
 function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
+  const t = useT();
   if (rows.length < 2) return null;
   const total = rows.reduce((s, [, v]) => s + v, 0) || 1;
   const COLORS = ["var(--accent)", "var(--c-teal)", "var(--c-ochre)", "var(--c-plum)", "var(--c-pine)"];
@@ -190,7 +192,10 @@ function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
     <div className="card cur-split">
       <div className="cur-split-bar">
         {rows.map(([code, v], i) => (
-          <span key={code} style={{ width: `${(v / total) * 100}%`, background: COLORS[i % COLORS.length] }} title={`${currencySign(code)}: ${formatMinor(v, { decimals: false })} ${baseSign()}`} />
+          <HoverTip key={code} content={<TipBody label={currencySign(code)} color={COLORS[i % COLORS.length]}
+            value={<>{formatMinor(v, { decimals: false })} {baseSign()}</>} sub={t("tip.shareOfTotal", { pct: curPcts[i] })} />}>
+            <span style={{ width: `${(v / total) * 100}%`, background: COLORS[i % COLORS.length] }} />
+          </HoverTip>
         ))}
       </div>
       <div className="cur-split-legend">
@@ -244,7 +249,10 @@ function FundsOverview() {
       {hasBar && (
         <div className="funds-bar">
           {parts.map((p) => p.val > 0 && (
-            <span key={p.key} style={{ width: `${(p.val / barTotal) * 100}%`, background: p.color }} title={`${p.label}: ${formatMinor(p.val, { decimals: false })} ${baseSign()}`} />
+            <HoverTip key={p.key} content={<TipBody label={p.label} color={p.color}
+              value={<>{formatMinor(p.val, { decimals: false })} {baseSign()}</>} sub={t("tip.shareOfTotal", { pct: Math.round((p.val / barTotal) * 100) })} />}>
+              <span style={{ width: `${(p.val / barTotal) * 100}%`, background: p.color }} />
+            </HoverTip>
           ))}
         </div>
       )}

@@ -25,6 +25,8 @@ import { resolveLocale } from "../platform/i18n.ts";
 
 /** Months of real charges the stack's history covers. A year: a yearly plan charges inside it once. */
 const PAID_MONTHS = 12;
+/** How many plans a month's tooltip names; the rest is «and N more». */
+const STACK_TOP = 4;
 /** Months averaged at each end of the history when measuring drift — one month is a coincidence. */
 const DRIFT_EDGE = 3;
 /** A trial is announced while it is fresh; after this it is simply the subscription. */
@@ -81,11 +83,23 @@ export async function subscriptionStack(
 
   // A zero-filled year: a month with nothing linked is a real zero here (the plans existed and took
   // nothing), unlike income, where an empty ledger month is «unknown».
-  const byMonth = new Map(paidRows.map((r) => [r.m, r.paid]));
-  const paid: { ym: string; paid: number }[] = [];
+  // Per plan, then folded per month: the column's tooltip names what the month was MADE of (the
+  // owner: «не дуже інформативно») — a total alone cannot say whether a tall month is a price rise
+  // or an annual renewal.
+  const byMonth = new Map<string, { paid: number; n: number; plans: { title: string; paid: number }[] }>();
+  for (const r of paidRows) {
+    const slot = byMonth.get(r.m) ?? { paid: 0, n: 0, plans: [] };
+    slot.paid += r.paid; slot.n += r.n; slot.plans.push({ title: r.title, paid: r.paid });
+    byMonth.set(r.m, slot);
+  }
+  const paid: SubStack["paid"] = [];
   for (let i = PAID_MONTHS; i >= 1; i--) {
     const ym = localYm(localMonthStart(now, -i));
-    paid.push({ ym, paid: byMonth.get(ym) ?? 0 });
+    const slot = byMonth.get(ym);
+    paid.push({
+      ym, paid: slot?.paid ?? 0, n: slot?.n ?? 0,
+      top: (slot?.plans ?? []).sort((a, b) => b.paid - a.paid).slice(0, STACK_TOP),
+    });
   }
   // Leading months before the first linked charge are not «the stack cost nothing» — the ledger or
   // the plans had not started. Trim them so the drift compares months that were actually observed.

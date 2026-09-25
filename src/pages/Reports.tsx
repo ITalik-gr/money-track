@@ -17,6 +17,7 @@ import { formatMinor, monthShort } from "../lib/format.ts";
 import { renderRich, renderRichPlain } from "../lib/citations.tsx";
 import { CashflowChart } from "../components/stats/CashflowChart.tsx";
 import { InfoTip } from "../components/ui/InfoTip.tsx";
+import { HoverTip, TipBody } from "../components/ui/HoverTip.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../lib/importance.ts";
 import { signFor } from "../lib/currency.ts";
@@ -370,7 +371,12 @@ function ImportanceSection({ data, sign }: { data: NonNullable<FinancialReport["
           {IMPORTANCE_LEVELS.map((lv) => {
             const row = byLevel(lv);
             if (!row?.amount_uah) return null;
-            return <span key={lv} style={{ width: `${(Math.abs(row.amount_uah) / total) * 100}%`, background: IMPORTANCE_META[lv].color }} title={`${t(IMPORTANCE_META[lv].labelKey)}: ${row.pct}%`} />;
+            return (
+              <HoverTip key={lv} content={<TipBody label={t(IMPORTANCE_META[lv].labelKey)} color={IMPORTANCE_META[lv].color}
+                value={<>{formatMinor(Math.abs(row.amount_uah) * 100, { decimals: false })} {sign}</>} sub={t("tip.shareOfSpend", { pct: row.pct })} />}>
+                <span style={{ width: `${(Math.abs(row.amount_uah) / total) * 100}%`, background: IMPORTANCE_META[lv].color }} />
+              </HoverTip>
+            );
           })}
         </div>
         <div className="imp-legend">

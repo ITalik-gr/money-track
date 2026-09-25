@@ -119,16 +119,6 @@
 .cat-page-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
 /* §CAT-SHARE — the category against everything else, one line above the tiles. */
 .cat-summary { margin: 0 0 12px; font-size: var(--fs-md); color: var(--ink-2); font-variant-numeric: tabular-nums; }
-/* §CAT-SETTINGS — the controls that belong to the category, where it is being looked at. */
-.cat-settings { margin-top: 14px; padding: 14px 18px; display: grid; gap: 12px; }
-.cs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.cs-row { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; }
-.cs-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); }
-.cs-seg { flex: 0 0 auto; }
-.cs-limit { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cs-input { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
-.cs-cur { color: var(--muted); font-size: var(--fs-sm); }
-.cs-note { font-size: var(--fs-xs); color: var(--muted); }
 .cat-page-dot { width: 12px; height: 12px; border-radius: 4px; flex-shrink: 0; }
 .cat-page-children { display: flex; flex-wrap: wrap; gap: 8px; }
 /* Also unstyled until now: a sub-category link rendered as bare underlined text in a row of them. */

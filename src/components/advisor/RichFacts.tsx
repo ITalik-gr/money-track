@@ -4,6 +4,7 @@ import { highlightAmounts } from "../../lib/highlight.tsx";
 import { useGetCategoriesQuery } from "../../store/api.ts";
 import type { AiFact } from "../../store/api.ts";
 import { baseSign } from "../../lib/currency.ts";
+import { Icon } from "../ui/Icon.tsx";
 
 // Стилізований рендер структурованого AI-виводу: headline + факти (суми/категорії/
 // дельти виділені) + порада. Спільний для інсайту й порад (DESIGN.md §7 F6).
@@ -42,8 +43,13 @@ export function RichFacts({ headline, facts, note, sign }: { headline?: string; 
                     </span>
                   )}
                   {f.amount != null && <span className={`fact-amt ${f.tone ?? "neutral"}`}>{fmt0.format(f.amount)} {sign ?? baseSign()}</span>}
+                  {/* The delta takes the fact's OWN tone (the model's verdict on the line): a rise
+                      is bad news on spending and good news on income, and the sign alone cannot
+                      tell which. Uncoloured when the model gave no verdict. */}
                   {f.delta_pct != null && (
-                    <span className="fact-delta">{f.delta_pct >= 0 ? "+" : ""}{f.delta_pct}%</span>
+                    <span className={`fact-delta ${f.tone === "neg" || f.tone === "pos" ? f.tone : ""}`}>
+                      {f.delta_pct > 0 ? "+" : ""}{f.delta_pct}%
+                    </span>
                   )}
                   {/* Факт без числового значення (напр. «Runway на burn») не лишаємо порожнім рядком. */}
                   {!hasVal && <span className="fact-amt muted-dash">—</span>}
@@ -53,7 +59,7 @@ export function RichFacts({ headline, facts, note, sign }: { headline?: string; 
           })}
         </div>
       )}
-      {note && <p className="rich-note">{highlightAmounts(note)}</p>}
+      {note && <p className="rich-note"><Icon name="spark" size={15} className="rich-note-ico" /><span>{highlightAmounts(note)}</span></p>}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useGetForecastQuery } from "../../store/api.ts";
 import { Money } from "../ui/Money.tsx";
 import { formatMinor } from "../../lib/format.ts";
 import { InfoTip } from "../ui/InfoTip.tsx";
+import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 import { useT } from "../../i18n/index.ts";
 import { baseSign } from "../../lib/currency.ts";
 
@@ -41,9 +42,12 @@ export function ForecastCard() {
           </div>
         </div>
 
-        <div className="fc-bar">
-          <div className="fc-fill" style={{ width: `${paceRatio * 100}%` }} />
-        </div>
+        <HoverTip content={<TipBody label={t("common.spent")} value={<Money minor={f.spend} decimals={false} />}
+          sub={t("tip.spentOf", { pct: Math.round(paceRatio * 100), of: formatMinor(f.projectedSpend, { decimals: false }) + " " + baseSign() })} />}>
+          <div className="fc-bar">
+            <div className="fc-fill" style={{ width: `${paceRatio * 100}%` }} />
+          </div>
+        </HoverTip>
         <div className="fc-legend">
           <span>{t("common.spent")} <b><Money minor={f.spend} decimals={false} /></b></span>
           <span className="muted">{t("fc.pace", { pace: formatMinor(f.pace, { decimals: false }) })}</span>

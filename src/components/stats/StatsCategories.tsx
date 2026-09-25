@@ -44,29 +44,28 @@ export function CategoryBreakdown({ rows, from, to, currency, sign }: {
     const color = secondaryStyle ? "var(--muted)" : (e.color ?? FALLBACK[i % FALLBACK.length]);
     const id = e.category_id;
     const open = openId != null && openId === id;
+    const series = id != null ? spark?.categories[String(id)] : undefined;
     return (
       <div key={`${id}-${i}`}>
-        <HoverTip content={
-          <><div className="tip-lbl">{e.category_name ?? noCat}</div>
-          <div className="r"><span className="d" style={{ background: color }} />{formatMinor(e.spent, { decimals: false })} {sign}</div>
-          <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{p.toFixed(0)}% · {e.n} {t("stats.txCountShort")} · {t("stats.avgShort")} {formatMinor(Math.round(e.spent / Math.max(1, e.n)), { decimals: false })} {sign}</div></>
-        }>
-          <button type="button" className={`catbar catbar-btn ${open ? "open" : ""}`}
-            onClick={() => id != null && setOpenId(open ? null : id)}>
-            <span className="cb-name"><span className="d" style={{ background: color }} />{e.category_name ?? noCat}</span>
-            <span className="cb-track"><span className="cb-fill" style={{ width: `${Math.min(p, 100)}%`, background: color }} /></span>
-            {id != null && spark?.categories[String(id)] && <Sparkline values={spark.categories[String(id)]} color={color} />}
-            <span className="cb-val">{formatMinor(e.spent, { decimals: false })} {sign}</span>
-            <span className="cb-pct">{p.toFixed(0)}%</span>
-          </button>
-        </HoverTip>
+        <button type="button" className={`trow ${open ? "open" : ""} ${secondaryStyle ? "muted-row" : ""}`}
+          onClick={() => id != null && setOpenId(open ? null : id)}>
+          <span className="trow-name"><span className="d" style={{ background: color }} /><span>{e.category_name ?? noCat}</span></span>
+          <span className="trow-bar"><span style={{ width: `${Math.min(p, 100)}%`, background: color }} /></span>
+          {series && (
+            <span className="trow-spark">
+              <Sparkline values={series} months={spark?.buckets} sign={sign} color={color} width={112} height={32} area />
+            </span>
+          )}
+          <span className="trow-val">{formatMinor(e.spent, { decimals: false })} {sign}</span>
+          <span className="trow-sub">{p.toFixed(0)}% · {e.n} {t("stats.txCountShort")}</span>
+        </button>
         {open && id != null && <CatDrill category={id} from={from} to={to} currency={currency} sign={sign} />}
       </div>
     );
   };
 
   return (
-    <div className="card flush"><div className="catbars">
+    <div className="card flush"><div className="trows">
       {primary.slice(0, 9).map((e, i) => bar(e, i, false))}
       {secondary.length > 0 && (
         <div className="cat-secondary">

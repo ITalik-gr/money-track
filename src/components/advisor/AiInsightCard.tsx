@@ -26,9 +26,6 @@ export function AiInsightCard({ days = 30 }: { days?: number }) {
           {isLoading ? t("ai.analyzing") : has ? t("ai.update") : t("ai.generate")}
         </button>
       </div>
-      {data?.usage && !data.empty && (
-        <div style={{ textAlign: "right", marginTop: -6, marginBottom: 8 }}><UsageCost usage={data.usage} /></div>
-      )}
       {structured ? (
         <RichFacts headline={structured.headline} facts={structured.facts} note={structured.note} sign={signFor(data?.cur ?? 980)} />
       ) : text ? (
@@ -36,6 +33,9 @@ export function AiInsightCard({ days = 30 }: { days?: number }) {
       ) : (
         <p className="ai-text muted">{t("ai.emptyPrompt")}</p>
       )}
+      {/* The cost is a footnote to the answer, not a caption under the button — squeezed between
+          the head and the headline it read as part of the insight. */}
+      {data?.usage && !data.empty && <div className="ai-cost"><UsageCost usage={data.usage} /></div>}
     </div>
   );
 }

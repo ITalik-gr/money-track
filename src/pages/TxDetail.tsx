@@ -1,24 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getLocale, dateFmt, numFmt } from "../i18n/locale.ts";
-import { AiChangeLog } from "../components/transactions/AiChangeLog.tsx";
 import { translate, useT } from "../i18n/index.ts";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  useChatTxMutation,
   useEditTransactionMutation,
-  useEnrichTransactionMutation,
   useGetCategoriesQuery,
   useGetEventsQuery,
   useGetTransactionQuery,
-  useGetTxChatQuery,
 } from "../store/api.ts";
-import { renderMarkdown } from "../lib/markdown.tsx";
 import { Money } from "../components/ui/Money.tsx";
 import { SimilarTx } from "../components/transactions/SimilarTx.tsx";
-import { WhyCategory } from "../components/transactions/WhyCategory.tsx";
+import { TxAiBlock } from "../components/transactions/TxAiBlock.tsx";
 import { BusinessToggle } from "../components/fop/BusinessToggle.tsx";
 import { MerchantLogo } from "../components/ui/MerchantLogo.tsx";
 import { Icon } from "../components/ui/Icon.tsx";
+import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { currencySign } from "../lib/format.ts";
@@ -74,21 +70,20 @@ export function TxDetail() {
   const t = useT();
   const { id = "" } = useParams();
   const navigate = useNavigate();
-  const { data: tx, isLoading } = useGetTransactionQuery(id, { skip: !id });
+  const { data: tx, isLoading, error, refetch } = useGetTransactionQuery(id, { skip: !id });
   const { data: cats } = useGetCategoriesQuery();
   const { data: events = [] } = useGetEventsQuery();
   const [editTx, { isLoading: saving }] = useEditTransactionMutation();
-  const [enrich, { isLoading: enriching }] = useEnrichTransactionMutation();
 
   const [merchant, setMerchant] = useState("");
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [realCategoryId, setRealCategoryId] = useState<number | null>(null);
-  const [note, setNote] = useState("");
   const [tags, setTags] = useState<number[]>([]);
   const [eventId, setEventId] = useState<number | null>(null);
   const [learn, setLearn] = useState(false);
   const [isTransfer, setIsTransfer] = useState(false);
   const [tagQuery, setTagQuery] = useState("");
+  const [tagOpen, setTagOpen] = useState(false);
   const [importance, setImportance] = useState<string | null>(null); // §6: override; null = як категорія
 
   const catOptions = useMemo(() => categoryOptions(cats), [cats]);
@@ -109,7 +104,6 @@ export function TxDetail() {
       setMerchant(tx.merchant ?? "");
       setCategoryId(tx.category_id);
       setRealCategoryId(tx.real_category_id ?? null);
-      setNote(tx.user_note ?? "");
       setIsTransfer(!!tx.is_transfer);
       setEventId(tx.event_id ?? null);
       setTags((tx.tags ?? []).map((t) => t.id));
@@ -122,6 +116,9 @@ export function TxDetail() {
   }
 
   if (isLoading) return <div className="empty">{t("common.loading")}</div>;
+  // A failed request is not «not found»: the row may well exist, and saying it does not would send
+  // the reader looking for a deleted operation that is fine.
+  if (error && !tx) return <ErrorNote error={error} onRetry={refetch} />;
   if (!tx) return <div className="card empty">{t("tx.notFound")}</div>;
 
   const isMono = tx.source === "mono";
@@ -138,13 +135,11 @@ export function TxDetail() {
 
   async function save() {
     try {
-      const noteChanged = note.trim() !== (tx?.user_note ?? "").trim();
       await editTx({
         id,
         body: {
           merchant: merchant.trim() || null,
           category_id: categoryId,
-          user_note: note.trim() || null,
           learn: isMono && learn,
           is_transfer: isTransfer,
           event_id: eventId,
@@ -154,15 +149,7 @@ export function TxDetail() {
         },
       }).unwrap();
       setLearn(false);
-      // §R6: якщо я написав/змінив нотатку для AI — одразу переосмислюємо категорію з нею
-      // (enrich має пріоритет №1 на user_note). Так «це було за освіту» реально спрацьовує.
-      if (noteChanged && note.trim()) {
-        toast.success(t("tx.savedEnriching"));
-        try { await enrich(id).unwrap(); toast.success(t("tx.aiNoted")); }
-        catch { toast.error(t("tx.aiNoteFailed")); }
-      } else {
-        toast.success(t("tx.saved"));
-      }
+      toast.success(t("tx.saved"));
     } catch (e) {
       toast.error(errText(e));
     }
@@ -271,112 +258,7 @@ export function TxDetail() {
             <TxReimbursementUsage txId={id} amount={tx.amount} currency={tx.currency_code} />
           )}
 
-          {/* Окремий AI-блок: що AI знає + розпізнавання + нотатка + інлайн-чат */}
-          <div className="card ai-block">
-            <div className="ai-block-head">
-              <span className="ai-block-title"><Icon name="spark" size={16} />{t("tx.aiBlockTitle")}</span>
-              <button className="btn ai-recognize" disabled={enriching}
-                onClick={async () => {
-                  try { await enrich(id).unwrap(); toast.success(t("tx.aiEnrichedDone")); }
-                  catch (e) { toast.error(errText(e)); }
-                }}>{enriching ? t("tx.analyzing") : t("tx.recognize")}</button>
-            </div>
-
-            {/*
-              The lead: WHAT this is and WHY, in one sentence, before any table. The block used to
-              open with a `status · recognised as · category` grid — eight rows of what the app
-              decided and not one word of what it decided from, which reads as a machine reporting
-              to itself.
-            */}
-            <WhyCategory txId={id} />
-
-            {/* §TAX-BASE — the business flag lives on the operation, next to the other things a
-                human decides about it, not on a settings screen. */}
-            <BusinessToggle txId={id} value={tx.is_business ?? null}
-              proposal={tx.ai_business} accountBusiness={tx.account_business} />
-
-            {/*
-              The facts stay, folded. They are reference — the exact MCC, the tags, the plan link —
-              wanted rarely and specifically, and open by default they were the loudest thing on a
-              page whose subject is a single payment. Native `<details>`: it keeps keyboard and
-              screen-reader behaviour that a custom toggle would have to reimplement badly.
-            */}
-            <details className="ai-details">
-              <summary className="ai-details-sum">{t("tx.aiFactsSummary")}</summary>
-            <div className="ai-facts">
-              <div className="ai-fact">
-                <span className="ai-fact-k">{t("tx.aiFact.status")}</span>
-                <span className="ai-fact-v">{tx.ai_enriched ? t("tx.aiStatusEnriched") : t("tx.aiStatusNotEnriched")}</span>
-              </div>
-              <div className="ai-fact">
-                <span className="ai-fact-k">{t("tx.aiFact.recognizedAs")}</span>
-                <span className="ai-fact-v">{tx.merchant ?? tx.comment ?? "—"}</span>
-              </div>
-              {tx.user_note && (
-                <div className="ai-fact">
-                  <span className="ai-fact-k">{t("tx.aiFact.myNote")}</span>
-                  <span className="ai-fact-v">📝 {tx.user_note}</span>
-                </div>
-              )}
-              {tx.ai_note && (
-                <div className="ai-fact">
-                  <span className="ai-fact-k">{t("tx.aiFact.aiUnderstands")}</span>
-                  <span className="ai-fact-v">{tx.ai_note}</span>
-                </div>
-              )}
-              {tx.planned_title && (
-                <div className="ai-fact">
-                  <span className="ai-fact-k">{t("tx.aiFact.planned")}</span>
-                  <span className="ai-fact-v">🔁 {tx.planned_title}</span>
-                </div>
-              )}
-              <div className="ai-fact">
-                <span className="ai-fact-k">{t("tx.aiFact.category")}</span>
-                <span className="ai-fact-v">
-                  {tx.category_color && <span className="ai-fact-dot" style={{ background: tx.category_color }} />}
-                  {tx.category_name ?? t("tx.noCategory")}
-                </span>
-              </div>
-              {looksTransfer && tx.real_category_name && (
-                <div className="ai-fact">
-                  <span className="ai-fact-k">{t("tx.aiFact.realCategory")}</span>
-                  <span className="ai-fact-v">
-                    {tx.real_category_color && <span className="ai-fact-dot" style={{ background: tx.real_category_color }} />}
-                    {tx.real_category_name}
-                  </span>
-                </div>
-              )}
-              {tx.tags.length > 0 && (
-                <div className="ai-fact">
-                  <span className="ai-fact-k">{t("tx.aiFact.tags")}</span>
-                  <span className="ai-fact-v ai-fact-tags">
-                    {tx.tags.map((t) => (
-                      <span key={t.id} className="ai-tag"><span className="ai-fact-dot" style={{ background: t.color ?? "var(--muted)" }} />{t.name}</span>
-                    ))}
-                  </span>
-                </div>
-              )}
-              {tx.mcc && (
-                <div className="ai-fact">
-                  <span className="ai-fact-k">{t(MCC_HINT_KEY)}</span>
-                  <span className="ai-fact-v mono">{tx.mcc}</span>
-                </div>
-              )}
-            </div>
-            </details>
-
-            <label className="stack" style={{ gap: 4, marginTop: 12 }}>
-              <span className="label">{t("tx.label.noteForAi")}</span>
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={t("tx.placeholder.noteForAi")} />
-              <span className="ai-block-sub">{t("tx.noteHint")}</span>
-            </label>
-
-            {/* Інлайн-чат: обговорити операцію, уточнити («це відпочинок») — AI оновить категорію */}
-            {/* §AI-AUDIT sits directly ABOVE the chat: the chat is where most of these changes
-                come from, so the record of them belongs next to their source. */}
-            <AiChangeLog txId={id} />
-            <TxAiChat txId={id} txName={tx.merchant ?? tx.comment ?? t("tx.chatFallback")} />
-          </div>
+          <TxAiBlock tx={tx} />
 
           {tx.receipt && (
             <div>
@@ -467,85 +349,91 @@ export function TxDetail() {
                 </div>
               )}
 
-              <div className="stack" style={{ gap: 8 }}>
-                <div className="row" style={{ justifyContent: "space-between", alignItems: "baseline" }}>
-                  <span className="label">{t("tx.label.tags")}</span>
-                  <span className="tags-count">{tags.length}/3</span>
+              {/* Tags are extra CATEGORIES on one row (at most three): «Подарунки» on a restaurant
+                  bill. The chosen ones and the «+» sit on one line, so an empty field is one small
+                  control rather than a label, a counter and a disclosure stacked up. */}
+              <div className="stack" style={{ gap: 6 }}>
+                <span className="label">{t("tx.label.tags")} · {tags.length}/3</span>
+                <div className="tag-line">
+                  {tags.map((tid) => {
+                    const c = orderedCats.find((x) => x.id === tid);
+                    if (!c) return null;
+                    return (
+                      <button key={tid} type="button" className="tag-chip on" aria-label={t("tx.tagRemove", { name: c.name })} onClick={() => toggleTag(tid)}>
+                        <span className="d" style={{ background: c.color ?? "var(--muted)" }} />
+                        {c.name}
+                        <span className="tag-chip-x" aria-hidden>×</span>
+                      </button>
+                    );
+                  })}
+                  {tags.length < 3 && (
+                    <button type="button" className={`tag-add ${tagOpen ? "open" : ""}`} aria-expanded={tagOpen} onClick={() => setTagOpen(!tagOpen)}>
+                      <Icon name="plus" size={13} />{t("tx.tagsPick")}
+                    </button>
+                  )}
                 </div>
-
-                {/* Вибрані — чипами зверху, щоб було видно й легко зняти */}
-                {tags.length > 0 && (
-                  <div className="tag-chosen">
-                    {tags.map((id) => {
-                      const c = orderedCats.find((x) => x.id === id);
-                      if (!c) return null;
+                {tagOpen && tags.length < 3 && (
+                  <div className="tag-panel">
+                    <input className="tag-search" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} placeholder={t("tx.placeholder.tagSearch")} />
+                    {(() => {
+                      const qq = tagQuery.trim().toLowerCase();
+                      const matches = (c: Category) => c.id !== categoryId && !tags.includes(c.id) && (!qq || c.name.toLowerCase().includes(qq));
+                      const groups: [string, Category[]][] = [
+                        [t("tx.tagGroup.expenses"), orderedCats.filter((c) => !c.is_income && matches(c))],
+                        [t("tx.tagGroup.income"), orderedCats.filter((c) => c.is_income && matches(c))],
+                      ];
+                      const atMax = tags.length >= 3;
                       return (
-                        <button key={id} type="button" className="tag-chip on" onClick={() => toggleTag(id)}>
-                          <span className="d" style={{ background: c.color ?? "var(--muted)" }} />
-                          {c.name}
-                          <span className="tag-chip-x">×</span>
-                        </button>
+                        <div className="tag-groups">
+                          {groups.map(([title, listc]) => listc.length === 0 ? null : (
+                            <div key={title} className="tag-group">
+                              <div className="tag-group-h">{title}</div>
+                              <div className="tag-chips">
+                                {listc.map((c) => (
+                                  <button key={c.id} type="button" disabled={atMax}
+                                    className={`tag-chip ${c.parent_id ? "sub" : ""}`} onClick={() => toggleTag(c.id)}>
+                                    <span className="d" style={{ background: c.color ?? "var(--muted)" }} />
+                                    {c.name}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                          {atMax && <div className="ai-block-sub">{t("tx.tagsMax3")}</div>}
+                        </div>
                       );
-                    })}
+                    })()}
                   </div>
                 )}
-
-                {/*
-                  Folded (2026-08-14). Forty category chips in a scrolling box were the tallest
-                  thing on the page — for a field that takes at most THREE tags and is usually
-                  left empty. The chosen ones stay above, outside the fold, so nothing already set
-                  is hidden. `<details>` keeps keyboard and screen-reader behaviour for free.
-                */}
-                <details className="tag-pick">
-                  <summary className="disclose">{t("tx.tagsPick")}</summary>
-
-                <input className="tag-search" value={tagQuery} onChange={(e) => setTagQuery(e.target.value)} placeholder={t("tx.placeholder.tagSearch")} />
-
-                {(() => {
-                  const qq = tagQuery.trim().toLowerCase();
-                  const matches = (c: Category) => c.id !== categoryId && !tags.includes(c.id) && (!qq || c.name.toLowerCase().includes(qq));
-                  const groups: [string, Category[]][] = [
-                    [t("tx.tagGroup.expenses"), orderedCats.filter((c) => !c.is_income && matches(c))],
-                    [t("tx.tagGroup.income"), orderedCats.filter((c) => c.is_income && matches(c))],
-                  ];
-                  const atMax = tags.length >= 3;
-                  return (
-                    <div className="tag-groups">
-                      {groups.map(([title, listc]) => listc.length === 0 ? null : (
-                        <div key={title} className="tag-group">
-                          <div className="tag-group-h">{title}</div>
-                          <div className="tag-chips">
-                            {listc.map((c) => (
-                              <button key={c.id} type="button" disabled={atMax}
-                                className={`tag-chip ${c.parent_id ? "sub" : ""}`} onClick={() => toggleTag(c.id)}>
-                                <span className="d" style={{ background: c.color ?? "var(--muted)" }} />
-                                {c.name}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                      {atMax && <div className="ai-block-sub">{t("tx.tagsMax3")}</div>}
-                    </div>
-                  );
-                })()}
-                </details>
               </div>
 
-              {isMono && (
-                <label className="row" style={{ gap: 8, alignItems: "flex-start" }}>
-                  <input type="checkbox" checked={learn} onChange={(e) => setLearn(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
-                  <span style={{ fontSize: 13 }}>
-                    {t("tx.learnHint.before")} <strong>{t("tx.learnHint.strong")}</strong> {t("tx.learnHint.after")}
+              {/* §TAX-BASE — a person's decision about the row, so it lives in the editor. It used to
+                  sit inside the AI block, where «Робоча операція» read as something the AI had
+                  concluded — and nobody could tell what it was for. */}
+              <BusinessToggle txId={id} value={tx.is_business ?? null}
+                proposal={tx.ai_business} accountBusiness={tx.account_business} />
+
+              {/* Switches, not checkboxes buried in a sentence: a title that says WHAT, a line that
+                  says what it changes. The old «Застосувати до всіх таких і **запамʼятати** — …» put
+                  the control in front of a paragraph and made the reader parse it to find out. */}
+              <div className="switch-list">
+                <label className="switch-row">
+                  <span className="switch-text">
+                    <span className="switch-title">{t("tx.transferTitle")}</span>
+                    <span className="switch-hint">{t("tx.transferHint2")}</span>
                   </span>
+                  <input type="checkbox" role="switch" className="switch" checked={isTransfer} onChange={(e) => setIsTransfer(e.target.checked)} />
                 </label>
-              )}
-              <label className="row" style={{ gap: 8, alignItems: "flex-start" }}>
-                <input type="checkbox" checked={isTransfer} onChange={(e) => setIsTransfer(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
-                <span style={{ fontSize: 13 }}>
-                  {t("tx.transferHint.before")} <strong>{t("tx.transferHint.strong")}</strong> {t("tx.transferHint.after")}
-                </span>
-              </label>
+                {isMono && (
+                  <label className="switch-row">
+                    <span className="switch-text">
+                      <span className="switch-title">{t("tx.learnTitle")}</span>
+                      <span className="switch-hint">{t("tx.learnHint2")}</span>
+                    </span>
+                    <input type="checkbox" role="switch" className="switch" checked={learn} onChange={(e) => setLearn(e.target.checked)} />
+                  </label>
+                )}
+              </div>
               <button className="btn primary" onClick={save} disabled={saving}>{saving ? t("tx.saving") : t("common.save")}</button>
             </div>
           </div>
@@ -560,85 +448,6 @@ export function TxDetail() {
         </div>
       </div>
     </>
-  );
-}
-
-type ChatMsg = { role: "user" | "assistant"; content: string };
-
-/**
- * The conversation about ONE operation: the person clarifies ("this was for the course"), the
- * model answers and may update the category or the transfer flag (applied server-side).
- *
- * §TX-CHAT (2026-08-12): the exchange is STORED. It used to live in this component's `useState`,
- * so it existed until the user navigated away and then was gone — strictly worse than the state
- * §CHAT-SYNC was created to end. Somebody would explain why a payment is not what it looks like,
- * the model would use it, and an hour later there was no evidence the explanation had ever
- * happened. Now it loads with the page, so the operation carries its own history: what was said
- * about it, and when.
- */
-function TxAiChat({ txId, txName }: { txId: string; txName: string }) {
-  const t = useT();
-  const [chatTx, { isLoading: chatting }] = useChatTxMutation();
-  const { data: history } = useGetTxChatQuery(txId);
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
-  const [input, setInput] = useState("");
-  const sending = useRef(false);
-
-  // Server history seeds the thread once. Not `messages = history` on every render: the optimistic
-  // user turn is added locally the moment it is sent, and re-reading the server between the send
-  // and its answer would make the question flicker out and back.
-  useEffect(() => {
-    if (history && messages.length === 0) setMessages(history as ChatMsg[]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [history]);
-
-  async function send(text?: string) {
-    const q = (text ?? input).trim();
-    if (!q || chatting || sending.current) return;
-    sending.current = true;
-    const next: ChatMsg[] = [...messages, { role: "user", content: q }];
-    setMessages(next);
-    setInput("");
-    try {
-      const r = await chatTx({ id: txId, messages: next }).unwrap();
-      setMessages((m) => [...m, { role: "assistant", content: r.reply }]);
-      if (r.applied?.category_name) toast.success(t("tx.aiUpdatedCategory", { name: r.applied.category_name }));
-      if (r.applied?.is_transfer) toast.success(t("tx.aiMarkedTransfer"));
-      if (r.applied?.understanding) toast.success(t("tx.aiUpdatedUnderstanding"));
-    } catch (e) {
-      // Показуємо РЕАЛЬНУ причину (ліміт, ключ, збій моделі), а не глухе «спробуй ще раз» —
-      // інакше діагностувати AI-помилку неможливо (див. `lib/errors.ts`).
-      setMessages((m) => [...m, { role: "assistant", content: t("tx.chatReplyFailed", { error: errText(e) }) }]);
-    } finally { sending.current = false; }
-  }
-
-  return (
-    <div className="tx-chat">
-      {/* An `Icon`, not an emoji: every other section head in the app uses one, and the emoji
-          rendered glued to the text because the head is a flex row that collapses the space. */}
-      <div className="tx-chat-head"><Icon name="advisor" size={15} />{t("tx.chatHead")}</div>
-      {messages.length === 0 && !chatting && (
-        <div className="tx-chat-hint">
-          {t("tx.chatHint")}
-        </div>
-      )}
-      {messages.length > 0 && (
-        <div className="tx-chat-log">
-          {messages.map((m, i) => (
-            <div key={i} className={`chat-msg ${m.role}`}>
-              {m.role === "assistant" ? renderMarkdown(m.content) : m.content}
-            </div>
-          ))}
-          {chatting && <div className="chat-msg assistant chat-typing"><span></span><span></span><span></span></div>}
-        </div>
-      )}
-      <div className="tx-chat-input">
-        <input placeholder={t("tx.chatInputPlaceholder", { name: txName })} value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter") send(); }} />
-        <button className="btn primary" onClick={() => send()} disabled={chatting || !input.trim()} aria-label={t("tx.chatSend")}>➤</button>
-      </div>
-    </div>
   );
 }
 

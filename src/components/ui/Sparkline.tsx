@@ -1,7 +1,27 @@
+import { useState } from "react";
+import { HoverTip } from "./HoverTip.tsx";
+import { dateFmt } from "../../i18n/locale.ts";
+import { useT } from "../../i18n/index.ts";
+import { formatMinor } from "../../lib/format.ts";
+
+const fmtMonth = dateFmt({ month: "long", year: "numeric" });
+const fmtShort = dateFmt({ month: "short" });
+const monthOf = (ym: string) => new Date(`${ym}-15T12:00:00Z`);
+
 // Міні-тренд 6 міс у рядку списку (категорії/мерчанти). Крихітний SVG-polyline + крапка-кінець,
 // колір кінцевої крапки за трендом (зростання витрат = neg, спад = pos). Без осей/підписів.
-export function Sparkline({ values, color = "var(--muted)", width = 58, height = 20, goodUp = false, area = false }: {
+export function Sparkline({ values, color = "var(--muted)", width = 58, height = 20, goodUp = false, area = false, months, sign }: {
   values: number[]; color?: string; width?: number; height?: number; goodUp?: boolean;
+  /**
+   * `YYYY-MM` per value, oldest first. Given, the sparkline becomes READABLE: the point under the
+   * cursor is marked and a tip says the month, the amount (minor units, with `sign`) and the change
+   * against the month before. The owner liked the little line and could not ask it anything — the
+   * shape without the numbers made «is this up a lot?» a guess. The LAST month is the running one
+   * (`/analytics/spark` ends at the current month), and the tip says so: a half-month compared to a
+   * whole one is not a fall.
+   */
+  months?: string[];
+  sign?: string;
   /**
    * Fill the space under the line with a soft wash of `color`.
    *
@@ -11,8 +31,13 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
    */
   area?: boolean;
 }) {
+  const t = useT();
+  const [hover, setHover] = useState<number | null>(null);
   const clean = values ?? [];
-  if (clean.length < 2 || clean.every((v) => v === clean[0])) {
+  // A flat line is information once the months can be read (a subscription at one price every
+  // month); without them it is a line that says nothing, and stays hidden as before.
+  const flat = clean.every((v) => v === clean[0]);
+  if (clean.length < 2 || (flat && !months)) {
     return <svg className="spark" width={width} height={height} aria-hidden />;
   }
   const max = Math.max(...clean);
@@ -29,7 +54,7 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
   const pad = 3;
   const stepX = (width - pad * 2) / (clean.length - 1);
   const x = (i: number) => pad + i * stepX;
-  const y = (v: number) => height - pad - ((v - min) / range) * (height - pad * 2);
+  const y = (v: number) => flat ? height / 2 : height - pad - ((v - min) / range) * (height - pad * 2);
   const pts = clean.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
   const last = clean[clean.length - 1];
   const first = clean[0];
@@ -39,11 +64,48 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
   // Closed down to the baseline and back, so the fill has a bottom edge. Built from the same
   // `pts` string as the line — a second point list would drift the moment the padding changes.
   const areaPts = `${x(0).toFixed(1)},${height} ${pts} ${x(clean.length - 1).toFixed(1)},${height}`;
-  return (
+  const svg = (
     <svg className="spark" width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" aria-hidden>
       {area && <polygon points={areaPts} fill={color} opacity={0.12} />}
+      {hover != null && <line x1={x(hover)} x2={x(hover)} y1={0} y2={height} className="spark-guide" />}
       <polyline points={pts} fill="none" stroke={color} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" opacity={0.75} />
-      <circle cx={x(clean.length - 1).toFixed(1)} cy={y(last).toFixed(1)} r={2} fill={trend} />
+      {hover != null && hover !== clean.length - 1 && <circle cx={x(hover).toFixed(1)} cy={y(clean[hover]).toFixed(1)} r={2.6} fill={color} />}
+      <circle cx={x(clean.length - 1).toFixed(1)} cy={y(last).toFixed(1)} r={hover === clean.length - 1 ? 2.8 : 2} fill={trend} />
     </svg>
+  );
+  if (!months || months.length !== clean.length) return svg;
+
+  const tip = (i: number) => {
+    const v = clean[i];
+    const prev = i > 0 ? clean[i - 1] : null;
+    const running = i === clean.length - 1;
+    const pct = prev != null && prev > 0 && !running ? Math.round(((v - prev) / prev) * 100) : null;
+    // Tone from the VALUE's meaning (DESIGN §6): more spending is red unless `goodUp`.
+    const tone = pct == null || pct === 0 ? "tip-muted" : (pct > 0) === goodUp ? "tip-pos" : "tip-neg";
+    return (
+      <>
+        <div className="tip-lbl">{fmtMonth.format(monthOf(months[i]))}{running ? ` · ${t("spark.running")}` : ""}</div>
+        <div className="tip-big">{formatMinor(v, { decimals: false })} {sign}</div>
+        {pct != null && (
+          <div className={tone}>{pct > 0 ? "+" : pct < 0 ? "−" : ""}{Math.abs(pct)}% {t("spark.vsMonth", { month: fmtShort.format(monthOf(months[i - 1])) })}</div>
+        )}
+      </>
+    );
+  };
+
+  return (
+    <HoverTip content={hover != null ? tip(hover) : null}>
+      <span
+        className="spark-hit"
+        onMouseMove={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          const px = ((e.clientX - r.left) / r.width) * width;
+          setHover(Math.max(0, Math.min(clean.length - 1, Math.round((px - pad) / stepX))));
+        }}
+        onMouseLeave={() => setHover(null)}
+      >
+        {svg}
+      </span>
+    </HoverTip>
   );
 }

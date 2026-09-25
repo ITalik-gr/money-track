@@ -159,11 +159,23 @@
 .stack-drift.neg { color: var(--neg); }
 .stack-drift.pos { color: var(--pos); }
 .stack-drift-said { margin: var(--sp-2) 0 0; font-size: var(--fs-sm); color: var(--ink-2); }
-.stack-cols { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; margin-top: var(--sp-3); }
-.stack-col { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
-.stack-col-track { width: 100%; height: 56px; display: flex; align-items: flex-end; border-radius: var(--radius-xs); background: var(--surface-2); overflow: hidden; }
-.stack-col-track i { display: block; width: 100%; border-radius: inherit; background: var(--accent); }
-.stack-col-m { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.stack-figs { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--muted); }
+.stack-figs b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stack-chart { margin-top: var(--sp-4); }
+/* Columns are bars you can point at (UI_PASS S5): each carries a tooltip with the month's plans. */
+.stack-plot { position: relative; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; height: 96px; }
+.stack-bar { display: flex; align-items: flex-end; height: 100%; border-radius: var(--radius-xs); background: var(--surface-2); overflow: hidden; cursor: default; }
+.stack-bar i { display: block; width: 100%; border-radius: inherit; background: color-mix(in srgb, var(--accent) 70%, var(--surface)); transition: background var(--dur-1) var(--ease-out); }
+.stack-bar:hover i { background: var(--accent); }
+.stack-avg { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--ink-2); pointer-events: none; }
+/* An opaque chip, not bare text on the line (DESIGN §6: the problem is the background). */
+.stack-avg-chip {
+  position: absolute; right: 0; bottom: 3px; padding: 1px 7px; border-radius: 999px;
+  background: var(--surface); box-shadow: var(--shadow-sm);
+  font-size: 11px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.stack-months { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; margin-top: 6px; }
+.stack-months span { font-size: 10.5px; color: var(--muted); text-align: center; white-space: nowrap; overflow: hidden; }
 .stack-block { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); display: grid; gap: 6px; }
 .stack-row { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; color: inherit; text-decoration: none; }
 .stack-row-name { font-weight: 600; }
@@ -172,7 +184,7 @@
 .stack-dupe-sum { font-size: var(--fs-sm); font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }
 @media (max-width: 620px) {
   .stack-card { padding: 14px; }
-  .stack-col-m { font-size: 9.5px; }
+  .stack-months span { font-size: 9.5px; }
 }
 
 /* §SUB-STACK on one subscription: what cancelling frees — a simulation, stated calmly. */
@@ -181,25 +193,8 @@
 .sub-cancel-row b { font-size: var(--fs-lg); color: var(--ink); font-weight: 600; }
 .sub-cancel-note { margin-top: 8px; font-size: var(--fs-sm); color: var(--muted); }
 
-/* §SUB-SETTINGS — the plan's own controls. Label left, control right; wraps to a column on a phone. */
-.sub-settings { display: grid; gap: 14px; padding: 16px 18px; }
-.ss-row { display: flex; align-items: center; justify-content: space-between; gap: 8px 16px; flex-wrap: wrap; }
-.ss-lbl { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--ink-2); }
-.ss-ctrl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.ss-amt { width: 110px; text-align: right; font-variant-numeric: tabular-nums; }
-.ss-count { width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
-.ss-cur, .ss-sep { color: var(--muted); font-size: var(--fs-sm); }
-.ss-cat { min-width: 220px; }
-.ss-note-row { align-items: flex-start; }
-.ss-note { flex: 1 1 280px; align-items: flex-start; }
-.ss-note textarea { flex: 1 1 auto; min-width: 0; resize: vertical; }
-.ss-end { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--line); }
-.ss-end-q { font-size: var(--fs-sm); color: var(--ink-2); }
 /* A linked charge at a price other than the declared one carries its difference on the row. */
 .sub-charge-amt { display: inline-flex; align-items: baseline; gap: 8px; }
 .sub-charge-diff { font-size: var(--fs-xs); font-weight: 600; font-variant-numeric: tabular-nums; }
 .sub-charge-diff.neg { color: var(--neg); }
 .sub-charge-diff.pos { color: var(--pos); }
-@media (max-width: 620px) {
-  .ss-cat { min-width: 0; flex: 1 1 100%; }
-}

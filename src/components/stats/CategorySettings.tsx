@@ -18,11 +18,11 @@ import { useT } from "../../i18n/index.ts";
 import {
   useGetCategoriesQuery, useUpdateCategoryMutation, useSetBudgetMutation, useRemoveBudgetMutation,
 } from "../../store/api.ts";
-import { IMPORTANCE_LEVELS, IMPORTANCE_META } from "../../lib/importance.ts";
+import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../../lib/importance.ts";
 import { toast } from "../../lib/toast.ts";
 import { errText } from "../../lib/errors.ts";
 import { baseSign } from "../../lib/currency.ts";
-import { InfoTip } from "../ui/InfoTip.tsx";
+import { Icon } from "../ui/Icon.tsx";
 import { CategoryModal } from "../planning/CategoryModal.tsx";
 import type { CategoryOverview } from "../../../shared/api/analytics.ts";
 
@@ -65,63 +65,80 @@ export function CategorySettings({ data, monthView }: { data: CategoryOverview; 
     } catch (e) { toast.error(errText(e)); }
   }
 
+  const impMeta = IMPORTANCE_META[data.importance as Importance] as (typeof IMPORTANCE_META)[Importance] | undefined;
+  const limitDirty = limit.trim() !== "" && limit !== String(current ?? "");
+
   return (
-    <div className="card cat-settings">
-      <div className="cs-head">
-        <div className="label">{t("catset.title")}</div>
+    <section>
+      <div className="section-head">
+        <h2>{t("catset.title")}</h2>
         {category && (
-          <button className="btn ghost sm" onClick={() => setEditing(true)}>{t("catset.edit")}</button>
+          <button className="btn sm" onClick={() => setEditing(true)}>
+            <Icon name="edit" size={14} />{t("catset.edit")}
+          </button>
+        )}
+      </div>
+      <div className="card setform">
+        {!data.is_income && (
+          <div className="setform-row">
+            <div className="setform-lbl">
+              <span className="setform-name">{t("catset.importance")}</span>
+              <span className="setform-hint">{t("catset.importanceHint")}</span>
+            </div>
+            <div className="setform-ctrl">
+              <div className="seg" role="radiogroup" aria-label={t("catset.importance")}>
+                {IMPORTANCE_LEVELS.map((lv) => (
+                  <button
+                    key={lv} role="radio" aria-checked={data.importance === lv} disabled={savingImp}
+                    className={`seg-btn ${data.importance === lv ? "active" : ""}`}
+                    onClick={() => pickImportance(lv)}
+                  >
+                    <span className="imp-dot" style={{ background: IMPORTANCE_META[lv].color }} />
+                    {t(IMPORTANCE_META[lv].labelKey)}
+                  </button>
+                ))}
+              </div>
+              {/* What the CURRENT level means, in words — the three short labels alone asked the
+                  reader to already know the scale. */}
+              {impMeta && <span className="setform-sub">{t(impMeta.hintKey)}</span>}
+            </div>
+          </div>
+        )}
+
+        {!data.is_income && !data.is_sub && (
+          <div className="setform-row">
+            <div className="setform-lbl">
+              <span className="setform-name">{t("catset.limit")}</span>
+              <span className="setform-hint">{t("catset.limitHint")}</span>
+            </div>
+            <div className="setform-ctrl">
+              {canBudget ? (
+                <>
+                  <label className="affix">
+                    <input
+                      inputMode="decimal" value={limit} placeholder={t("catset.limitPlaceholder")}
+                      onChange={(e) => setLimit(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveLimit(); }}
+                      aria-label={t("catset.limit")}
+                    />
+                    <span className="affix-unit">{baseSign()}</span>
+                  </label>
+                  <button className={`btn sm ${limitDirty ? "primary" : ""}`} disabled={savingBudget || !limitDirty} onClick={saveLimit}>
+                    {t("catset.save")}
+                  </button>
+                  {current != null && (
+                    <button className="btn ghost sm danger-text" onClick={dropLimit}>{t("catset.remove")}</button>
+                  )}
+                </>
+              ) : (
+                <span className="setform-hint">{t("catset.limitMonthOnly")}</span>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
-      {!data.is_income && (
-        <div className="cs-row">
-          <span className="cs-lbl">
-            {t("catset.importance")}
-            <InfoTip>{t("catset.importanceTip")}</InfoTip>
-          </span>
-          <div className="seg cs-seg" role="radiogroup" aria-label={t("catset.importance")}>
-            {IMPORTANCE_LEVELS.map((lv) => (
-              <button
-                key={lv} role="radio" aria-checked={data.importance === lv} disabled={savingImp}
-                className={`seg-btn ${data.importance === lv ? "active" : ""}`}
-                onClick={() => pickImportance(lv)}
-              >
-                {t(IMPORTANCE_META[lv].shortKey)}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {canBudget && (
-        <div className="cs-row">
-          <span className="cs-lbl">
-            {t("catset.limit")}
-            <InfoTip>{t("catset.limitTip")}</InfoTip>
-          </span>
-          <div className="cs-limit">
-            <input
-              className="cs-input" inputMode="decimal" value={limit} placeholder={t("catset.limitPlaceholder")}
-              onChange={(e) => setLimit(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") saveLimit(); }}
-              aria-label={t("catset.limit")}
-            />
-            <span className="cs-cur">{baseSign()}</span>
-            <button className="btn sm" disabled={savingBudget || limit.trim() === "" || limit === String(current ?? "")} onClick={saveLimit}>
-              {t("catset.save")}
-            </button>
-            {current != null && (
-              <button className="btn ghost sm" onClick={dropLimit}>{t("catset.remove")}</button>
-            )}
-          </div>
-        </div>
-      )}
-      {!data.is_income && !data.is_sub && !monthView && (
-        <div className="cs-note">{t("catset.limitMonthOnly")}</div>
-      )}
-
       {editing && category && <CategoryModal category={category} onClose={() => setEditing(false)} />}
-    </div>
+    </section>
   );
 }

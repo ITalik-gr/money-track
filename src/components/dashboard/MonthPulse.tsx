@@ -6,6 +6,7 @@ import { EmptyCard } from "../ui/EmptyCard.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useT } from "../../i18n/index.ts";
 import { baseSign } from "../../lib/currency.ts";
+import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 
 // §4 Пульс місяця для Головної: норма заощаджень + топ-категорії міні (календарний місяць,
 // зведено в ₴). Одна вибірка overview → обидва блоки. Клік по категорії → дриль у Статистиці.
@@ -91,11 +92,15 @@ export function MonthPulse() {
           <div>
             <span className="label" style={{ display: "block", marginBottom: 8 }}>{t("common.topCategories")}</span>
             {top.map((c, i) => (
-              <Link key={c.category_id ?? i} to={`/stats?tab=categories`} className="pulse-cat">
-                <span className="pc-name"><span className="d" style={{ background: c.color ?? FALLBACK[i % FALLBACK.length] }} />{c.category_name ?? t("common.uncategorized")}</span>
-                <span className="pc-track"><span style={{ width: `${(c.spent / topMax) * 100}%`, background: c.color ?? FALLBACK[i % FALLBACK.length] }} /></span>
-                <span className="pc-val">{formatMinor(c.spent, { decimals: false })} {baseSign()}</span>
-              </Link>
+              <HoverTip key={c.category_id ?? i} content={<TipBody label={c.category_name ?? t("common.uncategorized")} color={c.color ?? FALLBACK[i % FALLBACK.length]}
+                value={<>{formatMinor(c.spent, { decimals: false })} {baseSign()}</>}
+                sub={spend > 0 ? t("tip.shareOfSpend", { pct: Math.round((c.spent / spend) * 100) }) : null} />}>
+                <Link to={`/stats?tab=categories`} className="pulse-cat">
+                  <span className="pc-name"><span className="d" style={{ background: c.color ?? FALLBACK[i % FALLBACK.length] }} />{c.category_name ?? t("common.uncategorized")}</span>
+                  <span className="pc-track"><span style={{ width: `${(c.spent / topMax) * 100}%`, background: c.color ?? FALLBACK[i % FALLBACK.length] }} /></span>
+                  <span className="pc-val">{formatMinor(c.spent, { decimals: false })} {baseSign()}</span>
+                </Link>
+              </HoverTip>
             ))}
           </div>
         )}

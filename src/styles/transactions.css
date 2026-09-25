@@ -42,28 +42,22 @@
    picker, Telegram maintenance — and the first was 12px muted text with a ▸ in front, which the
    owner could not see. Anything you are meant to click has to look clickable: a border, a hit area
    and a hover. Same shape everywhere, so learning it once is enough. */
-.disclose,
-.ai-details > .ai-details-sum {
+.disclose {
   cursor: pointer; list-style: none;
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 11px; border: 1px solid var(--line-strong); border-radius: 999px;
   font-size: 13px; color: var(--ink-2); background: var(--surface);
   transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
-.disclose::-webkit-details-marker,
-.ai-details > .ai-details-sum::-webkit-details-marker { display: none; }
-.disclose:hover,
-.ai-details > .ai-details-sum:hover { background: var(--surface-2); color: var(--ink); }
+.disclose::-webkit-details-marker { display: none; }
+.disclose:hover { background: var(--surface-2); color: var(--ink); }
 /* The caret is the state, so it rotates rather than swapping character — a ▸ turning into a ▾ is
    two glyphs of different widths and the label jumps sideways on every toggle. */
-.disclose::before,
-.ai-details > .ai-details-sum::before {
+.disclose::before {
   content: "›"; display: inline-block; font-size: 15px; line-height: 1;
   color: var(--muted); transition: transform var(--dur-1) var(--ease-out);
 }
-details[open] > .disclose::before,
-.ai-details[open] > .ai-details-sum::before { transform: rotate(90deg); }
-.ai-details[open] > .ai-details-sum,
+details[open] > .disclose::before { transform: rotate(90deg); }
 details[open] > .disclose { margin-bottom: 10px; }
 
 /* The lone-child guard for the settings grid (2026-08-14).
@@ -153,16 +147,27 @@ details[open] > .disclose { margin-bottom: 10px; }
   color: var(--accent);
 }
 
-/* Mobile: an insight row is `label — [category chip] — amount — delta` on one line, and a long
-   category name ("Відсотки по кредиту та схоже") squeezed the label into a three-line column with
-   the money floating beside it. Below 700px the label takes the full width and the values move to
-   their own line underneath, right-aligned — the sentence reads as a sentence and the numbers
-   stay together. */
-@media (max-width: 700px) {
-  .fact-row { flex-direction: column; align-items: stretch; gap: 4px; }
-  .fact-label { padding-right: 0; }
-  .fact-vals { justify-content: flex-end; }
-  .fact-cat { max-width: 100%; }
+/* An insight row is `label — [category chip] — amount — delta` on one line. With a long category
+   name («Відсотки по кредиту та схоже») the label was squeezed into a one-word column with the money
+   floating beside it (owner's screenshot, 2026-09-25). This was a `@media (max-width: 700px)` rule —
+   but the card lives in a ~460px column on a 1440px screen, where the VIEWPORT is wide and the
+   CARD is narrow, so it never fired where it was needed. Now a container query on `.rich`: below
+   560px of card, the label takes the whole line and the values follow on their own line, left-
+   aligned under it so the pair still reads as one sentence. */
+.rich { container-type: inline-size; }
+.rich-note {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 14px; padding: 12px 14px;
+  border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink);
+}
+.rich-note-ico { flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+.fact-delta { padding: 1px 7px; border-radius: 999px; background: var(--surface-2); }
+.fact-delta.neg { color: var(--neg); background: color-mix(in srgb, var(--neg) 10%, transparent); }
+.fact-delta.pos { color: var(--pos); background: color-mix(in srgb, var(--pos) 10%, transparent); }
+.ai-cost { margin-top: 12px; text-align: right; }
+@container (max-width: 560px) {
+  .fact-row { flex-direction: column; align-items: stretch; gap: 6px; }
+  .fact-vals { justify-content: flex-start; flex-wrap: wrap; }
+  .fact-cat { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 }
 
 /* Goals: the cards were sized for a dense list, but a goal is a thing you look AT — a number, a
@@ -279,3 +284,57 @@ details[open] > .disclose { margin-bottom: 10px; }
 @media (hover: hover) and (pointer: fine) {
   .q-chip:hover .q-chip-x { color: var(--ink); }
 }
+
+/* ── Operation page, UI_PASS S7 (2026-09-25) ─────────────────────────────────────────────────── */
+
+/* What the model understands the row to be — the one line of the old folded table worth reading,
+   now a quote under the «why». Neutral surface, no accent: it is a reading, not an alert. */
+.ai-understands { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.ai-understands figcaption { font-size: var(--fs-xs); color: var(--muted); margin-bottom: 3px; }
+.ai-understands blockquote { margin: 0; font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.ai-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); font-size: 12px; color: var(--muted); text-decoration: none;
+}
+.ai-chip.on { color: var(--ink-2); }
+.ai-chip.on svg { color: var(--pos); }
+.ai-chip.link { color: var(--ink-2); }
+.ai-chip.link:hover { border-color: var(--accent); color: var(--accent); }
+.ai-note { display: flex; flex-direction: column; gap: 6px; }
+.ai-note-foot { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.ai-note-foot .btn { flex-shrink: 0; }
+
+/* Tags: the chosen chips and the «+ Додати тег» on one line; the picker opens under it. */
+.tag-line { display: flex; flex-wrap: wrap; gap: 7px; }
+.tag-add {
+  display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px;
+  border: 1px dashed var(--line-strong); background: none; color: var(--ink-2); font-size: 13px; cursor: pointer;
+  transition: border-color var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.tag-add:hover, .tag-add.open { border-color: var(--accent); color: var(--accent); }
+.tag-panel {
+  display: flex; flex-direction: column; gap: 10px; margin-top: 4px; padding: 12px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.tag-panel .tag-chip { background: var(--surface); }
+
+/* Switch rows: a title that says WHAT, a line that says what it changes, the switch at the end. */
+.switch-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-sm); }
+.switch-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 14px; cursor: pointer; }
+.switch-row + .switch-row { border-top: 1px solid var(--line); }
+.switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.switch-title { font-size: 14px; font-weight: 500; color: var(--ink); }
+.switch-hint { font-size: 12px; color: var(--muted); line-height: 1.45; }
+input[type="checkbox"].switch {
+  appearance: none; -webkit-appearance: none; flex-shrink: 0; position: relative;
+  width: 36px; height: 20px; border-radius: 999px; background: var(--line-strong); cursor: pointer;
+  transition: background var(--dur-2) var(--ease-out);
+}
+input[type="checkbox"].switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--surface); box-shadow: var(--shadow-sm); transition: transform var(--dur-2) var(--ease-out);
+}
+input[type="checkbox"].switch:checked { background: var(--accent); }
+input[type="checkbox"].switch:checked::after { transform: translateX(16px); }
+input[type="checkbox"].switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

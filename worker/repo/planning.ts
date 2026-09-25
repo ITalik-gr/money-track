@@ -95,14 +95,14 @@ export async function activeWithCategory(db: AppDb): Promise<CategorisedPlanRow[
  */
 export async function linkedPaidByMonth(
   db: AppDb, mult: string, ymSql: string, from: number, to: number,
-): Promise<{ m: string; paid: number }[]> {
+): Promise<{ m: string; plan_id: number; title: string; paid: number; n: number }[]> {
   const r = await db.prepare(
-    `SELECT ${ymSql} AS m, CAST(ROUND(SUM(ABS(t.amount) * ${mult})) AS INTEGER) AS paid
+    `SELECT ${ymSql} AS m, p.id AS plan_id, p.title, CAST(ROUND(SUM(ABS(t.amount) * ${mult})) AS INTEGER) AS paid, COUNT(*) AS n
      FROM transactions t JOIN planned_payments p ON p.id = t.planned_id
      WHERE t.amount < 0 AND t.is_transfer = 0 AND COALESCE(p.kind, '') <> 'income'
        AND t.time >= ? AND t.time < ?
-     GROUP BY m ORDER BY m`,
-  ).bind(from, to).all<{ m: string; paid: number }>();
+     GROUP BY m, p.id ORDER BY m`,
+  ).bind(from, to).all<{ m: string; plan_id: number; title: string; paid: number; n: number }>();
   return r.results ?? [];
 }
 

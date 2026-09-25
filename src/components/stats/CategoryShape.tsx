@@ -16,7 +16,7 @@ import { formatMinor, weekdayShort } from "../../lib/format.ts";
 import { useGetCategoryShapeQuery } from "../../store/api.ts";
 import { IMPORTANCE_META, type Importance } from "../../lib/importance.ts";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
-import { HoverTip } from "../ui/HoverTip.tsx";
+import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 import { Money } from "../ui/Money.tsx";
 
 export function CategoryShapeBlocks({ id, from, to, hasBudget }: {
@@ -70,12 +70,10 @@ export function CategoryShapeBlocks({ id, from, to, hasBudget }: {
             {impBar && (
               <div className="cat-imp-bar">
                 {imp.map((r) => (
-                  <div
-                    key={r.level}
-                    className="cat-imp-seg"
-                    style={{ width: `${r.share_pct}%`, background: impMeta(r.level)?.color ?? "var(--muted)" }}
-                    title={`${t(impMeta(r.level)?.labelKey ?? "cat.impTitle")} · ${r.share_pct}%`}
-                  />
+                  <HoverTip key={r.level} content={<TipBody label={t(impMeta(r.level)?.labelKey ?? "cat.impTitle")} color={impMeta(r.level)?.color}
+                    value={<Money minor={r.spent} decimals={false} />} sub={t("tip.shareOfCategory", { pct: r.share_pct, n: r.n })} />}>
+                    <div className="cat-imp-seg" style={{ width: `${r.share_pct}%`, background: impMeta(r.level)?.color ?? "var(--muted)" }} />
+                  </HoverTip>
                 ))}
               </div>
             )}

@@ -489,14 +489,9 @@
 
 /* ── the flag on one operation (§TAX-BASE) ───────────────────────────────────────────────────── */
 
-.fop-tx {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-3);
-  flex-wrap: wrap;
-  margin: var(--sp-3) 0;
-}
-
+/* A field of the transaction editor (UI_PASS S7): label, the three-way segment, the explanation. */
+.fop-tx { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+/* The account-level switch on Accounts still uses the inline label. */
 .fop-tx-label { color: var(--muted); font-size: var(--fs-sm); }
 
 .fop-tx-note {

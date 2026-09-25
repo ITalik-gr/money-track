@@ -1,111 +1,155 @@
 /**
- * §FLOOR — what a month costs with no decisions in it, and how long the cushion covers THAT.
+ * §FLOOR + §COMMITTED — one card: what a month costs with no decisions in it, and how much of the
+ * income that takes.
  *
- * The owner's complaint that produced §BURN-SHAPE was «порадник каже я 44к в місяць витрачаю, але
- * такого і близько немає». The split answered it — his 44 784 is 28 707 that repeats plus 16 077
- * of quarterly tax, electronics and a dentist — and then went almost nowhere: the full breakdown
- * reaches the model, and the screen shows one parenthetical line under the burn metric. The number
- * he recognised as his life is still not a number the app puts in front of him.
+ * ⚠️ **Two cards became one (2026-09-25, UI_PASS S8).** The owner, about «Скільки коштує просто
+ * жити» and «Скільки доходу вже зайнято»: «інтуїтивно не зрозумілі, інфи особливо не дають». They
+ * were one idea told twice — the same floor, once as a ledger against the burn and once as a share
+ * of income — and each needed the other to make sense: the ledger had no scale («is 28 707 a lot?»)
+ * and the percentage had no content («62% of what, made of what?»). Now the floor is stated once,
+ * drawn ON the income it is measured against, and the rest of the card answers the two follow-ups:
+ * what it is made of, and how long the cushion covers it.
  *
- * It matters more than a caption, because runway is divided by the FULL burn. That is the right
- * default — a quarterly tax is real money, and a runway that forgets it lies in the dangerous
- * direction — but «скільки я протягну, якщо не станеться нічого разового» is a different question
- * with a different, always larger, answer. Both are shown, labelled, and the full-burn one stays
- * the headline: showing either alone is a claim rather than a fact.
- *
- * ⚠️ **The card is a LEDGER, not two figures side by side** (2026-09-10, owner: «блок не зовсім
- * зрозумілий»). The first version printed «28 885 постійні» beside «11 849 разові» with «71% від
- * burn 40 734» underneath, which asks the reader to do three things at once: add two numbers that
- * were never shown as addends, divide one of them by a third, and know what «burn» means. The
- * figures were right and the block still had to be decoded. Now the two parts are stacked as
- * addends with the total under a rule, so the arithmetic is READ rather than performed — and the
- * total, which is the number every other screen quotes, is the one on the bottom line.
- *
- * ⚠️ **Each runway carries the condition it is true under, in words.** «запас на все: 1.3м» /
- * «лише на постійне: 1.8м» were labels for a distinction the reader has to already hold in their
- * head — and «1.3м» in a card full of hryvnia reads as 1.3 million at a glance. The cushion the
- * two divide into is named as well: without it they are two ratios with an invisible numerator.
+ * Rules kept from both:
+ * ⚠️ «Uneven» is about RHYTHM, never «money you could skip» — a quarterly tax is lumpy and owed.
+ * ⚠️ The full-burn runway stays the headline; the floor-only one is its condition-labelled second.
+ * ⚠️ Fixed costs as a share of income are never green: neutral below 70%, `--warn` from 70%, red
+ * past 100% (DESIGN §6: a neutral state is not green).
+ * ⚠️ No levels yet → no card: «0 ₴ a month» is a confident answer about an account not yet seen.
  */
 import { useT } from "../../i18n/index.ts";
+import { dateFmt } from "../../i18n/locale.ts";
 import { Money } from "../ui/Money.tsx";
 import { InfoTip } from "../ui/InfoTip.tsx";
-import { useGetSpendFloorQuery } from "../../store/api.ts";
+import { HoverTip } from "../ui/HoverTip.tsx";
+import { useGetSpendFloorQuery, useGetCommittedQuery } from "../../store/api.ts";
+
+const fmtMonth = dateFmt({ month: "short" });
+const fmtMonthLong = dateFmt({ month: "long", year: "numeric" });
+const monthOf = (ym: string) => new Date(`${ym}-15T12:00:00Z`);
+const toneOf = (share: number) => (share > 1 ? "neg" : share >= 0.7 ? "warn" : "idle");
+const pctOf = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
 export function SpendFloorCard() {
   const t = useT();
   const { data } = useGetSpendFloorQuery();
-  // No levels yet (a fresh account) means there is no floor to state. Saying «0 ₴/міс» would be a
-  // confident answer about an account the app has not yet seen a full month of.
+  const { data: cm } = useGetCommittedQuery();
   if (!data || data.burn <= 0) return null;
 
-  const share = data.burn > 0 ? Math.round((data.floor / data.burn) * 100) : 0;
+  const income = cm?.income != null && cm.income > 0 ? cm.income : null;
+  // The bar's length is the larger of income and the month's cost, so an overshoot is DRAWN (the
+  // cost runs past the income mark) instead of being clipped to a full bar.
+  const scale = Math.max(income ?? 0, data.burn);
+  const free = income != null ? income - data.burn : null;
+  const tone = income != null ? toneOf(data.floor / income) : "idle";
+
+  const seg = (label: string, amount: number, cls: string) => (
+    <HoverTip content={
+      <>
+        <div className="tip-lbl">{label}</div>
+        <div className="tip-big"><Money minor={amount} decimals={false} /></div>
+        {income != null && <div className="tip-muted">{t("base.ofIncome", { pct: pctOf(amount, income) })}</div>}
+      </>
+    }>
+      <span className={`mb-seg ${cls}`} style={{ width: `${(amount / scale) * 100}%` }} />
+    </HoverTip>
+  );
+
+  const first = cm?.trend[0];
+  const nowPct = income != null ? pctOf(data.floor, income) : null;
+  const moved = first && cm && cm.trend.length >= 2 && nowPct != null ? nowPct - Math.round((first.share ?? 0) * 100) : null;
+  const maxShare = cm ? Math.max(1, ...cm.trend.map((p) => p.share ?? 0)) : 1;
 
   return (
     <div className="card floor-card">
       <div className="ai-head">
         <div style={{ minWidth: 0 }}>
-          <div className="ai-title">
-            {t("floor.title")}
-            <InfoTip>{t("floor.tip")}</InfoTip>
-          </div>
-          <div className="label">{t("floor.sub")}</div>
+          <div className="ai-title">{t("base.title")}<InfoTip>{t("base.tip")}</InfoTip></div>
+          <div className="label">{t("base.sub")}</div>
         </div>
       </div>
 
-      {/* Two addends and a total, in that order and under a rule. The one-off row keeps the tip
-          that says what «one-off» means here: RHYTHM, never «money you could skip» — a quarterly
-          tax is lumpy and unavoidable, and calling it optional would be the app inventing
-          permission. §EFF_IMPORTANCE is where avoidability lives, and it is a different axis. */}
-      <div className="floor-ledger">
-        <div className="fl-row">
-          <span className="fl-lbl">{t("floor.fixedRow")}</span>
-          <span className="fl-amt"><Money minor={data.floor} decimals={false} /></span>
-        </div>
-        <div className="fl-row">
-          <span className="fl-lbl">
-            <span className="fl-op" aria-hidden>+</span>
-            {t("floor.lumpyRow")}
-            <InfoTip>{t("floor.lumpyNote")}</InfoTip>
-          </span>
-          <span className="fl-amt muted-num"><Money minor={data.lumpy} decimals={false} /></span>
-        </div>
-        <div className="fl-row total">
-          <span className="fl-lbl">{t("floor.totalRow")}</span>
-          <span className="fl-amt"><Money minor={data.burn} decimals={false} /></span>
-        </div>
-        <div className="fl-note">{t("floor.fixedShare", { pct: share })}</div>
+      {/* The answer first, as a sentence with its numbers in it. */}
+      <div className="mb-hero">
+        <span className="mb-amt"><Money minor={data.burn} decimals={false} /><small>{t("base.perMonth")}</small></span>
+        {nowPct != null && <span className={`mb-pct ${tone}`}>{t("base.fixedIsPct", { pct: nowPct })}</span>}
       </div>
 
-      {/* Two runways, each with the condition that makes it true. The full-burn one keeps the
-          emphasis: it is the number every other screen shows, and quietly promoting the friendlier
-          one would be the app choosing the optimistic answer on the reader's behalf. */}
-      {data.runway_months != null && (
-        <div className="floor-runways">
-          <div className="label">{t("floor.cushionIs")} <Money minor={data.cushion} decimals={false} /></div>
-          <div className="floor-rw strong">
-            <b>{t("floor.months", { n: data.runway_months })}</b>
-            <span>{t("floor.runwayFullWhen")}</span>
-          </div>
-          {data.floor_months != null && data.floor_months !== data.runway_months && (
-            <div className="floor-rw">
-              <b>{t("floor.months", { n: data.floor_months })}</b>
-              <span>{t("floor.runwayFloorWhen")}</span>
-            </div>
+      <div className="mb-bar-wrap">
+        <div className="mb-bar" role="img" aria-label={t("base.barLabel")}>
+          {seg(t("base.fixed"), data.floor, "fixed")}
+          {data.lumpy > 0 && seg(t("base.lumpy"), data.lumpy, "lumpy")}
+          {free != null && free > 0 && seg(t("base.free"), free, "free")}
+          {income != null && data.burn > income && (
+            <span className="mb-income-mark" style={{ left: `${(income / scale) * 100}%` }} />
           )}
         </div>
+        <div className="mb-legend">
+          <span><i className="fixed" />{t("base.fixed")} <b><Money minor={data.floor} decimals={false} /></b></span>
+          {data.lumpy > 0 && (
+            <span><i className="lumpy" />{t("base.lumpy")} <b><Money minor={data.lumpy} decimals={false} /></b><InfoTip>{t("base.lumpyTip")}</InfoTip></span>
+          )}
+          {free != null && (free >= 0
+            ? <span><i className="free" />{t("base.free")} <b><Money minor={free} decimals={false} /></b></span>
+            : <span className="neg">{t("base.short")} <b><Money minor={-free} decimals={false} /></b></span>)}
+          {income != null && <span className="mb-income">{t("base.income", { n: cm?.months ?? 0 })} <b><Money minor={income} decimals={false} /></b></span>}
+        </div>
+      </div>
+
+      {data.runway_months != null && (
+        <p className="mb-runway">
+          {t("base.runway", { months: data.runway_months })}{" "}<span className="muted">(<Money minor={data.cushion} decimals={false} />)</span>
+          {data.floor_months != null && data.floor_months !== data.runway_months && <> {t("base.runwayFloor", { months: data.floor_months })}</>}
+        </p>
       )}
 
       {data.parts.length > 0 && (
-        <div className="floor-parts">
-          <div className="label">{t("floor.made")}</div>
+        <div className="mb-block">
+          <div className="label">{t("base.made")}</div>
           <div className="floor-chips">
             {data.parts.map((p) => (
-              <span key={p.category_id} className="floor-chip">
-                <span className="d" style={{ background: p.color ?? "var(--muted)" }} />
-                {p.name}
-                <b><Money minor={p.level} decimals={false} /></b>
-              </span>
+              <HoverTip key={p.category_id} content={<><div className="tip-lbl">{p.name}</div><div className="tip-muted">{t("base.partShare", { pct: pctOf(p.level, data.floor) })}</div></>}>
+                <span className="floor-chip">
+                  <span className="d" style={{ background: p.color ?? "var(--muted)" }} />
+                  {p.name}
+                  <b><Money minor={p.level} decimals={false} /></b>
+                </span>
+              </HoverTip>
             ))}
+          </div>
+        </div>
+      )}
+
+      {cm && cm.trend.length >= 2 && (
+        <div className="mb-block">
+          <div className="cm-trend-head">
+            <span className="label">{t("base.trend")}</span>
+            {moved != null && moved !== 0 && first && (
+              <span className={`cm-moved ${moved > 0 ? "neg" : "pos"}`}>
+                {t("base.moved", { value: `${moved > 0 ? "+" : "−"}${Math.abs(moved)}`, month: fmtMonth.format(monthOf(first.ym)) })}
+              </span>
+            )}
+          </div>
+          <div className="cm-cols">
+            {cm.trend.map((p) => {
+              const s = p.share ?? 0;
+              return (
+                <HoverTip key={p.ym} content={
+                  <>
+                    <div className="tip-lbl">{fmtMonthLong.format(monthOf(p.ym))}</div>
+                    <div className="tip-big">{Math.round(s * 100)}%</div>
+                    <div className="tip-kv"><span>{t("base.fixed")}</span><span><Money minor={p.floor} decimals={false} /></span></div>
+                    {p.income != null && <div className="tip-kv"><span>{t("base.incomeShort")}</span><span><Money minor={p.income} decimals={false} /></span></div>}
+                  </>
+                }>
+                  <div className="cm-col">
+                    <span className="cm-col-v">{Math.round(s * 100)}%</span>
+                    <span className="cm-col-track"><i className={toneOf(s)} style={{ height: `${Math.max(4, (s / maxShare) * 100)}%` }} /></span>
+                    <span className="cm-col-m">{fmtMonth.format(monthOf(p.ym))}</span>
+                  </div>
+                </HoverTip>
+              );
+            })}
           </div>
         </div>
       )}

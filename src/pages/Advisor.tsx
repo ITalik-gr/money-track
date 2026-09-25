@@ -29,7 +29,6 @@ import { HealthIndexCard } from "../components/stats/HealthIndexCard.tsx";
 import { KnowledgeCorpusCard } from "../components/advisor/KnowledgeCorpusCard.tsx";
 import { CashflowCalendar } from "../components/stats/CashflowCalendar.tsx";
 import { SpendFloorCard } from "../components/advisor/SpendFloor.tsx";
-import { CommittedCard } from "../components/advisor/CommittedCard.tsx";
 import { PaydayCard } from "../components/advisor/PaydayCard.tsx";
 import { IncomeRhythmCard } from "../components/advisor/IncomeRhythmCard.tsx";
 import { FxExposureCard } from "../components/advisor/FxExposureCard.tsx";
@@ -131,7 +130,6 @@ export function Advisor() {
           <HealthIndexCard />
           <NetworthCard />
           <SpendFloorCard />
-          <CommittedCard />
           <PaydayCard />
           <IncomeRhythmCard />
           <FxExposureCard />

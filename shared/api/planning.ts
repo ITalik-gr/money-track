@@ -413,8 +413,9 @@ export interface SubStack {
   /** §SUB-MONTH over the same set. No `annual` field: it is `monthly × 12`, and a derived figure on the
    *  wire only multiplies a rounding (the §BASE-CUR sweep caught a 6-minor-unit drift). */
   monthly: number;
-  /** What linked charges ACTUALLY took per complete month, oldest first, from the first month anything was linked. */
-  paid: { ym: string; paid: number }[];
+  /** What linked charges ACTUALLY took per complete month, oldest first, from the first month anything was linked.
+   *  `n` = charges that month; `top` = the largest plans in it (at most four), for the column's tooltip. */
+  paid: { ym: string; paid: number; n: number; top: { title: string; paid: number }[] }[];
   /** First three observed months against the last three; null without six observed months. */
   drift: { from_avg: number; to_avg: number; pct: number } | null;
   /** Two or more live subscriptions under one LEAF category — asked, never asserted. */

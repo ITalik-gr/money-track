@@ -4,7 +4,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
 import { dateFmt, numFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
-import { useGetCategoryOverviewQuery, useGetCategoryDrillQuery, useGetTransactionsQuery } from "../store/api.ts";
+import { useGetCategoryOverviewQuery, useGetCategoryDrillQuery, useGetTransactionsQuery, useGetSparkQuery } from "../store/api.ts";
+import type { SparkData } from "../../shared/api/analytics.ts";
+import { Sparkline } from "../components/ui/Sparkline.tsx";
 import { CategoryShapeBlocks } from "../components/stats/CategoryShape.tsx";
 import { CategorySettings } from "../components/stats/CategorySettings.tsx";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
@@ -101,6 +103,7 @@ export function Category() {
   const [openMonth, setOpenMonth] = useState<string | null>(null);
 
   const { data, isError, error, refetch } = useGetCategoryOverviewQuery({ id, from, to });
+  const { data: spark } = useGetSparkQuery();
   const { data: drill } = useGetCategoryDrillQuery({ category: id, from, to });
   const monthWin = openMonth ? monthBounds(openMonth) : null;
   const { data: monthRows, isFetching: monthLoading } = useGetTransactionsQuery(
@@ -330,20 +333,12 @@ export function Category() {
                 : t("cat.topMerchantsHint")}
             </span>
           </div>
-          <div className="card">
-            <ul className="cat-merch-list">
-              {data.top_merchants.map((m) => (
-                <li key={m.merchant}>
-                  <Link className="cat-merch-name" to={`/merchant/${encodeURIComponent(m.merchant)}`}>{m.merchant}</Link>
-                  {/* The share is what turns a list into an answer: a total tells the reader
-                      nothing until they know what the category costs. */}
-                  <span className="cat-merch-share label">{m.share_pct}%</span>
-                  <span className="cat-merch-n label">{t("cat.merchantOps", { n: m.n })}</span>
-                  <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} {baseSign()}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <div className="card flush"><div className="trows">
+            {data.top_merchants.map((m) => (
+              <MerchTrow key={m.merchant} name={m.merchant} spent={Math.abs(m.spent)} barPct={m.share_pct}
+                sub={<>{m.share_pct}% · {t("cat.merchantOps", { n: m.n })}</>} spark={spark} />
+            ))}
+          </div></div>
         </section>
       )}
 
@@ -542,19 +537,38 @@ export function Category() {
       {!!drill?.merchants.length && (
         <section>
           <div className="section-head"><h2>{t("cat.merchantsTitle")}</h2></div>
-          <div className="card">
-            <ul className="cat-merch-list">
-              {drill.merchants.slice(0, 12).map((m) => (
-                <li key={m.merchant}>
-                  <Link className="cat-merch-name" to={`/merchant/${encodeURIComponent(m.merchant)}`}>{m.merchant}</Link>
-                  <span className="cat-merch-n label">{t("cat.merchantOps", { n: m.n })}</span>
-                  <span className="num-mono">{formatMinor(Math.abs(m.spent), { decimals: false })} {baseSign()}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+          <div className="card flush"><div className="trows">
+            {drill.merchants.slice(0, 12).map((m) => (
+              <MerchTrow key={m.merchant} name={m.merchant} spent={Math.abs(m.spent)} spark={spark}
+                barPct={(Math.abs(m.spent) / Math.max(1, ...drill.merchants.map((x) => Math.abs(x.spent)))) * 100}
+                sub={t("cat.merchantOps", { n: m.n })} />
+            ))}
+          </div></div>
         </section>
       )}
     </>
+  );
+}
+
+/**
+ * A merchant row on the category page — the same `.trow` as Statistics (UI_PASS S10), so the
+ * 6-month sparkline the owner liked there is readable here too, per month on hover.
+ */
+function MerchTrow({ name, spent, barPct, sub, spark }: {
+  name: string; spent: number; barPct: number; sub: React.ReactNode; spark: SparkData | undefined;
+}) {
+  const series = spark?.merchants[name];
+  return (
+    <Link className="trow" to={`/merchant/${encodeURIComponent(name)}`}>
+      <span className="trow-name"><span>{name}</span></span>
+      <span className="trow-bar"><span style={{ width: `${Math.min(100, barPct)}%`, background: "var(--accent)" }} /></span>
+      {series && (
+        <span className="trow-spark">
+          <Sparkline values={series} months={spark?.buckets} sign={baseSign()} color="var(--accent)" width={112} height={32} area />
+        </span>
+      )}
+      <span className="trow-val">{formatMinor(spent, { decimals: false })} {baseSign()}</span>
+      <span className="trow-sub">{sub}</span>
+    </Link>
   );
 }

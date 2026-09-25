@@ -214,7 +214,7 @@
 .hover-tip {
   position: fixed; z-index: 200; pointer-events: none;
   background: #0f1620; color: #fff; border-radius: 10px; padding: 9px 12px;
-  font-size: 12px; box-shadow: var(--shadow); max-width: 240px;
+  font-size: 12px; box-shadow: var(--shadow); max-width: 250px;
 }
 .hover-tip .tip-lbl { color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 4px; }
 .hover-tip .r { display: flex; align-items: center; gap: 7px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
@@ -223,6 +223,18 @@
 .hover-tip b { color: #fff; }
 .tip-explain { line-height: 1.45; max-width: 210px; }
 .tip-explain b { color: #fff; }
+/* Shared tooltip vocabulary for both dark tips (`.chart-tip`, `.hover-tip`): a muted line, a
+   key-value row, a section under a hairline, and pos/neg tones lifted toward white — the plain
+   tokens are tuned for a light card and read as mud on the tip's near-black (§HEALTH-TREND). */
+.tip-muted { color: rgba(255, 255, 255, 0.6); }
+.tip-big { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tip-pos { color: color-mix(in srgb, var(--pos) 55%, white); }
+.tip-neg { color: color-mix(in srgb, var(--neg) 55%, white); }
+.tip-sec { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.tip-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-variant-numeric: tabular-nums; }
+.tip-kv + .tip-kv { margin-top: 2px; }
+.tip-kv > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255, 255, 255, 0.75); }
+.tip-kv > :last-child { flex-shrink: 0; }
 
 /* §1: інфо-іконка з поясненням метрики (KPI/факти) — не заважає кліку на плитку. */
 .info-tip {

@@ -18,7 +18,7 @@ import { formatMinor } from "../../lib/format.ts";
 import { useGetPatternsQuery } from "../../store/api.ts";
 import type { Overview } from "../../store/api.ts";
 import { IMPORTANCE_LEVELS, IMPORTANCE_META, type Importance } from "../../lib/importance.ts";
-import { HoverTip } from "../ui/HoverTip.tsx";
+import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { SliceDrillPanel, StatKpiInner, type Cur } from "./shared.tsx";
 import { baseSign } from "../../lib/currency.ts";
@@ -85,9 +85,12 @@ export function ImportanceBreakdown({ data, sign, from, to, currency }: { data: 
             if (!v) return null;
             const pct = impPcts[li];
             return (
-              <span key={lv} style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }} title={`${t(IMPORTANCE_META[lv].labelKey)}: ${pct}%`}>
-                {pct >= 8 && <span className="imp-seg-lbl">{pct}%</span>}
-              </span>
+              <HoverTip key={lv} content={<TipBody label={t(IMPORTANCE_META[lv].labelKey)} color={IMPORTANCE_META[lv].color}
+                value={<>{formatMinor(v, { decimals: false })} {sign}</>} sub={t("tip.shareOfSpend", { pct })} />}>
+                <span style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }}>
+                  {pct >= 8 && <span className="imp-seg-lbl">{pct}%</span>}
+                </span>
+              </HoverTip>
             );
           })}
         </div>

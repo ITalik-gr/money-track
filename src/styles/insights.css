@@ -94,37 +94,31 @@
 
 /* ---- §FLOOR: the cost of changing nothing --------------------------------- */
 .floor-card { padding: 18px 20px; }
-/* An addition, laid out as one: two addends, a rule, a total. Labels left, money right on a
-   shared column, so the digits line up and the sum can be checked by eye — the whole point of
-   the rewrite (the previous version printed the parts and the total in three different places
-   and expected the reader to relate them). */
-.floor-ledger { margin-top: var(--sp-3); }
-.fl-row { display: flex; align-items: baseline; gap: var(--sp-3); padding: 5px 0; }
-.fl-lbl { flex: 1 1 auto; min-width: 0; font-size: var(--fs-sm); color: var(--ink-2); display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-/* The «+» sits in the label column rather than before the amount: an operator next to the digits
-   would read as a positive sign on the number, which is the opposite of what it means here. */
-.fl-op { color: var(--muted); font-variant-numeric: tabular-nums; }
-.fl-amt { flex: 0 0 auto; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; font-size: var(--fs-lg); white-space: nowrap; }
-/* The uneven half is real money and must not read as an error or as a discount — muted, not red. */
-.fl-amt.muted-num { color: var(--ink-2); font-weight: 500; }
-.fl-row.total { border-top: 1px solid var(--line-strong); margin-top: 2px; padding-top: 9px; }
-.fl-row.total .fl-lbl { color: var(--ink); }
-.fl-row.total .fl-amt { font-size: var(--fs-2xl); }
-.fl-note { margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); }
-/* Each runway is a line of its own: a number, then the condition under which it is true. Side by
-   side they were two labels for a distinction the reader had to already be holding. */
-.floor-runways {
-  margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line);
-  font-size: var(--fs-sm); color: var(--muted);
-}
-.floor-runways > .label { display: flex; align-items: baseline; gap: 5px; }
-.floor-rw { display: flex; align-items: baseline; gap: var(--sp-2); margin-top: 4px; }
-.floor-rw b { flex: 0 0 auto; min-width: 58px; font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink-2); }
-/* The full-burn runway keeps the emphasis: it is the number every other screen shows, and letting
-   the friendlier one look like the answer would be the app choosing the optimistic reading. */
-.floor-rw.strong { color: var(--ink); }
-.floor-rw.strong b { color: var(--ink); font-weight: 600; }
-.floor-parts { margin-top: var(--sp-3); }
+/* One bar on the income's length (UI_PASS S8): fixed · uneven · free. Fixed is ink, never green
+   (a share of income taken by fixed costs is not «good» on its own terms); uneven is the same ink
+   lighter (real money, not an error); free is the pale remainder. */
+.mb-hero { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin-top: var(--sp-3); }
+.mb-amt { font-size: var(--fs-3xl); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; color: var(--ink); }
+.mb-amt small { font-size: var(--fs-md); font-weight: 500; color: var(--muted); margin-left: 4px; }
+.mb-pct { font-size: var(--fs-sm); font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
+.mb-pct.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
+.mb-pct.neg { color: var(--neg); background: color-mix(in srgb, var(--neg) 10%, transparent); }
+.mb-bar-wrap { margin-top: var(--sp-4); }
+.mb-bar { position: relative; display: flex; height: 14px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.mb-seg { display: block; height: 100%; cursor: default; }
+.mb-seg + .mb-seg { box-shadow: inset 2px 0 0 var(--surface); }
+.mb-seg.fixed, .mb-legend i.fixed { background: var(--ink-2); }
+.mb-seg.lumpy, .mb-legend i.lumpy { background: color-mix(in srgb, var(--ink-2) 45%, var(--surface)); }
+.mb-seg.free, .mb-legend i.free { background: color-mix(in srgb, var(--pos) 22%, var(--surface)); }
+.mb-income-mark { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--neg); }
+.mb-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 10px; font-size: var(--fs-sm); color: var(--muted); }
+.mb-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.mb-legend i { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
+.mb-legend b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mb-legend .neg b, .mb-legend .neg { color: var(--neg); }
+.mb-legend .mb-income { margin-left: auto; }
+.mb-runway { margin: var(--sp-4) 0 0; padding-top: var(--sp-3); border-top: 1px solid var(--line); font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.5; }
+.mb-block { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
 .floor-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px; }
 .floor-chip {
   display: inline-flex; align-items: center; gap: 6px;
@@ -134,21 +128,7 @@
 }
 .floor-chip .d { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 .floor-chip b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
-/* ---- §COMMITTED: the floor as a share of income ------------------------------ */
-.committed-card { padding: 18px 20px; }
-.cm-head { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-3); }
-.cm-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: var(--fs-3xl); font-weight: 600; line-height: 1; color: var(--ink); }
-.cm-pct.warn { color: var(--warn); }
-.cm-pct.neg { color: var(--neg); }
-.cm-said { font-size: var(--fs-sm); color: var(--ink-2); min-width: 0; }
-.cm-said b { color: var(--ink); font-weight: 600; }
-/* One track, the income's length; the fill is what the floor takes. Muted ink by default — a share
-   of income taken by fixed costs is never «good» on its own terms, so it never goes green. */
-.cm-bar { height: 8px; margin-top: var(--sp-3); border-radius: var(--radius-pill); background: var(--surface-2); overflow: hidden; }
-.cm-fill { display: block; height: 100%; border-radius: inherit; background: var(--ink-2); }
-.cm-fill.warn { background: var(--warn); }
-.cm-fill.neg { background: var(--neg); }
-.cm-trend { margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+/* ---- §COMMITTED trend, now inside the §FLOOR card -------------------------- */
 .cm-trend-head { display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap; }
 /* Rising share is bad, falling is good — the tone follows the value (DESIGN §6), not the slope. */
 .cm-moved { margin-left: auto; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; font-weight: 600; }
@@ -189,13 +169,11 @@
 .pd-weeks { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .pd-weeks b { color: var(--ink); font-weight: 600; }
 @media (max-width: 620px) {
-  .committed-card { padding: 14px; }
-  .cm-pct { font-size: var(--fs-2xl); }
   .payday-card { padding: 14px; }
   .rhythm-card { padding: 14px; }
   .fx-card { padding: 14px; }
 }
 @media (max-width: 620px) {
   .floor-card { padding: 14px; }
-  .fl-row.total .fl-amt { font-size: var(--fs-xl); }
+  .mb-amt { font-size: var(--fs-2xl); }
 }

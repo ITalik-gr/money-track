@@ -37,24 +37,24 @@ export function MerchantsBlock({ data, sign, merchMax }: {
     <section>
       <div className="section-head"><h2>{t("stats.merchants.title")}</h2><InfoTip>{t("stats.merchants.tip")}</InfoTip><span className="label">{t("stats.byCategory.click")}</span></div>
       {data.byMerchant.length ? (
-        <div className="card flush"><div className="mrows">
+        <div className="card flush"><div className="trows">
           {data.byMerchant.slice(0, 7).map((m, i) => (
-            <Link key={i} to={`/merchant/${encodeURIComponent(m.merchant)}`} className="mrow mrow-link">
-              <MerchantLogo merchant={m.merchant} color="var(--accent)" fallbackLabel={m.merchant} />
-              <div className="m-body">
-                <div className="m-name">{m.merchant}</div>
-                <div className="m-track"><div className="m-fill" style={{ width: `${(m.spent / merchMax) * 100}%` }} /></div>
-              </div>
-              {spark?.merchants[m.merchant] && <Sparkline values={spark.merchants[m.merchant]} color="var(--accent)" />}
-              <div style={{ textAlign: "right" }}>
-                <div className="m-val">{formatMinor(m.spent, { decimals: false })} {sign}</div>
-                <div className="m-sub">
-                  {t("stats.merchants.avgSub", { n: m.n, amount: formatMinor(Math.round(m.spent / m.n), { decimals: false }), sign })}
-                  {/* A share of the period's WHOLE spend — only the top seven are listed, so it is not a
-                      set that sums to 100 and is not rounded as one (§PCT-SUM `pctOf`). */}
-                  {pctOf(m.spent, data.summary.spend) != null && <> · {t("stats.shareOfSpend", { pct: pctOf(m.spent, data.summary.spend)! })}</>}
-                </div>
-              </div>
+            <Link key={i} to={`/merchant/${encodeURIComponent(m.merchant)}`} className="trow has-lead">
+              <span className="trow-lead"><MerchantLogo merchant={m.merchant} color="var(--accent)" fallbackLabel={m.merchant} /></span>
+              <span className="trow-name"><span>{m.merchant}</span></span>
+              <span className="trow-bar"><span style={{ width: `${(m.spent / merchMax) * 100}%`, background: "var(--accent)" }} /></span>
+              {spark?.merchants[m.merchant] && (
+                <span className="trow-spark">
+                  <Sparkline values={spark.merchants[m.merchant]} months={spark.buckets} sign={sign} color="var(--accent)" width={112} height={32} area />
+                </span>
+              )}
+              <span className="trow-val">{formatMinor(m.spent, { decimals: false })} {sign}</span>
+              <span className="trow-sub">
+                {t("stats.merchants.avgSub", { n: m.n, amount: formatMinor(Math.round(m.spent / m.n), { decimals: false }), sign })}
+                {/* A share of the period's WHOLE spend — only the top seven are listed, so it is not a
+                    set that sums to 100 and is not rounded as one (§PCT-SUM `pctOf`). */}
+                {pctOf(m.spent, data.summary.spend) != null && <> · {pctOf(m.spent, data.summary.spend)}%</>}
+              </span>
             </Link>
           ))}
         </div></div>

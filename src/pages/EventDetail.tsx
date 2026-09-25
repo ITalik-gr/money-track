@@ -16,6 +16,7 @@ import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { baseSign } from "../lib/currency.ts";
+import { HoverTip, TipBody } from "../components/ui/HoverTip.tsx";
 
 const kindLabel = (k: string | null) => {
   const found = GROUP_KINDS.find((x) => x.value === k);
@@ -137,7 +138,10 @@ function EventPlan({ eventId, kind, planned, plannedTotal, spent }: {
 
       {hasPlan && (
         <div className="evt-plan-bar-wrap">
-          <div className="evt-plan-bar"><span className={over ? "over" : ""} style={{ width: `${fill}%` }} /></div>
+          <HoverTip content={<TipBody label={t("evt.plan.actual")} value={<Money minor={spent} decimals={false} />}
+            sub={t("tip.shareOfTotal", { pct: plannedTotal > 0 ? Math.round((spent / plannedTotal) * 100) : 0 })} />}>
+            <div className="evt-plan-bar"><span className={over ? "over" : ""} style={{ width: `${fill}%` }} /></div>
+          </HoverTip>
           <div className="evt-plan-nums">
             <span>{t("evt.plan.planned")} <b><Money minor={plannedTotal} decimals={false} /></b></span>
             <span>{t("evt.plan.actual")} <b><Money minor={spent} decimals={false} /></b></span>

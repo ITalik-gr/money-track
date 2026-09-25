@@ -55,6 +55,10 @@ export interface ProjectedDay {
   ordinary: number;
   /** Expected inflow: dated income plans plus recurring paydays. */
   income: number;
+  /** The named plans behind `scheduled` and a plan-sourced `income`, `cashflowMoves` sign. */
+  items: { title: string; amount: number }[];
+  /** True when `income` is the detected payday rather than a dated plan. */
+  payday: boolean;
 }
 
 export interface ProjectionInput {
@@ -63,7 +67,7 @@ export interface ProjectionInput {
   /** Inclusive upper bound: the end of the period being drawn. */
   until: number;
   /** Dated plan moves, `cashflowMoves` convention: positive leaves, negative arrives. */
-  scheduled: { at: number; amount: number }[];
+  scheduled: { at: number; amount: number; title?: string }[];
   /** Expected ordinary (unplanned) spend for one average day, minor units. */
   ordinaryDaily: number;
   /** `typical` unplanned spend per day-of-month, index 0 = the 1st. Zeroes are allowed. */
@@ -121,17 +125,21 @@ export function projectDays(input: ProjectionInput): ProjectedDay[] {
   // the total does not.
   const scale = weightSum > 0 ? (ordinaryDaily * days.length) / weightSum : 0;
 
-  const byDay = new Map<number, { out: number; in: number }>();
+  // The NAMES travel with the sums (UI_PASS S3): a tooltip that says «−12 500 planned» without
+  // saying it is the rent explains nothing the dashed line did not already show.
+  const byDay = new Map<number, { out: number; in: number; items: { title: string; amount: number }[] }>();
   for (const m of scheduled) {
     const key = localDayStart(m.at);
-    const slot = byDay.get(key) ?? { out: 0, in: 0 };
+    const slot = byDay.get(key) ?? { out: 0, in: 0, items: [] };
     if (m.amount >= 0) slot.out += m.amount; else slot.in += -m.amount;
+    if (m.title) slot.items.push({ title: m.title, amount: Math.round(m.amount) });
     byDay.set(key, slot);
   }
   const paydayBy = new Map(paydays.map((p) => [p.dom, p.amount]));
 
   return days.map((d, i) => {
-    const sched = byDay.get(d.at) ?? { out: 0, in: 0 };
+    const sched = byDay.get(d.at) ?? { out: 0, in: 0, items: [] };
+    const payday = !(sched.in > 0) && paydayBy.has(d.dom);
     return {
       at: d.at,
       date: `${localParts(d.at).y}-${String(localParts(d.at).m).padStart(2, "0")}-${String(d.dom).padStart(2, "0")}`,
@@ -141,6 +149,8 @@ export function projectDays(input: ProjectionInput): ProjectedDay[] {
       // fact, the rhythm is an inference from it or from something like it, and adding both would
       // count one salary twice on the one day it is most likely to be right about.
       income: Math.round(sched.in > 0 ? sched.in : (paydayBy.get(d.dom) ?? 0)),
+      items: sched.items,
+      payday,
     };
   });
 }
@@ -239,7 +249,7 @@ export async function buildCashProjection(
     // already expressed every charge in the reader's base — the parameter is named `rates` and its
     // unit follows whoever supplied it. Multiplying by `uahToBase` here converted twice, and on a
     // dollar screen that reads as a plausibly small subscription rather than as a broken chart.
-    scheduled: moves.map((m) => ({ at: m.at, amount: Math.round(m.amount) })),
+    scheduled: moves.map((m) => ({ at: m.at, amount: Math.round(m.amount), title: m.title })),
     ordinaryDaily, domProfile, dowProfile, paydays,
   });
 

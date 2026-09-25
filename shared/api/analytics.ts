@@ -580,6 +580,10 @@ export interface CashProjectionDay {
   ordinary: number;
   /** Expected inflow: a dated income plan, else a detected payday. NEVER canonical income. */
   income: number;
+  /** The plans that fall on this day, by name: positive leaves, negative arrives (minor units). */
+  items: { title: string; amount: number }[];
+  /** `income` is the detected payday (a rhythm), not a dated plan. */
+  payday: boolean;
 }
 
 export interface CashProjection {

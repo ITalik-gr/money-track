@@ -396,9 +396,7 @@ export function Subscription() {
         </section>
       )}
 
-      <section>
-        <SubSettings plan={plan} />
-      </section>
+      <SubSettings plan={plan} />
     </>
   );
 }

@@ -43,8 +43,9 @@ export function BusinessToggle({ txId, value, proposal, accountBusiness }: {
     catch (e) { toast.error(errText(e)); }
   };
 
+  // «За рахунком» alone asked the reader to know what the account says; the option now names it.
   const options: { v: 0 | 1 | null; label: string }[] = [
-    { v: null, label: t("fop.tx.inherit") },
+    { v: null, label: t(accountBusiness ? "fop.tx.inheritWork" : "fop.tx.inheritPersonal") },
     { v: 1, label: t("fop.tx.yes") },
     { v: 0, label: t("fop.tx.no") },
   ];
@@ -59,11 +60,11 @@ export function BusinessToggle({ txId, value, proposal, accountBusiness }: {
 
   return (
     <div className="fop-tx">
-      <span className="fop-tx-label">{t("fop.tx.label")}</span>
-      <div className="seg">
+      <span className="label">{t("fop.tx.label")}</span>
+      <div className="seg" role="radiogroup" aria-label={t("fop.tx.label")}>
         {options.map((o) => (
           <button
-            key={String(o.v)}
+            key={String(o.v)} role="radio" aria-checked={value === o.v}
             className={`seg-btn ${value === o.v ? "active" : ""}`}
             disabled={isLoading}
             onClick={() => set(o.v)}
@@ -78,9 +79,10 @@ export function BusinessToggle({ txId, value, proposal, accountBusiness }: {
           </button>
         </span>
       )}
-      {/* Said where the decision is made, not only on /fop: somebody marking a purchase as a work
-          expense will assume it lowers the tax. On the single tax it does not. */}
-      <span className="fop-tx-note">{t("fop.tx.note")}</span>
+      {/* What the flag DOES, said where it is set — the owner could not tell what «Робоча операція»
+          was for. And the single-tax caveat: somebody marking a purchase as a work expense will
+          assume it lowers the tax. It does not. */}
+      <span className="fop-tx-note">{t("fop.tx.explain")}</span>
     </div>
   );
 }

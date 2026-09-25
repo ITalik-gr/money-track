@@ -35,11 +35,36 @@ import { FactLabel, SliceDrillPanel, labelFor, weekdayLong, weekdayShort, type C
  * function only accumulates them — a second running sum in the client is how a chart's two halves
  * end up disagreeing about the day they meet.
  */
-export type CumPoint = { label: string; cum: number | null; proj?: number | null };
+export type CumPoint = {
+  label: string;
+  cum: number | null;
+  proj?: number | null;
+  /** Tooltip heading: the full date for a day bucket, the axis label otherwise. */
+  title: string;
+  /** Actual bucket, whole units of the reader's currency. */
+  spend?: number;
+  income?: number;
+  /** Projected day: named plans (positive leaves), shaped ordinary spend, expected income. */
+  plans?: { title: string; amount: number }[];
+  ordinary?: number;
+  expIncome?: number;
+  incomes?: { title: string; amount: number }[];
+  payday?: boolean;
+};
+
+const dayTitle = dateFmt({ weekday: "short", day: "numeric", month: "short" });
+
 export function toCumulative(series: Overview["series"], projection?: CashProjection | null): CumPoint[] {
   let acc = 0;
-  const rows: CumPoint[] = series.map((s) => { acc += (s.income - s.spend) / 100; return { label: labelFor(s.bucket), cum: Math.round(acc) }; });
   const daily = series.every((s) => /^\d{4}-\d{2}-\d{2}$/.test(s.bucket));
+  const rows: CumPoint[] = series.map((s) => {
+    acc += (s.income - s.spend) / 100;
+    return {
+      label: labelFor(s.bucket),
+      title: daily ? dayTitle.format(new Date(s.bucket + "T12:00:00")) : labelFor(s.bucket),
+      cum: Math.round(acc), spend: s.spend / 100, income: s.income / 100,
+    };
+  });
   if (!projection?.days.length || !daily || rows.length < 2) return rows;
 
   const lastCum = rows[rows.length - 1].cum ?? 0;
@@ -48,10 +73,18 @@ export function toCumulative(series: Overview["series"], projection?: CashProjec
   let proj = lastCum;
   for (const d of projection.days) {
     proj += (d.income - d.scheduled - d.ordinary) / 100;
+    const at = new Date(d.at * 1000);
     rows.push({
-      label: dm.format(new Date(d.at * 1000)).replace(/\s/g, ""),
+      label: dm.format(at).replace(/\s/g, ""),
+      title: dayTitle.format(at),
       cum: null,
       proj: Math.round(proj),
+      // Income plans ride in `items` with a negative sign; they are shown as income, not as plans.
+      plans: d.items.filter((it) => it.amount > 0).map((it) => ({ title: it.title, amount: it.amount / 100 })),
+      incomes: d.items.filter((it) => it.amount < 0).map((it) => ({ title: it.title, amount: -it.amount / 100 })),
+      ordinary: d.ordinary / 100,
+      expIncome: d.income / 100,
+      payday: d.payday,
     });
   }
   return rows;
