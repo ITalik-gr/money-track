@@ -2,50 +2,56 @@
  * light theme's own cool neutral carried into the dark, cobalt lifted so it does not sink.
  * Same token set as `theme-light.css` (lint C23); the contract is written there.
  *
- * Contrast on --surface (WCAG): ink 14.9 · ink-2 9.1 · muted 5.7 · accent 6.7 · neg 6.5 · pos 7.8 ·
- * on-accent on accent 7.3 · card vs bg 1.13 · surface-3 vs surface 1.30 · tip vs surface 1.34.
+ * Contrast on --surface (WCAG): ink 13.2 · ink-2 8.3 · muted 5.5 · neg 7.4 · warn 9.9 · pos 8.3 ·
+ * primary text on --primary ≥ 10 · card vs bg 1.10.
  * A new text pair keeps ≥ 4.5 (body ≥ 7). */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #0a0d13;
-  --surface: #161b25;
-  --surface-2: #1f2531;
-  --surface-3: #28303e;
-  --raised: #28303e;
-  --float: #1f2531;
-  --float-2: #28303e;
-  --field: #10141c;
+  --bg: #0f131a;
+  --surface: #181d27;
+  --surface-2: #212734;
+  --surface-3: #2a3140;
+  --raised: #2a3140;
+  --float: #212734;
+  --float-2: #2a3140;
+  --field: #13171f;
   --hover: rgba(233, 237, 244, 0.06);
   --overlay: rgba(3, 5, 9, 0.62);
 
   --focus-edge: var(--accent);
   --focus-ring: 0 0 0 3px var(--accent-soft);
 
-  --line: #262d3a;
-  --line-strong: #353e4e;
+  --line: #272e3b;
+  --line-strong: #333b4a;
+  /* Softer than --line-strong: on a dark ground the fill already separates the card, and a
+     bright frame on every card made the page read as boxes. */
+  --card-line: #2a3140;
 
-  --ink: #e9edf4;
-  --ink-2: #b4bdcc;
-  --muted: #8b95a7;
+  --ink: #dfe4ec;
+  --ink-2: #adb6c4;
+  --muted: #8a94a5;
 
   --accent: #789fff;
   --accent-strong: #9cb8ff;
   --accent-soft: #1c2845;
   --on-accent: #0b1220;
+  /* Not --ink: a full-strength near-white slab was the brightest thing on the screen. */
+  --primary: #c9d1dd;
+  --on-primary: #11151c;
   --accent-on-ink: color-mix(in srgb, var(--accent) 72%, #000);
 
-  --pos: #47c390;
+  --pos: #4fcb97;
   --pos-soft: #13292a;
-  --neg: #f17e6e;
-  --neg-soft: #2e1c1d;
+  --neg: #ff8b7b;
+  --neg-soft: #33201f;
   --on-neg: #1a0d0b;
-  --warn: #e1ac4e;
-  --warn-soft: #2b2417;
+  --warn: #ecc06a;
+  --warn-soft: #30291a;
 
   --tip: #2b3240;
   --tip-line: #3b4455;
-  --tip-ink: #e9edf4;
+  --tip-ink: #e6eaf1;
   --tip-ink-2: #c4ccd9;
   --tip-muted: #9aa4b6;
   --tip-sep: #3b4455;
@@ -70,7 +76,7 @@
   --shadow-sm: none;
   --shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-card: none;
-  --shadow-raised: inset 0 0 0 1px #353e4e;
+  --shadow-raised: inset 0 0 0 1px #333b4a;
   --shadow-float: 0 10px 30px rgba(0, 0, 0, 0.5);
   --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.45);
   --shadow-sheet: 0 -8px 30px rgba(0, 0, 0, 0.45);

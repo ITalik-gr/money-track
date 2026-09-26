@@ -63,7 +63,7 @@ const EXCEPTIONS = {
   // worker/repo, entered 2026-09-25 at the sizes they had (see DIRS). Seams already visible in them:
   // `analytics.ts` holds health, insights and drill queries side by side; `transactions.ts` the feed,
   // the receipt and the reimbursement queries.
-  "worker/repo/analytics.ts": 920,   // 1006 → 971: `health_history` → repo/health.ts; → 920 (2026-09-25): income reads → repo/income.ts
+  "worker/repo/analytics.ts": 857,   // 1006 → 971: `health_history` → repo/health.ts; → 920 (2026-09-25): income reads → repo/income.ts; → 857 (2026-09-26): merchant reads → repo/merchant.ts
   "worker/repo/transactions.ts": 915,
   "worker/repo/planning.ts": 521,
   "worker/repo/categories.ts": 503,
@@ -75,7 +75,7 @@ const EXCEPTIONS = {
   // `lib/finance/cashflow.ts`, which is where "which money moves when" belonged anyway. The
   // exception ratchets down with the file so the slack cannot be spent twice.
   // 2026-08-14 (§CAT-PAGE): 687 → 655 — the category drill followed, into `category-drill.ts`.
-  "worker/routes/api/analytics.ts": 670,
+  "worker/routes/api/analytics.ts": 635,
   // Predates the split: the Telegram bot's command surface, still holding 3 inline queries too.
   // 2026-09-02 (§TG-CSV): 320 → 315. Statement import needed a dispatch branch and a callback
   // branch, and the exception could not rise — so the FORMATTERS moved to `tg-format.ts`, which

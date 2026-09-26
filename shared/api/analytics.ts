@@ -386,17 +386,42 @@ export interface Habits {
 export type CurrenciesList = number[];
 
 // §P3: сторінка мерчанта — агрегати по одному мерчанту.
-export interface MerchantAnalytics {
-  name: string;
-  total: number;                 // копійки, ₴ — уся історія витрат
-  n: number;
-  avg: number;                   // копійки, середній чек
+/** One side of a merchant's ledger — what you paid them, or what they paid you. */
+export interface MerchantSide {
+  total: number;                 // minor units, reader's base; spend is NET of refunds (§REFUND)
+  n: number;                     // real operations (a refund is not a visit)
+  avg: number;                   // total / n
   first_at: number | null;
   last_at: number | null;
-  by_month: { month: string; spent: number }[];
-  top_category: { name: string; color: string | null; spent: number } | null;
-  category_share: number | null; // % витрат категорії, що припадає на мерчанта
+  /** Median days between consecutive operations — "every ~30 days". Null below 3 operations. */
+  every_days: number | null;
+  top_category: { name: string; color: string | null; amount: number } | null;
+  category_share: number | null; // % of that category's all-time total this merchant carries
+}
+
+/**
+ * `GET /analytics/merchant?name=` — one merchant, both directions.
+ *
+ * A merchant is not always a shop: an employer, a client or a friend PAYS you. `kind` says which
+ * side dominates, so the page can word itself ("received" vs "spent") instead of showing an
+ * employer as "spent 0 ₴".
+ */
+export interface MerchantAnalytics {
+  name: string;
+  kind: "spend" | "income" | "mixed" | "none";
+  spend: MerchantSide;
+  income: MerchantSide;
+  /** Refunds from this merchant — already subtracted from `spend.total`, shown for honesty. */
+  refunds: { total: number; n: number };
+  /** Operations neither side counts (own-money moves, transfers, allocated compensations). */
+  other_n: number;
+  /** Every operation with this merchant, whatever side. */
+  total_n: number;
+  /** Twelve calendar months, oldest first, gaps filled with zeros. */
+  by_month: { month: string; spent: number; income: number }[];
   transactions: import("./transactions.ts").TxRow[];
+  /** More rows exist than `transactions` carries. */
+  has_more: boolean;
 }
 
 /**

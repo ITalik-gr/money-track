@@ -23,8 +23,8 @@
 /* Primary = ink/near-black, not saturated cobalt (DESIGN.md §10.2). Cobalt is
    reserved for links, current selection, and focus rings — never "the button
    colour". Inverts cleanly in dark theme (light button on dark surface). */
-.btn.primary { background: var(--ink); color: var(--surface); border-color: var(--ink); }
-.btn.primary:hover { background: color-mix(in srgb, var(--ink) 88%, var(--surface)); border-color: color-mix(in srgb, var(--ink) 88%, var(--surface)); }
+.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.btn.primary:hover { background: color-mix(in srgb, var(--primary) 88%, var(--on-primary)); border-color: color-mix(in srgb, var(--primary) 88%, var(--on-primary)); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.ghost { border-color: transparent; background: transparent; }
 .btn.ghost:hover { background-image: var(--hover-layer); border-color: transparent; }

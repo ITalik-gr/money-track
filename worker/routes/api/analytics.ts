@@ -18,6 +18,7 @@ import { st } from "../../lib/platform/i18n.ts";
 import { apiRoutes, numParam } from "./_shared.ts";
 import { buildWeekdayAnalytics, buildDomAnalytics } from "../../lib/finance/weekday.ts";
 import { buildNetworth } from "../../lib/finance/networth.ts";
+import { buildMerchant } from "../../lib/finance/merchant.ts";
 import { collectHabits } from "../../lib/finance/habits.ts";
 import { computePriceDrift } from "../../lib/finance/price-drift.ts";
 import { computeFxCost } from "../../lib/finance/fx.ts";
@@ -158,44 +159,11 @@ analytics.get("/analytics/networth", async (c) => {
   return c.json(await buildNetworth(c.env, months, c.get("locale")) satisfies Networth);
 });
 
-// §P3: сторінка мерчанта — агрегати по одному мерчанту (уся історія + тренд 6 міс + частка
-// в категорії). Канон stats.ts (SPEND_WHERE/amountSum/EFF_*), зведено в ₴.
+// §P3: the merchant page — both directions of money (lib/finance/merchant.ts).
 analytics.get("/analytics/merchant", async (c) => {
   const name = new URL(c.req.url).searchParams.get("name");
   if (!name) return c.json({ error: "name required" }, 400);
-  const rates = await getRates(c.env);
-  const { mult } = valueMode(rates, null);
-  const now = Math.floor(Date.now() / 1000);
-  const from6 = localMonthStart(now, -5);
-
-  const db = c.env.DB, loc = c.get("locale");
-  const [agg, byMonth, topCat, txs] = await Promise.all([
-    analyticsRepo.merchantAggregate(db, mult, name),
-    analyticsRepo.merchantByMonth(db, mult, now, name, from6),
-    analyticsRepo.merchantTopCategory(db, loc, mult, name),
-    analyticsRepo.merchantTransactions(db, loc, name),
-  ]);
-
-  // Частка в категорії: витрати мерчанта / витрати всієї категорії (уся історія).
-  let categoryShare: number | null = null;
-  if (topCat?.id != null && topCat.spent > 0) {
-    const catTot = await analyticsRepo.categoryTotalAllTime(db, mult, topCat.id);
-    if (catTot && catTot.spent > 0) categoryShare = Math.round((topCat.spent / catTot.spent) * 100);
-  }
-
-  const total = agg?.total ?? 0;
-  const n = agg?.n ?? 0;
-  return c.json({
-    name,
-    total, n,
-    avg: n > 0 ? Math.round(total / n) : 0,
-    first_at: agg?.first_at ?? null,
-    last_at: agg?.last_at ?? null,
-    by_month: byMonth.map((r) => ({ month: r.m, spent: r.spent })),
-    top_category: topCat?.name ? { name: topCat.name, color: topCat.color, spent: topCat.spent } : null,
-    category_share: categoryShare,
-    transactions: txs,
-  } satisfies MerchantAnalytics);
+  return c.json(await buildMerchant(c.env, c.get("locale"), name) satisfies MerchantAnalytics);
 });
 
 // Порівняння двох періодів side-by-side (беклог): вибраний період A проти попереднього

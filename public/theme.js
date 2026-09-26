@@ -9,7 +9,7 @@
 // so it cannot read `--bg` and holds the chrome colours as literals: lint C23 checks that `BG` has
 // exactly the themes of `THEMES` and that each value equals that theme file's `--bg`.
 try {
-  var BG = { light: "#f3f5f8", dark: "#0a0d13" };
+  var BG = { light: "#f3f5f8", dark: "#0f131a" };
   var t = localStorage.getItem("mt-theme");
   if (!BG.hasOwnProperty(t)) t = "light";
   document.documentElement.setAttribute("data-theme", t);

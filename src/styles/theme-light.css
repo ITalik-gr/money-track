@@ -40,6 +40,7 @@
   /* ── Lines ── */
   --line: #e9edf3;
   --line-strong: #dbe1ea;
+  --card-line: var(--line-strong); /* a resting card's border */
 
   /* ── Text ── */
   --ink: #0f1620;
@@ -51,6 +52,9 @@
   --accent-strong: #1f57cc; /* primary hover: darker in light, LIGHTER in dark */
   --accent-soft: #eaf1fd;   /* selected / open / active fills */
   --on-accent: #ffffff;     /* text and icons on --accent */
+  /* The solid primary fill (buttons, «Add», the brand mark) and its text. Ink in light (DESIGN §10.2). */
+  --primary: var(--ink);
+  --on-primary: var(--surface);
   --accent-on-ink: color-mix(in srgb, var(--accent) 70%, #fff); /* accent on an --ink band */
 
   /* ── Signals ── */

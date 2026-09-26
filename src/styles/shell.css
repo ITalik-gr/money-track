@@ -48,7 +48,7 @@ a { color: inherit; text-decoration: none; }
    Shadow is reserved for the floating layer ONLY (modals / popovers / dropdowns). */
 .card {
   background: var(--surface);
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--card-line);
   border-radius: var(--radius);
   box-shadow: none;
   /* Падінг за замовчуванням — картка БЕЗ нього не потрібна нікому, а його відсутність у
@@ -63,7 +63,7 @@ a { color: inherit; text-decoration: none; }
    картки цей відступ додається до падінга — заголовок провалюється вниз. */
 .card > .section-head:first-child { margin-top: 0; }
 /* Hero card (dashboard balance) — no lift either; hierarchy comes from its content. */
-.card.hero { box-shadow: none; border-color: var(--line-strong); }
+.card.hero { box-shadow: none; border-color: var(--card-line); }
 
 h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 
@@ -115,8 +115,8 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .brand .mark {
   width: 26px; height: 26px;
   border-radius: 7px;
-  background: var(--ink);
-  color: var(--surface);
+  background: var(--primary);
+  color: var(--on-primary);
   display: grid; place-items: center;
   font-family: var(--font-mono);
   font-weight: 600; font-size: 15px;
@@ -145,8 +145,8 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 .side-nav a:hover { background: var(--hover); color: var(--ink); }
 .side-nav a.active { background: var(--accent-soft); color: var(--accent); }
 .side-nav a.active .ico { opacity: 1; }
-.side-nav .add { margin-top: 10px; background: var(--ink); color: var(--surface); }
-.side-nav .add:hover { background: color-mix(in srgb, var(--ink) 88%, var(--surface)); color: var(--surface); }
+.side-nav .add { margin-top: 10px; background: var(--primary); color: var(--on-primary); }
+.side-nav .add:hover { background: color-mix(in srgb, var(--primary) 88%, var(--on-primary)); color: var(--on-primary); }
 
 .side-foot { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--line); }
 

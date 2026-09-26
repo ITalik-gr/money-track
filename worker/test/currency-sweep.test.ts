@@ -51,6 +51,8 @@ const NOT_MONEY = new Set([
   "events",
   // §INCOME-RHYTHM: counts of months and days.
   "covered_floor", "longest_gap_days", "days_since_last",
+  // §P3 merchant page: operation counts and the median gap between payments, in days.
+  "total_n", "other_n", "every_days",
   // §FX-EXPOSURE: a currency CODE and the size of the what-if.
   "base_currency", "move_pct",
   // ⚠️ Money, but BASE-RELATIVE by definition: which currency is «foreign» depends on the base, so a
@@ -169,7 +171,7 @@ const ENDPOINTS: string[] = [
   "/analytics/cashflow-calendar", "/analytics/cash-projection", "/analytics/receipt-items", "/analytics/price-drift", "/analytics/fx-cost",
   "/analytics/patterns", "/analytics/by-category", "/analytics/habits", "/analytics/weekday",
   "/analytics/weekday?preset=month", "/analytics/day-of-month", "/analytics/spark", "/analytics/health",
-  "/analytics/category?id=1", "/analytics/merchant?name=Сільпо",
+  "/analytics/category?id=1", "/analytics/merchant?name=Сільпо", "/analytics/merchant?name=Зарплата",
   "/analytics/category?category=1",   // the Statistics donut drill (§CAT-PAGE)
 ];
 

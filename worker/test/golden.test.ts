@@ -77,6 +77,7 @@ const ENDPOINTS: string[] = [
   "/analytics/health",
   "/analytics/category?id=1",
   "/analytics/merchant?name=Сільпо",
+  "/analytics/merchant?name=Зарплата",   // the income side (§P3): a payer, not a shop
 ];
 
 /** Filename-safe slug of the request path, so a golden file is traceable to its endpoint. */

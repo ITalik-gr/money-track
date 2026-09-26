@@ -23,6 +23,8 @@
 @import "./styles/topbar.css";
 @import "./styles/dashboard.css";
 @import "./styles/domains-a.css";
+/* Merchant page. Split out of domains-a.css (C8 ratchet, 2026-09-26); same position in the order. */
+@import "./styles/merchant.css";
 /* Advisor: the runway card, the two-column shell, the state row, the advice history. Split out of
    domains-a.css (C8 ratchet, 2026-08-27) and imported IMMEDIATELY after it, in the position its
    rules already occupied — a part moved to a different point in the order changes which rule wins

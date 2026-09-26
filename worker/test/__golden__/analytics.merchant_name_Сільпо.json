@@ -2,43 +2,99 @@
   "status": 200,
   "body": {
     "name": "Сільпо",
-    "total": 902400,
-    "n": 18,
-    "avg": 50133,
-    "first_at": 1757149200,
-    "last_at": 1778749200,
+    "kind": "spend",
+    "spend": {
+      "total": 902400,
+      "n": 18,
+      "avg": 50133,
+      "first_at": 1757149200,
+      "last_at": 1778749200,
+      "every_days": 10,
+      "top_category": {
+        "name": "Продукти",
+        "color": "#1F6E4C",
+        "amount": 902400
+      },
+      "category_share": 45
+    },
+    "income": {
+      "total": 0,
+      "n": 0,
+      "avg": 0,
+      "first_at": null,
+      "last_at": null,
+      "every_days": null,
+      "top_category": null,
+      "category_share": null
+    },
+    "refunds": {
+      "total": 0,
+      "n": 0
+    },
+    "other_n": 0,
+    "total_n": 18,
     "by_month": [
       {
+        "month": "2025-06",
+        "spent": 0,
+        "income": 0
+      },
+      {
+        "month": "2025-07",
+        "spent": 0,
+        "income": 0
+      },
+      {
+        "month": "2025-08",
+        "spent": 0,
+        "income": 0
+      },
+      {
+        "month": "2025-09",
+        "spent": 90300,
+        "income": 0
+      },
+      {
+        "month": "2025-10",
+        "spent": 93000,
+        "income": 0
+      },
+      {
+        "month": "2025-11",
+        "spent": 112300,
+        "income": 0
+      },
+      {
         "month": "2025-12",
-        "spent": 98400
+        "spent": 98400,
+        "income": 0
       },
       {
         "month": "2026-01",
-        "spent": 74400
+        "spent": 74400,
+        "income": 0
       },
       {
         "month": "2026-02",
-        "spent": 158100
+        "spent": 158100,
+        "income": 0
       },
       {
         "month": "2026-03",
-        "spent": 98800
+        "spent": 98800,
+        "income": 0
       },
       {
         "month": "2026-04",
-        "spent": 103300
+        "spent": 103300,
+        "income": 0
       },
       {
         "month": "2026-05",
-        "spent": 73800
+        "spent": 73800,
+        "income": 0
       }
     ],
-    "top_category": {
-      "name": "Продукти",
-      "color": "#1F6E4C",
-      "spent": 902400
-    },
-    "category_share": 45,
     "transactions": [
       {
         "id": "tx0058",
@@ -778,6 +834,7 @@
         "category_color": "#1F6E4C",
         "category_icon": "cart"
       }
-    ]
+    ],
+    "has_more": false
   }
 }

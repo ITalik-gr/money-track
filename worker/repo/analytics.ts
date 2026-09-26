@@ -19,7 +19,6 @@ import type { NotifLocale } from "../../shared/notif-i18n.ts";
 // Declaring a private twin here would re-create D2 one layer down: two spellings of one row,
 // drifting quietly, with `tsc` unable to compare them.
 import type { CategorySpend, DrillTx, PeriodTotals } from "../../shared/api/analytics.ts";
-import type { TxRow } from "../../shared/api/transactions.ts";
 
 /**
  * How amounts are valued, straight from `valueMode(rates, currency)`.
@@ -229,68 +228,6 @@ export async function foreignConversions(db: AppDb, r: Range): Promise<ForeignTx
      ORDER BY t.time ASC`,
   ).bind(r.from, r.to).all<ForeignTx>();
   return res.results ?? [];
-}
-
-// ---- single merchant --------------------------------------------------------
-
-export interface MerchantAggregate {
-  total: number; n: number; first_at: number | null; last_at: number | null;
-}
-
-export async function merchantAggregate(
-  db: AppDb, mult: string, name: string,
-): Promise<MerchantAggregate | null> {
-  return await db.prepare(
-    `SELECT ${amountSum(mult)} AS total, COUNT(DISTINCT t.id) AS n, MIN(t.time) AS first_at, MAX(t.time) AS last_at
-     FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?`,
-  ).bind(name).first<MerchantAggregate>();
-}
-
-export async function merchantByMonth(
-  db: AppDb, mult: string, now: number, name: string, from: number,
-): Promise<{ m: string; spent: number }[]> {
-  const res = await db.prepare(
-    `SELECT ${localYmSql(now)} AS m, ${amountSum(mult)} AS spent
-     FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ? AND t.time >= ?
-     GROUP BY m ORDER BY m`,
-  ).bind(name, from).all<{ m: string; spent: number }>();
-  return res.results ?? [];
-}
-
-export interface TopCategory {
-  id: number | null; name: string | null; color: string | null; spent: number;
-}
-
-export async function merchantTopCategory(
-  db: AppDb, locale: NotifLocale, mult: string, name: string,
-): Promise<TopCategory | null> {
-  return await db.prepare(
-    `SELECT ${EFF_CAT_ID} AS id, ${catNameSql(locale, EFF_CAT_NAME)} AS name, ${EFF_CAT_COLOR} AS color, ${amountSum(mult)} AS spent
-     FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND t.merchant = ?
-     GROUP BY ${EFF_CAT_ID} ORDER BY spent DESC LIMIT 1`,
-  ).bind(name).first<TopCategory>();
-}
-
-/** Recent rows for the merchant. NOT filtered by `SPEND_WHERE` — the detail list shows refunds
- *  and transfers too, because hiding them would make the history look wrong to the reader. */
-export async function merchantTransactions(
-  db: AppDb, locale: NotifLocale, name: string,
-): Promise<TxRow[]> {
-  const res = await db.prepare(
-    `SELECT t.*, ${catNameSql(locale, EFF_CAT_NAME)} AS category_name, ${EFF_CAT_COLOR} AS category_color,
-            COALESCE(rc.icon, c.icon) AS category_icon
-     FROM transactions t ${STATS_JOINS} WHERE t.merchant = ? ORDER BY t.time DESC LIMIT 40`,
-  ).bind(name).all<TxRow>();
-  return res.results ?? [];
-}
-
-/** All-time spending in one effective category — the denominator for "share of category". */
-export async function categoryTotalAllTime(
-  db: AppDb, mult: string, categoryId: number,
-): Promise<{ spent: number } | null> {
-  return await db.prepare(
-    `SELECT ${amountSum(mult)} AS spent FROM transactions t ${STATS_JOINS} WHERE ${SPEND_WHERE} AND ${EFF_CAT_ID} = ?`,
-  ).bind(categoryId).first<{ spent: number }>();
 }
 
 /**

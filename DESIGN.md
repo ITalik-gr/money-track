@@ -47,25 +47,27 @@ explicit toggle is the product).
 
 | Token | Light | Dark | Role |
 |---|---|---|---|
-| `--bg` | `#f3f5f8` | `#0a0d13` | app ground |
-| `--surface` | `#ffffff` | `#161b25` | cards |
-| `--surface-2` | `#eef1f6` | `#1f2531` | nested/inset blocks, tracks, chips, drill panels |
-| `--surface-3` | `#e8ecf3` | `#28303e` | raised inside a nested block |
-| `--raised` | `#ffffff` | `#28303e` | the ON chip of a segmented control |
-| `--float` / `--float-2` | `#ffffff` / `#eef1f6` | `#1f2531` / `#28303e` | popovers, Select, palette, toasts / a tile on them |
-| `--field` | `#ffffff` | `#10141c` | inputs (sunken in dark) |
+| `--bg` | `#f3f5f8` | `#0f131a` | app ground |
+| `--surface` | `#ffffff` | `#181d27` | cards |
+| `--surface-2` | `#eef1f6` | `#212734` | nested/inset blocks, tracks, chips, drill panels |
+| `--surface-3` | `#e8ecf3` | `#2a3140` | raised inside a nested block |
+| `--raised` | `#ffffff` | `#2a3140` | the ON chip of a segmented control |
+| `--float` / `--float-2` | `#ffffff` / `#eef1f6` | `#212734` / `#2a3140` | popovers, Select, palette, toasts / a tile on them |
+| `--field` | `#ffffff` | `#13171f` | inputs (sunken in dark) |
 | `--hover` | `rgba(40,70,130,.08)` | `rgba(233,237,244,.06)` | hover OVERLAY, any surface |
 | `--overlay` | `rgba(10,16,24,.45)` | `rgba(3,5,9,.62)` | modal / sheet scrim |
-| `--line` / `--line-strong` | `#e9edf3` / `#dbe1ea` | `#262d3a` / `#353e4e` | borders / inputs |
-| `--ink` / `--ink-2` / `--muted` | `#0f1620` / `#3b4656` / `#5f6b79` | `#e9edf4` / `#b4bdcc` / `#8b95a7` | text |
+| `--line` / `--line-strong` | `#e9edf3` / `#dbe1ea` | `#272e3b` / `#333b4a` | borders / inputs |
+| `--card-line` | = `--line-strong` | `#2a3140` | a resting card's border |
+| `--primary` / `--on-primary` | = `--ink` / `--surface` | `#c9d1dd` / `#11151c` | solid primary fill (buttons, «Add», brand mark) |
+| `--ink` / `--ink-2` / `--muted` | `#0f1620` / `#3b4656` / `#5f6b79` | `#dfe4ec` / `#adb6c4` / `#8a94a5` | text |
 | `--accent` / `-strong` / `-soft` | `#2e6be6` / `#1f57cc` / `#eaf1fd` | `#789fff` / `#9cb8ff` / `#1c2845` | cobalt / hover / selected fill |
 | `--on-accent` · `--on-neg` | `#fff` · `#fff` | `#0b1220` · `#1a0d0b` | text on a solid accent / neg |
-| `--pos` · `--neg` · `--warn` (+`-soft`) | `#14915f` · `#dd4b39` · `#b5790f` | `#47c390` · `#f17e6e` · `#e1ac4e` | signals |
+| `--pos` · `--neg` · `--warn` (+`-soft`) | `#14915f` · `#dd4b39` · `#b5790f` | `#4fcb97` · `#ff8b7b` · `#ecc06a` | signals |
 | `--tip*` | `#0f1620` ground, white ink | `#2b3240` ground, `#3b4455` edge | every tooltip |
 | `--cat-keep` | `100%` | `69%` | how much of a stored category colour survives |
 | `--shadow-*` | low, cool | none at rest; `--shadow-float` on floating layers | elevation |
 
-Contrast on dark `--surface`: ink 14.9 · ink-2 9.1 · muted 5.7 · accent 6.7 · on-accent 7.3.
+Contrast on dark `--surface`: ink 13.2 · ink-2 8.3 · muted 5.5 · neg 7.4 · warn 9.9 · pos 8.3.
 A new text pair keeps ≥ 4.5 (body ≥ 7).
 
 **Rules.** Hover is `var(--hover)` (or `background-image: var(--hover-layer)` on a control with
@@ -193,6 +195,7 @@ Standing rules distilled from the log up to 2026-09-21 (the full history is in g
 |---|---|---|
 | 2026-09-26 | Dark theme palette = **«Сланець» (Slate)**: cool graphite with a slight blue bias, the light theme's cobalt lifted to `#789fff`, a 4-step elevation ladder, hover as a translucent overlay, dark text on the accent. Shortlisted alternatives (keys `bg / surface / surface-2 / hover-step / line / ink / accent / pos / neg / warn / tip`): Графіт `#0b0d11 #171b22 #20252e #29303b #262c36 #e8ecf2 #6f9bff #45c28e #f07b6b #e0aa4c #2b313c`; Чорнило `#0a0c16 #161a2a #1f2437 #282e45 #262b41 #eceefb #8aa6ff #48c69c #f3857b #e4b35c #2a3048`; Тепла сажа `#0a0a0b #19191c #212124 #2b2b30 #2a2a2f #eeeef0 #7c9dff #56c291 #ec7c6c #dfab50 #303036`; Опівніч `#080b14 #141a2a #1c2336 #252d44 #232b40 #eaeefa #7ea3ff #46c59a #f2837a #e3b15a #28304a`. | Owner: the current dark theme «дуже погана»; chosen from a palette lab of seven (https://claude.ai/artifact/YAUvoVTkCJ61GN91EYSibw). |
 | 2026-09-26 | §THEME implemented: themes split into `theme-light.css` / `theme-dark.css` (same token set, C23), one switch module `src/lib/theme.ts` (both toggles share state; `theme-color` read from `--bg`), `catColor()` for stored colours, ~45 hover fills → overlay, tooltips/popovers/toasts/scrims/fields/segmented/checkbox tick/skeleton on tokens, every hard-coded colour gone from app CSS and components. Kept from the design, not the brief: primary button stays ink (§10.2), `.sub-ai-block`/`.ai-block` stay neutral cards, open `.trow` stays `--surface-2`. Light moved slightly in three places: hover overlay (#eef0f5 vs #eef1f6), one scrim value (0.4/0.5 → 0.45), fallback palettes for uncoloured rows now cycle the six category tokens. | The old dark theme was overrides plus ~140 colours that never followed it; each fix was a rule to remember, so the whole class is now a failed check. Not seen live yet. |
+| 2026-09-26 | Slate retuned after the owner's first look: ground `#0a0d13` → `#0f131a` (it read as a different hue from the cards), ink `#e9edf4` → `#dfe4ec` and a new `--primary` `#c9d1dd` for solid primary fills (the white glowed), neg `#f17e6e` → `#ff8b7b` and warn `#e1ac4e` → `#ecc06a` (salmon and amber were hard to read), card border softened to `--card-line`. Light unchanged. | «білий дуже світиться, червоний важче читати, оранжево-жовтий»; «бг сам і бг блоків не матчиться». Not seen live yet. |
 | 2026-09-25 | One styled checkbox/radio app-wide (17px, 5px radius, white tick on accent); an instant-save on/off setting is a `.switch`, a picker is a checkbox. Tooltips open on tap and on keyboard focus (`HoverTip`), a flipped tip anchors by `right`/`bottom` and flips on its measured size; prose tips are `max-content` ≤ 300px. | T2/T3/F5/F6: OS checkboxes in both themes; tips that did not exist on phones or for keyboards; prose wrapped one word per line near the edge. |
 | 2026-09-25 | A drill is the open row's lower half: the row loses its bottom radius, the panel continues its tone with no border, inner blocks are captioned sections (no card in a card). Statistics → Trends has ONE «when» block (facts · weekday/day-of-month switch · priciest days as chips · one drill slot). «Форма витрат» leads with its one sentence. | ST1/ST2/ST4: «a grey box pasted under a row»; five similar day blocks; the biggest block of the tab for one fact. |
 | 2026-09-25 | Dashboard main column = this month then the long view (forecast full width → free/pulse → envelopes → 6-month flow → capital); upcoming charges in the rail. Balance chips are labelled by currency code. «Місячний мінімум» is two columns at full width, its trend has a 70% line and a sentence saying what the share means. | D1/D2/A2/A3 from the owner's review. |
@@ -213,6 +216,7 @@ Standing rules distilled from the log up to 2026-09-21 (the full history is in g
 | 2026-09-25 | §SUB-STACK card under the Subscriptions hero: drift pill (+red / −green by value), a sentence with the two averages, 12 month columns of what was ACTUALLY charged, then «Trial ended» rows (link to the plan) and «Similar subscriptions» as questions. Subscription page: «Якщо скасувати» card — per month, per year, points of committed income, and a trial line. | The stack drifts while every row looks small; a cancel decision needs its size in the reader's own terms. Duplicates are questions — a household can have two phones. Not seen live yet. |
 | 2026-09-25 | §COMMITTED card on Advisor → Стан, under the floor card: percentage FIRST (`--fs-3xl`), money sentence beside it, one income-length bar, six month columns with their own % labels. Tone: neutral ink below 70%, `--warn` from 70%, `--neg` past 100% — never green. | A share of income taken by fixed costs is never «good» on its own terms; the owner asked for percentages next to hryvnia. Not seen live yet. |
 | 2026-09-25 | Health trend = Recharts area on a fixed 0..100 axis with a tooltip (score · band · four parts' points, each ± vs the previous day, «moved most»), replacing the bare sparkline. A provisional index shows «—» and no band. Unmeasured parts use `.idle` (no signal colour). | «Can't hover it and see what the score was». A score alone teaches nothing; the part that moved names what to look at. Not seen live yet. |
+| 2026-09-26 | §P3 merchant page shows BOTH directions: `kind` (spend / income / mixed / none) words the header and tiles («Усього отримано», «Середній платіж»); tiles add last operation (+ days ago) and regularity (median gap, «щомісяця» for 27–33 d); a mixed counterparty gets a received · paid · net line and a tile row per side; the trend is 12 gap-filled months as bars (income `--pos`, spend `--accent`); refunds and uncounted transfers are named in one muted note; «Усі операції →» when the list is cut. | Owner, screenshot: an employer paying a salary read «Усього витрачено 0 ₴ · 0 операцій» above three incoming payments. Not seen live yet. |
 
 ## 7. Working on design (skills — mandatory)
 
