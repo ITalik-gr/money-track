@@ -6,6 +6,7 @@
  * and the one about to be reached is the one that answers «am I getting anywhere».
  * Silent without goals: an empty rail card would be an advert for a feature on the daily screen.
  */
+import { catColor } from "../../lib/theme.ts";
 import { Link } from "react-router-dom";
 import { useT } from "../../i18n/index.ts";
 import { useGetGoalsQuery } from "../../store/api.ts";
@@ -40,7 +41,7 @@ export function GoalsMini() {
               <HoverTip content={<TipBody label={g.name} color={color}
                 value={<Money minor={g.current} currency={g.currency_code} decimals={false} />}
                 sub={<>{t("goal.ofTarget")} <Money minor={g.target_amount} currency={g.currency_code} decimals={false} /> · {t("tip.left")} <Money minor={g.pace.left} currency={g.currency_code} decimals={false} /></>} />}>
-                <span className="gm-bar"><i style={{ width: `${Math.min(100, pct)}%`, background: color }} /></span>
+                <span className="gm-bar"><i style={{ width: `${Math.min(100, pct)}%`, background: catColor(color) }} /></span>
               </HoverTip>
               <span className="gm-sub">{t("tip.left")} <Money minor={g.pace.left} currency={g.currency_code} decimals={false} /></span>
             </Link>

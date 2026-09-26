@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/index.ts";
 import { Select } from "../ui/Select.tsx";
@@ -95,7 +96,7 @@ export function TxSplitEditor({ txId, amount, currency, cats }: {
         <div className="split-view">
           {splits!.map((s) => (
             <div className="split-vrow" key={s.id}>
-              <span className="split-cat"><span className="d" style={{ background: s.category_color ?? "var(--muted)" }} />{s.category_name ?? t("split.categoryFallback")}</span>
+              <span className="split-cat"><span className="d" style={{ background: catColor(s.category_color ?? "var(--muted)") }} />{s.category_name ?? t("split.categoryFallback")}</span>
               <span className="split-amt">{formatMinor(Math.abs(s.amount), { decimals: false })} {sign}</span>
             </div>
           ))}

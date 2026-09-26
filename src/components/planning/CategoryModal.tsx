@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { useEffect, useState } from "react";
 import {
   useCreateCategoryMutation,
@@ -72,7 +73,7 @@ export function CategoryModal({ category, defaultParentId, defaultIncome, onClos
         </div>
         <div className="stack" style={{ gap: 14 }}>
           <div className="row" style={{ gap: 10, alignItems: "flex-end" }}>
-            <span className="cat-ico cat-preview" style={{ background: color }}><CategoryIcon slug={icon} size={22} /></span>
+            <span className="cat-ico cat-preview" style={{ background: catColor(color) }}><CategoryIcon slug={icon} size={22} /></span>
             <label className="stack" style={{ gap: 5, flex: 1 }}>
               <span className="label">{t("catModal.nameLabel")}</span>
               <input autoFocus placeholder={t("catModal.namePlaceholder")} value={name}
@@ -112,7 +113,7 @@ export function CategoryModal({ category, defaultParentId, defaultIncome, onClos
             <div className="icon-picker">
               {ICON_SLUGS.map((s) => (
                 <button key={s} type="button" className={`icon-opt ${icon === s ? "on" : ""}`}
-                  style={icon === s ? { background: color, color: "#fff", borderColor: color } : undefined}
+                  style={icon === s ? { background: catColor(color), color: "#fff", borderColor: catColor(color) } : undefined}
                   onClick={() => setIcon(s)} aria-label={s}>
                   <CategoryIcon slug={s} size={18} />
                 </button>
@@ -130,9 +131,9 @@ export function CategoryModal({ category, defaultParentId, defaultIncome, onClos
                   return (
                     <button key={lv} type="button" title={t(m.hintKey)}
                       className={`imp-opt ${on ? "on" : ""}`}
-                      style={on ? { borderColor: m.color, background: `color-mix(in srgb, ${m.color} 14%, transparent)`, color: m.color } : undefined}
+                      style={on ? { borderColor: catColor(m.color), background: `color-mix(in srgb, ${catColor(m.color)} 14%, transparent)`, color: catColor(m.color) } : undefined}
                       onClick={() => setImportance(on ? null : lv)}>
-                      <span className="d" style={{ background: m.color }} />{t(m.labelKey)}
+                      <span className="d" style={{ background: catColor(m.color) }} />{t(m.labelKey)}
                     </button>
                   );
                 })}

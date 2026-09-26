@@ -13,37 +13,23 @@
 
 ### STYLES phase 4 (`DESIGN.md §8`)
 Phase 0.5 is done (C20, 2026-09-25). Phase 4: real domain grouping across cascade boundaries.
-Also found on the way: `.sub-ai-block` renders neutral in explicit dark (`data-theme="dark"`) but
-accent-tinted in system dark (`prefers-color-scheme`) — pick one. (The dead `.wd-bar` transition
-went with the second `.wd-*` rule set in UI_PASS ST2.)
+(The dead `.wd-bar` transition went with the second `.wd-*` rule set in UI_PASS ST2.)
 
-### Dark theme — a real second theme, not an inversion (owner, 2026-09-25: «дуже погана»)
-Recorded, NOT started. Analysis from the tokens (`tokens.css` `:root[data-theme="dark"]`) and the
-live screens seen during UI_PASS:
-- **Character.** Light is warm spruce + cobalt (DESIGN §1); dark is a generic cold navy
-  (`--bg #0b0f14`, `--surface #141a22`) — the two themes do not look like one product, which
-  breaks «light and dark are equals».
-- **Too few luminance steps.** `--surface #141a22` → `--surface-2 #1b232d` → `--line #232d38` are
-  ~3% apart: hover fills, drill panels (ST1), `.ilist` separators, segmented controls and nested
-  blocks melt into each other. Needs a deliberate elevation ladder (bg < surface < raised <
-  hover) with measured contrast between neighbours.
-- **Tooltips vanish.** `.hover-tip` / `.chart-tip` are hard-coded `#0f1620` — the same as the
-  dark background, so a tip has no edge. Tips need a token (raised surface + border in dark).
-- **Signal colours too loud.** `--neg #f0674a` / `--pos #35b37e` / accent `#5a97ff` at full
-  saturation on near-black: red amounts in the ledger glow, heatmaps (`color-mix` with
-  transparent) go muddy. Desaturate for dark and re-check AA on `--surface`.
-- **Colours that do not follow the theme.** ~60 hard-coded hex values outside the theme blocks
-  (C20 note in DESIGN §8): category colours stored in the DB (tuned for light, e.g. pine
-  `#1f6e4c` is dark-on-dark), `#fff` text on tiles, `#0f1620` tips, chart fills. Needs a mapping
-  for category colours in dark (lighten by a fixed rule) rather than per-screen fixes.
-- **Shadows are invisible** (`rgba(0,0,0,.35)` on near-black) — elevation must come from surface
-  colour and a hairline, not shadow.
-- **System vs explicit dark differ** (`.sub-ai-block`, above) — one source of truth for dark.
-**Goal:** a dark theme with its own spruce-tinted palette and a 4-step elevation ladder, every
-colour through a token. **Steps:** (1) palette + ladder proposal as a swatch page for the owner's
-yes; (2) tokens; (3) sweep hard-coded colours (a lint like C15 for raw hex outside `tokens.css`);
-(4) category-colour mapping for dark; (5) live pass on every screen. **Done-when:** no raw hex
-outside `tokens.css`/`landing.css`, and the owner signs off the swatch page and a screen tour.
+### `/business` spacing
+Owner (2026-09-25): gaps between elements and texts across `/business` feel off. The page is
+owner-only (§FOP-GATE) and cannot be opened in the local demo; a static pass found no inline
+margins and the stack spaced by `gap`. **Needs:** the owner's screenshots (which gaps). **Done-when:**
+the named gaps follow DESIGN §6 (spacing from the container, section rhythm 26px).
+
+### Cashflow calendar — the bigger redesign
+The popover clipping is fixed (O3, 2026-09-25). Left for a live screen: cell density (two inline
+items + «+N»), the red tint scaled by the day's total, whether income days need their own row.
+
+### Reports — judge the text with a paid run
+O4 (2026-09-25) gave the report the canonical burn and the app's verdicts (`report-news.ts`: health
+band, attention subscriptions, stack drift, what is coming). **Steps:** generate one weekly and one
+monthly report and read them; if the model ignores `news_note`, move those lines into the system
+prompt (`report-prompt.ts`) and confirm with `npm run eval`.
 
 ### MCP for a second assistant (ChatGPT) — live connection
 Everything is built against the specs and pinned in `oauth.test.ts` (§MCP-OAUTH).
@@ -59,6 +45,15 @@ Everything is built against the specs and pinned in `oauth.test.ts` (§MCP-OAUTH
   `appendSemantic` only when a line separates «shown» from «hidden» (§7.4).
 - Other users: a per-user TypeSafe key through `user_secrets` (§10).
 - `known_plan`: only with a real case whose bank name differs from the plan's.
+
+### Split `src/store/api.ts` with `injectEndpoints`
+~1390 lines, outside C3 (client code). One file per domain, mirroring `shared/api/*`; every hook
+import changes, so do it as one mechanical pass with `tsc` as the check.
+
+### `draftMissedPlans` on top of `planState`
+It keeps its own loop, though it reads the same constants and walk as `plan-state.ts`, so it cannot
+disagree today. Rewriting it on `planState` removes the second loop; its tests pin wording and
+dedup keys, so keep those identical.
 
 ### Batch runs — wire a real job kind
 The mechanics exist (§A6-BATCH, migration 0053, pinned on `noop_batch`). Left: hang

@@ -1,6 +1,7 @@
 // Автобюджет із історії — детерміновано, без AI і без чату.
 // «Ліміти = мій звичний рівень мінус N%». Поруч живе AI-план: той пояснює й враховує
 // профіль, цей — миттєвий, безкоштовний і передбачуваний. Різні інструменти, обидва потрібні.
+import { catColor } from "../../lib/theme.ts";
 import { useState } from "react";
 import { useLazyGetAutoBudgetQuery, useApplyAutoBudgetMutation } from "../../store/api.ts";
 import type { AutoBudgetItem } from "../../store/api.ts";
@@ -86,7 +87,7 @@ export function AutoBudget() {
                   <div className="ab-body">
                     <div className="bp-item-main">
                       <span className="bp-name">
-                        <span className="d" style={{ background: i.color ?? "var(--muted)" }} />
+                        <span className="d" style={{ background: catColor(i.color ?? "var(--muted)") }} />
                         {i.name}
                         {i.essential && <span className="ab-tag">{tr("ab.essentialTag")}</span>}
                         {/* §BUDGET-MEMORY: a row that stops being trimmed while its neighbours are

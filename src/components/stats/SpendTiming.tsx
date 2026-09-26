@@ -139,8 +139,8 @@ export function SpendTiming({ series, sign, from, to, currency }: {
                     sub={<>{money(d.spent)} · {t("stats.patterns.domTimes", { n: d.days })}</>} />}>
                     <button type="button" className={`dom-cell ${isOpen("dom", String(d.dom)) ? "open" : ""}`} disabled={!(d.spent > 0)}
                       onClick={() => toggle({ dim: "dom", value: String(d.dom), label: t("stats.patterns.domDrill", { dom: d.dom }) })}
-                      style={{ background: d.typical > 0 ? `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, transparent)` : "var(--surface-2)" }}>
-                      <span className="dom-num" style={{ color: intensity > 0.55 ? "#fff" : "var(--muted)" }}>{d.dom}</span>
+                      style={{ background: d.typical > 0 ? `color-mix(in srgb, var(--accent) ${Math.round(intensity * 100)}%, var(--surface))` : "var(--surface-2)" }}>
+                      <span className="dom-num" style={{ color: intensity > 0.55 ? "var(--on-accent)" : "var(--muted)" }}>{d.dom}</span>
                     </button>
                   </HoverTip>
                 );

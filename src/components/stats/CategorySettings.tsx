@@ -13,6 +13,7 @@
  * a year-long window would sit next to numbers about a different period.
  * ⚠️ The amount typed is in the reader's base; the server converts it (`baseToUah`, §BASE-CUR).
  */
+import { catColor } from "../../lib/theme.ts";
 import { useState } from "react";
 import { useT } from "../../i18n/index.ts";
 import {
@@ -88,7 +89,7 @@ export function CategorySettings({ data, monthView }: { data: CategoryOverview; 
             </div>
             <div className="setform-ctrl">
               <span className="catset-look">
-                <span className="catset-look-ico" style={{ background: category.color ?? "var(--muted)" }}><CategoryIcon slug={category.icon} size={16} /></span>
+                <span className="catset-look-ico" style={{ background: catColor(category.color ?? "var(--muted)") }}><CategoryIcon slug={category.icon} size={16} /></span>
                 {category.name}
               </span>
               <button className="btn sm" onClick={() => setEditing(true)}>
@@ -111,7 +112,7 @@ export function CategorySettings({ data, monthView }: { data: CategoryOverview; 
                     className={`seg-btn ${data.importance === lv ? "active" : ""}`}
                     onClick={() => pickImportance(lv)}
                   >
-                    <span className="imp-dot" style={{ background: IMPORTANCE_META[lv].color }} />
+                    <span className="imp-dot" style={{ background: catColor(IMPORTANCE_META[lv].color) }} />
                     {t(IMPORTANCE_META[lv].labelKey)}
                   </button>
                 ))}

@@ -44,7 +44,7 @@
   border-radius: 10px;
   display: grid; place-items: center;
   font-size: 17px; font-weight: 600;
-  color: #fff;
+  color: var(--on-tile);
   flex-shrink: 0;
 }
 
@@ -58,7 +58,7 @@
   border-radius: 0; background: transparent; box-shadow: none;
 }
 .ledger.rows .tx:last-child { border-bottom: none; }
-.ledger.rows .tx.tappable:hover { background: var(--surface-2); }
+.ledger.rows .tx.tappable:hover { background: var(--hover); }
 
 /* ── Широкий контейнер (сторінка Транзакцій) → той самий стек-рядок, лише
    просторіший: більше лого, повітря й трохи більший шрифт суми. Структура й
@@ -90,7 +90,7 @@
 .ledger.rows.drill-txs::-webkit-scrollbar { width: 8px; }
 .ledger.rows.drill-txs::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
 .ledger.rows.drill-txs .tx { box-shadow: none; background: var(--surface); border: none; border-radius: var(--radius-sm); padding: 8px 12px; }
-.ledger.rows.drill-txs .tx:hover { background: color-mix(in srgb, var(--ink) 4%, var(--surface)); }
+.ledger.rows.drill-txs .tx:hover { background: var(--hover-layer) var(--surface); }
 
 /* group membership: decorative left strip (rounded pill, group colour) — не бордер */
 .tx.in-group { position: relative; }
@@ -105,7 +105,7 @@
 }
 .tx .tx-check {
   width: 20px; height: 20px; border-radius: 6px; border: 1.6px solid var(--line-strong);
-  display: grid; place-items: center; color: #fff; background: var(--surface);
+  display: grid; place-items: center; color: var(--on-accent); background: var(--surface);
   transition: background-color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out);
 }
 .tx .tx-check.on { background: var(--accent); border-color: var(--accent); }
@@ -116,7 +116,7 @@
 .bulkbar-inner {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding: 10px 14px; border-radius: var(--radius);
-  background: var(--surface); border: 1px solid var(--line-strong); box-shadow: var(--shadow-card);
+  background: var(--float); border: 1px solid var(--line-strong); box-shadow: var(--shadow-float);
   max-width: 100%;
 }
 .bulk-count { font-weight: 600; font-size: 13.5px; white-space: nowrap; }
@@ -125,13 +125,13 @@
 
 /* modal (popup) */
 .modal-overlay {
-  position: fixed; inset: 0; z-index: 100; background: rgba(10, 16, 24, 0.5);
+  position: fixed; inset: 0; z-index: 100; background: var(--overlay);
   backdrop-filter: blur(2px); display: flex; align-items: center; justify-content: center; padding: 20px;
   animation: sel-in 0.14s ease;
 }
 .modal {
   width: 100%; background: var(--surface); border: 1px solid var(--line-strong);
- box-shadow: var(--shadow-card); max-height: 90vh; overflow-y: auto;
+ box-shadow: var(--shadow-float); max-height: 90vh; overflow-y: auto;
 }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .modal-head h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.01em; }
@@ -171,7 +171,7 @@
 .rev-foot { display: flex; justify-content: space-between; gap: 8px; align-items: center; margin-top: 14px;
   position: sticky; bottom: -20px; background: var(--surface); padding: 12px 0 2px; border-top: 1px solid var(--line); }
 .modal-x { width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; }
-.modal-x:hover { background: var(--surface-2); color: var(--ink); }
+.modal-x:hover { background-image: var(--hover-layer); color: var(--ink); }
 .color-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .swatch { width: 28px; height: 28px; border-radius: 8px; border: 2px solid transparent; cursor: pointer; }
 .swatch.on { border-color: var(--ink); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
@@ -187,9 +187,9 @@
 }
 @media (hover: hover) and (pointer: fine) { .group-card:hover { border-color: var(--line-strong); transform: translateY(-1px); } }
 .group-top { display: flex; align-items: flex-start; justify-content: space-between; }
-.group-ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; }
+.group-ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: var(--on-tile); }
 .group-del { border: none; background: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; }
-.group-del:hover { color: var(--neg); background: var(--surface-2); }
+.group-del:hover { color: var(--neg); background: var(--hover); }
 .group-name { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; margin-top: 4px; }
 .group-kind { font-size: 12.5px; color: var(--muted); }
 .group-note { font-size: 13px; color: var(--ink-2); line-height: 1.4; margin-top: 2px;
@@ -253,7 +253,7 @@
   background: var(--surface); color: var(--ink-2); cursor: pointer;
   display: grid; place-items: center; transition: border-color 0.12s, background 0.12s;
 }
-.icon-opt:hover { border-color: var(--muted); background: var(--surface-2); }
+.icon-opt:hover { border-color: var(--muted); background-image: var(--hover-layer); }
 .cat-preview { width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0; }
 
 /* categories management grid */
@@ -276,7 +276,7 @@
 .cat-badge { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); border: 1px solid var(--line-strong); border-radius: 5px; padding: 1px 5px; flex-shrink: 0; }
 .cat-card-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .icon-mini { width: 28px; height: 28px; border-radius: 7px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; display: grid; place-items: center; }
-.icon-mini:hover { background: var(--surface-2); color: var(--ink); }
+.icon-mini:hover { background-image: var(--hover-layer); color: var(--ink); }
 .cat-subs { display: flex; flex-wrap: wrap; gap: 6px; }
 .cat-sub {
   display: inline-flex; align-items: center; gap: 6px;
@@ -284,8 +284,8 @@
   border: 1px solid var(--line-strong); background: var(--surface);
   font-size: 12.5px; color: var(--ink-2); cursor: pointer;
 }
-.cat-sub:hover { border-color: var(--muted); background: var(--surface-2); }
-.cat-sub-dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.cat-sub:hover { border-color: var(--muted); background-image: var(--hover-layer); }
+.cat-sub-dot { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; color: var(--on-tile); flex-shrink: 0; }
 .cat-sub-x { color: var(--muted); font-size: 11px; margin-left: 1px; }
 .cat-sub-x:hover { color: var(--neg); }
 .cat-sub-add { border-style: dashed; color: var(--muted); }
@@ -343,11 +343,11 @@
 .filt-sec-body { padding-bottom: 12px; }
 .cat-tree { display: flex; flex-direction: column; gap: 1px; }
 .cat-tree-row { display: flex; align-items: center; width: 100%; border: none; background: none; cursor: pointer; border-radius: 8px; color: var(--ink-2); font-size: 13.5px; text-align: left; }
-.cat-tree-row:hover { background: var(--surface-2); }
+.cat-tree-row:hover { background: var(--hover); }
 .cat-tree-row.on { background: var(--accent-soft); color: var(--accent); font-weight: 500; }
 .cat-tree-row .ctr-main { display: flex; align-items: center; gap: 9px; flex: 1; min-width: 0; padding: 8px 8px; background: none; border: none; cursor: pointer; color: inherit; font: inherit; }
 .cat-tree-row > .ctr-name { padding: 8px; }
-.ctr-ico { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.ctr-ico { width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--on-tile); flex-shrink: 0; }
 .ctr-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-left: 4px; }
 .ctr-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ctr-caret { border: none; background: none; color: var(--muted); cursor: pointer; padding: 6px; display: grid; place-items: center; }
@@ -384,6 +384,6 @@
 /* кнопка «Вибрати» на /tx */
 .select-btn { display: inline-flex; align-items: center; gap: 7px; }
 .tx.tappable { cursor: pointer; }
-.tx.tappable:hover { background: var(--surface-2); }
+.tx.tappable:hover { background: var(--hover); }
 .tx.is-transfer .amt { color: var(--muted); }
 

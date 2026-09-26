@@ -10,6 +10,7 @@ import type { Locale } from "../../i18n/index.ts";
 import type { TranslationKey } from "../../i18n/index.ts";
 import { getBaseCurrency, setBaseCurrency } from "../../lib/currency.ts";
 import { useBrandMark } from "../../lib/brand.ts";
+import { useTheme } from "../../lib/theme.ts";
 import { asBaseCurrency } from "../../../shared/currency.ts";
 import { api } from "../../store/api.ts";
 import { store } from "../../store/index.ts";
@@ -77,27 +78,6 @@ function LangSwitch() {
       ))}
     </div>
   );
-}
-
-function useTheme() {
-  const [dark, setDark] = useState(
-    () => document.documentElement.getAttribute("data-theme") === "dark",
-  );
-  function toggle() {
-    const next = dark ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", next);
-    // Same rewrite `public/theme.js` does before first paint — otherwise the browser/PWA chrome
-    // keeps the previous theme's colour until the next reload.
-    document.querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", next === "dark" ? "#0b0f14" : "#f3f5f8");
-    try {
-      localStorage.setItem("mt-theme", next);
-    } catch {
-      /* ignore */
-    }
-    setDark(!dark);
-  }
-  return { dark, toggle };
 }
 
 // Топбар-пошук: відкриває командну панель (Ctrl-K). Раніше тут був окремий інпут, що вів

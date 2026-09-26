@@ -29,13 +29,13 @@
 /* §BUDGET-MEMORY in the auto-budget: "never kept" is a WARNING tone, not a negative one. It
    reports a fact about the past, and the row it sits on is a proposal being made more achievable —
    colouring it like an error would read as the app telling someone off. */
-.ab-tag.warn { color: var(--warn, #c9871a); border-color: color-mix(in srgb, var(--warn, #c9871a) 40%, var(--line)); }
-.bp-reason.neg { color: var(--warn, #c9871a); }
+.ab-tag.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.bp-reason.neg { color: var(--warn); }
 
 /* ---- §BUDGET-ZERO: an envelope deliberately set to nothing ------------------ */
 /* A word where the percentage would be. Sized like `.bc-pct` so the head keeps its rhythm whether
    the envelope is a number or a promise. */
-.bc-zero { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; color: var(--c-teal, #2f7d6b); }
+.bc-zero { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; color: var(--c-teal); }
 .bc-zero.over { color: var(--neg); }
 /* The hint is deliberately quiet and only appears while the field is open: it teaches ONE thing at
    the moment it can be acted on, and a permanently visible sentence on every card would be noise
@@ -49,7 +49,7 @@
   transition: color var(--dur-1) var(--ease-out); }
 .bc-remove:hover { color: var(--neg); }
 /* Same word-instead-of-percentage treatment in the envelope grid, sized to match `.env-pct`. */
-.env-zero { font-size: 11.5px; font-weight: 600; color: var(--c-teal, #2f7d6b); }
+.env-zero { font-size: 11.5px; font-weight: 600; color: var(--c-teal); }
 .env-zero.over { color: var(--neg); }
 
 /* ---- §INCOME-PLAN: expected inflow, beside the number but never inside it ---- */
@@ -59,7 +59,7 @@
   border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
 .sts-expect-line b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); }
 /* Late money is a question for someone, so it is warned — not negative. Nothing has been lost. */
-.sts-expect-line.late, .sts-expect-line.late b { color: var(--warn, #c9871a); }
+.sts-expect-line.late, .sts-expect-line.late b { color: var(--warn); }
 
 
 /* ---- §BUDGET-MEMORY: how the months closed --------------------------------- */
@@ -69,7 +69,7 @@
 .bh-month { color: var(--muted); text-transform: capitalize; }
 .bh-bar { position: relative; height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 .bh-bar > i { position: absolute; inset: 0; transform-origin: left center; border-radius: 999px;
-  background: var(--c-teal, #2f7d6b); }
+  background: var(--c-teal); }
 .bh-row.over .bh-bar > i { background: var(--neg); }
 /* Overspend gets a cap at the END of the track instead of a longer bar. A bar allowed to exceed
    its own container stops reading as a proportion, and a proportion is the only thing this row is
@@ -102,7 +102,7 @@
 .br-dots { display: flex; gap: 3px; }
 /* Squares, not a bar: the question here is «в які саме місяці», and a proportion cannot answer
    it. Order is chronological left to right, matching the month list above. */
-.br-dots > i { width: 9px; height: 9px; border-radius: 2px; background: var(--c-teal, #2f7d6b); }
+.br-dots > i { width: 9px; height: 9px; border-radius: 2px; background: var(--c-teal); }
 .br-dots > i.over { background: var(--neg); }
 .br-streak { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
 
@@ -174,7 +174,7 @@
 .inc-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
 .inc-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .inc-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600;
-  color: var(--c-teal, #2f7d6b); white-space: nowrap; }
+  color: var(--c-teal); white-space: nowrap; }
 .inc-per { color: var(--muted); font-weight: 400; font-size: 12px; }
 
 /* §EVENT-GOAL: the saving-versus-spending verdict on an event page. No progress bar on purpose —
@@ -183,7 +183,7 @@
 .evt-goal { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 .evt-goal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .evt-goal-verdict { margin: 0; font-size: 14px; }
-.evt-goal-verdict.ok { color: var(--c-teal, #2f7d6b); }
+.evt-goal-verdict.ok { color: var(--c-teal); }
 .evt-goal-verdict.over { color: var(--neg); }
 .evt-goal-verdict b { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 .evt-goal-nums { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }

@@ -45,7 +45,6 @@ export type Cur = number | null;
 export type MoverRow = CompareRow;
 export type Movers = { up: CompareRow[]; down: CompareRow[] };
 
-export const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e", "#127c86", "#6b7a74"];
 
 // Localized short weekday names (0=Sun..6=Sat). Used both as tooltips and inline labels
 // in deeper-analytics charts; keeps the live locale in sync.

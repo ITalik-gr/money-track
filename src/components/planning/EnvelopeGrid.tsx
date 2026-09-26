@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useGetBudgetStatusQuery, useGetCategoriesQuery } from "../../store/api.ts";
@@ -31,7 +32,7 @@ export function EnvelopeGrid() {
   const envelopes = useMemo(() => {
     const catById = new Map((cats ?? []).map((c) => [c.id, c]));
     return [...(rows ?? [])]
-      .map((r) => ({ ...r, color: catById.get(r.id)?.color ?? "#6B7A74" }))
+      .map((r) => ({ ...r, color: catById.get(r.id)?.color ?? "var(--c-slate)" }))
       .sort((a, b) => b.ratio - a.ratio); // tightest envelopes first
   }, [rows, cats]);
 
@@ -77,7 +78,7 @@ export function EnvelopeGrid() {
         return (
           <Link to={`/categories/${e.id}`} key={e.id} className={`env-item ${state}`}>
             <div className="env-top">
-              <span className="env-name"><span className="d" style={{ background: e.color }} />{e.name}</span>
+              <span className="env-name"><span className="d" style={{ background: catColor(e.color) }} />{e.name}</span>
               {zero
                 ? <span className={`env-zero ${state}`}>{over ? t("eg.zeroBroken") : t("eg.zeroKept")}</span>
                 : <span className={`env-pct ${state}`}>{pct}%</span>}
@@ -86,7 +87,7 @@ export function EnvelopeGrid() {
                 would suggest a limit was reached rather than a limit of nothing broken. */}
             {!zero && (
               <div className="env-bar">
-                <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: bar }} />
+                <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: catColor(bar) }} />
                 {/* A hairline where the projection lands, drawn INSIDE the same track: the gap
                     between the filled bar and the mark is literally "what is still coming". */}
                 {showForecast && (

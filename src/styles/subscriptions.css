@@ -55,7 +55,7 @@
 .sub-row .s-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 15px; text-align: right; white-space: nowrap; }
 /* §R5: «це не підписка» — закрити кандидата */
 .sub-row .s-dismiss { padding: 6px 9px; color: var(--muted); font-size: 13px; }
-.sub-row .s-dismiss:hover { color: var(--neg, #d64545); }
+.sub-row .s-dismiss:hover { color: var(--neg); }
 /* §R5: опис підписки для AI */
 .sub-card-cat { display: flex; flex-direction: column; gap: 3px; margin-top: 10px; }
 .sub-card-cat .label { text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
@@ -75,7 +75,7 @@
 }
 .sub-card.is-finished { opacity: 0.62; }
 .sub-card-x { position: absolute; top: 10px; right: 10px; border: none; background: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 3px 6px; border-radius: 6px; }
-.sub-card-x:hover { color: var(--neg); background: var(--surface-2); }
+.sub-card-x:hover { color: var(--neg); background: var(--hover); }
 .sub-card-top { display: flex; align-items: center; gap: 11px; min-width: 0; padding-right: 20px; }
 /* Now a link (§SUB-PAGE) — inherits colour, so clickable did not mean restyled. */
 .sub-card-name { display: block; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; text-decoration: none; }
@@ -123,7 +123,7 @@
 .sub-share-pct { font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; flex-shrink: 0; }
 
 .sub-charge-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 14px; color: inherit; text-decoration: none; }
-.sub-charge-row:hover { background: var(--surface-2); }
+.sub-charge-row:hover { background: var(--hover); }
 
 /* §PRICE-STEPS (2026-08-27) — when the price moved, one row per step. */
 .sub-price-one { display: flex; align-items: baseline; gap: 10px; padding: 14px 18px; font-size: var(--fs-lg); }
@@ -171,7 +171,7 @@
 /* An opaque chip, not bare text on the line (DESIGN §6: the problem is the background). */
 .stack-avg-chip {
   position: absolute; right: 0; bottom: 3px; padding: 1px 7px; border-radius: 999px;
-  background: var(--surface); box-shadow: var(--shadow-sm);
+  background: var(--float); box-shadow: var(--shadow-raised);
   font-size: 11px; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums;
 }
 .stack-months { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 5px; margin-top: 6px; }

@@ -17,6 +17,7 @@
  * past 100% (DESIGN §6: a neutral state is not green).
  * ⚠️ No levels yet → no card: «0 ₴ a month» is a confident answer about an account not yet seen.
  */
+import { catColor } from "../../lib/theme.ts";
 import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
 import { Money } from "../ui/Money.tsx";
@@ -122,7 +123,7 @@ export function SpendFloorCard() {
             {data.parts.map((p) => (
               <HoverTip key={p.category_id} content={<><div className="tip-lbl">{p.name}</div><div className="tip-muted">{t("base.partShare", { pct: pctOf(p.level, data.floor) })}</div></>}>
                 <span className="floor-chip">
-                  <span className="d" style={{ background: p.color ?? "var(--muted)" }} />
+                  <span className="d" style={{ background: catColor(p.color ?? "var(--muted)") }} />
                   {p.name}
                   <b><Money minor={p.level} decimals={false} /></b>
                 </span>

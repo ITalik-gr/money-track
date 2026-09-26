@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
@@ -138,7 +139,7 @@ export function Category() {
       <div className="page-head">
         <div>
           <div className="greet">
-            <span className="d cat-page-dot" style={{ background: data.color ?? "var(--muted)" }} />
+            <span className="d cat-page-dot" style={{ background: catColor(data.color ?? "var(--muted)") }} />
             {data.name}
           </div>
           {/*
@@ -428,7 +429,7 @@ export function Category() {
                 <YAxis {...Y_AXIS} tick={{ fontSize: 11, fill: "var(--muted)" }} axisLine={false} tickLine={false} />
                 <Tooltip content={<CTooltip />} cursor={{ fill: "var(--surface-2)" }} />
                 <Bar
-                  dataKey="spent" fill={data.color ?? "var(--accent)"} radius={[4, 4, 0, 0]} {...CHART_ANIM}
+                  dataKey="spent" fill={catColor(data.color ?? "var(--accent)")} radius={[4, 4, 0, 0]} {...CHART_ANIM}
                   cursor="pointer"
                   // Toggle: the second click on the same bar closes it. A drill that can only be
                   // opened leaves the page permanently taller than the reader asked for.
@@ -550,7 +551,7 @@ export function Category() {
                 {data.composition.length > 1 && <span className="label">{t("cat.compositionRest")}</span>}
                 {quiet.map((ch) => (
                   <Link key={ch.id} className="cat-chip" to={`/categories/${ch.id}`}>
-                    <span className="d" style={{ background: ch.color ?? "var(--muted)" }} />{ch.name}
+                    <span className="d" style={{ background: catColor(ch.color ?? "var(--muted)") }} />{ch.name}
                   </Link>
                 ))}
               </div>

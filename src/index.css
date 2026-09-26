@@ -13,6 +13,10 @@
  * its component — and if none does, that is the signal a new part is needed.
  */
 @import "./styles/tokens.css";
+/* The themes (§THEME): every colour token, one file per theme, the same set in each (lint C23).
+   Light first: it is also the bare `:root` default, so the page is light before `theme.js` runs. */
+@import "./styles/theme-light.css";
+@import "./styles/theme-dark.css";
 @import "./styles/shell.css";
 @import "./styles/ledger.css";
 @import "./styles/controls.css";

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CategoryIcon } from "./CategoryIcon.tsx";
 import { useT } from "../../i18n/index.ts";
+import { catColor } from "../../lib/theme.ts";
 
 export interface SelectOption {
   value: string | number;
@@ -136,9 +137,9 @@ function OptionInner({ o }: { o: SelectOption }) {
   return (
     <span className="sel-opt-inner">
       {o.icon
-        ? <span className="sel-ico" style={{ background: o.color ?? "var(--muted)" }}><CategoryIcon slug={o.icon} size={15} /></span>
+        ? <span className="sel-ico" style={{ background: catColor(o.color) ?? "var(--muted)" }}><CategoryIcon slug={o.icon} size={15} /></span>
         : o.color
-          ? <span className="sel-dot" style={{ background: o.color }} />
+          ? <span className="sel-dot" style={{ background: catColor(o.color) }} />
           : null}
       <span className="sel-label">{o.label}</span>
     </span>

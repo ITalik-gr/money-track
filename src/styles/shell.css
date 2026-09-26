@@ -142,7 +142,7 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
   font-weight: 500;
 }
 .side-nav a .ico { width: 18px; height: 18px; text-align: center; opacity: 0.75; font-size: 15px; }
-.side-nav a:hover { background: var(--surface-2); color: var(--ink); }
+.side-nav a:hover { background: var(--hover); color: var(--ink); }
 .side-nav a.active { background: var(--accent-soft); color: var(--accent); }
 .side-nav a.active .ico { opacity: 1; }
 .side-nav .add { margin-top: 10px; background: var(--ink); color: var(--surface); }
@@ -203,13 +203,13 @@ h2 { font-size: 15px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
 
 /* "Ще" sheet — reach non-core pages on mobile */
 .more-overlay {
-  position: fixed; inset: 0; z-index: 40; background: rgba(10, 16, 24, 0.5);
+  position: fixed; inset: 0; z-index: 40; background: var(--overlay);
   backdrop-filter: blur(2px); display: flex; align-items: flex-end;
   animation: sel-in 0.14s ease;
 }
 .more-sheet {
   width: 100%; background: var(--surface); border-top-left-radius: var(--radius-lg); border-top-right-radius: var(--radius-lg);
-  padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 30px rgba(0,0,0,0.18);
+  padding: 10px 16px calc(18px + env(safe-area-inset-bottom)); box-shadow: var(--shadow-sheet);
 }
 .more-grip { width: 40px; height: 4px; border-radius: 999px; background: var(--line-strong); margin: 2px auto 14px; }
 .more-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
@@ -353,13 +353,13 @@ section > .section-head:first-child { margin-top: 26px; }
   border: 1px solid var(--line); background: var(--surface); color: var(--muted);
   display: grid; place-items: center; cursor: pointer;
 }
-.acct2-edit:hover { background: var(--surface-2); color: var(--ink); }
+.acct2-edit:hover { background-image: var(--hover-layer); color: var(--ink); }
 /* Sentence-case, НЕ uppercase-letterspaced (DESIGN §Типографіка / фідбек #2). */
 .acct2-sublabel { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
 .acct2-bal { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 25px; letter-spacing: -0.02em; line-height: 1.05; }
 .acct2-fx { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
 /* §R3: бейдж інвест-рахунку + опис для AI на картці */
-.acct2-role { flex-shrink: 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-plum, #7a3e9d) 16%, transparent); color: var(--c-plum, #7a3e9d); }
+.acct2-role { flex-shrink: 0; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--c-plum) 16%, transparent); color: var(--c-plum); }
 .acct2-note { margin-top: 8px; font-size: 12px; line-height: 1.4; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .acct2 .acct-note-input { resize: vertical; min-height: 44px; font: inherit; font-size: 13px; line-height: 1.4; }
 .acct2-credit { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -388,7 +388,7 @@ section > .section-head:first-child { margin-top: 26px; }
 .env-name { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .env-name .d { width: 9px; height: 9px; border-radius: 3px; flex-shrink: 0; }
 .env-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600; color: var(--muted); }
-.env-pct.warn { color: var(--warn, #c9871a); }
+.env-pct.warn { color: var(--warn); }
 .env-pct.over { color: var(--neg); }
 .env-bar { position: relative; height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
 /* scaleX, не width — анімація layout-властивості = thrash (див. .bc-bar). */

@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useRef, useState } from "react";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { getLocale, localeTag } from "../i18n/locale.ts";
@@ -46,9 +47,9 @@ export function EventDetail() {
         <button className="btn ghost xs" style={{ marginLeft: -8 }} onClick={() => navigate(-1)}>← {t("evt.back")}</button>
       </div>
 
-      <div className="card group-detail-head" style={{ "--group-color": color } as React.CSSProperties}>
+      <div className="card group-detail-head" style={{ "--group-color": catColor(color) } as React.CSSProperties}>
         <div className="row" style={{ gap: 12, alignItems: "center" }}>
-          <span className="group-ico" style={{ background: color }}><Icon name="folder" size={20} /></span>
+          <span className="group-ico" style={{ background: catColor(color) }}><Icon name="folder" size={20} /></span>
           <div>
             <div className="greet" style={{ fontSize: 22 }}>{event.name}</div>
             <div className="sub">{kindLabel(event.kind)} · {t("evt.txCount", { n: transactions.length })}</div>

@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { useMemo } from "react";
 import { numFmt } from "../../i18n/locale.ts";
 import { highlightAmounts } from "../../lib/highlight.tsx";
@@ -30,7 +31,7 @@ export function RichFacts({ headline, facts, note, sign }: { headline?: string; 
       {facts && facts.length > 0 && (
         <div className="rich-facts">
           {facts.map((f, i) => {
-            const catColor = f.category ? colorByName.get(f.category.toLowerCase()) : undefined;
+            const factColor = f.category ? colorByName.get(f.category.toLowerCase()) : undefined;
             const hasVal = f.category || f.amount != null || f.delta_pct != null;
             return (
               <div className="fact-row" key={i}>
@@ -38,7 +39,7 @@ export function RichFacts({ headline, facts, note, sign }: { headline?: string; 
                 <span className="fact-vals">
                   {f.category && (
                     <span className="fact-cat">
-                      {catColor && <span className="fact-cat-dot" style={{ background: catColor }} />}
+                      {factColor && <span className="fact-cat-dot" style={{ background: catColor(factColor) }} />}
                       {f.category}
                     </span>
                   )}

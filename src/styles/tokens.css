@@ -4,40 +4,48 @@
    основна; темна — опція через тумблер. Свідомо не AI-дефолт. */
 
 :root {
-  color-scheme: light;
+  /* Everything here is THEME-INDEPENDENT. Every colour that differs between the themes lives in
+     `theme-light.css` / `theme-dark.css` (§THEME); lint C23 refuses a colour literal anywhere else
+     and a token one theme defines and the other forgets. */
 
-  --bg: #f3f5f8;
-  --surface: #ffffff;
-  --surface-2: #eef1f6;
-  --ink: #0f1620;
-  --ink-2: #3b4656;
-  /* AA-safe secondary: ≥4.5:1 on surface for metadata text (was #7a8797, ~3.6:1) */
-  --muted: #5f6b79;
-  --line: #e9edf3;
-  --line-strong: #dbe1ea;
+  /* The stored category palette (§CAT-COLOR). The DB and the pickers hold these LIGHT hexes; a
+     screen never paints them raw — `--c-*` below (CSS) and `catColor()` (TS, `src/lib/theme.ts`)
+     lift them for the dark ground by mixing toward `--ink` by `--cat-keep`, so one stored colour
+     serves both themes and the light theme stays pixel-identical (`--cat-keep: 100%`). */
+  --pal-pine: #1f6e4c;
+  --pal-cobalt: #2e6be6;
+  --pal-plum: #7a3e9d;
+  --pal-ochre: #c9871a;
+  --pal-brick: #b23a2e;
+  --pal-teal: #127c86;
+  --pal-slate: #6b7a74;
+  --pal-mist: #9aa5a0;   /* «the rest» slice of a chart */
+  --c-pine: color-mix(in srgb, var(--pal-pine) var(--cat-keep), var(--ink));
+  --c-cobalt: color-mix(in srgb, var(--pal-cobalt) var(--cat-keep), var(--ink));
+  --c-plum: color-mix(in srgb, var(--pal-plum) var(--cat-keep), var(--ink));
+  --c-ochre: color-mix(in srgb, var(--pal-ochre) var(--cat-keep), var(--ink));
+  --c-brick: color-mix(in srgb, var(--pal-brick) var(--cat-keep), var(--ink));
+  --c-teal: color-mix(in srgb, var(--pal-teal) var(--cat-keep), var(--ink));
+  --c-slate: color-mix(in srgb, var(--pal-slate) var(--cat-keep), var(--ink));
+  --c-mist: color-mix(in srgb, var(--pal-mist) var(--cat-keep), var(--ink));
 
-  --accent: #2e6be6;
-  --accent-strong: #1f57cc;
-  --accent-soft: #eaf1fd;
-  --pos: #14915f;
-  --pos-soft: #e6f5ee;
-  --neg: #dd4b39;
-  --neg-soft: #fdecea;
-  --warn: #b5790f;
-  --warn-soft: #fbf1dc;
+  /* Physical card faces (the account badges): the bank's plastic, the same in both themes. */
+  --card-black: #14171a;
+  --card-white: #f4f5f6;
+  --card-white-ink: #4a5560;
+  --card-white-edge: #c7cdd4;
+  --card-fop: #12251d;
+  --card-silver: #8a94a6; /* a white/platinum card as a chart swatch (a white dot would vanish) */
 
-  /* категорії (конверти) */
-  --c-pine: #1f6e4c;
-  --c-cobalt: #2e6be6;
-  --c-plum: #7a3e9d;
-  --c-ochre: #c9871a;
-  --c-brick: #b23a2e;
-  --c-teal: #127c86;
-
-  /* графік cashflow — системні тони (DESIGN.md §10.3): cobalt-витрата (домінує) +
-     green-дохід (тихо). Прибрано бурштин #e8a13c — «recharts з коробки». */
+  /* Derived roles — defined ONCE, in terms of the theme tokens, so a theme never restates them.
+     (A custom property resolves its var()s where it is declared — on :root, which is where
+     `data-theme` sits, so these follow the theme.) */
   --chart-expense: var(--accent);
   --chart-income: var(--pos);
+  /* The hover overlay as a background LAYER, for a control that already has its own fill (a
+     `.btn` on --surface): `background-image` keeps that fill and darkens it; a plain
+     `background: var(--hover)` would swap the fill for the overlay and let the parent show. */
+  --hover-layer: linear-gradient(var(--hover), var(--hover));
 
   /* ── Fonts (unified: one sans family; numbers use sans tabular figures,
         mono is reserved for codes/PAN/MCC only). DESIGN.md §2 rev. 2026-07-11 ── */
@@ -75,10 +83,6 @@
   --fs-3xl: 1.75rem;    /* 28 */
   --fs-4xl: 2.25rem;    /* 36 */
 
-  /* ── One elevation model (calmer, cooler than before) ── */
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.05);
-  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.05);
 
   /* ── Motion tokens (product: 120–240ms, ease-out only) ── */
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
@@ -89,43 +93,6 @@
 
   --sidebar-w: 248px;
   --content-w: 1240px;
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --bg: #0b0f14;
-  --surface: #141a22;
-  --surface-2: #1b232d;
-  --ink: #eaf0f6;
-  --ink-2: #b7c2ce;
-  --muted: #8493a2;
-  --line: #232d38;
-  --line-strong: #2f3b48;
-
-  --accent: #5a97ff;
-  --accent-strong: #7aabff;
-  --accent-soft: #182740;
-  --pos: #35b37e;
-  --pos-soft: #12281f;
-  --neg: #f0674a;
-  --neg-soft: #2c1a17;
-  --warn: #dda43a;
-  --warn-soft: #2a2213;
-
-  --c-pine: #35b37e;
-  --c-cobalt: #5a97ff;
-  --c-plum: #b07fd0;
-  --c-ochre: #dda43a;
-  --c-brick: #e26a5c;
-  --c-teal: #35b0bb;
-
-  --chart-expense: var(--accent);
-  --chart-income: var(--pos);
-
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 20px rgba(0, 0, 0, 0.4);
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 
 * { box-sizing: border-box; }

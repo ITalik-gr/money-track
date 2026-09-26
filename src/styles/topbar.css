@@ -79,7 +79,7 @@
   color: var(--muted); font-size: 13.5px; text-align: left;
   transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
-.top-search:hover { background: var(--surface-2); border-color: var(--muted); }
+.top-search:hover { background-image: var(--hover-layer); border-color: var(--muted); }
 .top-search:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .top-search .ico { color: var(--muted); display: flex; flex: none; }
 .ts-ph { flex: 1; min-width: 0; }
@@ -185,7 +185,7 @@
 /* Рядок = «застосувати» + «видалити». Кошик проявляється на hover/focus рядка, щоб
    список читався як перелік, а не як стіна іконок. */
 .sf-item { display: flex; align-items: center; gap: 2px; border-radius: var(--radius-sm); }
-.sf-item:hover, .sf-item:focus-within { background: var(--surface-2); }
+.sf-item:hover, .sf-item:focus-within { background: var(--hover); }
 .sf-apply {
   flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px;
   padding: 7px 8px; border: none; background: none; color: var(--ink-2);
@@ -213,15 +213,15 @@
 /* ---- Командна панель (Ctrl-K) -------------------------------------------- */
 .cmdk-overlay {
   position: fixed; inset: 0; z-index: 60;
-  background: color-mix(in srgb, var(--ink) 32%, transparent);
+  background: var(--overlay);
   backdrop-filter: blur(2px);
   display: flex; justify-content: center; align-items: flex-start;
   padding: 12vh 16px 16px;
 }
 .cmdk {
   width: min(620px, 100%); max-height: 60vh; display: flex; flex-direction: column;
-  background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); overflow: hidden;
+  background: var(--float); border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-float); overflow: hidden;
 }
 .cmdk-input {
   display: flex; align-items: center; gap: 10px;
@@ -255,7 +255,7 @@
 .cmdk-row.active { background: var(--accent-soft); }
 .cmdk-ico {
   display: grid; place-items: center; width: 26px; height: 26px; flex: none;
-  border-radius: var(--radius-xs); background: var(--surface-2); color: var(--muted);
+  border-radius: var(--radius-xs); background: var(--float-2); color: var(--muted);
 }
 .cmdk-row.active .cmdk-ico { color: var(--accent); }
 .cmdk-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-md); }
@@ -272,7 +272,7 @@
   border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink-2);
   display: grid; place-items: center; position: relative; transition: background 0.12s, color 0.12s;
 }
-.icon-btn:hover { background: var(--surface-2); color: var(--ink); }
+.icon-btn:hover { background-image: var(--hover-layer); color: var(--ink); }
 /* §A6 — індикатор фонової AI-генерації в топбарі. Живе поруч із дзвіночком і зникає, щойно
    робота скінчилась: постійний елемент, який 99% часу нічого не означає, — це шум.
    Акцентна пігулка, а не ще одна `icon-btn`: це СТАН, а не дія, і сплутати їх не має бути як. */
@@ -303,9 +303,9 @@
   display: flex; align-items: center; gap: 10px; padding: 5px 13px 5px 5px;
   border-radius: 999px; border: 1px solid var(--line-strong); background: var(--surface);
 }
-.avatar-chip:hover { background: var(--surface-2); }
+.avatar-chip:hover { background-image: var(--hover-layer); }
 .avatar-chip .avatar {
-  width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff;
+  width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: var(--on-accent);
   display: grid; place-items: center; font-weight: 600; font-size: 14px; flex-shrink: 0;
 }
 .avatar-chip .who2 { line-height: 1.25; }
@@ -325,7 +325,7 @@
    розіпхав би її ширше за viewport, §Клієнт і розкладка) — і тоді контрол мусить стати КОЛОМ:
    той самий падінг навколо самої іконки дав би овал (та сама помилка, що вже була на `.avatar-chip`). */
 .topbar-period { border-radius: 999px; padding: 0 14px; gap: 7px; }
-.topbar-period:hover { background: var(--surface-2); }
+.topbar-period:hover { background: var(--hover); }
 @media (max-width: 900px) {
   .topbar-period .tp-label { display: none; }
   .topbar-period { width: 40px; padding: 0; gap: 0; justify-content: center; }

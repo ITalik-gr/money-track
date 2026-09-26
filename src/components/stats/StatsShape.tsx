@@ -12,6 +12,7 @@
  * Server-computed (`lib/finance/spending-shape.ts`) against the same canonical spend population as
  * the totals above it, so the bars add up to the figure the page already shows.
  */
+import { catColor } from "../../lib/theme.ts";
 import { useT } from "../../i18n/index.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { useGetSpendingShapeQuery } from "../../store/api.ts";
@@ -64,7 +65,7 @@ export function SpendingShape({ from, to, currency, sign }: {
             b.spent > 0 && (
               <HoverTip key={i} content={<TipBody label={label(b)} color={BUCKET_TONES[i]} value={money(b.spent)}
                 sub={<>{b.share_pct}% · {t("stats.shape.nOps", { n: b.n })}</>} />}>
-                <span className="shape-seg" style={{ width: `${b.share_pct}%`, background: BUCKET_TONES[i] }} />
+                <span className="shape-seg" style={{ width: `${b.share_pct}%`, background: catColor(BUCKET_TONES[i]) }} />
               </HoverTip>
             )
           ))}
@@ -72,7 +73,7 @@ export function SpendingShape({ from, to, currency, sign }: {
         <div className="shape-legend">
           {data.buckets.map((b, i) => (
             <span key={i} className="shape-leg">
-              <span className="d" style={{ background: BUCKET_TONES[i] }} />
+              <span className="d" style={{ background: catColor(BUCKET_TONES[i]) }} />
               {label(b)}
               {/* The COUNT next to the share is the whole point: «38% витрат — це 214 покупок» is a
                   different month from «38% — це три платежі», and the share alone hides which. */}

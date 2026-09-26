@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useGetCategoriesQuery, useDeleteCategoryMutation, useLazyGetCategoryUsageQuery } from "../store/api.ts";
@@ -149,7 +150,7 @@ function CatSection({ title, groups, onEdit, onAddSub, onDelete }: {
         {groups.map(({ parent, children }) => (
           <div key={parent.id} className="cat-card">
             <div className="cat-card-head">
-              <span className="cat-ico" style={{ background: parent.color ?? "var(--muted)" }}><CategoryIcon slug={parent.icon} size={20} /></span>
+              <span className="cat-ico" style={{ background: catColor(parent.color ?? "var(--muted)") }}><CategoryIcon slug={parent.icon} size={20} /></span>
               <div className="cat-card-title">
                 {/* §CATEGORY-PAGE — the name is the way in. Only the name, not the whole card:
                     the card carries edit and delete, and a link wrapping them would swallow the
@@ -170,7 +171,7 @@ function CatSection({ title, groups, onEdit, onAddSub, onDelete }: {
                 // Delete/Backspace on the chip instead, announced through aria-keyshortcuts (C21).
                 <button key={ch.id} className="cat-sub" onClick={() => onEdit(ch)} aria-keyshortcuts="Delete"
                   onKeyDown={(e) => { if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); onDelete(ch); } }}>
-                  <span className="cat-sub-dot" style={{ background: ch.color ?? parent.color ?? "var(--muted)" }}>
+                  <span className="cat-sub-dot" style={{ background: catColor(ch.color ?? parent.color ?? "var(--muted)") }}>
                     <CategoryIcon slug={ch.icon} size={12} />
                   </span>
                   {ch.name}

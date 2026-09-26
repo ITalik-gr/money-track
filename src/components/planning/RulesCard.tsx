@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { useState } from "react";
 import {
   useGetRulesQuery, useCreateRuleMutation, useDeleteRuleMutation, useApplyRuleMutation,
@@ -127,7 +128,7 @@ export function RulesCard() {
               <span className="rule-pat" title={r.pattern}>{r.pattern}</span>
               <span className="rule-arrow">→</span>
               <span className="rule-cat">
-                <span className="d" style={{ background: r.category_color ?? "var(--muted)" }} />
+                <span className="d" style={{ background: catColor(r.category_color ?? "var(--muted)") }} />
                 {r.category_name ?? "—"}
               </span>
               <button className="btn sm ghost" disabled={applying} onClick={() => applyRule(r.id)}>

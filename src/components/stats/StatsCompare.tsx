@@ -10,6 +10,7 @@
  * `/analytics/overview` request they all read. Everything a single tab owns lives here.
  */
 
+import { catColor } from "../../lib/theme.ts";
 import { useMemo, useState } from "react";
 import { useT } from "../../i18n/index.ts";
 import { formatMinor } from "../../lib/format.ts";
@@ -110,7 +111,7 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
                 <div className="mv-head up">{t("stats.compare.moversUp")}</div>
                 {movers.up.length ? movers.up.map((r, i) => (
                   <div key={i} className="mv-row">
-                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
+                    <span className="mv-name"><span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />{r.category_name ?? noCat}</span>
                     <span className="mv-delta up">+{formatMinor(r.delta, { decimals: false })} {sign}</span>
                   </div>
                 )) : <div className="mv-empty">{t("stats.compare.moversEmpty")}</div>}
@@ -119,7 +120,7 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
                 <div className="mv-head down">{t("stats.compare.moversDown")}</div>
                 {movers.down.length ? movers.down.map((r, i) => (
                   <div key={i} className="mv-row">
-                    <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
+                    <span className="mv-name"><span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />{r.category_name ?? noCat}</span>
                     <span className="mv-delta down">−{formatMinor(-r.delta, { decimals: false })} {sign}</span>
                   </div>
                 )) : <div className="mv-empty">{t("stats.compare.moversEmptyDown")}</div>}
@@ -147,7 +148,7 @@ export function MonthCompare({ currency, sign }: { currency: Cur; sign: string }
             </div>
             {rows.map((r, i) => (
               <div key={i} className="cmp-row">
-                <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
+                <span className="cmp-name"><span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />{r.category_name ?? noCat}</span>
                 <span className="cmp-b">{formatMinor(r.b, { decimals: false })} {sign}</span>
                 <span className="cmp-a">{formatMinor(r.a, { decimals: false })} {sign}</span>
                 <DeltaChip a={r.a} b={r.b} meaningful={r.delta_meaningful} />

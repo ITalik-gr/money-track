@@ -10,6 +10,7 @@
  * `/analytics/overview` request they all read. Everything a single tab owns lives here.
  */
 
+import { catColor, CAT_FALLBACK } from "../../lib/theme.ts";
 import { useMemo, useState } from "react";
 import { localMidnight, localMonthStart, localQuarterStart, localWeekStart, localYearStart, nowUnix } from "../../../shared/time.ts";
 import { useT } from "../../i18n/index.ts";
@@ -26,7 +27,7 @@ import { HoverTip } from "../ui/HoverTip.tsx";
 import { Icon } from "../ui/Icon.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import {
-  DeltaChip, DrillTxList, FALLBACK, RANGES, isSecondaryCat, type Cur, type MoverRow, type Movers, type RangeKey,
+  DeltaChip, DrillTxList, RANGES, isSecondaryCat, type Cur, type MoverRow, type Movers, type RangeKey,
 } from "./shared.tsx";
 
 export function CategoryBreakdown({ rows, from, to, currency, sign }: {
@@ -42,7 +43,7 @@ export function CategoryBreakdown({ rows, from, to, currency, sign }: {
 
   const bar = (e: Overview["byCategory"][number], i: number, secondaryStyle: boolean) => {
     const p = (e.spent / total) * 100;
-    const color = secondaryStyle ? "var(--muted)" : (e.color ?? FALLBACK[i % FALLBACK.length]);
+    const color = secondaryStyle ? "var(--muted)" : (e.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length]);
     const id = e.category_id;
     const open = openId != null && openId === id;
     const series = id != null ? spark?.categories[String(id)] : undefined;
@@ -50,8 +51,8 @@ export function CategoryBreakdown({ rows, from, to, currency, sign }: {
       <div key={`${id}-${i}`}>
         <button type="button" className={`trow ${open ? "open" : ""} ${secondaryStyle ? "muted-row" : ""}`}
           onClick={() => id != null && setOpenId(open ? null : id)}>
-          <span className="trow-name" title={e.category_name ?? noCat}><span className="d" style={{ background: color }} /><span>{e.category_name ?? noCat}</span></span>
-          <span className="trow-bar"><span style={{ width: `${Math.min(p, 100)}%`, background: color }} /></span>
+          <span className="trow-name" title={e.category_name ?? noCat}><span className="d" style={{ background: catColor(color) }} /><span>{e.category_name ?? noCat}</span></span>
+          <span className="trow-bar"><span style={{ width: `${Math.min(p, 100)}%`, background: catColor(color) }} /></span>
           {series && (
             <span className="trow-spark">
               <Sparkline values={series} months={spark?.buckets} sign={sign} color={color} width={112} height={32} area />
@@ -134,8 +135,8 @@ export function CatDrill({ category, from, to, currency, sign }: { category: num
               <div className="cat-drill-panel-h">{t("stats.catdrill.subs")}</div>
               {subs.map((s, i) => (
                 <div key={i} className="drill-row">
-                  <span className="drill-name"><span className="d" style={{ background: s.color ?? "var(--muted)" }} />{s.name}</span>
-                  <span className="drill-track"><span style={{ width: `${(s.spent / subMax) * 100}%`, background: s.color ?? "var(--muted)" }} /></span>
+                  <span className="drill-name"><span className="d" style={{ background: catColor(s.color ?? "var(--muted)") }} />{s.name}</span>
+                  <span className="drill-track"><span style={{ width: `${(s.spent / subMax) * 100}%`, background: catColor(s.color ?? "var(--muted)") }} /></span>
                   <span className="drill-val">{formatMinor(s.spent, { decimals: false })} {sign}</span>
                 </div>
               ))}
@@ -179,7 +180,7 @@ export function AvgCheckByCategory({ rows, sign }: { rows: Overview["byCategory"
   const noCat = t("common.uncategorized");
   const items = rows
     .filter((r) => !isSecondaryCat(r.category_name) && r.n > 0 && r.spent > 0)
-    .map((r, i) => ({ name: r.category_name ?? noCat, color: r.color ?? FALLBACK[i % FALLBACK.length], avg: Math.round(r.spent / r.n), n: r.n }))
+    .map((r, i) => ({ name: r.category_name ?? noCat, color: r.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length], avg: Math.round(r.spent / r.n), n: r.n }))
     .sort((a, b) => b.avg - a.avg)
     .slice(0, 8);
   if (items.length < 2) return null;
@@ -190,8 +191,8 @@ export function AvgCheckByCategory({ rows, sign }: { rows: Overview["byCategory"
       <div className="card flush"><div className="catbars">
         {items.map((it, i) => (
           <div key={i} className="catbar">
-            <span className="cb-name" title={it.name}><span className="d" style={{ background: it.color }} /><span>{it.name}</span></span>
-            <span className="cb-track"><span className="cb-fill" style={{ width: `${(it.avg / max) * 100}%`, background: it.color }} /></span>
+            <span className="cb-name" title={it.name}><span className="d" style={{ background: catColor(it.color) }} /><span>{it.name}</span></span>
+            <span className="cb-track"><span className="cb-fill" style={{ width: `${(it.avg / max) * 100}%`, background: catColor(it.color) }} /></span>
             <span className="cb-val">{formatMinor(it.avg, { decimals: false })} {sign}</span>
             <span className="cb-pct">{t("stats.avgCheck.nTx", { n: it.n })}</span>
           </div>
@@ -281,7 +282,7 @@ export function PeriodCompare({ range, mode, ym, currency, sign }: {
             <div className="mv-head up">{t("stats.compare.moversUp")}</div>
             {movers.up.length ? movers.up.map((r, i) => (
               <div key={i} className="mv-row">
-                <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
+                <span className="mv-name"><span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />{r.category_name ?? noCat}</span>
                 <span className="mv-delta up">+{formatMinor(r.delta, { decimals: false })} {sign}</span>
               </div>
             )) : <div className="mv-empty">{t("stats.compare.moversEmpty")}</div>}
@@ -290,7 +291,7 @@ export function PeriodCompare({ range, mode, ym, currency, sign }: {
             <div className="mv-head down">{t("stats.compare.moversDown")}</div>
             {movers.down.length ? movers.down.map((r, i) => (
               <div key={i} className="mv-row">
-                <span className="mv-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
+                <span className="mv-name"><span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />{r.category_name ?? noCat}</span>
                 <span className="mv-delta down">−{formatMinor(-r.delta, { decimals: false })} {sign}</span>
               </div>
             )) : <div className="mv-empty">{t("stats.compare.moversEmptyDown")}</div>}
@@ -317,7 +318,7 @@ export function PeriodCompare({ range, mode, ym, currency, sign }: {
             <div className="r">{t("stats.compare.drillCur", { amount: formatMinor(r.a, { decimals: false }), sign })}</div></>
           }>
             <div className="cmp-row">
-              <span className="cmp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.category_name ?? noCat}</span>
+              <span className="cmp-name"><span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />{r.category_name ?? noCat}</span>
               <span className="cmp-b">{formatMinor(r.b, { decimals: false })} {sign}</span>
               <span className="cmp-a">{formatMinor(r.a, { decimals: false })} {sign}</span>
               <DeltaChip a={r.a} b={r.b} meaningful={r.delta_meaningful} />

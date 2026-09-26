@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useMemo, useState } from "react";
 import { useT } from "../i18n/index.ts";
 import { Link } from "react-router-dom";
@@ -227,7 +228,7 @@ function BudgetPlanner() {
               return (
                 <div className={`bp-item ${on ? "done" : ""}`} key={r.category_id}>
                   <div className="bp-item-main">
-                    <Link to={`/categories/${r.category_id}`} className="bp-name"><span className="d" style={{ background: r.color ?? "var(--muted)" }} />{r.name}</Link>
+                    <Link to={`/categories/${r.category_id}`} className="bp-name"><span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />{r.name}</Link>
                     <span className="bp-figs">
                       <span className="bp-avg">{t("stats.avgShort")} <Money minor={r.avg_month} decimals={false} /></span>
                       <span className="bp-arrow">→</span>
@@ -372,7 +373,7 @@ function BudgetCard({
   const t = useT();
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(hasBudget ? String(limit / 100) : "");
-  const dot = color ?? "#8A948F";
+  const dot = color ?? "var(--c-slate)";
 
   // §BUDGET-MEMORY: ефективний ліміт = базовий + перенесене. `carried` приходить із канону й
   // може бути ВІД'ЄМНИМ — перевитрачений місяць з'їдає наступний рівно так само, як зекономлений
@@ -388,7 +389,7 @@ function BudgetCard({
   const state = !hasBudget ? "none"
     : zero ? (spent > 0 ? "over" : "ok")
     : ratio > 1 ? "over" : ratio >= 0.8 ? "warn" : "ok";
-  const barColor = state === "over" ? "var(--neg)" : state === "warn" ? "var(--warn, #c9871a)" : dot;
+  const barColor = state === "over" ? "var(--neg)" : state === "warn" ? "var(--warn)" : dot;
 
   function save() {
     const raw = val.trim();
@@ -406,7 +407,7 @@ function BudgetCard({
       <div className="bc-head">
         {/* The envelope names a category the app has a whole page about (§CATEGORY-PAGE); the
             reader who wants to know WHY it is at 90% has to be able to get there from here. */}
-        <Link to={`/categories/${id}`} className="bc-name"><span className="d" style={{ background: dot }} />{name}</Link>
+        <Link to={`/categories/${id}`} className="bc-name"><span className="d" style={{ background: catColor(dot) }} />{name}</Link>
         {/* Перенесений залишок — видимий бейдж, а не рядок у лейблі чекбокса:
             він змінює ліміт цього місяця, тож має читатись відразу. */}
         {carry !== 0 && (
@@ -428,7 +429,7 @@ function BudgetCard({
           broken. The words above and the amount below say it exactly. */}
       {!zero && (
         <div className="bc-bar">
-          <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: barColor }} />
+          <span style={{ transform: `scaleX(${Math.min(pct, 100) / 100})`, background: catColor(barColor) }} />
           {/* Засічка на межі БАЗОВОГО ліміту — видно, де закінчується «свій» місяць
               і починається перенесене. Без неї смуга мовчки розтягується. */}
           {carry > 0 && effLimit > 0 && (

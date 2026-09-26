@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useEffect, useMemo, useState } from "react";
 import { getLocale, dateFmt, numFmt } from "../i18n/locale.ts";
 import { translate, useT } from "../i18n/index.ts";
@@ -330,9 +331,9 @@ export function TxDetail() {
                       return (
                         <button key={lv} type="button" title={t(m.hintKey)}
                           className={`imp-opt ${on ? "on" : ""}`}
-                          style={on ? { borderColor: m.color, background: `color-mix(in srgb, ${m.color} 14%, transparent)`, color: m.color } : undefined}
+                          style={on ? { borderColor: catColor(m.color), background: `color-mix(in srgb, ${catColor(m.color)} 14%, transparent)`, color: catColor(m.color) } : undefined}
                           onClick={() => setImportance(lv)}>
-                          <span className="d" style={{ background: m.color }} />{t(m.labelKey)}
+                          <span className="d" style={{ background: catColor(m.color) }} />{t(m.labelKey)}
                         </button>
                       );
                     })}
@@ -360,7 +361,7 @@ export function TxDetail() {
                     if (!c) return null;
                     return (
                       <button key={tid} type="button" className="tag-chip on" aria-label={t("tx.tagRemove", { name: c.name })} onClick={() => toggleTag(tid)}>
-                        <span className="d" style={{ background: c.color ?? "var(--muted)" }} />
+                        <span className="d" style={{ background: catColor(c.color ?? "var(--muted)") }} />
                         {c.name}
                         <span className="tag-chip-x" aria-hidden>×</span>
                       </button>
@@ -392,7 +393,7 @@ export function TxDetail() {
                                 {listc.map((c) => (
                                   <button key={c.id} type="button" disabled={atMax}
                                     className={`tag-chip ${c.parent_id ? "sub" : ""}`} onClick={() => toggleTag(c.id)}>
-                                    <span className="d" style={{ background: c.color ?? "var(--muted)" }} />
+                                    <span className="d" style={{ background: catColor(c.color ?? "var(--muted)") }} />
                                     {c.name}
                                   </button>
                                 ))}
@@ -456,7 +457,7 @@ function FactLine({ k, v, dot, mono }: { k: string; v: React.ReactNode; dot?: st
     <div className="fact-line">
       <span className="fact-k">{k}</span>
       <span className={`fact-v ${mono ? "mono" : ""}`}>
-        {dot && <span className="fact-dot" style={{ background: dot }} />}
+        {dot && <span className="fact-dot" style={{ background: catColor(dot) }} />}
         {v}
       </span>
     </div>

@@ -10,6 +10,7 @@
  * `/analytics/overview` request they all read. Everything a single tab owns lives here.
  */
 
+import { catColor } from "../../lib/theme.ts";
 import { pctOf } from "../../../shared/pct.ts";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -90,8 +91,8 @@ export function EventsBlock({ data, from, to, currency, sign }: {
           return (
             <div key={e.event_id}>
               <button type="button" className={`catbar catbar-btn ${isOpen ? "open" : ""}`} onClick={() => setOpen(isOpen ? null : e.event_id)}>
-                <span className="cb-name" title={e.event_name}><span className="d" style={{ background: e.event_color ?? "var(--accent)" }} /><span>{e.event_name}</span></span>
-                <span className="cb-track"><span className="cb-fill" style={{ width: `${(e.spent / max) * 100}%`, background: e.event_color ?? "var(--accent)" }} /></span>
+                <span className="cb-name" title={e.event_name}><span className="d" style={{ background: catColor(e.event_color ?? "var(--accent)") }} /><span>{e.event_name}</span></span>
+                <span className="cb-track"><span className="cb-fill" style={{ width: `${(e.spent / max) * 100}%`, background: catColor(e.event_color ?? "var(--accent)") }} /></span>
                 <span className="cb-val">
                   {formatMinor(e.spent, { decimals: false })} {sign}
                   {pctOf(e.spent, data.summary.spend) != null && <span className="muted"> · {pctOf(e.spent, data.summary.spend)}%</span>}

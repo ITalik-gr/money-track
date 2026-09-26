@@ -1,3 +1,4 @@
+import { CAT_FALLBACK, catColor } from "../lib/theme.ts";
 import { useState } from "react";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { wholePcts } from "../../shared/pct.ts";
@@ -265,8 +266,8 @@ export function ReportDetail() {
                     const isNew = hasCatDetail && (c.prev_uah ?? 0) === 0 && c.amount_uah !== 0;
                     return (
                       <div key={i} className="catbar">
-                        <span className="cb-name" title={c.note ? `${c.name} — ${c.note}` : c.name}><span className="d" style={{ background: barColor(i), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} /><span>{c.name}</span></span>
-                        <span className="cb-track"><span className="cb-fill" style={{ width: `${(Math.abs(c.amount_uah) / catMax) * 100}%`, background: barColor(i) }} /></span>
+                        <span className="cb-name" title={c.note ? `${c.name} — ${c.note}` : c.name}><span className="d" style={{ background: catColor(barColor(i)), width: 9, height: 9, borderRadius: 3, display: "inline-block", marginRight: 7 }} /><span>{c.name}</span></span>
+                        <span className="cb-track"><span className="cb-fill" style={{ width: `${(Math.abs(c.amount_uah) / catMax) * 100}%`, background: catColor(barColor(i)) }} /></span>
                         <span className="cb-val">{formatMinor(c.amount_uah * 100, { decimals: false })} {sign}</span>
                         <span className="cb-pct">{isNew ? <span className="cmp-delta new">{t("stats.compare.newLabel")}</span> : <Delta pct={c.delta_pct} />}</span>
                       </div>
@@ -375,7 +376,7 @@ function ImportanceSection({ data, sign }: { data: NonNullable<FinancialReport["
             return (
               <HoverTip key={lv} content={<TipBody label={t(IMPORTANCE_META[lv].labelKey)} color={IMPORTANCE_META[lv].color}
                 value={<>{formatMinor(Math.abs(row.amount_uah) * 100, { decimals: false })} {sign}</>} sub={t("tip.shareOfSpend", { pct: row.pct })} />}>
-                <span style={{ width: `${(Math.abs(row.amount_uah) / total) * 100}%`, background: IMPORTANCE_META[lv].color }} />
+                <span style={{ width: `${(Math.abs(row.amount_uah) / total) * 100}%`, background: catColor(IMPORTANCE_META[lv].color) }} />
               </HoverTip>
             );
           })}
@@ -386,7 +387,7 @@ function ImportanceSection({ data, sign }: { data: NonNullable<FinancialReport["
             if (!row) return null;
             return (
               <span key={lv} className="lg">
-                <span className="d" style={{ background: IMPORTANCE_META[lv].color }} />
+                <span className="d" style={{ background: catColor(IMPORTANCE_META[lv].color) }} />
                 {t(IMPORTANCE_META[lv].labelKey)} · <b>{row.pct}%</b> <span className="muted">({formatMinor(row.amount_uah * 100, { decimals: false })} {sign})</span>
               </span>
             );
@@ -397,8 +398,7 @@ function ImportanceSection({ data, sign }: { data: NonNullable<FinancialReport["
   );
 }
 
-const CAT_COLORS = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e", "#127c86", "#6b7a74", "#3f8f5a", "#4a63d0"];
-function barColor(i: number): string { return CAT_COLORS[i % CAT_COLORS.length]; }
+function barColor(i: number): string { return CAT_FALLBACK[i % CAT_FALLBACK.length]; }
 
 function monthLabel(m: string): string { const p = m.split("-"); return monthShort(Number(p[1]) - 1) ?? m; }
 
@@ -410,8 +410,8 @@ function DonutTooltip(props: any) {
   return (
     <div className="chart-tip">
       <div className="tip-lbl">{d.name}</div>
-      <div className="r"><span className="d" style={{ background: d.payload.color }} />{formatMinor(d.value * 100, { decimals: false })} {sign}</div>
-      <div className="r" style={{ color: "rgba(255,255,255,0.6)" }}>{d.payload.pct}{translate(getLocale(), "report.ofTotal")}</div>
+      <div className="r"><span className="d" style={{ background: catColor(d.payload.color) }} />{formatMinor(d.value * 100, { decimals: false })} {sign}</div>
+      <div className="r tip-muted">{d.payload.pct}{translate(getLocale(), "report.ofTotal")}</div>
     </div>
   );
 }
@@ -421,7 +421,7 @@ function CategoryDonut({ cats, sign }: { cats: { name: string; amount_uah: numbe
   const t = useT();
   const top = cats.slice(0, 8).map((c, i) => ({ name: c.name, value: Math.abs(c.amount_uah), color: barColor(i) }));
   const restSum = cats.slice(8).reduce((s, c) => s + Math.abs(c.amount_uah), 0);
-  if (restSum > 0) top.push({ name: t("report.other"), value: restSum, color: "#9aa5a0" });
+  if (restSum > 0) top.push({ name: t("report.other"), value: restSum, color: "var(--c-mist)" });
   const total = top.reduce((s, d) => s + d.value, 0);
   if (!total) return null;
   const pcts = wholePcts(top.map((d) => d.value));   // §PCT-SUM
@@ -431,7 +431,7 @@ function CategoryDonut({ cats, sign }: { cats: { name: string; amount_uah: numbe
       <ResponsiveContainer width="100%" height={200}>
         <PieChart>
           <Pie data={withPct} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={54} outerRadius={82} paddingAngle={1.5} strokeWidth={0} {...CHART_ANIM}>
-            {withPct.map((d, i) => <Cell key={i} fill={d.color} />)}
+            {withPct.map((d, i) => <Cell key={i} fill={catColor(d.color)} />)}
           </Pie>
           <Tooltip content={<DonutTooltip sign={sign} />} />
         </PieChart>

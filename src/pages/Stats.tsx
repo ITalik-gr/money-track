@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useMemo, useState } from "react";
 import { useT } from "../i18n/index.ts";
 import { dateFmt } from "../i18n/locale.ts";
@@ -232,7 +233,7 @@ export function Stats() {
                   <div className="fact">
                     <FactLabel info={<>{t("stats.fact.topCatInfo")}</>}>{t("stats.fact.topCat")}</FactLabel>
                     <span className="fact-val fact-cat">
-                      {topCat ? (<><span className="d" style={{ background: topCat.color ?? "var(--accent)" }} />{topCat.category_name ?? "—"} · {formatMinor(topCat.spent, { decimals: false })} {sign}</>) : "—"}
+                      {topCat ? (<><span className="d" style={{ background: catColor(topCat.color ?? "var(--accent)") }} />{topCat.category_name ?? "—"} · {formatMinor(topCat.spent, { decimals: false })} {sign}</>) : "—"}
                     </span>
                   </div>
                   <div className="fact">

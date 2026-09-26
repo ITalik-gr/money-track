@@ -17,7 +17,7 @@
   color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
   transition: background var(--dur-1) ease, color var(--dur-1) ease, border-color var(--dur-1) ease;
 }
-.cf-nav-btn:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); }
+.cf-nav-btn:hover:not(:disabled) { background-image: var(--hover-layer); color: var(--ink); border-color: var(--line-strong); }
 .cf-nav-btn:disabled { opacity: 0.35; cursor: default; }
 /* Іконка `chevron` дивиться ВНИЗ, тож стрілки будуються поворотом. Без цього «назад» і «вперед»
    виглядали однаково, і напрямок доводилось вгадувати. */
@@ -102,8 +102,8 @@
    обрізало на крайніх днях. Не ловить курсор — він лише показує, а наведення лишається на дні. */
 .cf-pop { position: fixed; z-index: 200; min-width: 210px; max-width: min(280px, calc(100vw - 16px));
   display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; pointer-events: none;
-  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card); font-size: var(--fs-xs); text-align: left; color: var(--ink); }
+  background: var(--float); border: 1px solid var(--line-strong); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-float); font-size: var(--fs-xs); text-align: left; color: var(--ink); }
 .cf-pop-head { font-weight: 600; color: var(--ink); text-transform: capitalize; }
 .cf-pop-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .cf-pop-name { color: var(--ink-2); overflow-wrap: anywhere; }

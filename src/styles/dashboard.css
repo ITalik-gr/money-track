@@ -153,7 +153,7 @@
 .inc-stab { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .stab-badge { font-size: 12.5px; font-weight: 600; padding: 3px 10px; border-radius: 999px; background: var(--surface-2); color: var(--ink-2); }
 .stab-badge.pos { background: color-mix(in srgb, var(--pos) 14%, transparent); color: var(--pos); }
-.stab-badge.warn { background: color-mix(in srgb, var(--c-ochre, #c9871a) 16%, transparent); color: var(--c-ochre, #c9871a); }
+.stab-badge.warn { background: color-mix(in srgb, var(--c-ochre) 16%, transparent); color: var(--c-ochre); }
 .stab-badge.neg { background: color-mix(in srgb, var(--neg) 14%, transparent); color: var(--neg); }
 /* ST5: the stability card is the wider half — six labelled columns need the room. */
 .inc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 14px; }
@@ -174,7 +174,7 @@
 .up-sub .us-mid { display: flex; flex-direction: column; min-width: 0; }
 .up-sub .us-name { font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .up-sub .us-when { font-size: 12px; color: var(--muted); }
-.up-sub .us-when.urgent { color: var(--c-ochre, #c9871a); font-weight: 500; }
+.up-sub .us-when.urgent { color: var(--c-ochre); font-weight: 500; }
 .up-sub .us-amt { font-variant-numeric: tabular-nums; font-weight: 500; white-space: nowrap;
   display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
 /* ₴-еквівалент валютного плану — підпорядкований рядок під сумою у валюті. */
@@ -189,7 +189,7 @@
 .pulse-rate { font-size: 34px; line-height: 1; margin-top: 4px; }
 .pulse-rate.pos { color: var(--pos); }
 .pulse-rate.neg { color: var(--neg); }
-.pulse-rate.warn { color: var(--c-ochre, #c9871a); }
+.pulse-rate.warn { color: var(--c-ochre); }
 .pulse-rate .cur { font-size: 0.5em; color: var(--muted); margin-left: 0.1em; vertical-align: 0.14em; }
 .pulse-save-detail { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--muted); text-align: right; }
 .pulse-save-detail b { font-variant-numeric: tabular-nums; margin-left: 5px; }
@@ -212,10 +212,10 @@
 .legend .d { width: 9px; height: 9px; border-radius: 50%; }
 .chart-wrap { width: 100%; height: 230px; }
 .chart-tip {
-  background: #0f1620; color: #fff; border-radius: 10px; padding: 9px 12px;
-  font-size: 12px; box-shadow: var(--shadow); border: none;
+  background: var(--tip); color: var(--tip-ink); border-radius: 10px; padding: 9px 12px;
+  font-size: 12px; box-shadow: var(--shadow); border: 1px solid var(--tip-line);
 }
-.chart-tip .tip-lbl { color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 4px; }
+.chart-tip .tip-lbl { color: var(--tip-muted); font-size: 11px; margin-bottom: 4px; }
 .chart-tip .r { display: flex; align-items: center; gap: 7px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 .chart-tip .r + .r { margin-top: 2px; }
 .chart-tip .d { width: 8px; height: 8px; border-radius: 50%; }
@@ -223,30 +223,30 @@
 /* §R2-ST1: плаваючий тултип за курсором (портал у body) для не-recharts барів. */
 .hover-tip {
   position: fixed; z-index: 200; pointer-events: none;
-  background: #0f1620; color: #fff; border-radius: 10px; padding: 9px 12px;
-  font-size: 12px; box-shadow: var(--shadow); max-width: 250px;
+  background: var(--tip); color: var(--tip-ink); border: 1px solid var(--tip-line);
+  border-radius: 10px; padding: 9px 12px; font-size: 12px; box-shadow: var(--shadow); max-width: 250px;
 }
-.hover-tip .tip-lbl { color: rgba(255,255,255,0.6); font-size: 11px; margin-bottom: 4px; }
+.hover-tip .tip-lbl { color: var(--tip-muted); font-size: 11px; margin-bottom: 4px; }
 .hover-tip .r { display: flex; align-items: center; gap: 7px; font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 .hover-tip .r + .r { margin-top: 2px; }
 .hover-tip .d { width: 8px; height: 8px; border-radius: 50%; }
-.hover-tip b { color: #fff; }
+.hover-tip b { color: var(--tip-ink); }
 /* Prose tips (T3): one comfortable measure, not the data tips' 250px cap — at 210px an explanation
    was a column of single words. `max-content` keeps a short sentence on one line. */
 .hover-tip:has(> .tip-explain) { max-width: min(300px, calc(100vw - 16px)); }
 .tip-explain { line-height: 1.45; width: max-content; max-width: 100%; }
-.tip-explain b { color: #fff; }
-/* Shared tooltip vocabulary for both dark tips (`.chart-tip`, `.hover-tip`): a muted line, a
-   key-value row, a section under a hairline, and pos/neg tones lifted toward white — the plain
-   tokens are tuned for a light card and read as mud on the tip's near-black (§HEALTH-TREND). */
-.tip-muted { color: rgba(255, 255, 255, 0.6); }
+.tip-explain b { color: var(--tip-ink); }
+/* Shared tooltip vocabulary for both tips (`.chart-tip`, `.hover-tip`): a muted line, a key-value
+   row, a section under a hairline, and pos/neg tones of their own — the plain tokens are tuned for
+   a card and read as mud on the tip's ground (§HEALTH-TREND). Every colour is a `--tip-*` token. */
+.tip-muted { color: var(--tip-muted); }
 .tip-big { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.tip-pos { color: color-mix(in srgb, var(--pos) 55%, white); }
-.tip-neg { color: color-mix(in srgb, var(--neg) 55%, white); }
-.tip-sec { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.tip-pos { color: var(--tip-pos); }
+.tip-neg { color: var(--tip-neg); }
+.tip-sec { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--tip-sep); }
 .tip-kv { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-variant-numeric: tabular-nums; }
 .tip-kv + .tip-kv { margin-top: 2px; }
-.tip-kv > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: rgba(255, 255, 255, 0.75); }
+.tip-kv > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--tip-ink-2); }
 .tip-kv > :last-child { flex-shrink: 0; }
 
 /* §1: інфо-іконка з поясненням метрики (KPI/факти) — не заважає кліку на плитку. */
@@ -255,14 +255,14 @@
   width: 20px; height: 20px; border-radius: 50%; color: var(--muted);
   flex-shrink: 0; transition: color 0.12s, background 0.12s;
 }
-.info-tip:hover, .info-tip:focus-visible { color: var(--ink-2); background: var(--surface-2); outline: none; }
+.info-tip:hover, .info-tip:focus-visible { color: var(--ink-2); background: var(--hover); outline: none; }
 
 
 /* ---- UI_PASS S11: the dashboard catches up with the app ------------------------------------- */
 /* «Потребує уваги»: one row per thing to fix, the tone on the icon only — a whole red row for a
    late subscription would shout louder than the balance above it. */
 .att-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: var(--radius-sm); color: inherit; text-decoration: none; transition: background var(--dur-1) var(--ease-out); }
-.att-row:hover { background: var(--surface-2); }
+.att-row:hover { background: var(--hover); }
 .att-ico { flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 8px; background: var(--surface-2); color: var(--muted); }
 .att-row.bad .att-ico { color: var(--neg); background: color-mix(in srgb, var(--neg) 10%, var(--surface)); }
 .att-row.warn .att-ico { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
@@ -270,13 +270,13 @@
 .att-text { font-size: 13.5px; font-weight: 500; line-height: 1.35; }
 .att-sub { font-size: 12px; color: var(--muted); }
 .att-more { display: block; width: 100%; padding: 9px 10px; border: none; border-radius: var(--radius-sm); background: none; color: var(--accent); font: inherit; font-size: 13px; font-weight: 500; text-align: left; cursor: pointer; }
-.att-more:hover { background: var(--surface-2); }
+.att-more:hover { background: var(--hover); }
 .att-clear { display: flex; align-items: center; gap: 8px; padding: 14px 16px; font-size: 13.5px; color: var(--ink-2); }
 .att-clear svg { color: var(--pos); }
 /* Goals mini: name + %, a bar with a tooltip, what is left. */
 .gm-card { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
 .gm-row { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: var(--radius-sm); color: inherit; text-decoration: none; }
-.gm-row:hover { background: var(--surface-2); }
+.gm-row:hover { background: var(--hover); }
 .gm-head { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; }
 .gm-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gm-pct { font-variant-numeric: tabular-nums; color: var(--ink-2); font-weight: 600; }

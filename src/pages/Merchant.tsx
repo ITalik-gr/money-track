@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { Link, useParams } from "react-router-dom";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../lib/chart.ts";
@@ -38,7 +39,7 @@ function Stat({ label, v, sub, color }: { label: string; v: React.ReactNode; sub
     <div className="card merchant-stat">
       <div className="label">{label}</div>
       <div className="merchant-stat-v num-hero">
-        {color && <span className="d" style={{ background: color, width: 9, height: 9, borderRadius: 999, display: "inline-block", marginRight: 7, verticalAlign: "middle" }} />}
+        {color && <span className="d" style={{ background: catColor(color), width: 9, height: 9, borderRadius: 999, display: "inline-block", marginRight: 7, verticalAlign: "middle" }} />}
         {v}
       </div>
       {sub && <div className="merchant-stat-sub">{sub}</div>}

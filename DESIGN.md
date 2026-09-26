@@ -29,21 +29,52 @@ but warm and friendly — not the old strict dark-mono.
 
 ## 2. Tokens (`src/styles/tokens.css`)
 
-**Light theme colours**
+**§THEME — how theming works.** Three layers, and a colour lives in exactly one of them:
+1. `src/styles/tokens.css` — theme-INDEPENDENT: scales, fonts, motion, the stored category palette
+   (`--pal-*`), physical card faces (`--card-*`), and derived roles written once in terms of theme
+   tokens (`--c-*`, `--chart-*`, `--hover-layer`).
+2. `src/styles/theme-light.css` / `theme-dark.css` — one file per theme, the SAME set of colour
+   tokens in each (lint C23). Light is also the bare `:root` default. A new colour role = a token
+   in every theme file, never a `[data-theme] .thing` twin rule.
+3. `src/lib/theme.ts` — the only code that switches (`useTheme()`, `setTheme()`; `THEMES`); it
+   writes `data-theme` on `<html>`, `localStorage["mt-theme"]` and `<meta name="theme-color">`
+   (read from the live `--bg`). `public/theme.js` applies the stored choice before first paint.
+A new theme = a `theme-<name>.css` with the full set + its name in `THEMES` + its `--bg` in
+`public/theme.js`; C23 fails until all three agree. The app does not follow the OS setting (an
+explicit toggle is the product).
 
-| Token | Value | Role |
-|---|---|---|
-| `--bg` | `#f2f5f3` | app ground (cool off-white) |
-| `--surface` / `--surface-2` | `#ffffff` / `#eaeeeb` | cards / nested, hover, segments |
-| `--ink` / `--ink-2` | `#13201b` / `#33443c` | text / secondary text |
-| `--muted` | `#5f6b79` | captions, meta (AA ≥ 4.5:1 on surface) |
-| `--line` / `--line-strong` | `#e2e7e4` / `#d3dad5` | borders / inputs |
-| `--accent` / `--accent-soft` | `#2e6be6` / `#eaf1fd` | cobalt actions, active state |
-| `--pos` / `--neg` | `#12805c` / `#d24430` | income / spend, debt |
+**Colour tokens** (light · dark «Сланець»)
 
-Category colours: `--c-pine #1f6e4c` · `--c-cobalt #2e6be6` · `--c-plum #7a3e9d` ·
-`--c-ochre #c9871a` · `--c-brick #b23a2e` · `--c-teal #127c86`.
-Dark theme: `@media (prefers-color-scheme: dark)` + manual `data-theme` override.
+| Token | Light | Dark | Role |
+|---|---|---|---|
+| `--bg` | `#f3f5f8` | `#0a0d13` | app ground |
+| `--surface` | `#ffffff` | `#161b25` | cards |
+| `--surface-2` | `#eef1f6` | `#1f2531` | nested/inset blocks, tracks, chips, drill panels |
+| `--surface-3` | `#e8ecf3` | `#28303e` | raised inside a nested block |
+| `--raised` | `#ffffff` | `#28303e` | the ON chip of a segmented control |
+| `--float` / `--float-2` | `#ffffff` / `#eef1f6` | `#1f2531` / `#28303e` | popovers, Select, palette, toasts / a tile on them |
+| `--field` | `#ffffff` | `#10141c` | inputs (sunken in dark) |
+| `--hover` | `rgba(40,70,130,.08)` | `rgba(233,237,244,.06)` | hover OVERLAY, any surface |
+| `--overlay` | `rgba(10,16,24,.45)` | `rgba(3,5,9,.62)` | modal / sheet scrim |
+| `--line` / `--line-strong` | `#e9edf3` / `#dbe1ea` | `#262d3a` / `#353e4e` | borders / inputs |
+| `--ink` / `--ink-2` / `--muted` | `#0f1620` / `#3b4656` / `#5f6b79` | `#e9edf4` / `#b4bdcc` / `#8b95a7` | text |
+| `--accent` / `-strong` / `-soft` | `#2e6be6` / `#1f57cc` / `#eaf1fd` | `#789fff` / `#9cb8ff` / `#1c2845` | cobalt / hover / selected fill |
+| `--on-accent` · `--on-neg` | `#fff` · `#fff` | `#0b1220` · `#1a0d0b` | text on a solid accent / neg |
+| `--pos` · `--neg` · `--warn` (+`-soft`) | `#14915f` · `#dd4b39` · `#b5790f` | `#47c390` · `#f17e6e` · `#e1ac4e` | signals |
+| `--tip*` | `#0f1620` ground, white ink | `#2b3240` ground, `#3b4455` edge | every tooltip |
+| `--cat-keep` | `100%` | `69%` | how much of a stored category colour survives |
+| `--shadow-*` | low, cool | none at rest; `--shadow-float` on floating layers | elevation |
+
+Contrast on dark `--surface`: ink 14.9 · ink-2 9.1 · muted 5.7 · accent 6.7 · on-accent 7.3.
+A new text pair keeps ≥ 4.5 (body ≥ 7).
+
+**Rules.** Hover is `var(--hover)` (or `background-image: var(--hover-layer)` on a control with
+its own fill) — never a fixed surface, which vanishes on a nested block. Selected/open is
+`--accent-soft` or `--surface-2`, not hover. Resting cards are flat with a border in both themes.
+**§CAT-COLOR:** the DB stores the light palette; every inline paint of a stored colour goes through
+`catColor()` (`src/lib/theme.ts`, mixes toward `--ink` by `--cat-keep`), a missing one uses
+`CAT_FALLBACK` / `var(--c-*)`. Category colours: pine `#1f6e4c` · cobalt `#2e6be6` · plum
+`#7a3e9d` · ochre `#c9871a` · brick `#b23a2e` · teal `#127c86`.
 
 **Type — one family.** Geist Sans carries headings, labels, body AND all numbers (tabular figures,
 `"tnum" 1`, class `.money`). Geist Mono ONLY for codes (PAN `··4932`, MCC, IDs) — never money.
@@ -160,6 +191,8 @@ Standing rules distilled from the log up to 2026-09-21 (the full history is in g
 
 | Date | Decision | Why |
 |---|---|---|
+| 2026-09-26 | Dark theme palette = **«Сланець» (Slate)**: cool graphite with a slight blue bias, the light theme's cobalt lifted to `#789fff`, a 4-step elevation ladder, hover as a translucent overlay, dark text on the accent. Shortlisted alternatives (keys `bg / surface / surface-2 / hover-step / line / ink / accent / pos / neg / warn / tip`): Графіт `#0b0d11 #171b22 #20252e #29303b #262c36 #e8ecf2 #6f9bff #45c28e #f07b6b #e0aa4c #2b313c`; Чорнило `#0a0c16 #161a2a #1f2437 #282e45 #262b41 #eceefb #8aa6ff #48c69c #f3857b #e4b35c #2a3048`; Тепла сажа `#0a0a0b #19191c #212124 #2b2b30 #2a2a2f #eeeef0 #7c9dff #56c291 #ec7c6c #dfab50 #303036`; Опівніч `#080b14 #141a2a #1c2336 #252d44 #232b40 #eaeefa #7ea3ff #46c59a #f2837a #e3b15a #28304a`. | Owner: the current dark theme «дуже погана»; chosen from a palette lab of seven (https://claude.ai/artifact/YAUvoVTkCJ61GN91EYSibw). |
+| 2026-09-26 | §THEME implemented: themes split into `theme-light.css` / `theme-dark.css` (same token set, C23), one switch module `src/lib/theme.ts` (both toggles share state; `theme-color` read from `--bg`), `catColor()` for stored colours, ~45 hover fills → overlay, tooltips/popovers/toasts/scrims/fields/segmented/checkbox tick/skeleton on tokens, every hard-coded colour gone from app CSS and components. Kept from the design, not the brief: primary button stays ink (§10.2), `.sub-ai-block`/`.ai-block` stay neutral cards, open `.trow` stays `--surface-2`. Light moved slightly in three places: hover overlay (#eef0f5 vs #eef1f6), one scrim value (0.4/0.5 → 0.45), fallback palettes for uncoloured rows now cycle the six category tokens. | The old dark theme was overrides plus ~140 colours that never followed it; each fix was a rule to remember, so the whole class is now a failed check. Not seen live yet. |
 | 2026-09-25 | One styled checkbox/radio app-wide (17px, 5px radius, white tick on accent); an instant-save on/off setting is a `.switch`, a picker is a checkbox. Tooltips open on tap and on keyboard focus (`HoverTip`), a flipped tip anchors by `right`/`bottom` and flips on its measured size; prose tips are `max-content` ≤ 300px. | T2/T3/F5/F6: OS checkboxes in both themes; tips that did not exist on phones or for keyboards; prose wrapped one word per line near the edge. |
 | 2026-09-25 | A drill is the open row's lower half: the row loses its bottom radius, the panel continues its tone with no border, inner blocks are captioned sections (no card in a card). Statistics → Trends has ONE «when» block (facts · weekday/day-of-month switch · priciest days as chips · one drill slot). «Форма витрат» leads with its one sentence. | ST1/ST2/ST4: «a grey box pasted under a row»; five similar day blocks; the biggest block of the tab for one fact. |
 | 2026-09-25 | Dashboard main column = this month then the long view (forecast full width → free/pulse → envelopes → 6-month flow → capital); upcoming charges in the rail. Balance chips are labelled by currency code. «Місячний мінімум» is two columns at full width, its trend has a 70% line and a sentence saying what the share means. | D1/D2/A2/A3 from the owner's review. |
@@ -206,9 +239,10 @@ Standing rules distilled from the log up to 2026-09-21 (the full history is in g
   `var(--x, fallback)`.
 - **C20 (2026-09-25):** no declaration that a later rule for the SAME selector always overrides. The
   «8 selectors declared twice» were really 37 dead declarations; removed with the effective cascade
-  PROVEN identical (every property of every top-level selector, every conditional block). Still
-  open (needs the owner's eye): ~60 hardcoded colours outside the theme blocks, and `.sub-ai-block`
-  which is neutral in explicit dark but accent-tinted in system dark.
+  PROVEN identical (every property of every top-level selector, every conditional block).
+- **C23 (2026-09-26, §THEME):** theme files hold the same token set; no colour literal, theme token,
+  `[data-theme]` or `prefers-color-scheme` rule anywhere else; a stored colour is painted only
+  through `catColor()`. Exceptions only shrink (`landing.css`, the pickers' stored palettes, brands).
 - A block whose content is history does not hide on an empty current period; loading ≠ empty ≠ error.
 - Per-user `localStorage` keys are scoped by user id.
 - **§SET-FLOW:** Settings cards flow in CSS columns (`columns: 2`, `set-full` spans all), not a grid.

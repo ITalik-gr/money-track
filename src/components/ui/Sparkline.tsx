@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { useState } from "react";
 import { HoverTip } from "./HoverTip.tsx";
 import { dateFmt } from "../../i18n/locale.ts";
@@ -70,10 +71,10 @@ export function Sparkline({ values, color = "var(--muted)", width = 58, height =
   const areaPts = `${x(0).toFixed(1)},${height} ${pts} ${x(clean.length - 1).toFixed(1)},${height}`;
   const svg = (
     <svg className="spark" width={width} height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="xMidYMid meet" aria-hidden>
-      {area && <polygon points={areaPts} fill={color} opacity={0.12} />}
+      {area && <polygon points={areaPts} fill={catColor(color)} opacity={0.12} />}
       {hover != null && <line x1={x(hover)} x2={x(hover)} y1={0} y2={height} className="spark-guide" />}
-      <polyline points={pts} fill="none" stroke={color} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" opacity={0.75} />
-      {hover != null && hover !== clean.length - 1 && <circle cx={x(hover).toFixed(1)} cy={y(clean[hover]).toFixed(1)} r={2.6} fill={color} />}
+      <polyline points={pts} fill="none" stroke={catColor(color)} strokeWidth={1.4} strokeLinecap="round" strokeLinejoin="round" opacity={0.75} />
+      {hover != null && hover !== clean.length - 1 && <circle cx={x(hover).toFixed(1)} cy={y(clean[hover]).toFixed(1)} r={2.6} fill={catColor(color)} />}
       <circle cx={x(clean.length - 1).toFixed(1)} cy={y(last).toFixed(1)} r={hover === clean.length - 1 ? 2.8 : 2} fill={trend} />
     </svg>
   );

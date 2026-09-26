@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { Link } from "react-router-dom";
 import { formatDate } from "../../lib/format.ts";
 import { Money } from "../ui/Money.tsx";
@@ -78,14 +79,14 @@ export function TxItem({ t, compact, selectable, selected, onToggle }: Props) {
             <span className="m-sub" title={tr("tx.subCharge")}>🔁</span>
           )}
           {t.event_name && (
-            <span className="m-group" style={{ color: groupColor ?? undefined }} title={t.event_name}>
-              <span className="d" style={{ background: groupColor ?? "var(--accent)" }} />{t.event_name}
+            <span className="m-group" style={{ color: catColor(groupColor ?? undefined) }} title={t.event_name}>
+              <span className="d" style={{ background: catColor(groupColor ?? "var(--accent)") }} />{t.event_name}
             </span>
           )}
         </div>
         <div className="tx-line2">
           <span className="tx-cat">
-            {!transfer && <span className="d" style={{ background: t.category_color ?? "var(--muted)" }} />}
+            {!transfer && <span className="d" style={{ background: catColor(t.category_color ?? "var(--muted)") }} />}
             {route ? (
               // Маршрут замість слова «переказ»: той самий рядок несе більше сенсу.
               <span className="tx-route-mini">

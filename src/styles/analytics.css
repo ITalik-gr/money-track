@@ -168,7 +168,9 @@
   transition: background var(--dur-1) var(--ease-out);
 }
 .trow.has-lead { grid-template-columns: auto minmax(0, 1fr) auto minmax(84px, auto); grid-template-areas: "lead name spark val" "lead bar spark sub"; }
-.trow:hover, .trow.open { background: var(--surface-2); }
+.trow:hover { background: var(--hover); }
+/* Open is not hover: the row takes its drill panel's --surface-2 so the two read as one block. */
+.trow.open { background: var(--surface-2); }
 .trow-lead { grid-area: lead; }
 .trow-name { grid-area: name; display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; font-weight: 500; }
 .trow-name > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -227,7 +229,7 @@ a.trow::after { transform: translateY(-50%) rotate(-45deg); }
 .when-chips .chip b { font-weight: 600; font-variant-numeric: tabular-nums; }
 .wd-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
 .wd-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; border: none; background: none; cursor: pointer; padding: 0; border-radius: 8px; transition: background 0.12s; }
-.wd-col:hover { background: var(--surface-2); }
+.wd-col:hover { background: var(--hover); }
 .wd-col.open .wd-lbl { color: var(--accent); font-weight: 600; }
 /* A chart that only answers a hover (the category page): no pointer, no press fill. */
 .wd-col.static { cursor: default; }

@@ -8,13 +8,13 @@
   padding: 9px 11px; border-radius: var(--radius-sm); color: var(--ink-2);
   font-size: 14px; font-weight: 500; cursor: pointer; user-select: none;
 }
-.theme-toggle:hover { background: var(--surface-2); color: var(--ink); }
+.theme-toggle:hover { background: var(--hover); color: var(--ink); }
 .theme-toggle .row { display: flex; align-items: center; gap: 11px; }
 .switch { width: 38px; height: 22px; border-radius: 999px; background: var(--line-strong); position: relative; transition: background 0.15s; flex-shrink: 0; }
 .switch.on { background: var(--accent); }
 .switch::after {
   content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px;
-  border-radius: 50%; background: #fff; transition: transform 0.15s; box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+  border-radius: 50%; background: var(--knob); transition: transform 0.15s; box-shadow: var(--shadow-knob);
 }
 .switch.on::after { transform: translateX(16px); }
 
@@ -35,7 +35,7 @@
   letter-spacing: 0.04em; cursor: pointer; transition: background 0.15s, color 0.15s;
 }
 .lang-seg button:hover { color: var(--ink); }
-.lang-seg button.on { background: var(--surface); color: var(--accent); box-shadow: var(--shadow-sm); }
+.lang-seg button.on { background: var(--raised); color: var(--accent); box-shadow: var(--shadow-raised); }
 /* Global :focus-visible uses outline-offset 2px, which would draw the ring outside the track;
    pull it inward so the focused segment stays inside the control. */
 .lang-seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -48,7 +48,7 @@
 .cat-ico {
   width: 40px; height: 40px; border-radius: 12px;
   display: grid; place-items: center;
-  font-size: 17px; font-weight: 600; color: #fff;
+  font-size: 17px; font-weight: 600; color: var(--on-tile);
   flex-shrink: 0; overflow: hidden;
 }
 /* локальні бренд-плитки мерчантів (DESIGN.md §7 F2; brands.tsx, без зовнішніх запитів) */
@@ -56,11 +56,12 @@
 .cat-ico.brand-mono { font-weight: 700; font-size: 18px; letter-spacing: -0.01em; }
 
 /* §1: «По картках» (Статистика→Мерчанти) — велика плитка-картка замість голого рядка тексту. */
-.acct-badge { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; color: #fff; }
-.acct-badge.black { background: #14171a; }
-.acct-badge.white { background: #f4f5f6; color: #4a5560; box-shadow: inset 0 0 0 1px #c7cdd4; }
-.acct-badge.fop { background: #12251d; }
-.acct-badge.jar { background: var(--c-teal, #127c86); }
+.acct-badge { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; color: var(--on-tile); }
+/* The plastic's own colour in both themes; the inset edge keeps a black card visible on a dark one. */
+.acct-badge.black { background: var(--card-black); box-shadow: inset 0 0 0 1px var(--card-edge); }
+.acct-badge.white { background: var(--card-white); color: var(--card-white-ink); box-shadow: inset 0 0 0 1px var(--card-white-edge); }
+.acct-badge.fop { background: var(--card-fop); box-shadow: inset 0 0 0 1px var(--card-edge); }
+.acct-badge.jar { background: var(--c-teal); }
 .acct-badge.other { background: var(--muted); }
 .acct-pan {
   font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-weight: 400;
@@ -169,7 +170,7 @@
 .split-bar > span { display: block; height: 100%; }
 /* клікабельний бар категорії (drill-down) */
 .catbar-btn { position: relative; width: 100%; border: none; background: none; cursor: pointer; border-radius: 8px; padding: 6px 24px 6px 8px; margin: -1px 0; text-align: left; transition: background 0.12s; }
-.catbar-btn:hover { background: var(--surface-2); }
+.catbar-btn:hover { background: var(--hover); }
 .catbar-btn.open { background: var(--surface-2); }
 /* каретка-індикатор «можна розкрити» — обертається у відкритому стані */
 .catbar-btn::after, .mrow-btn::after {
@@ -186,11 +187,9 @@
 .cat-ai-callout {
   display: flex; align-items: center; gap: 12px; margin-bottom: 10px;
   padding: 12px 14px; border-radius: var(--radius);
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
-  border: 1px solid var(--accent-soft);
+  background: var(--ai-tint);
+  border: 1px solid var(--ai-edge);
 }
-:root[data-theme="dark"] .cat-ai-callout { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cat-ai-callout { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, transparent); } }
 .cat-ai-body { min-width: 0; flex: 1; }
 .cat-ai-title { display: flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
 .cat-ai-title svg { color: var(--accent); flex-shrink: 0; }
@@ -259,7 +258,7 @@
 .mrow .m-sub { font-size: 12px; color: var(--muted); }
 /* §R2-ST5(б): рядок-мерчант як кнопка (розкриває операції) */
 .mrow-btn { position: relative; width: 100%; border: none; background: none; cursor: pointer; text-align: left; border-radius: var(--radius-sm); padding-left: 12px; padding-right: 24px; transition: background 0.12s; }
-.mrow-btn:hover { background: var(--surface-2); }
+.mrow-btn:hover { background: var(--hover); }
 .mrow-btn.open { background: var(--surface-2); }
 .drill-open-link { margin-left: auto; font-size: 11.5px; color: var(--accent); text-decoration: none; font-weight: 500; text-transform: none; letter-spacing: 0; }
 .drill-open-link:hover { text-decoration: underline; }
@@ -309,7 +308,7 @@
 .rb-bar-mine { display: block; height: 100%; border-radius: var(--radius-pill); background: var(--ink); }
 .rb-cands { display: flex; flex-direction: column; gap: 4px; margin: 6px 0 4px; }
 .rb-cand { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: var(--fs-sm); }
-.rb-cand:hover { background: var(--surface-2); }
+.rb-cand:hover { background: var(--hover); }
 .rb-cand.on { border-color: var(--accent); background: var(--accent-soft); }
 .rb-cand-pick { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .rb-cand-pick > input { flex: none; }
@@ -326,7 +325,7 @@
 .rb-cand-amt { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--pos); flex-shrink: 0; }
 .rb-modes { display: flex; gap: 4px; margin: 4px 0 12px; padding: 3px; border-radius: var(--radius-sm); background: var(--surface-2); }
 .rb-mode { flex: 1; padding: 6px 10px; border: none; border-radius: var(--radius-xs); background: none; color: var(--muted); font: inherit; font-size: var(--fs-sm); cursor: pointer; }
-.rb-mode.on { background: var(--surface); color: var(--ink); font-weight: 500; box-shadow: var(--shadow-sm); }
+.rb-mode.on { background: var(--raised); color: var(--ink); font-weight: 500; box-shadow: var(--shadow-raised); }
 .rb-preview { margin: 12px 0 2px; }
 .rb-preview .split-remainder { margin-bottom: 0; }
 
@@ -450,7 +449,7 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 .bch-starter:hover { border-color: var(--accent); color: var(--accent); }
 .bch-msgs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; max-height: 340px; overflow-y: auto; }
 .bch-msg { max-width: 88%; padding: 9px 13px; border-radius: 14px; font-size: 13.5px; line-height: 1.5; }
-.bch-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+.bch-msg.user { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 4px; }
 .bch-msg.assistant { align-self: flex-start; background: var(--surface-2); border-bottom-left-radius: 4px; }
 .bch-proposals { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; background: var(--surface-2); }
 .bch-prop { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); }
@@ -477,11 +476,11 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 .bc-name { display: inline-flex; align-items: center; gap: 8px; font-size: 14.5px; font-weight: 500; min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* Перенесений залишок (rollover): бейдж у шапці конверта — він піднімає ліміт місяця. */
 .bc-carry { flex-shrink: 0; font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap;
-  color: var(--c-teal, #2f7d6b); background: color-mix(in srgb, var(--c-teal, #2f7d6b) 12%, transparent);
+  color: var(--c-teal); background: color-mix(in srgb, var(--c-teal) 12%, transparent);
   border-radius: var(--radius-pill, 999px); padding: 2px 8px; }
 .bc-name .d { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
 .bc-pct { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 13px; font-weight: 600; color: var(--muted); }
-.bc-pct.warn { color: var(--warn, #c9871a); }
+.bc-pct.warn { color: var(--warn); }
 .bc-pct.over { color: var(--neg); }
 .bc-set { border: 1px dashed var(--line-strong); background: none; color: var(--muted); font-size: 12px; border-radius: 8px; padding: 3px 9px; cursor: pointer; }
 .bc-set:hover { color: var(--ink); border-color: var(--muted); }
@@ -515,13 +514,13 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 .sts-card { padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
 .sts-hero { display: flex; flex-direction: column; gap: 2px; }
 .sts-label { font-size: 12.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-.sts-num { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; color: var(--pos, #1f6e4c); line-height: 1.1; }
+.sts-num { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-size: 34px; font-weight: 600; letter-spacing: -0.02em; color: var(--pos); line-height: 1.1; }
 .sts-card.neg .sts-num { color: var(--neg); }
 .sts-sub { font-size: 12px; color: var(--muted); }
 .sts-break { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .sts-line { display: flex; align-items: baseline; justify-content: space-between; font-size: 13px; color: var(--ink-2); }
 .sts-line b { font-family: var(--font-num); font-variant-numeric: tabular-nums; color: var(--ink); font-weight: 600; }
-.sts-line b.pos { color: var(--pos, #1f6e4c); }
+.sts-line b.pos { color: var(--pos); }
 .sts-line b.neg { color: var(--neg); }
 .sts-line.total { padding-top: 6px; border-top: 1px dashed var(--line); font-weight: 600; color: var(--ink); }
 .sts-imp { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
@@ -539,13 +538,13 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 .mv-col { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; }
 .mv-head { font-size: 12.5px; font-weight: 600; margin-bottom: 8px; }
 .mv-head.up { color: var(--neg); }
-.mv-head.down { color: var(--pos, #1f6e4c); }
+.mv-head.down { color: var(--pos); }
 .mv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-size: 13px; }
 .mv-name { display: inline-flex; align-items: center; gap: 7px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mv-name .d { width: 8px; height: 8px; border-radius: 3px; flex-shrink: 0; }
 .mv-delta { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 .mv-delta.up { color: var(--neg); }
-.mv-delta.down { color: var(--pos, #1f6e4c); }
+.mv-delta.down { color: var(--pos); }
 .mv-empty { font-size: 12px; color: var(--muted); padding: 4px 0; }
 
 /* §6 Вагомість — пікер (категорія/операція) + смуга частки у Статистиці */
@@ -564,7 +563,7 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 /* §E5 — збільшений блок Вагомості: вищий бар з підписами + картки-рівні */
 .imp-bar-lg { height: 26px; border-radius: 8px; }
 .imp-bar-lg span { display: flex; align-items: center; justify-content: center; }
-.imp-seg-lbl { font-size: 11.5px; font-weight: 600; color: #fff; font-variant-numeric: tabular-nums; }
+.imp-seg-lbl { font-size: 11.5px; font-weight: 600; color: var(--on-tile); font-variant-numeric: tabular-nums; }
 .imp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 14px; }
 .imp-card { display: flex; flex-direction: column; gap: 3px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); min-width: 0; text-align: left; font: inherit; cursor: pointer; transition: border-color var(--dur-1) var(--ease-out), transform var(--dur-1) var(--ease-out); }
 @media (hover: hover) and (pointer: fine) { .imp-card.fact-click:hover:not(:disabled) { border-color: var(--muted); transform: translateY(-1px); } }
@@ -619,7 +618,7 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
   color: var(--accent); background: var(--accent-soft); border-radius: 5px;
   transform: translateY(1px);
 }
-.tx-cite:hover { background: var(--accent); color: #fff; }
+.tx-cite:hover { background: var(--accent); color: var(--on-accent); }
 
 /* §5 РЕПОРТИ — окрема сторінка (список карток + деталь) */
 .report-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
@@ -637,11 +636,11 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
   transition: opacity .12s, background .12s, color .12s;
 }
 .report-card:hover .rc-del, .rc-del:focus-visible { opacity: 1; }
-.rc-del:hover { background: var(--neg-soft, color-mix(in srgb, var(--neg) 14%, transparent)); color: var(--neg); }
+.rc-del:hover { background: var(--neg-soft); color: var(--neg); }
 .rc-top { display: flex; align-items: center; gap: 8px; }
 .rc-badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 999px; }
 .rc-badge.week { background: var(--accent-soft); color: var(--accent); }
-.rc-badge.month { background: color-mix(in srgb, var(--c-teal, #127c86) 16%, transparent); color: var(--c-teal, #127c86); }
+.rc-badge.month { background: color-mix(in srgb, var(--c-teal) 16%, transparent); color: var(--c-teal); }
 /* Кастомний діапазон — нейтральний бейдж: він не третій «ранг» поруч із тижнем і місяцем,
    а просто «межі обрав користувач», тож акцентного кольору не заслуговує. */
 .rc-badge.custom { background: var(--surface-2); color: var(--ink-2); }
@@ -677,7 +676,7 @@ a.bp-name:hover, a.bc-name:hover { text-decoration: underline; text-underline-of
 .anomaly { display: flex; gap: 10px; align-items: flex-start; padding: 10px 4px; }
 .anomaly + .anomaly { border-top: 1px solid var(--line); }
 .anomaly .an-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex-shrink: 0; background: var(--muted); }
-.anomaly.warn .an-dot { background: var(--warn, #c9871a); }
+.anomaly.warn .an-dot { background: var(--warn); }
 .anomaly.high .an-dot { background: var(--neg); }
 .report-meta { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); text-align: right; }
 .report-cat-grid { display: grid; grid-template-columns: 220px 1fr; gap: 18px; align-items: center; }

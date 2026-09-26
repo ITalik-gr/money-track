@@ -11,6 +11,7 @@
  * FIFTH declaration of those rules (four exist, and the duplication is a known open bug) — and the
  * copies would drift apart exactly where nobody looks, since they are never on screen together.
  */
+import { catColor } from "../../lib/theme.ts";
 import { useT } from "../../i18n/index.ts";
 import { formatMinor, weekdayShort } from "../../lib/format.ts";
 import { useGetCategoryShapeQuery } from "../../store/api.ts";
@@ -73,7 +74,7 @@ export function CategoryShapeBlocks({ id, from, to, hasBudget }: {
                 {imp.map((r) => (
                   <HoverTip key={r.level} content={<TipBody label={t(impMeta(r.level)?.labelKey ?? "cat.impTitle")} color={impMeta(r.level)?.color}
                     value={<Money minor={r.spent} decimals={false} />} sub={t("tip.shareOfCategory", { pct: r.share_pct, n: r.n })} />}>
-                    <div className="cat-imp-seg" style={{ width: `${r.share_pct}%`, background: impMeta(r.level)?.color ?? "var(--muted)" }} />
+                    <div className="cat-imp-seg" style={{ width: `${r.share_pct}%`, background: catColor(impMeta(r.level)?.color ?? "var(--muted)") }} />
                   </HoverTip>
                 ))}
               </div>
@@ -81,7 +82,7 @@ export function CategoryShapeBlocks({ id, from, to, hasBudget }: {
             <div className="cat-imp-legend">
               {imp.map((r) => (
                 <div key={r.level} className="cat-imp-row">
-                  <span className="d" style={{ background: impMeta(r.level)?.color ?? "var(--muted)" }} />
+                  <span className="d" style={{ background: catColor(impMeta(r.level)?.color ?? "var(--muted)") }} />
                   <span className="cat-imp-name">{t(impMeta(r.level)?.labelKey ?? "cat.impTitle")}</span>
                   <span className="cat-imp-pct num-mono">{r.share_pct}%</span>
                   <span className="cat-imp-amt num-mono"><Money minor={r.spent} decimals={false} /></span>

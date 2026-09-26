@@ -16,7 +16,7 @@
               transform var(--dur-1) var(--ease-out);
 }
 .btn > svg { display: block; flex-shrink: 0; }
-.btn:hover { background: var(--surface-2); border-color: var(--muted); }
+.btn:hover { background-image: var(--hover-layer); border-color: var(--muted); }
 /* tactile press — deliberate action snaps down (review-animations §9) */
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -27,7 +27,7 @@
 .btn.primary:hover { background: color-mix(in srgb, var(--ink) 88%, var(--surface)); border-color: color-mix(in srgb, var(--ink) 88%, var(--surface)); }
 .btn:disabled { opacity: 0.5; cursor: default; }
 .btn.ghost { border-color: transparent; background: transparent; }
-.btn.ghost:hover { background: var(--surface-2); border-color: transparent; }
+.btn.ghost:hover { background-image: var(--hover-layer); border-color: transparent; }
 /* Компактний розмір — для дій у заголовках секцій, рядках, чіпах (не переважає текст поруч) */
 .btn.sm { padding: 6px 12px; font-size: 13px; border-radius: var(--radius-xs); gap: 6px; }
 /* `lg` moved here from the landing block on 2026-08-26: it is a size of the shared button,
@@ -42,7 +42,7 @@
 .sel-trigger {
   width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
+  background: var(--field); color: var(--ink); font: inherit; font-size: 14px; cursor: pointer;
   text-align: left; transition: border-color 0.14s, box-shadow 0.14s;
 }
 .sel-trigger:hover { border-color: var(--muted); }
@@ -54,11 +54,11 @@
 .sel-opt-inner { display: flex; align-items: center; gap: 9px; min-width: 0; }
 .sel-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sel-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.sel-ico { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: #fff; flex-shrink: 0; }
+.sel-ico { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; color: var(--on-tile); flex-shrink: 0; }
 .sel-pop {
   position: absolute; left: 0; right: 0; z-index: 60; padding: 5px;
-  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-card); animation: sel-in 0.12s ease;
+  background: var(--float); border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-float); animation: sel-in 0.12s ease;
 }
 .sel-pop.down { top: calc(100% + 6px); }
 .sel-pop.up { bottom: calc(100% + 6px); }
@@ -71,7 +71,7 @@
   padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 14px;
 }
 .sel-opt.indent { padding-left: 24px; }
-.sel-opt.active { background: var(--surface-2); }
+.sel-opt.active { background: var(--hover); }
 .sel-opt.sel-selected { color: var(--accent); font-weight: 600; }
 .sel-hint { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 .sel-clear, .sel-empty { color: var(--muted); font-size: 13.5px; padding: 2px 0; }
@@ -83,7 +83,7 @@ input, select, textarea {
   padding: 10px 12px;
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--field);
   color: var(--ink);
   width: 100%;
 }
@@ -99,7 +99,8 @@ input[type="checkbox"], input[type="radio"] {
 /* THE checkbox and radio (UI_PASS T2): the native box was the one control left in OS styling —
    grey and bevelled on one platform, blue on another, the same in both themes. A `.switch` is the
    on/off-SETTING control (saves at once); this is for picking things (rows, options in a form).
-   The tick is a white SVG on the accent fill, so it reads the same in both themes. */
+   The tick is an SVG in --on-accent on the accent fill; a data URI cannot read a custom property,
+   so each theme file carries its own copy (`--check-tick`, `--check-dash`). */
 input[type="checkbox"]:not(.switch), input[type="radio"] {
   appearance: none; -webkit-appearance: none; flex-shrink: 0; margin: 0;
   width: 17px; height: 17px; border: 1.5px solid var(--line-strong); border-radius: 5px;
@@ -110,11 +111,11 @@ input[type="radio"] { border-radius: 50%; }
 input[type="checkbox"]:not(.switch):hover:not(:disabled), input[type="radio"]:hover:not(:disabled) { border-color: var(--muted); }
 input[type="checkbox"]:not(.switch):checked {
   border-color: var(--accent); background-color: var(--accent);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www%2Ew3%2Eorg/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='white' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--check-tick);
 }
 input[type="checkbox"]:not(.switch):indeterminate {
   border-color: var(--accent); background-color: var(--accent);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www%2Ew3%2Eorg/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='white' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-image: var(--check-dash);
 }
 input[type="radio"]:checked { border-color: var(--accent); box-shadow: inset 0 0 0 3.5px var(--surface); background-color: var(--accent); }
 input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -126,8 +127,8 @@ textarea { resize: vertical; }
    тону: фокус мусить бути ВИДНИМ (без нього клавіатурна навігація сліпа), але він не подія.
    ⚠️ Прибрати зовсім не можна — це доступність, а не декор. */
 input:focus, select:focus, textarea:focus {
-  outline: none; border-color: var(--line-strong);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 8%, transparent);
+  outline: none; border-color: var(--focus-edge);
+  box-shadow: var(--focus-ring);
 }
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -220,7 +221,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 .modal-backdrop {
   position: fixed; inset: 0;
-  background: rgba(10, 16, 13, 0.4);
+  background: var(--overlay);
   display: flex; align-items: flex-end; justify-content: center;
   z-index: 50;
 }
@@ -281,7 +282,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   font-size: 13px;
   font-weight: 500;
 }
-.seg-btn.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow-sm); }
+.seg-btn.active { background: var(--raised); color: var(--ink); box-shadow: var(--shadow-raised); }
 
 /* §11 Статистика: секційні таби = підкреслення (навігація), відмінні від pill-фільтра
    періоду вище. Активний — ink-текст + акцент-підкреслення (поточний вибір). */
@@ -379,7 +380,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 .setform-sub { flex-basis: 100%; font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
 /* C3: the category's look, shown as the app shows it, beside the button that changes it. */
 .catset-look { display: inline-flex; align-items: center; gap: 9px; font-size: var(--fs-md); font-weight: 500; }
-.catset-look-ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: #fff; }
+.catset-look-ico { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--on-tile); }
 .setform-foot {
   display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 12px 20px;
   border-top: 1px solid var(--line); background: var(--surface-2);
@@ -393,9 +394,9 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
    separate label and left a gap that looked like a missing control. */
 .affix {
   display: inline-flex; align-items: center; gap: 6px; padding-right: 12px;
-  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--field);
 }
-.affix:focus-within { box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 8%, transparent); }
+.affix:focus-within { box-shadow: var(--focus-ring); }
 .affix > input {
   border: none; background: transparent; width: 10ch; padding-right: 0;
   text-align: right; font-variant-numeric: tabular-nums;

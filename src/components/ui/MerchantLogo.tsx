@@ -1,5 +1,6 @@
 import { matchBrand, BRAND_MARKS } from "../../lib/brands.tsx";
 import { CategoryIcon } from "./CategoryIcon.tsx";
+import { catColor } from "../../lib/theme.ts";
 
 // Плитка операції — локальна, без зовнішніх запитів (приватність). Пріоритет:
 // бренд-гліф → бренд-монограма (фірмовий колір) → іконка категорії → літера → крапка.
@@ -18,7 +19,7 @@ export function MerchantLogo({
 
   const brand = matchBrand(merchant);
   if (brand) {
-    const fg = brand.fg ?? "#fff";
+    const fg = brand.fg ?? "var(--on-tile)";
     if (brand.mark) {
       return (
         <span className="cat-ico brand-tile" style={{ background: brand.color, color: fg }}>
@@ -32,7 +33,7 @@ export function MerchantLogo({
 
   const letter = fallbackLabel?.trim() ? fallbackLabel.trim()[0].toUpperCase() : null;
   return (
-    <span className="cat-ico" style={{ background: color ?? "var(--muted)" }}>
+    <span className="cat-ico" style={{ background: catColor(color) ?? "var(--muted)" }}>
       {catIcon ? <CategoryIcon slug={catIcon} size={20} /> : (letter ?? <CategoryIcon slug={null} size={20} />)}
     </span>
   );

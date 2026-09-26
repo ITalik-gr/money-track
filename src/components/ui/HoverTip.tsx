@@ -1,5 +1,6 @@
 import { cloneElement, isValidElement, useEffect, useId, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { catColor } from "../../lib/theme.ts";
 
 // §R2-ST1: миттєвий кастомний тултип для не-recharts елементів (бари днів тижня,
 // будні/вихідні, бари категорій, рядки порівняння, топ-мерчанти). Обгортка має
@@ -119,7 +120,7 @@ export function HoverTip({ content, children }: { content: ReactNode; children: 
 export function TipBody({ label, value, sub, color }: { label: ReactNode; value: ReactNode; sub?: ReactNode; color?: string | null }) {
   return (
     <>
-      <div className="tip-lbl r">{color && <span className="d" style={{ background: color }} />}{label}</div>
+      <div className="tip-lbl r">{color && <span className="d" style={{ background: catColor(color) }} />}{label}</div>
       <div className="tip-big">{value}</div>
       {sub != null && sub !== false && <div className="tip-muted">{sub}</div>}
     </>

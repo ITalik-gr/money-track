@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useState } from "react";
 import { dateFmt } from "../i18n/locale.ts";
 import { useT } from "../i18n/index.ts";
@@ -221,7 +222,7 @@ function GoalCard({ g, onEdit, onDelete }: { g: SavingsGoal; onEdit: () => void;
   // remaining amount instead (decision of 2026-07-14, DESIGN §8 P5).
   const sprint = !done && left > 0 && p.per_month == null && dl != null && dl >= 0 && g.deadline != null;
   return (
-    <div className="goal-card" style={{ "--goal-color": color } as React.CSSProperties}>
+    <div className="goal-card" style={{ "--goal-color": catColor(color) } as React.CSSProperties}>
       <div className="goal-top">
         <div className="goal-name">{g.name}{done && <span className="goal-done">✓</span>}</div>
         <div className="goal-actions">

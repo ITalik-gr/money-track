@@ -67,7 +67,7 @@
   padding: 9px 12px; border-radius: var(--radius-sm);
   color: inherit; text-decoration: none;
 }
-.mo-row:hover { background: var(--surface-2); }
+.mo-row:hover { background: var(--hover); }
 .mo-name {
   display: inline-flex; align-items: center; gap: 8px; min-width: 0;
   font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

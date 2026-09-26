@@ -1,0 +1,98 @@
+/* The LIGHT theme — every colour token that differs between themes (§THEME).
+ *
+ * The contract, enforced by lint C23 (`scripts/check-theme.mjs`):
+ *   · `theme-light.css` and `theme-dark.css` define EXACTLY the same set of custom properties —
+ *     a token one theme forgets silently inherits the other's value, which is how the old dark
+ *     theme ended up painting light category colours on a near-black card;
+ *   · no other stylesheet defines them, holds a colour literal, or scopes a rule to a theme
+ *     (`[data-theme]`, `prefers-color-scheme`). A component that needs a new colour role adds a
+ *     token HERE and in the dark file — never a `:root[data-theme="dark"] .thing` twin.
+ * A third theme is a third file with the same set, imported below these two, plus its name in
+ * `THEMES` (`src/lib/theme.ts`) and its `--bg` in `public/theme.js` (C23 checks both).
+ *
+ * `:root` (not only `[data-theme="light"]`) so the page is light before `theme.js` runs and when
+ * storage is blocked. */
+:root, :root[data-theme="light"] {
+  color-scheme: light;
+
+  /* ── Ground and surfaces: the elevation ladder, low → high ── */
+  --bg: #f3f5f8;          /* app ground, sunken inputs */
+  --surface: #ffffff;     /* cards */
+  --surface-2: #eef1f6;   /* nested/inset blocks, tracks, chips, segmented track, drill panels */
+  --surface-3: #e8ecf3;   /* one step above --surface-2: raised inside a nested block */
+  /* The chip that is ON inside a --surface-2 track (segmented controls). Not --surface: in dark
+     that is DARKER than the track and reads as a hole. */
+  --raised: #ffffff;
+  --float: #ffffff;       /* dropdowns, popovers, palette, toasts — always with --shadow-float */
+  --float-2: #eef1f6;     /* an inset tile on a floating layer (one step off --float) */
+  --field: #ffffff;       /* inputs, selects, textareas; sunken below the card in dark */
+  /* Hover is an OVERLAY, not a surface: it darkens whatever it sits on, so a row inside a
+     --surface-2 drill panel hovers as visibly as one on a card. Tinted cool so that on a white
+     card it lands on the old --surface-2 hover (#eef0f5 vs #eef1f6). */
+  --hover: rgba(40, 70, 130, 0.08);
+  --overlay: rgba(10, 16, 24, 0.45); /* modal / sheet scrim */
+
+  /* A focused field: restrained in light (owner, 2026-08-14: «синій взагалі не підходить») — the
+     edge stays, a thin neutral ring; in dark a neutral ring is invisible, so the accent carries it. */
+  --focus-edge: var(--line-strong);
+  --focus-ring: 0 0 0 2px color-mix(in srgb, var(--ink) 8%, transparent);
+
+  /* ── Lines ── */
+  --line: #e9edf3;
+  --line-strong: #dbe1ea;
+
+  /* ── Text ── */
+  --ink: #0f1620;
+  --ink-2: #3b4656;
+  --muted: #5f6b79;       /* ≥ 4.5:1 on --surface */
+
+  /* ── Accent (cobalt) and what sits on it ── */
+  --accent: #2e6be6;
+  --accent-strong: #1f57cc; /* primary hover: darker in light, LIGHTER in dark */
+  --accent-soft: #eaf1fd;   /* selected / open / active fills */
+  --on-accent: #ffffff;     /* text and icons on --accent */
+  --accent-on-ink: color-mix(in srgb, var(--accent) 70%, #fff); /* accent on an --ink band */
+
+  /* ── Signals ── */
+  --pos: #14915f;
+  --pos-soft: #e6f5ee;
+  --neg: #dd4b39;
+  --neg-soft: #fdecea;
+  --on-neg: #ffffff;        /* text on a solid --neg (danger button, count badge) */
+  --warn: #b5790f;
+  --warn-soft: #fbf1dc;
+
+  /* ── Tooltips: a dark chip in BOTH themes (in dark it is lifted, not sunk) ── */
+  --tip: #0f1620;
+  --tip-line: #0f1620;
+  --tip-ink: #ffffff;
+  --tip-ink-2: rgba(255, 255, 255, 0.75); /* names in a key-value row */
+  --tip-muted: rgba(255, 255, 255, 0.6);  /* labels */
+  --tip-sep: rgba(255, 255, 255, 0.12);   /* hairline between tip sections */
+  --tip-pos: color-mix(in srgb, var(--pos) 55%, white);
+  --tip-neg: color-mix(in srgb, var(--neg) 55%, white);
+
+  /* ── The one tinted AI callout (`.cat-ai-callout`) ── */
+  --ai-tint: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+  --ai-edge: var(--accent-soft);
+
+  /* ── Fixed-colour marks ── */
+  --on-tile: #ffffff;       /* the letter/icon on a coloured category tile */
+  --knob: #ffffff;
+  --check-tick: url("data:image/svg+xml,%3Csvg xmlns='http://www%2Ew3%2Eorg/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2 5 8.6l4.6-5.1' fill='none' stroke='white' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --check-dash: url("data:image/svg+xml,%3Csvg xmlns='http://www%2Ew3%2Eorg/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 6h6' stroke='white' stroke-width='1.9' stroke-linecap='round'/%3E%3C/svg%3E");
+  --card-edge: transparent; /* a black card face needs an edge only on a dark ground */          /* switch knob — visible on both the off and the on track */
+  --shimmer: rgba(255, 255, 255, 0.6); /* skeleton sweep: LIGHTER than --surface-2 */
+
+  /* How much of a stored category colour survives (§CAT-COLOR): 100% = the stored hex as is. */
+  --cat-keep: 100%;
+
+  /* ── Elevation: low, cool shadows; resting surfaces are flat (DESIGN §2) ── */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.05);
+  --shadow-raised: 0 1px 2px rgba(15, 23, 42, 0.05); /* lifts --raised off its track */
+  --shadow-float: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.05); /* popovers, modals, toasts */
+  --shadow-knob: 0 1px 2px rgba(0, 0, 0, 0.25);
+  --shadow-sheet: 0 -8px 30px rgba(0, 0, 0, 0.18);
+}

@@ -1,3 +1,4 @@
+import { catColor, CAT_FALLBACK } from "../../lib/theme.ts";
 import { useGetIncomeAnalyticsQuery } from "../../store/api.ts";
 import { formatMinor, monthShort } from "../../lib/format.ts";
 import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
@@ -6,7 +7,6 @@ import { useT } from "../../i18n/index.ts";
 
 // §1 Аналітика доходу: джерела (по категоріях), стабільність (варіативність 6 міс) і
 // дельта проти минулого періоду. Зведено в ₴. Дзеркалить канон Статистики.
-const FALLBACK = ["#12805c", "#2e6be6", "#7a3e9d", "#c9871a", "#127c86", "#6b7a74"];
 // ST5: tone and words from the server's machine `level`. They used to be looked up by the LOCALISED
 // label against Ukrainian words, so an English screen always said «moderate».
 const stabTone = { stable: "pos", moderate: "warn", volatile: "neg" } as const;
@@ -68,8 +68,8 @@ export function IncomeBreakdown({ preset, from, to, currency, sign }: {
             {data.sources.length === 0 && <div className="inc-empty">{t("inc.noneThisPeriod")}</div>}
             {data.sources.slice(0, 6).map((s, i) => (
               <div key={s.category_id ?? i} className="inc-src">
-                <span className="is-name"><span className="d" style={{ background: s.color ?? FALLBACK[i % FALLBACK.length] }} />{s.name}</span>
-                <span className="is-track"><span style={{ width: `${(s.amount / srcMax) * 100}%`, background: s.color ?? FALLBACK[i % FALLBACK.length] }} /></span>
+                <span className="is-name"><span className="d" style={{ background: catColor(s.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length]) }} />{s.name}</span>
+                <span className="is-track"><span style={{ width: `${(s.amount / srcMax) * 100}%`, background: catColor(s.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length]) }} /></span>
                 <span className="is-val">{formatMinor(s.amount, { decimals: false })} {sign} <span className="muted">· {s.pct}%</span></span>
               </div>
             ))}

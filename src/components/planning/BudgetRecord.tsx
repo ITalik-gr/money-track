@@ -9,6 +9,7 @@
  * Everything here is computed by `budgetHistory` on the server. The component renders and derives
  * nothing — the same rule that took the spent-versus-limit arithmetic out of `EnvelopeGrid`.
  */
+import { catColor } from "../../lib/theme.ts";
 import { useT } from "../../i18n/index.ts";
 import { useGetBudgetHistoryQuery } from "../../store/api.ts";
 import { Money } from "../ui/Money.tsx";
@@ -77,7 +78,7 @@ export function BudgetRecord() {
             {data.categories.map((cat) => (
               <div key={cat.category_id} className="br-cat">
                 <span className="br-name">
-                  <span className="d" style={{ background: cat.color ?? "var(--muted)" }} />
+                  <span className="d" style={{ background: catColor(cat.color ?? "var(--muted)") }} />
                   {cat.name}
                 </span>
                 {/* One square per closed month, oldest left. A strip rather than a ratio: «3 з 6»

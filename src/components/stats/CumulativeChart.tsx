@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { AreaChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
 import { numFmt } from "../../i18n/locale.ts";
@@ -88,8 +89,8 @@ export function CumulativeChart({ rows, sign, height = 220 }: { rows: CumPoint[]
           <AreaChart data={rows} margin={{ top: 8, right: 6, left: Y_AXIS_LEFT_MARGIN, bottom: 0 }}>
             <defs>
               <linearGradient id="gCum" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={stroke} stopOpacity={0.08} />
-                <stop offset="100%" stopColor={stroke} stopOpacity={0} />
+                <stop offset="0%" stopColor={catColor(stroke)} stopOpacity={0.08} />
+                <stop offset="100%" stopColor={catColor(stroke)} stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid vertical={false} stroke="var(--line)" strokeOpacity={0.6} />
@@ -101,9 +102,9 @@ export function CumulativeChart({ rows, sign, height = 220 }: { rows: CumPoint[]
             {/* Where the facts end and the forecast begins. */}
             {todayLabel && <ReferenceLine x={todayLabel} stroke="var(--line-strong)" strokeDasharray="2 3" />}
             <Tooltip content={<CumTooltip sign={sign} />} cursor={{ stroke: "var(--line-strong)", strokeWidth: 1 }} />
-            <Area type="monotone" dataKey="cum" stroke={stroke} strokeWidth={2} strokeLinecap="round" fill="url(#gCum)" dot={false} activeDot={{ r: 3.5 }} connectNulls={false} {...CHART_ANIM} />
+            <Area type="monotone" dataKey="cum" stroke={catColor(stroke)} strokeWidth={2} strokeLinecap="round" fill="url(#gCum)" dot={false} activeDot={{ r: 3.5 }} connectNulls={false} {...CHART_ANIM} />
             {hasProj && (
-              <Line type="monotone" dataKey="proj" stroke={stroke} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={{ r: 3 }} connectNulls opacity={0.7} {...CHART_ANIM} />
+              <Line type="monotone" dataKey="proj" stroke={catColor(stroke)} strokeWidth={2} strokeDasharray="5 4" dot={false} activeDot={{ r: 3 }} connectNulls opacity={0.7} {...CHART_ANIM} />
             )}
           </AreaChart>
         </ResponsiveContainer>

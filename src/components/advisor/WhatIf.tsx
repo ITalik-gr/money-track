@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { useMemo, useState } from "react";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useGetAdviceQuery, useGetPatternsQuery } from "../../store/api.ts";
@@ -57,7 +58,7 @@ export function WhatIf() {
             return (
               <div key={c.category} className="whatif-row">
                 <div className="whatif-row-head">
-                  <span className="whatif-cat"><span className="d" style={{ background: c.color ?? "var(--muted)" }} />{c.category}</span>
+                  <span className="whatif-cat"><span className="d" style={{ background: catColor(c.color ?? "var(--muted)") }} />{c.category}</span>
                   <span className="whatif-usual">{fmt(c.usual)} {baseSign()}/{t("adv.monthsUnit")}</span>
                 </div>
                 <div className="whatif-slider-line">

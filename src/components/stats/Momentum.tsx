@@ -9,6 +9,7 @@
  * The sparkline is the whole point of the block: the claim is about a shape over months, and a
  * badge saying «третій місяць поспіль» with no picture asks to be taken on faith.
  */
+import { catColor } from "../../lib/theme.ts";
 import { Link } from "react-router-dom";
 import { useT } from "../../i18n/index.ts";
 import { formatMinor } from "../../lib/format.ts";
@@ -43,7 +44,7 @@ export function Momentum({ sign }: { sign: string }) {
           return (
             <Link key={r.category_id} to={`/categories/${r.category_id}`} className="mo-row">
               <span className="mo-name" title={r.name}>
-                <span className="d" style={{ background: r.color ?? "var(--muted)" }} />
+                <span className="d" style={{ background: catColor(r.color ?? "var(--muted)") }} />
                 <span>{r.name}</span>
               </span>
               {/* ST6: the shared, readable sparkline (hover / tap / arrows per month) instead of a private

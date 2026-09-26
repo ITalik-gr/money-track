@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useState } from "react";
 import { wholePcts } from "../../shared/pct.ts";
 import { useT } from "../i18n/index.ts";
@@ -195,14 +196,14 @@ function CurrencyBreakdown({ rows }: { rows: [number, number][] }) {
         {rows.map(([code, v], i) => (
           <HoverTip key={code} content={<TipBody label={currencySign(code)} color={COLORS[i % COLORS.length]}
             value={<>{formatMinor(v, { decimals: false })} {baseSign()}</>} sub={t("tip.shareOfTotal", { pct: curPcts[i] })} />}>
-            <span style={{ width: `${(v / total) * 100}%`, background: COLORS[i % COLORS.length] }} />
+            <span style={{ width: `${(v / total) * 100}%`, background: catColor(COLORS[i % COLORS.length]) }} />
           </HoverTip>
         ))}
       </div>
       <div className="cur-split-legend">
         {rows.map(([code, v], i) => (
           <span key={code} className="cs-item">
-            <span className="d" style={{ background: COLORS[i % COLORS.length] }} />
+            <span className="d" style={{ background: catColor(COLORS[i % COLORS.length]) }} />
             <span className="cs-cur">{currencySign(code)}</span>
             <span className="cs-val">{formatMinor(v, { decimals: false })} {baseSign()}</span>
             <span className="cs-pct muted">{curPcts[i]}%</span>
@@ -242,7 +243,7 @@ function FundsOverview() {
         </div>
         {parts.map((p) => (p.val > 0 || p.key === "cushion") && (
           <div key={p.key} className="funds-stat">
-            <span className="fs-lbl"><span className="d" style={{ background: p.color }} />{p.label}</span>
+            <span className="fs-lbl"><span className="d" style={{ background: catColor(p.color) }} />{p.label}</span>
             <span className={`fs-val ${p.key === "debt" && p.val > 0 ? "neg" : ""}`}>{p.key === "debt" && p.val > 0 ? "−" : ""}<Money minor={p.val} decimals={false} /></span>
           </div>
         ))}
@@ -252,7 +253,7 @@ function FundsOverview() {
           {parts.map((p) => p.val > 0 && (
             <HoverTip key={p.key} content={<TipBody label={p.label} color={p.color}
               value={<>{formatMinor(p.val, { decimals: false })} {baseSign()}</>} sub={t("tip.shareOfTotal", { pct: Math.round((p.val / barTotal) * 100) })} />}>
-              <span style={{ width: `${(p.val / barTotal) * 100}%`, background: p.color }} />
+              <span style={{ width: `${(p.val / barTotal) * 100}%`, background: catColor(p.color) }} />
             </HoverTip>
           ))}
         </div>
@@ -288,7 +289,7 @@ function last4(title: string | null): string | null {
 
 // Колір-акцент за типом рахунку (замість фонів «фізичних карток»).
 const TYPE_COLOR: Record<string, string> = {
-  black: "var(--ink)", white: "#8a94a6", platinum: "#8a94a6", fop: "var(--c-pine)",
+  black: "var(--ink)", white: "var(--card-silver)", platinum: "var(--card-silver)", fop: "var(--c-pine)",
   jar: "var(--c-teal)", cash: "var(--c-ochre)", manual_card: "var(--accent)", crypto: "var(--c-plum)",
 };
 
@@ -336,9 +337,9 @@ function AccountCard({ a, rates, spark }: {
   if (editing) return <AccountEditor a={a} onClose={() => setEditing(false)} cls={cls} manual={!!editable} renameable={!!renameable} />;
 
   return (
-    <div className={cls} style={{ "--acct-color": color } as React.CSSProperties}>
+    <div className={cls} style={{ "--acct-color": catColor(color) } as React.CSSProperties}>
       <div className="acct2-head">
-        <span className="acct2-badge" style={{ background: color }} />
+        <span className="acct2-badge" style={{ background: catColor(color) }} />
         <span className="acct2-title">{title}</span>
         {isInvestment && <span className="acct2-role" title={t("acct.investmentBadgeTitle")}>{t("acct.investmentBadge")}</span>}
         {/* §TAX-BASE: which account the tax module treats as the business one has to be

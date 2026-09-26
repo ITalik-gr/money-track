@@ -5,6 +5,7 @@ import { Icon } from "../components/ui/Icon.tsx";
 import { Lightbox } from "../components/landing/Lightbox.tsx";
 import type { Shot } from "../components/landing/Lightbox.tsx";
 import { useBrandMark } from "../lib/brand.ts";
+import { useTheme } from "../lib/theme.ts";
 
 // Screenshots, three sizes and one rule per size — the same split the repo already used before
 // this page existed: the ~4000px originals stay in `src/images/` (gitignored — committing them
@@ -59,7 +60,7 @@ const NAV = [
 export function Landing() {
   const t = useT();
   const { locale, setLocale } = useLocale();
-  const [dark, setDark] = useState(() => document.documentElement.getAttribute("data-theme") === "dark");
+  const { dark, toggle: toggleTheme } = useTheme();
   // Logged out there is no saved currency, so this is whatever the language implies — dollar on the
   // English page, hryvnia on the Ukrainian one — and it changes with the language toggle above it.
   const mark = useBrandMark();
@@ -67,16 +68,6 @@ export function Landing() {
   // `null` rather than a boolean plus an index: two pieces of state that must agree about whether
   // the viewer is open is the shape that ends up open on nothing.
   const [lightbox, setLightbox] = useState<number | null>(null);
-
-  // Same two writes `Layout` does, and for the same reason: the meta tag has to follow, or the
-  // browser/PWA chrome keeps the previous theme's colour until a reload.
-  function toggleTheme() {
-    const next = dark ? "light" : "dark";
-    document.documentElement.setAttribute("data-theme", next);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", next === "dark" ? "#0b0f14" : "#f3f5f8");
-    try { localStorage.setItem("mt-theme", next); } catch { /* private mode — the toggle still works for this visit */ }
-    setDark(!dark);
-  }
 
   // The phone menu closes the two ways a dropdown is expected to: Escape, and a click anywhere
   // else. Without them it is a panel that can only be dismissed by hitting the same 38px button

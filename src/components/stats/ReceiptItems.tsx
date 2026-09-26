@@ -35,7 +35,7 @@ export function ReceiptItems({ from, to }: { from: number; to: number }) {
           return (
             <div key={i} className="catbar">
               <span className="cb-name" title={it.name}><span>{it.name}</span></span>
-              <span className="cb-track"><span className="cb-fill" style={{ width: `${p}%`, background: "var(--c-teal, #127c86)" }} /></span>
+              <span className="cb-track"><span className="cb-fill" style={{ width: `${p}%`, background: "var(--c-teal)" }} /></span>
               <span className="cb-val">{formatMinor(it.total, { decimals: false })} {sign}</span>
               <span className="cb-pct">×{it.qty % 1 === 0 ? it.qty : it.qty.toFixed(1)}</span>
             </div>

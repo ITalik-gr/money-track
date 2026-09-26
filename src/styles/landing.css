@@ -268,11 +268,10 @@
   background: var(--ink); color: var(--surface);
   /* The one thing that does NOT follow from that: the accent. Lightening it works over the dark
      band a light theme produces and turns to pale blue on white when the band inverts, so the
-     dark theme darkens it instead. Declared once as a variable — the alternative was three
-     rules each remembering to have a dark-theme twin, and the third would have been forgotten. */
-  --lp-on-accent: color-mix(in srgb, var(--accent) 70%, #fff);
+     dark theme darkens it instead — which is the theme token `--accent-on-ink` (§THEME: no rule
+     here is scoped to a theme). */
+  --lp-on-accent: var(--accent-on-ink);
 }
-:root[data-theme="dark"] .lp-ai { --lp-on-accent: color-mix(in srgb, var(--accent) 72%, #000); }
 .lp-ai-grid { display: grid; gap: clamp(28px, 4vw, 48px); align-items: center; }
 @media (min-width: 940px) { .lp-ai-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr); } }
 .lp-ai .lp-kicker { color: var(--lp-on-accent); }

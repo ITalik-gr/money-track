@@ -1,3 +1,4 @@
+import { catColor, CAT_FALLBACK } from "../../lib/theme.ts";
 import { Link } from "react-router-dom";
 import { useGetOverviewQuery } from "../../store/api.ts";
 import { formatMinor } from "../../lib/format.ts";
@@ -10,7 +11,6 @@ import { HoverTip, TipBody } from "../ui/HoverTip.tsx";
 
 // §4 Пульс місяця для Головної: норма заощаджень + топ-категорії міні (календарний місяць,
 // зведено в ₴). Одна вибірка overview → обидва блоки. Клік по категорії → дриль у Статистиці.
-const FALLBACK = ["#1f6e4c", "#2e6be6", "#7a3e9d", "#c9871a", "#b23a2e"];
 
 export function MonthPulse() {
   const t = useT();
@@ -92,12 +92,12 @@ export function MonthPulse() {
           <div>
             <span className="label" style={{ display: "block", marginBottom: 8 }}>{t("common.topCategories")}</span>
             {top.map((c, i) => (
-              <HoverTip key={c.category_id ?? i} content={<TipBody label={c.category_name ?? t("common.uncategorized")} color={c.color ?? FALLBACK[i % FALLBACK.length]}
+              <HoverTip key={c.category_id ?? i} content={<TipBody label={c.category_name ?? t("common.uncategorized")} color={c.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length]}
                 value={<>{formatMinor(c.spent, { decimals: false })} {baseSign()}</>}
                 sub={spend > 0 ? t("tip.shareOfSpend", { pct: Math.round((c.spent / spend) * 100) }) : null} />}>
                 <Link to={`/stats?tab=categories`} className="pulse-cat">
-                  <span className="pc-name"><span className="d" style={{ background: c.color ?? FALLBACK[i % FALLBACK.length] }} />{c.category_name ?? t("common.uncategorized")}</span>
-                  <span className="pc-track"><span style={{ width: `${(c.spent / topMax) * 100}%`, background: c.color ?? FALLBACK[i % FALLBACK.length] }} /></span>
+                  <span className="pc-name"><span className="d" style={{ background: catColor(c.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length]) }} />{c.category_name ?? t("common.uncategorized")}</span>
+                  <span className="pc-track"><span style={{ width: `${(c.spent / topMax) * 100}%`, background: catColor(c.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length]) }} /></span>
                   <span className="pc-val">{formatMinor(c.spent, { decimals: false })} {baseSign()}</span>
                 </Link>
               </HoverTip>

@@ -10,6 +10,7 @@
  * `/analytics/overview` request they all read. Everything a single tab owns lives here.
  */
 
+import { catColor } from "../../lib/theme.ts";
 import { wholePcts } from "../../../shared/pct.ts";
 import { useState } from "react";
 import { useT } from "../../i18n/index.ts";
@@ -87,7 +88,7 @@ export function ImportanceBreakdown({ data, sign, from, to, currency }: { data: 
             return (
               <HoverTip key={lv} content={<TipBody label={t(IMPORTANCE_META[lv].labelKey)} color={IMPORTANCE_META[lv].color}
                 value={<>{formatMinor(v, { decimals: false })} {sign}</>} sub={t("tip.shareOfSpend", { pct })} />}>
-                <span style={{ width: `${(v / total) * 100}%`, background: IMPORTANCE_META[lv].color }}>
+                <span style={{ width: `${(v / total) * 100}%`, background: catColor(IMPORTANCE_META[lv].color) }}>
                   {pct >= 8 && <span className="imp-seg-lbl">{pct}%</span>}
                 </span>
               </HoverTip>
@@ -101,7 +102,7 @@ export function ImportanceBreakdown({ data, sign, from, to, currency }: { data: 
             return (
               <button type="button" key={lv} className={`imp-card fact-click ${open === lv ? "open" : ""}`}
                 disabled={!v} onClick={() => setOpen((o) => (o === lv ? null : lv))}>
-                <span className="imp-card-top"><span className="d" style={{ background: IMPORTANCE_META[lv].color }} />{t(IMPORTANCE_META[lv].labelKey)} ›</span>
+                <span className="imp-card-top"><span className="d" style={{ background: catColor(IMPORTANCE_META[lv].color) }} />{t(IMPORTANCE_META[lv].labelKey)} ›</span>
                 <span className="imp-card-amt num-hero">{formatMinor(v, { decimals: false })} {sign}</span>
                 <span className="imp-card-pct muted">{pct}{t("stats.importance.ofSpend")}</span>
               </button>
@@ -183,7 +184,7 @@ export function SpendingPatterns() {
           <div className="card" style={{ padding: 8 }}>
             {anomalies.map((a, i) => (
               <div key={i} className="anomaly warn">
-                <span className="an-dot" style={{ background: a.color ?? undefined }} />
+                <span className="an-dot" style={{ background: catColor(a.color ?? undefined) }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <b>{a.category}</b>
                   <div className="muted" style={{ fontSize: 13 }}>
@@ -209,7 +210,7 @@ export function SpendingPatterns() {
             {pace.map((p, i) => (
               <div key={i} className="pace-row">
                 <span className="pace-name">
-                  <span className="d" style={{ background: p.color ?? "var(--accent)" }} />{p.category}
+                  <span className="d" style={{ background: catColor(p.color ?? "var(--accent)") }} />{p.category}
                   {(p.mostly_oneoff || p.lumpy) && <span className="pace-tag" title={t("stats.pace.lumpyTitle")}>{t("stats.pace.lumpyTag")}</span>}
                 </span>
                 <span className="pace-nums num-mono">

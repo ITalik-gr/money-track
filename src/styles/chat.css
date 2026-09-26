@@ -11,7 +11,7 @@
  * `domains-a.css` (the merchant page onwards), and it shares no selector with the chat.
  */
 .chat-msg { max-width: 86%; padding: 9px 13px; border-radius: 15px; font-size: 14px; line-height: 1.5; white-space: pre-wrap; }
-.chat-msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 5px; }
+.chat-msg.user { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-bottom-right-radius: 5px; }
 .chat-msg.assistant { align-self: flex-start; background: var(--surface-2); color: var(--ink); border-bottom-left-radius: 5px; }
 .chat-typing { color: var(--muted); letter-spacing: 2px; }
 
@@ -31,7 +31,7 @@
   display: flex; align-items: center; gap: 6px; padding: 9px 10px; border-radius: var(--radius-sm);
   cursor: pointer; color: var(--ink-2); font-size: 13px; transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
-.chat-rail-item:hover { background: var(--surface-2); }
+.chat-rail-item:hover { background: var(--hover); }
 .chat-rail-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 550; }
 .cri-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cri-del {
@@ -60,7 +60,7 @@
   color: var(--muted); font-size: 11.5px; padding: 3px 6px; border-radius: var(--radius-xs);
   transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
-.chat-msg-actions button:hover { background: var(--surface-2); color: var(--ink-2); }
+.chat-msg-actions button:hover { background: var(--hover); color: var(--ink-2); }
 .chat-log2 .chat-typing { display: inline-flex; gap: 4px; align-items: center; }
 .chat-log2 .chat-typing span { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); display: inline-block; animation: chat-dot 1s infinite ease-in-out; }
 .chat-log2 .chat-typing span:nth-child(2) { animation-delay: 0.15s; }
@@ -110,10 +110,10 @@
     position: fixed; top: 0; left: 0; bottom: 0; width: 268px; z-index: 60;
     background: var(--surface); border-right: 1px solid var(--line-strong); padding: 16px;
     transform: translateX(-100%); transition: transform var(--dur-2) var(--ease-out);
-    box-shadow: var(--shadow-card);
+    box-shadow: var(--shadow-float);
   }
   .chat-layout.rail-open .chat-rail { transform: translateX(0); }
-  .chat-layout.rail-open .chat-rail-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: rgba(15, 22, 32, 0.4); }
+  .chat-layout.rail-open .chat-rail-scrim { display: block; position: fixed; inset: 0; z-index: 55; background: var(--overlay); }
 }
 
 /* Телефон: місце віддається САМІЙ розмові (2026-08-22, скарга — «чат малий»).

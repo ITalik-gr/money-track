@@ -11,6 +11,7 @@
  * savings is exactly the month this block exists for, and a bar clamped at full would report the
  * worst case as a completed one.
  */
+import { catColor } from "../../lib/theme.ts";
 import { useT } from "../../i18n/index.ts";
 import { formatMinor } from "../../lib/format.ts";
 import { useGetIncomeSplitQuery } from "../../store/api.ts";
@@ -62,7 +63,7 @@ export function IncomeSplit({ from, to, sign }: { from: number; to: number; sign
           {BANDS.map((b) => {
             const share = data.shares![b];
             return share > 0 ? (
-              <span key={b} className="is-seg" style={{ width: `${Math.min(100, pct(share))}%`, background: IMPORTANCE_META[b].color }} />
+              <span key={b} className="is-seg" style={{ width: `${Math.min(100, pct(share))}%`, background: catColor(IMPORTANCE_META[b].color) }} />
             ) : null;
           })}
         </div>
@@ -70,7 +71,7 @@ export function IncomeSplit({ from, to, sign }: { from: number; to: number; sign
         <div className="is-legend">
           {BANDS.map((b) => (
             <span key={b} className="is-leg">
-              <span className="d" style={{ background: IMPORTANCE_META[b].color }} />
+              <span className="d" style={{ background: catColor(IMPORTANCE_META[b].color) }} />
               {t(IMPORTANCE_META[b].labelKey)}
               <b>{pct(data.shares![b])}%</b>
               <span className="muted">{money(data[b])}</span>

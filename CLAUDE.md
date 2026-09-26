@@ -5,7 +5,7 @@
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
 > In production (`https://money.italik.dev`). Migrations: `finance` to **0055**, `directory` to
-> **0012**. Lints **C1–C22**.
+> **0012**. Lints **C1–C23**.
 
 ## Documents
 
@@ -14,6 +14,7 @@
 | `CLAUDE.md` | always |
 | `ROADMAP.md` | before taking a task — only what is not done |
 | `docs/CANON.md` | **before any number about money** |
+| `docs/DARK_THEME.md` | the dark-theme brief — implemented; kept for the owner's live pass (§7), then deleted |
 | `DESIGN.md` | **before any UI/UX work** |
 | `README.md` · `SECURITY.md` · `CONTRIBUTING.md` · `AGENTS.md` | public face |
 
@@ -88,7 +89,9 @@ localhost, so CSP bugs reproduce only on another host.
 - Secrets only in Worker secrets. Every API shape declared once in `shared/api/`.
 - A literal route is declared ABOVE a parameterised one. A route outside `/api/*` must be in
   `assets.run_worker_first`, else the SPA shell answers.
-- `Select`, not native `<select>`. Light and dark themes are equals.
+- `Select`, not native `<select>`. Light and dark themes are equals. §THEME: a colour lives only in
+  `src/styles/theme-*.css` (same token set per theme); switching only via `src/lib/theme.ts`; a
+  stored category colour is painted only through `catColor()` (§CAT-COLOR).
 
 ## Checks (`npm run check`)
 
@@ -102,7 +105,8 @@ only — use `orLikeClause`/`likeVariants` from `lib/platform/text.ts`) · C17 a
 `?? []` from a query has an error branch (exceptions listed with reasons, only shrink) · C18 every
 §TAG cited in code is defined in CLAUDE.md / docs / DESIGN.md (48 legacy ids, shrinking) · C19 no
 export that nothing uses (a short KEEP list with reasons) · C20 no CSS declaration always overridden
-by a later rule for the same selector · C21 a clickable div/span/li has a role (keyboard-reachable) · C22 row separators with a hover fill only from `.ilist` (§ROW-LIST). Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
+by a later rule for the same selector · C21 a clickable div/span/li has a role (keyboard-reachable) · C22 row separators with a hover fill only from `.ilist` (§ROW-LIST) · C23 theme files in step, no
+colour literal / theme-scoped rule outside them, stored colours through `catColor()` (§THEME). Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
 `gen-migrations --check` (regenerate the DO embed after touching `migrations/`). Re-record a golden
 (`UPDATE_GOLDEN=1`) only for a deliberate, explained change.
 

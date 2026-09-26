@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useDeleteEventMutation, useGetEventsQuery } from "../store/api.ts";
@@ -39,9 +40,9 @@ export function Events() {
       {isLoading ? <GroupGridSkeleton /> : groups.length ? (
         <div className="group-grid">
           {groups.map((g) => (
-            <Link key={g.id} to={`/events/${g.id}`} className="group-card tappable" style={{ "--group-color": g.color ?? "var(--accent)" } as React.CSSProperties}>
+            <Link key={g.id} to={`/events/${g.id}`} className="group-card tappable" style={{ "--group-color": catColor(g.color ?? "var(--accent)") } as React.CSSProperties}>
               <div className="group-top">
-                <span className="group-ico" style={{ background: g.color ?? "var(--accent)" }}><Icon name="folder" size={18} /></span>
+                <span className="group-ico" style={{ background: catColor(g.color ?? "var(--accent)") }}><Icon name="folder" size={18} /></span>
                 <button className="group-del" aria-label={t("common.delete")}
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteEvent(g.id); }}>
                   <Icon name="trash" size={15} />

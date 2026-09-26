@@ -111,7 +111,7 @@ export function TransferReviewModal({ onClose }: { onClose: () => void }) {
 
         <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
           {t("trev.intro")}
-          {attention > 0 && <> <b style={{ color: "var(--warn, #c9871a)" }}>{attention}</b>{t("trev.needAttentionSuffix")}</>}
+          {attention > 0 && <> <b style={{ color: "var(--warn)" }}>{attention}</b>{t("trev.needAttentionSuffix")}</>}
         </p>
 
         {loading && rows.length === 0 && <div className="empty">{t("trev.analyzing")}</div>}

@@ -1,3 +1,4 @@
+import { catColor } from "../lib/theme.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { TransactionList } from "../components/transactions/TransactionList.tsx";
@@ -249,7 +250,7 @@ export function Transactions() {
                   <div key={c.id}>
                     <div className={`cat-tree-row ${active ? "on" : ""}`}>
                       <button className="ctr-main" onClick={() => pickParent(c)}>
-                        <span className="ctr-ico" style={{ background: c.color ?? "var(--muted)" }}><CategoryIcon slug={c.icon} size={13} /></span>
+                        <span className="ctr-ico" style={{ background: catColor(c.color ?? "var(--muted)") }}><CategoryIcon slug={c.icon} size={13} /></span>
                         <span className="ctr-name">{c.name}</span>
                       </button>
                       {kids.length > 0 && (
@@ -260,7 +261,7 @@ export function Transactions() {
                     </div>
                     {open && kids.map((ch) => (
                       <button key={ch.id} className={`cat-tree-row sub ${cat === String(ch.id) ? "on" : ""}`} onClick={() => pickChild(ch)}>
-                        <span className="ctr-dot" style={{ background: ch.color ?? c.color ?? "var(--muted)" }} />
+                        <span className="ctr-dot" style={{ background: catColor(ch.color ?? c.color ?? "var(--muted)") }} />
                         <span className="ctr-name">{ch.name}</span>
                       </button>
                     ))}

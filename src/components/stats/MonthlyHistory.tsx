@@ -1,3 +1,4 @@
+import { catColor } from "../../lib/theme.ts";
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { Y_AXIS, Y_AXIS_LEFT_MARGIN } from "../../lib/chart.ts";
 import { numFmt } from "../../i18n/locale.ts";
@@ -136,18 +137,18 @@ export function MonthlyHistory() {
                   <HoverTip key={i} content={
                     <>
                       <div className="tip-lbl">{r.label}{r.current ? t("mh.currentSuffix") : ""}</div>
-                      <div className="r"><span className="d" style={{ background: IMPORTANCE_META.essential.color }} />{t(IMPORTANCE_META.essential.shortKey)}: {Math.round(pct(r.essential))}%</div>
-                      <div className="r"><span className="d" style={{ background: IMPORTANCE_META.discretionary.color }} />{t(IMPORTANCE_META.discretionary.shortKey)}: {Math.round(pct(r.discretionary))}%</div>
-                      <div className="r"><span className="d" style={{ background: IMPORTANCE_META.optional.color }} />{t(IMPORTANCE_META.optional.shortKey)}: {Math.round(pct(r.optional))}%</div>
+                      <div className="r"><span className="d" style={{ background: catColor(IMPORTANCE_META.essential.color) }} />{t(IMPORTANCE_META.essential.shortKey)}: {Math.round(pct(r.essential))}%</div>
+                      <div className="r"><span className="d" style={{ background: catColor(IMPORTANCE_META.discretionary.color) }} />{t(IMPORTANCE_META.discretionary.shortKey)}: {Math.round(pct(r.discretionary))}%</div>
+                      <div className="r"><span className="d" style={{ background: catColor(IMPORTANCE_META.optional.color) }} />{t(IMPORTANCE_META.optional.shortKey)}: {Math.round(pct(r.optional))}%</div>
                     </>
                   }>
                     <div className="mh-weight-col">
                       <div className="mh-weight-track">
                         {/* A month with no spending renders an empty track rather than nothing:
                             a missing column would read as a missing month. */}
-                        <span style={{ height: `${pct(r.essential)}%`, background: IMPORTANCE_META.essential.color }} />
-                        <span style={{ height: `${pct(r.discretionary)}%`, background: IMPORTANCE_META.discretionary.color }} />
-                        <span style={{ height: `${pct(r.optional)}%`, background: IMPORTANCE_META.optional.color }} />
+                        <span style={{ height: `${pct(r.essential)}%`, background: catColor(IMPORTANCE_META.essential.color) }} />
+                        <span style={{ height: `${pct(r.discretionary)}%`, background: catColor(IMPORTANCE_META.discretionary.color) }} />
+                        <span style={{ height: `${pct(r.optional)}%`, background: catColor(IMPORTANCE_META.optional.color) }} />
                       </div>
                       <span className="mh-rate-lbl">{r.label}</span>
                     </div>

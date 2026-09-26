@@ -1,3 +1,4 @@
+import { catColor, CAT_FALLBACK } from "../../lib/theme.ts";
 import { useState } from "react";
 import { wholePcts } from "../../../shared/pct.ts";
 import { useNavigate } from "react-router-dom";
@@ -11,7 +12,6 @@ import { formatMinor, monthShort } from "../../lib/format.ts";
 import { baseSign } from "../../lib/currency.ts";
 import { EmptyCard } from "../ui/EmptyCard.tsx";
 import { ErrorNote } from "../ui/ErrorNote.tsx";
-import { FALLBACK } from "./shared.tsx";
 
 /**
  * §MONTH-STACK — one bar per month, split by category.
@@ -51,7 +51,7 @@ function StackTip({ active, payload, label, slices }: {
       <div className="tip-lbl">{label}</div>
       {rows.map((s, i) => (
         <div className="r" key={s.key}>
-          <span className="d" style={{ background: s.color }} />
+          <span className="d" style={{ background: catColor(s.color) }} />
           {s.name} · {formatMinor((by.get(s.key) ?? 0) * 100, { decimals: false })} · {pcts[i]}%
         </div>
       ))}
@@ -83,7 +83,7 @@ export function MonthStack() {
     name: c.name,
     // A seeded category carries its own colour; "other" and uncategorised have none, so they take
     // the shared fallback ramp rather than inventing a palette this chart alone would use.
-    color: c.color ?? FALLBACK[i % FALLBACK.length],
+    color: c.color ?? CAT_FALLBACK[i % CAT_FALLBACK.length],
   }));
 
   const chart = rows.map((m) => {
@@ -121,7 +121,7 @@ export function MonthStack() {
                 tickFormatter={(v: number) => (Math.abs(v) >= 1000 ? `${Math.round(v / 1000)}k` : String(v))} />
               <Tooltip content={<StackTip slices={slices} />} cursor={{ fill: "var(--surface-2)", opacity: 0.5 }} />
               {slices.map((s, i) => (
-                <Bar key={s.key} dataKey={s.key} stackId="m" fill={s.color} maxBarSize={44} cursor="pointer"
+                <Bar key={s.key} dataKey={s.key} stackId="m" fill={catColor(s.color)} maxBarSize={44} cursor="pointer"
                   // Only the topmost segment is rounded, or every band would look like its own bar.
                   radius={i === slices.length - 1 ? [3, 3, 0, 0] : undefined} {...CHART_ANIM} />
               ))}
@@ -130,7 +130,7 @@ export function MonthStack() {
         </div>
         <div className="legend ms-legend">
           {slices.map((s) => (
-            <span key={s.key}><span className="d" style={{ background: s.color }} />{s.name}</span>
+            <span key={s.key}><span className="d" style={{ background: catColor(s.color) }} />{s.name}</span>
           ))}
           <span className="ms-unit">{sign}</span>
         </div>
