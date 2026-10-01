@@ -4,7 +4,7 @@
 > in `ROADMAP.md`. Everything else is here, one or two sentences per rule. The story behind each
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
-> In production (`https://money.italik.dev`). Migrations: `finance` to **0055**, `directory` to
+> In production (`https://money.italik.dev`). Migrations: `finance` to **0056**, `directory` to
 > **0012**. Lints **C1–C23**.
 
 ## Documents

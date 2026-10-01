@@ -1298,7 +1298,7 @@
     "transaction_tags": [],
     "merchant_aliases": [],
     "rules": {
-      "total": 95,
+      "total": 94,
       "custom": [
         {
           "match_type": "text",
