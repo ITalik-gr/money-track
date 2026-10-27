@@ -91,10 +91,60 @@ const MONTH_WORDS: string[][] = [
   ["september", "верес"], ["october", "жовт"], ["november", "листоп"], ["december", "груд"],
 ];
 
+/**
+ * The PAIRED half of the calendar guard (2026-10-27). The set check above asks only «was this
+ * number stated somewhere», and the feed shipped the consequence on the 27th: «Через 4 дні —
+ * оплата квартири … платити 20 листопада». 4 is `days_left_in_month` (to the end of October), the
+ * rent is no `upcoming_charges` row at all, and «20 листопада» has no suffix, so neither regex
+ * looked at it. Both halves of the sentence were "grounded" and the sentence was false.
+ *
+ *   • `dates` — "MM-DD" of every date the payload states (today, each upcoming charge). A named
+ *     date («20 листопада», "November 20") must be one of them, day AND month together.
+ *   • `countdowns` — the distances that ARE distances to something: each charge's `in_days` and the
+ *     runway. «через N днів» / "in N days" must be one of them.
+ *   • `monthEnd` — `days_left_in_month`, a countdown only when the sentence says it counts to the
+ *     month's end; otherwise it is the number that lent the rent a false «4 дні».
+ */
+export interface PairedTimeAnchors { dates: Set<string>; countdowns: Set<number>; monthEnd: number }
+
+// Genitive/nominative stems with an English name, same 0-based index as MONTH_WORDS; "may" is
+// safe here because it must sit next to a day number.
+const DATE_MONTHS: string[][] = [
+  ["january", "січ"], ["february", "лют"], ["march", "берез"], ["april", "квіт"],
+  ["may", "трав"], ["june", "черв"], ["july", "лип"], ["august", "серп"],
+  ["september", "верес"], ["october", "жовт"], ["november", "листоп"], ["december", "груд"],
+];
+const MONTH_ALT = DATE_MONTHS.flat().join("|");
+const DAY_MONTH_RE = new RegExp(`(?<!\\d)(\\d{1,2})(?:-?го)?\\s+(${MONTH_ALT})\\p{L}*`, "giu");
+const MONTH_DAY_RE = new RegExp(`(?<!\\p{L})(${MONTH_ALT})\\p{L}*\\s+(\\d{1,2})(?!\\d)`, "giu");
+const COUNTDOWN_RE = /(?<!\p{L})(?:через|in|within)\s+(\d{1,3})\s*(?:днів|дні|дня|дн\.|day|days|доби|добу|діб)(?!\p{L})/giu;
+const MONTH_END_RE = new RegExp(`кін(?:ця|ець|ці)\\s+(?:місяц|${MONTH_ALT})|end of (?:the )?(?:month|${MONTH_ALT})|month ends`, "iu");
+
+const monthIndex = (word: string) => DATE_MONTHS.findIndex((ws) => ws.some((w) => word.startsWith(w)));
+const mmdd = (m: number, d: number) => `${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+
 export function timeClaimsAreGrounded(
-  text: string, anchors: Set<number>, months: Set<number>,
+  text: string, anchors: Set<number>, months: Set<number>, paired?: PairedTimeAnchors,
 ): boolean {
   const low = text.toLowerCase();
+  if (paired) {
+    for (const [re, dayAt, monAt] of [[DAY_MONTH_RE, 1, 2], [MONTH_DAY_RE, 2, 1]] as const) {
+      re.lastIndex = 0;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(low))) {
+        const mi = monthIndex(m[monAt]);
+        if (mi >= 0 && !paired.dates.has(mmdd(mi, Number(m[dayAt])))) return false;
+      }
+    }
+    COUNTDOWN_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = COUNTDOWN_RE.exec(low))) {
+      const n = Number(m[1]);
+      if (paired.countdowns.has(n)) continue;
+      if (n === paired.monthEnd && MONTH_END_RE.test(low)) continue;
+      return false;
+    }
+  }
   for (const re of [DAY_COUNT_RE, DAY_OF_MONTH_RE]) {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -164,6 +214,10 @@ export function scriptMatchesLocale(text: string, locale: "uk" | "en"): boolean 
   // Common/Inherited are excluded because «ʼ» (U+02BC, in «зʼїдено») IS a letter to Unicode —
   // a modifier letter of no particular script — and the first draft of this line rejected it.
   if (/(?![\p{Script=Cyrillic}\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}])\p{L}/u.test(text)) return false;
+  // One WORD in two scripts is the same decoding slip with a look-alike glyph (2026-10-27: «Роzetka»
+  // — Cyrillic «Ро» glued to Latin «zetka»). A brand with a Ukrainian ending is hyphenated or
+  // spaced («Rozetka-у» never occurs; «у Rozetka» does), so adjacency alone is the test.
+  if (/\p{Script=Cyrillic}\p{Script=Latin}|\p{Script=Latin}\p{Script=Cyrillic}/u.test(text)) return false;
   const cyr = (text.match(/\p{Script=Cyrillic}/gu) ?? []).length;
   const lat = (text.match(/\p{Script=Latin}/gu) ?? []).length;
   if (cyr + lat < 8) return true;              // "PS Plus 350" — too short to have a language

@@ -27,6 +27,7 @@ import { Icon } from "../ui/Icon.tsx";
 import { CategoryIcon } from "../ui/CategoryIcon.tsx";
 import { CategoryModal } from "../planning/CategoryModal.tsx";
 import type { CategoryOverview } from "../../../shared/api/analytics.ts";
+import { TRANSFER_CAT_ID } from "../../../shared/envelope.ts";
 
 export function CategorySettings({ data, monthView }: { data: CategoryOverview; monthView: boolean }) {
   const t = useT();
@@ -124,7 +125,7 @@ export function CategorySettings({ data, monthView }: { data: CategoryOverview; 
           </div>
         )}
 
-        {!data.is_income && !data.is_sub && (
+        {!data.is_income && !data.is_sub && data.id !== TRANSFER_CAT_ID && ( // §BUDGET-TRANSFER
           <div className="setform-row">
             <div className="setform-lbl">
               <span className="setform-name">{t("catset.limit")}</span>

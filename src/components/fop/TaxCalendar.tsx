@@ -46,6 +46,8 @@ export function TaxCalendar({ status }: { status: TaxStatus }) {
               {t(`fop.kind.${o.kind}` as never)} <span className="fop-cal-period">{o.period}</span>
             </span>
             <Money minor={o.amount} currency={HRYVNIA} decimals={false} />
+            {/* §TAX-UNLINKED: a same-amount payment exists — out of the reserve, the link stays a click. */}
+            {o.likely_paid_tx_id && <span className="fop-cal-state">{t("fop.calLikelyPaid")}</span>}
             <MarkPaid obligationId={o.id} />
           </div>
         ))}

@@ -4,7 +4,7 @@
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currencyNumeric, parseAmountMinor, parseStatementDate } from "../lib/bank/normalize.ts";
+import { currencyNumeric, merchantFromDescription, parseAmountMinor, parseStatementDate } from "../lib/bank/normalize.ts";
 import { localParts, localYmd } from "../lib/finance/stats.ts";
 
 test("statement dates: a zone-less wall clock is KYIV time", async (t) => {
@@ -61,4 +61,14 @@ test("currency: letters become the numeric code we store", async (t) => {
     assert.equal(currencyNumeric(""), null);
     assert.equal(currencyNumeric(null), null);
   });
+});
+
+test("a monthly bank charge is one merchant, whatever month it names (§MERCH-PERIOD)", () => {
+  assert.equal(merchantFromDescription("Списання відсотків за вересень"), "Списання відсотків");
+  assert.equal(merchantFromDescription("Списання відсотків за серпень 2026"), "Списання відсотків");
+  // Only the trailing period goes — «за квартиру» is what was bought, not when.
+  assert.equal(merchantFromDescription("Оплата за квартиру за жовтень"), "Оплата за квартиру");
+  assert.equal(merchantFromDescription("Оплата за квартиру"), "Оплата за квартиру");
+  assert.equal(merchantFromDescription("За перевищення кредитного ліміту"), "За перевищення кредитного ліміту");
+  assert.equal(merchantFromDescription(null), null);
 });

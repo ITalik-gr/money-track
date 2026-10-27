@@ -26,6 +26,7 @@ import type { Env } from "../../env.ts";
 import { localYmd } from "../finance/stats.ts";
 import { readProfile, refreshObligations, quarterWindow, fopAvailable } from "../finance/tax.ts";
 import * as taxRepo from "../../repo/tax.ts";
+import { likelyPaid } from "../finance/tax-paid.ts";
 import { listSources } from "../finance/tax-watch.ts";
 import { quietClients } from "../finance/business.ts";
 import type { Draft } from "./notify.ts";
@@ -62,8 +63,11 @@ export async function draftTaxDue(env: Env, now: number): Promise<Draft[]> {
   // quarter that is already closed and filed away. On 10 February a group-3 payer with a full Q4
   // got an EMPTY deadline feed (A3 audit, 2026-09-18). The 14-day horizon below still bounds the
   // noise, and a permanently unique `dedup_key` means each period is announced once ever.
-  for (const o of await taxRepo.listObligations(env.DB, `${Number(today.slice(0, 4)) - 1}-01`)) {
-    if (o.paid_tx_id || o.amount <= 0) continue;
+  const rows = await taxRepo.listObligations(env.DB, `${Number(today.slice(0, 4)) - 1}-01`);
+  // §TAX-UNLINKED: the shipped «ЄСВ, 191 days overdue» was a quarter paid on time and never linked.
+  const likely = await likelyPaid(env.DB, rows);
+  for (const o of rows) {
+    if (o.paid_tx_id || likely.has(o.id) || o.amount <= 0) continue;
     const days = Math.round(
       (Date.parse(`${o.due_date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
     );

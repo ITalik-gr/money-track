@@ -17,3 +17,12 @@ export function envelopeState(r: { amount: number; spent: number; ratio: number 
   const pct = Math.round(r.ratio * 100);
   return pct > 100 ? "over" : pct === 100 ? "full" : pct >= 80 ? "warn" : "ok";
 }
+
+/**
+ * §BUDGET-TRANSFER — «Перекази і зняття» (and its children) never holds an envelope.
+ *
+ * Moving one's own money is excluded from spending (`SPEND_WHERE`), so an envelope there reads 0%
+ * forever — a limit that can never be measured, shown as if it were being kept. The owner had one.
+ * Refused on write, absent from every picker, and migration 0058 removed the ones that existed.
+ */
+export const TRANSFER_CAT_ID = 13;

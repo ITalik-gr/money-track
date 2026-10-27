@@ -153,6 +153,11 @@ export async function draftAiObservations(env: Env, now: number, already: string
   // made up — see `timeClaimsAreGrounded`.
   const anchorDays = new Set(snap.timeAnchors.days);
   const anchorMonths = new Set(snap.timeAnchors.months);
+  const paired = {
+    dates: new Set(snap.timeAnchors.dates),
+    countdowns: new Set(snap.timeAnchors.countdowns),
+    monthEnd: snap.timeAnchors.monthEnd,
+  };
   // §PLAN-LATE: the plans whose date is still AHEAD — the ones an observation may not call
   // missing. Read back out of the PAYLOAD rather than recomputed, for the same reason the anchors
   // above are: the guard has to check the answer against what the model was actually handed.
@@ -174,7 +179,7 @@ export async function draftAiObservations(env: Env, now: number, already: string
     // 🔒 …and the same for the CALENDAR, which the money guard cannot see: its floor of 100 let
     // «Rent due in 11 days» through for a rent due in 25, because every figure in that sentence
     // was a small one.
-    if (!timeClaimsAreGrounded(text, anchorDays, anchorMonths)) {
+    if (!timeClaimsAreGrounded(text, anchorDays, anchorMonths, paired)) {
       console.warn("notify/ai: відкинуто спостереження з вигаданою датою:", title);
       continue;
     }

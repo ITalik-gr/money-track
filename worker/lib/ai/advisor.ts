@@ -12,12 +12,12 @@ import { toBaseMinor, getRates, resolveBaseCurrency, uahToBase, type Rates } fro
 import { currencySign } from "../../../shared/currency.ts";
 import { monthlyPlannedUAH, sumMonthlyPlannedUAH } from "../finance/subscriptions.ts";
 import { merchantContext, type MerchantRow } from "./merchant-context.ts";
-import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, burnShape, sumLevels, type BurnShape, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
+import { STATS_JOINS, EFF_AMOUNT, EFF_CAT_ID, EFF_CAT_NAME, EFF_IMPORTANCE, SPEND_WHERE, valueMode, spendSum, incomeSum, amountSum, recurringOneoffSplit, categoryMonthlyLevels, burnShape, sumLevels, runwayMonthsOf, type BurnShape, localMonthStart, localYmSql, localYm, localYmd } from "../finance/stats.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { financeChatTools, runFinanceTool } from "./chat-tools.ts";
 import { ownFundsMinor } from "../../../shared/own-funds.ts";
 import { buildWeekdayAnalytics } from "../finance/weekday.ts";
-import { buildTimeContext, buildUpcomingCharges } from "./time-context.ts";
+import { buildTimeContext, buildUpcomingCharges, type TimeAnchors } from "./time-context.ts";
 import * as analyticsRepo from "../../repo/analytics.ts";
 import { st, stLit, resolveLocale } from "../platform/i18n.ts";
 
@@ -150,7 +150,7 @@ export interface FinanceSnapshot {
    */
   levels: Map<number, MonthLevel>;
   /** §TIME-CTX: the day numbers and months this payload STATES — the calendar a model answer is checked against. */
-  timeAnchors: { days: number[]; months: number[] };
+  timeAnchors: TimeAnchors;
 }
 
 export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise<FinanceSnapshot> {
@@ -214,10 +214,10 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
        FROM budgets b JOIN categories c ON c.id = b.category_id WHERE b.period = 'month'`,
     ).all<{ id: number; name: string; lim: number }>(),
     env.DB.prepare(
-      `SELECT ${EFF_CAT_ID} AS id, ${amountSum(mult)} AS spent
+      `SELECT ${EFF_CAT_ID} AS id, ${CAT_NAME} AS name, ${amountSum(mult)} AS spent
        FROM transactions t ${STATS_JOINS}
        WHERE t.time >= ? AND ${SPEND_WHERE} GROUP BY ${EFF_CAT_ID}`,
-    ).bind(monthStart).all<{ id: number; spent: number }>(),
+    ).bind(monthStart).all<{ id: number; name: string | null; spent: number }>(),
     // Той самий зріз за ПОВНИЙ попередній місяць — щоб «на що пішла різниця» була рахунком,
     // а не здогадом моделі. Той самий канон, інші межі; порівнюємо ПОРІВНЯННИЙ відрізок
     // (стільки ж днів від початку місяця), інакше 1 серпня різниця = «місяць ще не почався».
@@ -265,7 +265,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
   const burn = burnShape(levels);
   const monthlyBurn = burn.total;
   // §C: ЧЕСНИЙ runway — від ліквідної подушки, не від нетто (нетто може бути від'ємним через борг).
-  const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
+  const runwayMonths = runwayMonthsOf(funds.cushion, monthlyBurn);
   const profile = await getProfile(env);
 
   // §2: бюджети — ліміт vs факт за поточний місяць.
@@ -297,7 +297,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
   const upcoming = buildUpcomingCharges(upcomingRows.results ?? [], rates, now);
 
   // §TIME-CTX: today, the runway in days, and the anchors an AI answer is checked against.
-  const timeCtx = buildTimeContext(now, upcoming, runwayMonths, (trend.results ?? []).map((t) => String(t.m)));
+  const timeCtx = buildTimeContext(now, upcoming, monthlyBurn > 0 ? funds.cushion / monthlyBurn : null, (trend.results ?? []).map((t) => String(t.m))); // unrounded: 0.5 міс gave 15 days for 14.1
 
   // §A1: активні факти про світ (наратив). Тут — ЄДИНЕ джерело контексту, тож і Порадник,
   // і Чат бачать факти автоматом (не додаємо їх у чат окремо). applied_to_numbers показує,
@@ -318,8 +318,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
   // цікаве і зростання, і падіння: категорія, що впала на 5к, пояснює місяць так само добре.
   const prevByCat = new Map((prevMonthByCat.results ?? []).map((r) => [r.id, { spent: Math.abs(r.spent), name: r.name }]));
   const nameById = new Map<number, string>();
-  for (const r of cats.results ?? []) if (r.id != null) nameById.set(r.id, r.name ?? "");
-  for (const [id, v] of prevByCat) if (v.name) nameById.set(id, v.name);
+  for (const r of [...(cats.results ?? []), ...(monthByCat.results ?? []), ...(prevMonthByCat.results ?? [])]) if (r.id != null && r.name) nameById.set(r.id, r.name); // this month's too: «Краса і догляд» read «без категорії»
   const drivers = [...new Set([...monthSpent.keys(), ...prevByCat.keys()])]
     .map((id) => {
       const cur = monthSpent.get(id) ?? 0;
@@ -340,6 +339,8 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     liquid_cushion_uah: Math.round(funds.cushion / 100),
     debt_uah: Math.round(funds.debt / 100),
     own_funds_uah: Math.round(ownFunds / 100),
+    // The feed wrote «17150 ₴ … включає недолік на чорній карті (−78777 ₴)»: nothing said debt is outside.
+    cushion_note: "liquid_cushion_uah is the sum of the POSITIVE liquid balances only. A negative balance in accounts (a used credit limit) is NOT inside it — that money is debt_uah. own_funds_uah = liquid_cushion_uah − debt_uah. Never say the cushion includes or is reduced by the debt.",
     // §R3: інвест-резерв (крипта/брокер) — НЕ ліквідна подушка й НЕ входить у runway за
     // замовчуванням; але це остання лінія, якщо все закінчиться. Не радь одразу «продати».
     investment_reserve_uah: Math.round(funds.investment / 100),
@@ -387,7 +388,8 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     by_event: (events.results ?? []).map((e) => ({ event: e.name, spent_90d_uah: Math.round(e.spent / 100), per_month_90d_uah: Math.round(e.spent / 3 / 100) })),
     by_importance: (importance.results ?? []).map((x) => ({ level: x.importance, spent_90d_uah: Math.round(x.spent / 100) })),
     monthly_trend: (trend.results ?? []).map((t) => ({ month: t.m, spend_uah: Math.round(t.spend / 100), income_uah: Math.round(t.income / 100) })),
-    budgets, ...(await (await import("../finance/tax.ts")).taxContextFor(env, now)), // §TAX-RESERVE · §FOP-GATE
+    budgets: budgets.filter((b) => b.limit_uah > 0 || b.spent_uah > 0), // a 0 envelope with nothing spent says nothing (7 of 17 rows, 2026-10-27)
+    ...(await (await import("../finance/tax.ts")).taxContextFor(env, now)), // §TAX-RESERVE · §FOP-GATE
   };
   if (facts.length) {
     context.facts = facts;
@@ -630,7 +632,7 @@ async function groupPayload(env: Env, eventId: number) {
   const now = Math.floor(Date.now() / 1000);
   const [lv, funds] = await Promise.all([categoryMonthlyLevels(env, valueMode(rates, null).mult, { now }), fundsBreakdown(env, rates)]);
   const monthlyBurn = sumLevels(lv);
-  const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
+  const runwayMonths = runwayMonthsOf(funds.cushion, monthlyBurn);
 
   return {
     ev, list,

@@ -87,3 +87,47 @@ test("a quarterly charge is LUMPY; a monthly one is not", async () => {
     assert.equal(levels.get(8)?.lumpy, false, "rent every month is not");
   } finally { restore(); }
 });
+
+test("§LEVEL-STEP: a monthly charge that stepped up is read at its new level; lumps are not", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const db = migratedDb();
+    seed(db);
+    // The owner's credit interest (2026-10-27): growing with the debt, read as 1 625/міс because
+    // a quiet first month and the old rate were averaged in.
+    const interest = [0, 167_600, 163_900, 166_600, 229_500, 247_700];
+    interest.forEach((a, i) => { if (a) spend(db, `i-${i}`, { amount: a, at: midMonth(MONTH_KEYS[i]!), category: 23 }); });
+    // Three one-offs, the last two equal: the step rule must not read them as a monthly cost — it
+    // asks for a charge present in all but one covered month, which these are not.
+    spend(db, "big-0", { amount: 300_000, at: midMonth("2026-02"), category: 24 });
+    spend(db, "big-1", { amount: 800_000, at: midMonth("2026-03"), category: 24 });
+    spend(db, "big-2", { amount: 820_000, at: midMonth("2026-04"), category: 24 });
+
+    const levels = await levelsOf(db);
+    assert.equal(levels.get(23)?.level, Math.round((229_500 + 247_700) / 2));
+    assert.equal(levels.get(24)?.fixed, false, "lumps stay averaged over the window");
+  } finally { restore(); }
+});
+
+test("§LEVEL-RECUR: equal payments with a gap, or a stopped charge, are not a monthly level", async () => {
+  const restore = freezeTime(FROZEN_NOW_ISO);
+  try {
+    const db = migratedDb();
+    seed(db);
+    // Every month, then a new rent from March: still read at its new level at once.
+    MONTH_KEYS.forEach((ym, i) => spend(db, `r-${i}`, { amount: i >= 4 ? 1_250_000 : 0, at: midMonth(ym), category: 5 }));
+    // 8 000 in February and April, nothing in March — a tax, not 8 000 a month.
+    spend(db, "gap-0", { amount: 800_000, at: midMonth("2026-02"), category: 23 });
+    spend(db, "gap-1", { amount: 800_000, at: midMonth("2026-04"), category: 23 });
+    // Paid in February and March, stopped in April.
+    spend(db, "stop-0", { amount: 500_000, at: midMonth("2026-02"), category: 24 });
+    spend(db, "stop-1", { amount: 500_000, at: midMonth("2026-03"), category: 24 });
+
+    const levels = await levelsOf(db);
+    assert.equal(levels.get(5)?.level, 1_250_000, "a new rent steps at its second month");
+    assert.equal(levels.get(23)?.fixed, false);
+    assert.equal(levels.get(23)?.level, levels.get(23)?.mean);
+    assert.equal(levels.get(24)?.fixed, false);
+    assert.ok((levels.get(24)?.level ?? 0) < 500_000, "a stopped charge is not still charged in full");
+  } finally { restore(); }
+});

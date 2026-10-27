@@ -2236,6 +2236,7 @@
   "fop.paidNoName": "без назви",
   "fop.calendar": "Календар платежів",
   "fop.calPaid": "сплачено",
+  "fop.calLikelyPaid": "схоже, сплачено — підтвердіть",
   "fop.calAllPaid": "Усе нараховане за цей період сплачено.",
   "fop.outlook": "Куди йде {q}",
   "fop.outlookDays": "лишилось {n} дн",

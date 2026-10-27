@@ -21,6 +21,7 @@
  */
 import type { AppDb } from "../platform/db-shim.ts";
 import * as taxRepo from "../../repo/tax.ts";
+import { likelyPaid } from "./tax-paid.ts";
 import { getState, setState } from "./repo.ts";
 import { localMidnight, localParts, localQuarterStart, localYearStart, localYmd } from "./time.ts";
 import { DEFAULT_PROFILE, ratesFor, taxOnIncome, type TaxProfile } from "./tax-rates.ts";
@@ -246,7 +247,7 @@ export interface TaxStatus {
   reserved: number;
   /** The nearest unpaid obligation, if any. */
   next: { id: number; kind: ObligationKind; period: string; amount: number; due_date: string; days_left: number } | null;
-  obligations: (taxRepo.Obligation & { overdue: boolean })[];
+  obligations: (taxRepo.Obligation & { overdue: boolean; likely_paid_tx_id: string | null })[];
   limit: {
     used: number;
     limit: number;
@@ -284,10 +285,11 @@ export async function taxStatus(db: AppDb, now: number): Promise<TaxStatus> {
   // and short enough that the list stays a list rather than an archive.
   const rows = await taxRepo.listObligations(db, `${localParts(yearStart).y - 1}-01`);
   const today = localYmd(now);
-  const obligations = rows.map((o) => ({ ...o, overdue: !o.paid_tx_id && o.due_date < today }));
-  const reserved = obligations.filter((o) => !o.paid_tx_id).reduce((n, o) => n + o.amount, 0);
-
-  const unpaid = obligations.filter((o) => !o.paid_tx_id).sort((a, b) => a.due_date.localeCompare(b.due_date));
+  const likely = await likelyPaid(db, rows); // §TAX-UNLINKED: out of the reserve, `next` and overdue
+  const open = (o: taxRepo.Obligation) => !o.paid_tx_id && !likely.has(o.id);
+  const obligations = rows.map((o) => ({ ...o, likely_paid_tx_id: likely.get(o.id) ?? null, overdue: open(o) && o.due_date < today }));
+  const reserved = obligations.filter(open).reduce((n, o) => n + o.amount, 0);
+  const unpaid = obligations.filter(open).sort((a, b) => a.due_date.localeCompare(b.due_date));
   const head = unpaid[0];
   const next = head
     ? {

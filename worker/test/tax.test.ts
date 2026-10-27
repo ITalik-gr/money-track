@@ -338,3 +338,33 @@ test("a disabled module contributes NOTHING to the snapshot, not zeroes", async 
   // taxes that nobody made. An absent key reads as «not applicable», which is the truth.
   assert.deepEqual(await taxContext(db(), NOW), {});
 });
+
+test("an unlinked same-amount payment is likely paid: out of the reserve, next and overdue (§TAX-UNLINKED)", async () => {
+  // The owner's data, 2026-10-27: Q1 ЄСВ paid on 7 April to the hryvnia and never linked read as
+  // «next payment: 19 April, 191 days overdue», and the reserve carried it a second time.
+  const restore = freezeTime(NOW_ISO);
+  try {
+    const d = db();
+    await writeProfile(d, G3);
+    await refreshObligations(d, NOW);
+    const before = await taxStatus(d, NOW);
+    const q1 = before.obligations.find((o) => o.kind === "social_contribution" && o.period === "2026-Q1")!;
+    assert.ok(q1.overdue, "unpaid and past its 19 April deadline");
+    const pay = (id: string, iso: string) => d.raw.prepare(
+      `INSERT INTO transactions (id, account_id, source, time, amount, currency_code, category_id, merchant)
+       VALUES (?,?,?,?,?,?,?,?)`,
+    ).run(id, "acc-personal", "mono", Math.floor(Date.parse(iso) / 1000), -q1.amount, 980, 24, "ГУ ДПС");
+    pay("esv-q1", "2026-04-07T10:00:00Z");
+
+    const st = await taxStatus(d, NOW);
+    const row = st.obligations.find((o) => o.id === q1.id)!;
+    assert.equal(row.likely_paid_tx_id, "esv-q1");
+    assert.equal(row.paid_tx_id, null, "offered, never linked by the app");
+    assert.equal(row.overdue, false);
+    assert.notEqual(st.next?.id, q1.id);
+    assert.equal(st.reserved, before.reserved - q1.amount);
+    // One payment answers one obligation: Q4 2025's ЄСВ (due 19 January) is outside the window,
+    // and Q2's (due 19 July) must not borrow the April payment either.
+    assert.equal(st.obligations.filter((o) => o.likely_paid_tx_id === "esv-q1").length, 1);
+  } finally { restore(); }
+});

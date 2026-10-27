@@ -204,7 +204,12 @@ Used by every `/analytics` endpoint AND the AI context → **UI numbers = AI num
   ≥ 3 distinct months of the trailing window. `recurringOneoffSplit()`.
 - **Category monthly level — `categoryMonthlyLevels()` (single source).** Fixed costs (stable last
   2–3 full months, CV ≤ 0.12) → average of the latest payments; variable → window average; full
-  months only. **§A1:** confirmed facts adjust the level in `applyFactAdjustments()` at the end of
+  months only. **§LEVEL-RECUR:** "stable" needs the charge in BOTH of the last two months — equal
+  payments with a gap (X, 0, X) or a charge that stopped (X, X, 0) take the window mean; two equal
+  one-offs in the last two months running still read as a new fixed level (indistinguishable from a
+  new rent). Runway = cushion ÷ burn is `runwayMonthsOf()` alone. **§LEVEL-STEP:** a charge present in all but ≤ 1 covered month whose last two
+  months agree (CV ≤ 0.12) and both sit ≥ 25% above the window mean → the mean of those two (upward
+  only; growing credit interest read at last year's rate). **§A1:** confirmed facts adjust the level in `applyFactAdjustments()` at the end of
   this function — the ONLY place a fact moves a number. Lives in `lib/finance/levels.ts`.
 - **§LEVEL-WINDOW — the denominator is the months the LEDGER covers, not the window length**
   (`coveredMonths`). A quiet month INSIDE the ledger stays in the denominator; the first month
@@ -254,6 +259,9 @@ The client never derives it.
   `budget-memory.test.ts`.
 - **§BUDGET-ZERO — limit 0 is a PLAN.** Row exists = envelope; removal is `DELETE
   /budgets/:categoryId`; negative → 400; `ratio` is binary, no bar, no rollover; an empty field ≠ 0.
+- **§BUDGET-TRANSFER — no envelope on «Перекази і зняття» or its children** (`TRANSFER_CAT_ID` in
+  `shared/envelope.ts`): it is never spending, so the limit could never count. PUT → 400, auto
+  skips it, no picker offers it; migration 0058 removed existing ones.
 - **§ENV-STATE — one verdict per envelope on screen:** `shared/envelope.ts` `envelopeState` —
   over / full / warn / ok by the PRINTED percentage (100% = «вичерпано», never «перевищено»);
   the grid and «Потребує уваги» both read it. Held by `envelope-state.test.ts`.

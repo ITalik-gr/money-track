@@ -72,6 +72,9 @@ budgets.put("/budgets", async (c) => {
   if (!Number.isFinite(amount) || amount < 0) {
     return c.json({ error: st(c.get("locale"), "errBudgetNegative") }, 400);
   }
+  if ((await budgetsRepo.transferBucketIds(c.env.DB)).has(Number(b.category_id))) {
+    return c.json({ error: st(c.get("locale"), "errBudgetTransfer") }, 400); // §BUDGET-TRANSFER
+  }
   // §BASE-CUR: the reader typed this in THEIR currency; the column has no currency, so it is
   // stored in hryvnia — the same direction `budgetStatus` converts back on the way out.
   const stored = baseToUah(amount, await getRates(c.env));
@@ -190,9 +193,11 @@ budgets.get("/budgets/auto", async (c) => {
 budgets.post("/budgets/auto", async (c) => {
   const b = await c.req.json<{ items?: { category_id: number; amount: number }[] }>()
     .catch(() => ({} as { items?: { category_id: number; amount: number }[] }));
-  const items = (b.items ?? [])
+  let items = (b.items ?? [])
     .map((i) => ({ category_id: Number(i.category_id), amount: Math.round(Number(i.amount)) }))
     .filter((i) => Number.isFinite(i.category_id) && i.amount > 0);
+  const transfer = await budgetsRepo.transferBucketIds(c.env.DB); // §BUDGET-TRANSFER
+  items = items.filter((i) => !transfer.has(i.category_id));
   if (!items.length) return c.json({ error: st(c.get("locale"), "errNothingToApply") }, 400);
 
   const rates = await getRates(c.env);

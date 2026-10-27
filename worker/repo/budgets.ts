@@ -8,6 +8,7 @@ import type { AppDb } from "../lib/platform/db-shim.ts";
 import { catNameSql } from "../lib/finance/categories-i18n.ts";
 import type { NotifLocale } from "../../shared/notif-i18n.ts";
 import type { Budget } from "../../shared/types.ts";
+import { TRANSFER_CAT_ID } from "../../shared/envelope.ts";
 
 export async function listAll(db: AppDb): Promise<Budget[]> {
   const r = await db.prepare("SELECT * FROM budgets").all<Budget>();
@@ -182,4 +183,11 @@ export async function closeMonth(db: AppDb, rows: BudgetMonth[], closedAt: numbe
        (ym, category_id, limit_minor, carry_in_minor, spent_minor, closed_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
   ).bind(m.ym, m.category_id, m.limit_minor, m.carry_in_minor, m.spent_minor, closedAt)));
+}
+
+/** §BUDGET-TRANSFER — the transfer bucket and its children: ids an envelope is refused on. */
+export async function transferBucketIds(db: AppDb): Promise<Set<number>> {
+  const r = await db.prepare("SELECT id FROM categories WHERE id = ? OR parent_id = ?")
+    .bind(TRANSFER_CAT_ID, TRANSFER_CAT_ID).all<{ id: number }>();
+  return new Set([TRANSFER_CAT_ID, ...(r.results ?? []).map((x) => x.id)]);
 }

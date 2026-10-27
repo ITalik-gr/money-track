@@ -4,7 +4,7 @@
 > in `ROADMAP.md`. Everything else is here, one or two sentences per rule. The story behind each
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
-> In production (`https://money.italik.dev`). Migrations: `finance` to **0056**, `directory` to
+> In production (`https://money.italik.dev`). Migrations: `finance` to **0058**, `directory` to
 > **0012**. Lints **C1–C23**.
 
 ## Documents
@@ -117,7 +117,8 @@ colour literal / theme-scoped rule outside them, stored colours through `catColo
 **AI**
 - Financial context only from `collectFinanceSnapshot`, so chat = advisor = screens.
 - Any AI number shown to a person passes `numbersAreGrounded`; dates pass `timeClaimsAreGrounded`
-  (§TIME-CTX — the app never states a date it wasn't given). A merchant silent > 45 days has no
+  (§TIME-CTX — the app never states a date it wasn't given; a named date must match a stated date
+  day-and-month together, and «через N днів» must be a stated distance, not any stated number). A merchant silent > 45 days has no
   monthly figure (§MERCH-QUIET). The unit and currency are named only by `moneyUnitDirective` (§AI-UNIT).
 - §ENRICH-GATE: the webhook asks the model only about what is unknown — `skip` (own-money moves,
   obvious MCCs), `carry` (copy a known merchant's verdict), `ask`. A user note beats every skip
@@ -154,7 +155,8 @@ click writes the real column. The amount never comes from a model.
 - §INGEST-WRITE: every bank row is written by `upsertCanonicalTx` alone; a feed overwrites, a file
   re-import does not. §STUB-ACC: an unknown account gets a stub row, healed by the next sync.
 - §BANK-PARSE: bank strings are parsed only in `lib/bank/normalize.ts`; a zone-less time is Kyiv;
-  an unknown currency is `null`, never 980.
+  an unknown currency is `null`, never 980. §MERCH-PERIOD: a trailing «за <month>» is cut from the
+  merchant at ingest (`merchantFromDescription`), so a monthly bank charge stays one merchant.
 - CSV: §CSV-PREAMBLE (find the header row), §CSV-DEBIT (sign from the Debit/Credit column),
   §CSV-STATE (skip declined/pending), §CSV-AI (model names columns only, its answer is proven on
   sample rows and shown for confirmation). The target account is never guessed.
@@ -190,7 +192,9 @@ click writes the real column. The amount never comes from a model.
 - §TAX-UAH: tax is always shown in hryvnia. §TAX-FX: foreign income frozen at the NBU rate on the
   credit date (`nbu_rates`). §TAX-RATES: only МЗП and ПМ are stored, dated; the rest is derived.
 - §TAX-LIMIT: within / will cross ~date / crossed. §TAX-DUE: obligations are generated; «paid» is a
-  link to an operation. §TAX-WATCH: we watch the official page and show a link — never restate a
+  link to an operation. §TAX-UNLINKED: an unlinked obligation with a same-amount (1 %) payment
+  near its deadline is «likely paid» — out of the reserve, `next`, overdue and the feed; the link
+  stays a click (`lib/finance/tax-paid.ts`). §TAX-WATCH: we watch the official page and show a link — never restate a
   requisite.
 
 **Language** — the answer language comes from the request (`x-mt-locale` on every request, raw

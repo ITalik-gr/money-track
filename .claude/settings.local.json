@@ -93,7 +93,8 @@
       "Bash(node *)",
       "Bash(graphify update *)",
       "mcp__claude_ai_Money_Tracker__find_transactions",
-      "Bash(caffeinate *)"
+      "Bash(caffeinate *)",
+      "mcp__claude_ai_Money_Tracker__get_finance_snapshot"
     ],
     "defaultMode": "bypassPermissions"
   },

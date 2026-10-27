@@ -2236,6 +2236,7 @@
   "fop.paidNoName": "no name",
   "fop.calendar": "Payment calendar",
   "fop.calPaid": "paid",
+  "fop.calLikelyPaid": "looks paid — confirm",
   "fop.calAllPaid": "Everything accrued for this period has been paid.",
   "fop.outlook": "Where {q} is heading",
   "fop.outlookDays": "{n} days left",

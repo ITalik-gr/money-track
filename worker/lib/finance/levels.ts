@@ -193,11 +193,27 @@ export async function categoryMonthlyLevels(
     // категорії (продукти/розваги) мають розкид навіть недавно → рівень = середнє за все вікно
     // (не хапаємо випадковий пік останнього місяця). Крок ренти визнається за 2-3 міс нового рівня.
     const recentNz = series.slice(-3).filter((v) => v > 0);
-    const fixed = recentNz.length >= 2 && cvOf(recentNz) <= 0.12;
+    const last2 = series.slice(-2);
+    // §LEVEL-STEP (2026-10-27): the last TWO months agree and both sit ≥ 25% above the window — a
+    // cost that stepped UP (credit interest growing with the debt: 1 666 → 2 295 → 2 477 read as
+    // 1 625/міс, a quiet April averaged in). Upward only, so runway can only get more cautious.
+    // ⚠️ Only for a charge present in all but at most one covered month: two big one-offs in the
+    // last two months (a quarterly tax paid twice running, a dentist) also "agree", and must stay lumps.
+    const stepUp = activeMonths >= winKeys.length - 1 && last2.length === 2
+      && last2.every((v) => v > 0 && v >= mean * 1.25) && cvOf(last2) <= 0.12;
+    // §LEVEL-RECUR (2026-10-27): "steady" needs the charge in BOTH of the last two months. Two equal
+    // payments with a gap (8 000 in July, nothing in August, 8 000 in September — a tax, a bimonthly
+    // bill) or a charge that stopped last month (X, X, 0) agreed with each other and became a full
+    // monthly level; they are now the window mean. A new rent at its second month still steps at once.
+    // ⚠️ Two equal one-offs in the last two months running are indistinguishable from that new rent
+    // and stay fixed — the price of not lagging a real rent rise by a month.
+    const steady = recentNz.length >= 2 && last2.length === 2 && last2.every((v) => v > 0) && cvOf(recentNz) <= 0.12;
+    const fixed = steady || stepUp;
+    const basis = steady ? recentNz : last2;
     // §REFUND: місяць може вийти ВІД'ЄМНИМ (повернення перевищило витрати — напр. скасували
     // велику покупку минулого місяця). Рівень «мінус 400 ₴/міс» безглуздий і тягнув би burn
     // униз, тож підлога 0.
-    const level = Math.max(0, fixed ? Math.round(recentNz.reduce((s, v) => s + v, 0) / recentNz.length) : mean);
+    const level = Math.max(0, fixed ? Math.round(basis.reduce((s, v) => s + v, 0) / basis.length) : mean);
     // §BURN-SHAPE. Both tests run on the window as covered, so a category cannot be called lumpy
     // for months that predate the ledger — the same denominator §LEVEL-WINDOW fixed above.
     const windowTotal = series.reduce((s, v) => s + Math.max(0, v), 0);
@@ -257,6 +273,14 @@ export function sumLevels(levels: Map<number, MonthLevel>): number {
   let s = 0;
   for (const v of levels.values()) s += v.level;
   return s;
+}
+
+/**
+ * Runway in months = liquid cushion ÷ canonical burn, to 0.1 — the ONE definition (2026-10-27).
+ * The snapshot, the budget planner and the event close-out each carried their own copy of this line.
+ */
+export function runwayMonthsOf(cushion: number, burn: number): number | null {
+  return burn > 0 ? Math.round((cushion / burn) * 10) / 10 : null;
 }
 
 export interface BurnShape {

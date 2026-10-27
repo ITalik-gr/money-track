@@ -121,3 +121,20 @@ export function currencyNumeric(code: string | number | null | undefined): numbe
   if (/^\d{3}$/.test(s)) return Number(s);
   return CURRENCY_NUMERIC[s] ?? null;
 }
+
+/**
+ * §MERCH-PERIOD — the merchant a bank row is grouped by, without the period the bank wrote into it.
+ *
+ * Monobank names its own monthly interest «Списання відсотків за вересень», so ONE recurring
+ * charge became a new merchant every month: on 2026-10-27 the Advisor got «…за серпень» marked
+ * `stopped` and «…за вересень» at a 90-day-÷-3 «796 ₴/міс», for a 2 400 ₴ charge that never
+ * stopped. Only a trailing «за <month>» goes; the date is on the row, and `raw_json` keeps the
+ * bank's text. Migration 0057 applies the same cut to rows already stored.
+ */
+const PERIOD_SUFFIX = / за (?:січень|лютий|березень|квітень|травень|червень|липень|серпень|вересень|жовтень|листопад|грудень)(?: \d{4})?$/u;
+
+export function merchantFromDescription(desc: string | null | undefined): string | null {
+  if (desc == null) return null;
+  const cut = desc.replace(PERIOD_SUFFIX, "").trim();
+  return cut || desc;
+}

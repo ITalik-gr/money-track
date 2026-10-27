@@ -56,10 +56,10 @@ export function sampleStatus(): TaxStatus {
       due_date: ymd(-4), days_left: -4,
     },
     obligations: [
-      { id: -1, kind: "single_tax", period: labels[0]!, amount: UAH(12_250), due_date: ymd(-4), paid_tx_id: null, paid_at: null, overdue: true },
-      { id: -2, kind: "military_levy", period: labels[0]!, amount: UAH(2_450), due_date: ymd(-4), paid_tx_id: null, paid_at: null, overdue: true },
-      { id: -3, kind: "social_contribution", period: labels[0]!, amount: UAH(3_730), due_date: ymd(17), paid_tx_id: null, paid_at: null, overdue: false },
-      { id: -4, kind: "single_tax", period: "prev", amount: UAH(11_100), due_date: ymd(-92), paid_tx_id: "sample-tx", paid_at: daysAgo(90), overdue: false },
+      { id: -1, kind: "single_tax", period: labels[0]!, amount: UAH(12_250), due_date: ymd(-4), paid_tx_id: null, paid_at: null, overdue: true, likely_paid_tx_id: null },
+      { id: -2, kind: "military_levy", period: labels[0]!, amount: UAH(2_450), due_date: ymd(-4), paid_tx_id: null, paid_at: null, overdue: true, likely_paid_tx_id: null },
+      { id: -3, kind: "social_contribution", period: labels[0]!, amount: UAH(3_730), due_date: ymd(17), paid_tx_id: null, paid_at: null, overdue: false, likely_paid_tx_id: null },
+      { id: -4, kind: "single_tax", period: "prev", amount: UAH(11_100), due_date: ymd(-92), paid_tx_id: "sample-tx", paid_at: daysAgo(90), overdue: false, likely_paid_tx_id: null },
     ],
     limit: {
       used: UAH(1_910_000), limit: UAH(2_700_000), pct: 71,

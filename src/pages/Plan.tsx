@@ -23,6 +23,7 @@ import { highlightAmounts } from "../lib/highlight.tsx";
 import { baseSign } from "../lib/currency.ts";
 import { toast } from "../lib/toast.ts";
 import type { BudgetProposalRow, BudgetPlanResult } from "../store/api.ts";
+import { TRANSFER_CAT_ID } from "../../shared/envelope.ts";
 
 // Планування (§7): місячні бюджети-конверти по категоріях. Підписки — окрема сторінка.
 export function Plan() {
@@ -315,7 +316,7 @@ function Budgets() {
   }, [spend]);
 
   // Верхньорівневі витратні категорії (бюджет тримаємо на батьках — узгоджено з рол-апом).
-  const topCats = (cats ?? []).filter((c) => !c.is_income && c.parent_id == null);
+  const topCats = (cats ?? []).filter((c) => !c.is_income && c.parent_id == null && c.id !== TRANSFER_CAT_ID); // §BUDGET-TRANSFER
   // Сортуємо: спершу з лімітом, потім за фактом спадання.
   const ordered = [...topCats].sort((a, b) => {
     const la = limits.has(a.id) ? 1 : 0, lb = limits.has(b.id) ? 1 : 0;

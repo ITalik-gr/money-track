@@ -24,6 +24,7 @@ import type { CanonicalTx } from "../lib/bank/providers/provider.ts";
 import { categorize } from "../lib/finance/categorize.ts";
 import { descriptionIsTransfer } from "../lib/finance/transfers.ts";
 import { rememberedName } from "./rename-memory.ts";
+import { merchantFromDescription } from "../lib/bank/normalize.ts";
 import { logChange } from "./ai-changes.ts";
 
 /** What to do when the id is already in the table. See the note above — this is the channel, not the bank. */
@@ -159,7 +160,7 @@ export async function upsertCanonicalTx(
       category_id,
       real_category_id,
       planned_id,
-      display_name ?? remembered ?? tx.description ?? null,
+      display_name ?? remembered ?? merchantFromDescription(tx.description),
       tx.comment ?? null,
       tx.balance_after ?? null,
       tx.cashback ?? null,

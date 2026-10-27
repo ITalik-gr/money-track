@@ -31,6 +31,8 @@ export interface TaxObligation {
   paid_tx_id: string | null;
   paid_at: number | null;
   overdue: boolean;
+  /** §TAX-UNLINKED — a same-amount payment near the deadline; offered for linking, not linked. */
+  likely_paid_tx_id: string | null;
 }
 
 export interface TaxStatus {

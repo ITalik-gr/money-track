@@ -20,11 +20,19 @@ import type { Rates } from "../finance/money.ts";
 
 export interface UpcomingCharge { in_days: number; date: string }
 
+/**
+ * `days`/`months` — what may be mentioned at all; `dates`/`countdowns`/`monthEnd` — which day goes
+ * with which month and which number is a distance to something (`PairedTimeAnchors`).
+ */
+export interface TimeAnchors {
+  days: number[]; months: number[]; dates: string[]; countdowns: number[]; monthEnd: number;
+}
+
 export interface TimeContext {
   /** Spread into the AI payload. */
   fields: Record<string, unknown>;
   /** Day numbers and 0-based months the payload STATES — nothing else may be claimed. */
-  anchors: { days: number[]; months: number[] };
+  anchors: TimeAnchors;
 }
 
 export function buildTimeContext(
@@ -64,6 +72,9 @@ export function buildTimeContext(
         ...upcoming.map((u) => Number(u.date.slice(5, 7)) - 1),
         ...trendMonths.map((m) => Number(m.slice(5, 7)) - 1),
       ],
+      dates: [localYmd(now).slice(5), ...upcoming.map((u) => u.date.slice(5, 10))],
+      countdowns: [...upcoming.map((u) => u.in_days), ...(runwayDays == null ? [] : [runwayDays]), 1, 7, 30],
+      monthEnd: daysLeft,
     },
   };
 }

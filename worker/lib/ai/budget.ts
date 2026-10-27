@@ -19,7 +19,7 @@ import { briefUsage, logUsage, type AiUsageBrief } from "./cost.ts";
 import { getRates } from "../finance/money.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, EFF_CAT_COLOR, EFF_IMPORTANCE, SPEND_WHERE,
-  valueMode, amountSum, categoryMonthlyLevels, sumLevels, burnShape,
+  valueMode, amountSum, categoryMonthlyLevels, sumLevels, runwayMonthsOf, burnShape,
 } from "../finance/stats.ts";
 import { coveredMonths, levelWindowKeys } from "../finance/levels.ts";
 import { monthlyPlannedUAH } from "../finance/subscriptions.ts";
@@ -66,7 +66,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
   const monthlyBurn = sumLevels(levels);
   // Runway is the liquid CUSHION over burn — the canon's (2026-09-25); it was NET funds here, so with
   // a credit-card debt the planner saw a shorter runway than every screen and the chat.
-  const runwayMonths = monthlyBurn > 0 ? Math.round((funds.cushion / monthlyBurn) * 10) / 10 : null;
+  const runwayMonths = runwayMonthsOf(funds.cushion, monthlyBurn);
 
   /**
    * The SHAPE of each category, not only its size.
