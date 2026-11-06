@@ -663,7 +663,7 @@
   "setup.aiCosts": "AI: cost & models",
   "setup.callsShort": "{n} calls",
   "setup.aiModelHint": "Model is set per task. Categorization/OCR always use Haiku. Cost is a token-based estimate, not a bill.",
-  "setup.aiModelDemoNote": "In the demo every task runs on Haiku 4.5 — the sandbox uses a shared key, so model choice is disabled.",
+  "setup.aiModelDemoNote": "In the demo every task runs on Haiku 5.5 — the sandbox uses a shared key, so model choice is disabled.",
   "setup.perMtok": "per MTok",
   "setup.task.report": "Reports",
   "setup.task.reportHint": "deep period analysis — worth the best model",

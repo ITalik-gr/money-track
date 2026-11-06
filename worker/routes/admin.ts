@@ -100,7 +100,7 @@ admin.get("/jev-usage", async (c) => {
   const now = nowUnix();
   const today = localYmd(now);
   const monthStart = localYmd(localMonthStart(now));
-  const cost = (tokens: number) => callCostUsd(JEV_MODEL, { input_tokens: tokens, output_tokens: 0 }, now);
+  const cost = (tokens: number) => callCostUsd(JEV_MODEL, { input_tokens: tokens, output_tokens: 0 });
   const sum = (rows: { calls: number; input_tokens: number }[]) => {
     const calls = rows.reduce((s, r) => s + r.calls, 0), input_tokens = rows.reduce((s, r) => s + r.input_tokens, 0);
     return { calls, input_tokens, cost_usd: cost(input_tokens) };

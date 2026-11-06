@@ -5,7 +5,7 @@
  * A § in a comment is a pointer: «§PLAN-LATE» means «the rule is written down, go and read it».
  * A pointer to nothing is worse than no pointer — it looks like provenance and is not. On
  * 2026-09-25 the code cited 179 distinct tags and 49 of them were defined nowhere: roadmap card
- * ids from finished rounds (§R2-ST1, §CH4, §A2…) whose cards were deleted as the process demands,
+ * ids from finished rounds (§R2-ST1, §CH4, §A3…) whose cards were deleted as the process demands,
  * leaving the pointer behind.
  *
  * Defining 55 historical tags after the fact would be invention, so this is a RATCHET, the same
@@ -25,7 +25,7 @@ const SELF = "scripts/check-section-index.mjs";
 
 /** Cited in code, defined nowhere, as of 2026-09-25. ONLY EVER SHRINKS. */
 const LEGACY = new Set([
-  "§A2", "§A3", "§A5", "§ADV-METRICS", "§AGENT", "§B1", "§BUDGET", "§C1", "§C2", "§CANON",
+  "§A3", "§A5", "§ADV-METRICS", "§AGENT", "§B1", "§BUDGET", "§C1", "§C2", "§CANON",
   "§CAT-LEAF", "§CAT2", "§CH4", "§CTX", "§D4", "§D5", "§E4", "§EFF_IMPORTANCE", "§F3",
   "§F4", "§F5", "§G1", "§G2", "§GR2", "§P2", "§P4", "§PERIMETER", "§PLATFORM",
   "§PRICE-DRIFT", "§R2-CUR1", "§R2-CUR2", "§R2-ST1", "§R2-ST2", "§R2-ST3", "§R2-ST4", "§R2-ST5",

@@ -231,7 +231,7 @@ quietly.** The rule throughout: *a check beats an instruction.*
 | Runtime | Cloudflare **Workers** + **Durable Objects** (SQLite) + **D1** + **R2** |
 | Server | **Hono**, TypeScript |
 | Frontend | **React 19**, Redux Toolkit (RTK Query), React Router 7, **Recharts**, Vite, `vite-plugin-pwa` |
-| AI | **Anthropic** — hybrid **Haiku 4.5** (bulk: enrich/OCR/parse/insight) / **Sonnet** (user-facing: advisor/reports/chat); **TypeSafe Jev** for judgments (categorization, subscription review, CSV columns) with Claude as the fallback — owner-only for now |
+| AI | **Anthropic** — hybrid **Haiku 5.5** (bulk: enrich/OCR/parse/insight) / **Sonnet** (user-facing: advisor/reports/chat); **TypeSafe Jev** for judgments (categorization, subscription review, CSV columns) with Claude as the fallback — owner-only for now |
 | Bank | Monobank (webhook + backfill), CSV import; provider abstraction |
 | Auth | Google OAuth (open signup, with a daily ceiling), revocable HMAC-signed session cookie; Telegram Mini App as a second key |
 | MCP | Streamable HTTP MCP server + an OAuth 2.1 authorization server (DCR · PKCE S256 · resource indicators · rotating refresh) |

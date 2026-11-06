@@ -1,9 +1,9 @@
 import type { AiUsageBrief } from "../../store/api.ts";
 import { useT } from "../../i18n/index.ts";
 
-// Приблизна вартість виклику (Haiku 4.5: $1/$5 за млн вх/вих, кеш-читання $0.10/млн).
+// Приблизна вартість виклику (Haiku 5.5: $0.10/$0.50 за млн вх/вих до 100K промпту, кеш-читання $0.01/млн).
 function cost(u: AiUsageBrief): number {
-  return (u.in * 1 + u.cache_read * 0.1 + u.out * 5) / 1_000_000;
+  return (u.in * 0.1 + u.cache_read * 0.01 + u.out * 0.5) / 1_000_000;
 }
 function toks(n: number): string {
   return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);

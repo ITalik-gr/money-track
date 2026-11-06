@@ -39,30 +39,34 @@ export function logUsage(tag: string, u: AnthropicUsage): void {
 // тут ми АКУМУЛЮЄМО usage у app_state, щоб показати «$ за сьогодні/місяць» у Налаштуваннях.
 // Записується централізовано в callHaiku/callHaikuMessages, тож ловить УСІ виклики (вкл. ретраї).
 
-// Ціни за 1M токенів (USD). Стікер; вступну ціну Sonnet 5 див. priceFor.
+// Ціни за 1M токенів (USD), покоління 5.5 (2026-11-06).
 // cache read ≈ 0.1× input; cache write — 1.25× (5хв TTL) / 2× (1год TTL) — див. callCostUsd.
 const PRICES: Record<string, { in: number; out: number }> = {
-  [MODEL_FAST]: { in: 1.0, out: 5.0 },   // Haiku 4.5
-  [MODEL_SMART]: { in: 3.0, out: 15.0 }, // Sonnet 5 (стікер; до 31.08.2026 діє вступна)
-  [MODEL_OPUS]: { in: 5.0, out: 25.0 },  // Opus 4.8
+  [MODEL_FAST]: { in: 0.1, out: 0.5 },   // Haiku 5.5, prompt ≤ 100K — see HAIKU_LONG
+  [MODEL_SMART]: { in: 2.0, out: 10.0 }, // Sonnet 5.5
+  [MODEL_OPUS]: { in: 4.0, out: 20.0 },  // Opus 5.5
   // TypeSafe Jev (docs/JEV.md §1): input-only billing, output is free. Without its own row the
-  // `PRICES[MODEL_FAST]` fallback below would price a judgment as a Haiku call — ~25× the input
-  // rate plus $5/M for "output" that is not billed at all.
+  // `PRICES[MODEL_FAST]` fallback below would price a judgment as a Haiku call — ~2× the input
+  // rate plus $0.50/M for "output" that is not billed at all.
   [JEV_MODEL]: { in: 0.042, out: 0 },
 };
 
-// Sonnet 5: ВСТУПНА ціна $2/$10 за MTok діє ДО 2026-08-31 включно (тобто до 01.09.2026 UTC),
-// після — стікер $3/$15. Тож ціна Sonnet — date-aware (§A2).
-const SONNET_INTRO_END = Date.UTC(2026, 8, 1) / 1000; // 1 вересня 2026, 00:00 UTC
-const SONNET_INTRO: { in: number; out: number } = { in: 2.0, out: 10.0 };
+// Haiku 5.5 has two rate cards chosen by PROMPT length (input + cache read + cache write), not one:
+// past 100K tokens the whole call is billed at 5×. A single flat rate would under-count exactly the
+// long statement/CSV calls that cost the most.
+const HAIKU_LONG_FROM = 100_000;
+const HAIKU_LONG: { in: number; out: number } = { in: 0.5, out: 2.5 };
 
-function priceFor(model: string, nowSec: number): { in: number; out: number } {
-  if (model === MODEL_SMART && nowSec < SONNET_INTRO_END) return SONNET_INTRO;
+function priceFor(model: string, u: AnthropicUsage): { in: number; out: number } {
+  if (model === MODEL_FAST) {
+    const prompt = u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+    if (prompt > HAIKU_LONG_FROM) return HAIKU_LONG;
+  }
   return PRICES[model] ?? PRICES[MODEL_FAST];
 }
 
-export function callCostUsd(model: string, u: AnthropicUsage, nowSec: number = Date.now() / 1000): number {
-  const p = priceFor(model, nowSec);
+export function callCostUsd(model: string, u: AnthropicUsage): number {
+  const p = priceFor(model, u);
   const cacheRead = u.cache_read_input_tokens ?? 0;
   // Cache write множник за TTL: 5хв=1.25×, 1год=2×. Беремо розбивку, коли API її дав;
   // інакше — агрегат за нашим фактичним TTL (усі write-и через buildSystemPrefix — 1год → 2×).
@@ -114,7 +118,7 @@ function monthKey(now: number): string { return localYm(now); }
 export async function recordUsage(env: Env, model: string, u: AnthropicUsage): Promise<void> {
   try {
     const now = Math.floor(Date.now() / 1000);
-    const cost = callCostUsd(model, u, now);
+    const cost = callCostUsd(model, u);
     // Demo sandboxes also book the cost against the shared budget (lib/demo.ts). Done here rather
     // than at the call sites for the same reason as `demoClamp`: this is the one place every
     // Anthropic response passes through, so it cannot be forgotten by a future feature.

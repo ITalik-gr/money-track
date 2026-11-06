@@ -12,6 +12,7 @@ import type { Env } from "../env.ts";
 import { getClientInfo, MonoRateLimit } from "../lib/bank/mono.ts";
 import { deleteSecret, putSecret, secretStatuses, SECRET_NAMES, type SecretName } from "../lib/platform/secrets.ts";
 import { st, resolveLocale } from "../lib/platform/i18n.ts";
+import { MODEL_FAST } from "../lib/ai/models.ts";
 
 export const credentials = new Hono<{ Bindings: Env }>();
 
@@ -25,7 +26,7 @@ async function verifyAnthropic(key: string): Promise<boolean> {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
+      model: MODEL_FAST,
       messages: [{ role: "user", content: "ping" }],
     }),
   });

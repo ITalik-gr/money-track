@@ -147,7 +147,7 @@ async function reviewTransferOne(env: Env, tx: TxRow, hint?: string | null): Pro
   }
 
   const history = await realCategoryHistory(env, tx);
-  // Рев'ю — user-facing, тож розумніша модель (Sonnet 5).
+  // Рев'ю — user-facing, тож розумніша модель (Sonnet).
   const result = await propose(env, {
     merchant: tx.merchant, comment: tx.comment, mcc: tx.mcc,
     amount: tx.amount, currency_code: tx.currency_code, history, hint: hint ?? null,

@@ -19,7 +19,7 @@
 // prefix silently does nothing — see `prompt.ts`, which owns that decision now.
 import type { Env } from "../../env.ts";
 import { demoAiGate, isDemoEnv } from "../platform/demo.ts";
-import { MODEL_FAST } from "./models.ts";
+import { MODEL_FAST, thinkingParams } from "./models.ts";
 import { recordUsage, type AnthropicUsage } from "./cost.ts";
 import { markVerified } from "../platform/secrets.ts";
 
@@ -51,12 +51,6 @@ function demoClamp(
   return { model: MODEL_FAST, maxTokens: Math.min(req.maxTokens, DEMO_MAX_OUTPUT_TOKENS), tools };
 }
 
-// Sonnet/Opus вмикають adaptive-thinking, коли поле thinking відсутнє — для наших легких
-// JSON/чат-викликів це зайва латентність і вартість. Явно вимикаємо. Haiku не чіпаємо.
-function thinkingOff(model: string): Record<string, unknown> {
-  return model !== MODEL_FAST ? { thinking: { type: "disabled" } } : {};
-}
-
 export interface AnthropicContentBlock {
   type: string;
   text?: string;
@@ -67,7 +61,7 @@ export interface AnthropicContentBlock {
 // тягнути шум (курс НБУ, тарифи, податки, ціни). Приватність: пошук іде тим самим каналом
 // Anthropic, що й знімок фінансів — не третій стороні.
 const WEB_SEARCH_DOMAINS = ["bank.gov.ua", "minfin.com.ua", "index.minfin.com.ua", "tax.gov.ua"];
-// Sonnet/Opus → динамічна фільтрація (_20260209); Haiku 4.5 — лише базовий (_20250305).
+// Sonnet/Opus → динамічна фільтрація (_20260209); Haiku — лише базовий (_20250305).
 export function webSearchTool(model: string, maxUses = 4): Record<string, unknown> {
   const type = model === MODEL_FAST ? "web_search_20250305" : "web_search_20260209";
   return { type, name: "web_search", max_uses: maxUses, allowed_domains: WEB_SEARCH_DOMAINS };
@@ -136,8 +130,14 @@ async function readStream(
         }
         case "content_block_delta": {
           const i = ev.index as number;
-          const d = ev.delta as { type?: string; text?: string; partial_json?: string };
-          if (d.type === "text_delta" && d.text) {
+          const d = ev.delta as { type?: string; text?: string; partial_json?: string; thinking?: string; signature?: string };
+          // Opus 5.5 always thinks, and a tool turn's thinking block must go back UNCHANGED with
+          // the tool results — a block rebuilt without its signature is a 400 on the next turn.
+          if (d.type === "thinking_delta" && d.thinking != null) {
+            blocks[i] = { ...blocks[i], thinking: (blocks[i]?.thinking ?? "") + d.thinking };
+          } else if (d.type === "signature_delta" && d.signature != null) {
+            blocks[i] = { ...blocks[i], signature: d.signature };
+          } else if (d.type === "text_delta" && d.text) {
             blocks[i] = { ...blocks[i], type: "text", text: (blocks[i]?.text ?? "") + d.text };
             onText?.(d.text);
           } else if (d.type === "input_json_delta" && d.partial_json != null) {
@@ -208,7 +208,7 @@ export async function callHaiku(
     body: JSON.stringify({
       model,
       max_tokens: maxTokens,
-      ...thinkingOff(model),
+      ...thinkingParams(model),
       system,
       messages: [{ role: "user", content: userContent }],
     }),
@@ -249,7 +249,7 @@ export async function callHaikuMessages(
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model, max_tokens: maxTokens, ...thinkingOff(model), system, messages,
+      model, max_tokens: maxTokens, ...thinkingParams(model), system, messages,
       ...(onText ? { stream: true } : {}),
     }),
   });
@@ -274,7 +274,7 @@ export async function callHaikuMessages(
 export interface ChatTool { name: string; description: string; input_schema: Record<string, unknown> }
 export type ToolExecutor = (name: string, input: Record<string, unknown>) => Promise<unknown>;
 interface RawMsg { role: "user" | "assistant"; content: unknown }
-interface RawBlock { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown> }
+interface RawBlock { type: string; text?: string; id?: string; name?: string; input?: Record<string, unknown>; thinking?: string; signature?: string }
 
 export async function callMessagesRaw(
   env: Env,
@@ -291,7 +291,7 @@ export async function callMessagesRaw(
     method: "POST",
     headers: { "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({
-      model, max_tokens: maxTokens, ...thinkingOff(model), system, messages,
+      model, max_tokens: maxTokens, ...thinkingParams(model), system, messages,
       ...(tools?.length ? { tools } : {}),
       ...(onText ? { stream: true } : {}),
     }),

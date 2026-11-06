@@ -5,10 +5,11 @@
 // changes when we learn something about how the model behaves. Both of the facts below were
 // learned the hard way.
 //
-//  • **The cache has a MINIMUM.** Haiku 4.5 will not cache a prefix under 4 096 tokens, and our
-//    base prefix measures ~789 — so `cache_control` on it silently does nothing. Caching is
+//  • **The cache has a MINIMUM.** Haiku 4.5 would not cache a prefix under 4 096 tokens, and our
+//    base prefix measured ~789 — so `cache_control` on it silently did nothing. Caching is
 //    therefore only switched on for the bulk-enrich path, where `CACHE_GUIDE` pushes the prefix
-//    over the threshold (and improves quality besides).
+//    over the threshold (and improves quality besides). The 5.5 models lowered the minimum to 512,
+//    so the small prefix could now cache too — not switched on until measured.
 //  • **A language instruction has TWO right answers, not one** (B6). Telling the chat "write
 //    everything in English, do NOT reply in Ukrainian" made the model answer a Ukrainian question
 //    in RUSSIAN — a third Slavic language that broke neither instruction literally. Hence the two
@@ -21,8 +22,8 @@ import type { AnthropicContentBlock } from "./ai.ts";
 
 
 // Build the system prefix from the live category taxonomy.
-// ВАЖЛИВО про кеш (виміряно count_tokens): базовий префікс ≈789 тк, а мінімум кешу
-// Haiku 4.5 = 4096 тк — тож cache_control на малому префіксі МОВЧКИ не працює.
+// ВАЖЛИВО про кеш (виміряно count_tokens на Haiku 4.5): базовий префікс ≈789 тк, а мінімум кешу
+// Haiku 4.5 був 4096 тк — тож cache_control на малому префіксі МОВЧКИ не працював (у 5.5 мінімум 512).
 // Тому кешування вмикаємо лише коли cached=true (масовий enrich): додаємо великий
 // СТАБІЛЬНИЙ гайд (CACHE_GUIDE, також покращує якість) з cache_control, щоб перетнути
 // поріг. Поодинокі/інтерактивні виклики лишаємо «лін» (без кешу — малий префікс дешевий).

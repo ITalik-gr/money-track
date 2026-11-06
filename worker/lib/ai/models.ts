@@ -8,10 +8,26 @@ import { getState } from "../finance/repo.ts";
 import { isDemoEnv } from "../platform/demo.ts";
 
 // Гібрид (рішення користувача 2026-07-06): масові/фонові задачі — дешевий Haiku;
-// розумні user-facing (чат по операції, поради, розуміння підписок, рев'ю) — Sonnet 5.
-export const MODEL_FAST = "claude-haiku-4-5";
-export const MODEL_SMART = "claude-sonnet-5";
-export const MODEL_OPUS = "claude-opus-4-8";
+// розумні user-facing (чат по операції, поради, розуміння підписок, рев'ю) — Sonnet.
+// Generation 5.5 since 2026-11-06. Each of the three needs a different "no thinking" shape —
+// see `thinkingParams` below before adding or swapping a model here.
+export const MODEL_FAST = "claude-haiku-5-5";
+export const MODEL_SMART = "claude-sonnet-5-5";
+export const MODEL_OPUS = "claude-opus-5-5";
+// Every 5.5 model runs adaptive thinking when `thinking` is omitted — for our light JSON/chat calls
+// that is latency and cost with nothing to show for it, so it is turned off. The 5.5 generation
+// made "off" a per-model shape, and the wrong one is a 400, not a slower answer:
+//  • Haiku 5.5 — `disabled` is accepted at effort ≤ high (its default is medium).
+//  • Sonnet 5.5 — `disabled` is a 400; `between_tools` is the off switch (alone, effort ≤ high).
+//  • Opus 5.5 — thinking cannot be turned off at all; `low` effort is the nearest equivalent.
+//    Its thinking blocks then come back in tool turns, which is why `readStream` in ai.ts rebuilds them.
+export function thinkingParams(model: string): Record<string, unknown> {
+  if (model === MODEL_FAST) return { thinking: { type: "disabled" } };
+  if (model === MODEL_SMART) return { thinking: { type: "between_tools" } };
+  if (model === MODEL_OPUS) return { output_config: { effort: "low" } };
+  return {};
+}
+
 // Not a Claude model: TypeSafe's judgment model (docs/JEV.md). It lives in this table only so
 // `cost.ts` can price it; nothing routes a TASK to it through `getTaskModel`.
 export const JEV_MODEL = "jev-latest";

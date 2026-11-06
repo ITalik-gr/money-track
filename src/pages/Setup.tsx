@@ -441,9 +441,9 @@ function AiUsageCard() {
 
 // Моделі ОКРЕМО НА ЗАДАЧУ. Три головні задачі змінні; enrich/OCR завжди на Haiku.
 const MODEL_META: Record<AiModelToken, { name: string; price: string }> = {
-  haiku: { name: "Haiku 4.5", price: "$1/$5" },
-  sonnet: { name: "Sonnet 5", price: "$3/$15" },
-  opus: { name: "Opus 4.8", price: "$5/$25" },
+  haiku: { name: "Haiku 5.5", price: "$0.10/$0.50" },
+  sonnet: { name: "Sonnet 5.5", price: "$2/$10" },
+  opus: { name: "Opus 5.5", price: "$4/$20" },
 };
 const AI_MODEL_TASKS: { task: AiTask; labelKey: "setup.task.report" | "setup.task.advisor" | "setup.task.chat" | "setup.task.insight" | "setup.task.notify"; hintKey: "setup.task.reportHint" | "setup.task.advisorHint" | "setup.task.chatHint" | "setup.task.insightHint" | "setup.task.notifyHint"; options: AiModelToken[] }[] = [
   { task: "report", labelKey: "setup.task.report", hintKey: "setup.task.reportHint", options: ["sonnet", "opus"] },

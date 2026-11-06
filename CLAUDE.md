@@ -44,7 +44,7 @@ run `graphify update .`.
 
 One **Cloudflare Worker (Hono) + a Durable Object per user (SQLite) + D1 `directory` + R2 +
 Vectorize**. Monobank (webhook + backfill), CSV import, Privat ФОП polling. React 19 + RTK Query +
-React Router 7 + Recharts, Vite + PWA. AI: **Haiku 4.5** bulk, **Sonnet 5** user-facing (and enrich
+React Router 7 + Recharts, Vite + PWA. AI: **Haiku 5.5** bulk, **Sonnet 5.5** user-facing (and enrich
 when the user wrote a note); **Jev (TypeSafe)** first for judgments, for everyone (§JEV-SHARED). Telegram bot + Mini
 App. UI uk/en.
 
