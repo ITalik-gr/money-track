@@ -21,6 +21,7 @@ import * as taxRepo from "../../repo/tax.ts";
 import { localMonthStart, localParts, localQuarterStart, localYearStart, localYmd } from "./time.ts";
 import { quarterLabel, accrualsFor, readProfile } from "./tax.ts";
 import { ratesFor } from "./tax-rates.ts";
+import { likelyPaid } from "./tax-paid.ts";
 // §RHYTHM moved next door under C3 (2026-09-21). One-way: `clients.ts` never imports back.
 import { rhythmOf, quietClients, type Rhythm, type QuietClient } from "./clients.ts";
 import type { NotifLocale } from "../../../shared/notif-i18n.ts";
@@ -197,7 +198,10 @@ async function nextUnpaid(
   db: AppDb, now: number,
 ): Promise<{ due_date: string; amount: number } | null> {
   const rows = await taxRepo.listObligations(db, `${localParts(localYearStart(now)).y - 1}-01`);
-  const unpaid = rows.filter((o) => !o.paid_tx_id && o.amount > 0)
+  // §TAX-UNLINKED, as in `taxStatus`: without it the cash-gap card named a deadline the tax tab
+  // already treats as paid — the «same list» this comment promised was not the same list.
+  const likely = await likelyPaid(db, rows);
+  const unpaid = rows.filter((o) => !o.paid_tx_id && !likely.has(o.id) && o.amount > 0)
     .sort((a, b) => a.due_date.localeCompare(b.due_date));
   const head = unpaid[0];
   return head ? { due_date: head.due_date, amount: head.amount } : null;

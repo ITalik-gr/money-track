@@ -36,7 +36,7 @@ around a change, not a gate on every commit.
 | `comment` / `note` | the counterparty's text / the user's own `user_note` |
 | `is_transfer`, `ai_enriched` | pre-set flags, for cases about the gate rather than the model |
 | `context` | rows that existed BEFORE this one — merchant history, a previous verdict to carry |
-| `expect` | only what this case is about: `gate`, `root`, `category`, `recurring`, `transfer` |
+| `expect` | only what this case is about: `gate`, `root`, `category`, `recurring`, `transfer`; `importance` / `business` are Jev's proposals and are scored on `--judge jev` runs only |
 | `why` | one line: what breaks if this case goes red |
 
 An expectation nobody wrote is not scored. A case that declares only `gate` is a statement about

@@ -1,8 +1,6 @@
-import { Link } from "react-router-dom";
 import { useT } from "../../i18n/index.ts";
-import { toast } from "../../lib/toast.ts";
-import { errText } from "../../lib/errors.ts";
 import { TaxProfileCard } from "./TaxProfileCard.tsx";
+import { BizSwitches } from "./BizSwitches.tsx";
 import type { TaxProfile } from "../../store/api.ts";
 
 /**
@@ -31,55 +29,11 @@ export function BizSetup({ profile, onSave, saving, sample, onSample }: {
   onSample: (on: boolean) => void;
 }) {
   const t = useT();
-  const business = !!profile?.business;
   const taxOn = !!profile?.enabled;
-
-  const save = async (patch: Partial<TaxProfile>) => {
-    try { await onSave(patch).unwrap(); } catch (e) { toast.error(errText(e)); }
-  };
 
   return (
     <>
-      <div className="card">
-        <div className="section-head"><h3>{t("fop.whatWeTrack")}</h3></div>
-
-        <label className="fop-check">
-          <input
-            type="checkbox" role="switch" className="switch"
-            checked={business}
-            disabled={saving || sample}
-            onChange={(e) => save({ business: e.target.checked })}
-          />
-          <span>
-            <b>{t("fop.bizOn")}</b>
-            <small className="fop-note">{t("fop.bizOnNote")}</small>
-          </span>
-        </label>
-
-        <label className={`fop-check ${business ? "" : "is-off"}`}>
-          <input
-            type="checkbox" role="switch" className="switch"
-            checked={taxOn}
-            // Off, not hidden: somebody looking for the tax module must find it and see WHY it is
-            // unavailable, rather than conclude the app does not have one.
-            disabled={saving || sample || !business}
-            onChange={(e) => save({ enabled: e.target.checked })}
-          />
-          <span>
-            <b>{t("fop.taxOn")}</b>
-            <small className="fop-note">{business ? t("fop.taxOnNote") : t("fop.taxNeedsBiz")}</small>
-          </span>
-        </label>
-
-        {/* §TAX-BASE — the switch the whole module actually depends on lives on the ACCOUNT, and
-            it is on another page. Said here because an empty business screen with no explanation
-            reads as a broken feature, when the real cause is that no account was ever marked. */}
-        {business && (
-          <p className="fop-note">
-            {t("fop.markAccounts")} <Link to="/accounts">{t("nav.accounts")}</Link>
-          </p>
-        )}
-      </div>
+      <BizSwitches profile={profile} onSave={onSave} saving={saving} locked={sample} />
 
       {taxOn && <TaxProfileCard profile={profile} onSave={onSave} saving={saving} />}
 

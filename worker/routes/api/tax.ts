@@ -15,6 +15,7 @@ import * as taxRepo from "../../repo/tax.ts";
 import { taxBaseUah, RATE_SCALE } from "../../lib/finance/nbu.ts";
 import { currencyCode } from "../../../shared/currency.ts";
 import { st } from "../../lib/platform/i18n.ts";
+import { muteTaxNews } from "../../lib/messaging/mute.ts";
 import { businessOverview } from "../../lib/finance/business.ts";
 import { quarterSummary } from "../../lib/finance/tax-report.ts";
 import * as watch from "../../lib/finance/tax-watch.ts";
@@ -75,6 +76,7 @@ tax.put("/tax/profile", async (c) => {
     esv_exempt: body.esv_exempt ?? current.esv_exempt,
   };
   await writeProfile(c.env.DB, next);
+  if (!next.enabled) await muteTaxNews(c.env);
   // Rewrite the accruals immediately: changing the group changes what is owed for the OPEN period,
   // and leaving the old figure on screen until something else happened to refresh it would show a
   // liability the user has just told us is not theirs.

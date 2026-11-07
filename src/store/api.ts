@@ -339,7 +339,8 @@ export const api = createApi({
     getByCategory: b.query<CategorySpend[], { from: number; to: number }>({
       query: ({ from, to }) => `/analytics/by-category?from=${from}&to=${to}`,
     }),
-    getSafeToSpend: b.query<SafeToSpend, void>({ query: () => "/analytics/safe-to-spend", providesTags: ["Tx", "Summary", "Budget"] }),
+    // "Tax": the figure subtracts the ФОП reserve, so switching the module or marking a tax paid must refetch it.
+    getSafeToSpend: b.query<SafeToSpend, void>({ query: () => "/analytics/safe-to-spend", providesTags: ["Tx", "Summary", "Budget", "Tax"] }),
     getCapitalTrend: b.query<CapitalTrend, number | void>({ query: (months) => `/analytics/capital-trend?months=${months ?? 6}`, providesTags: ["Tx", "Summary"] }),
     // currency undefined → зведено в ₴; preset → сервер рахує межі за period_mode.
     getMerchant: b.query<MerchantAnalytics, string>({

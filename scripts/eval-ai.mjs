@@ -249,8 +249,11 @@ function score(c, got) {
   if (e.transfer != null) checks.push({ kind: "transfer", want: e.transfer ? 1 : 0, got: got.after?.is_transfer ?? 0 });
   // Phase-3 PROPOSALS (docs/JEV.md). Business is a probability; 0.5 is where a proposal would be
   // offered at all, so that is the line it is scored at.
-  if (e.importance != null) checks.push({ kind: "importance", want: e.importance, got: got.after?.ai_importance ?? null });
-  if (e.business != null) {
+  // Only Jev makes these proposals — the Haiku ladder never writes `ai_importance`/`ai_business`.
+  // Scoring them on a Haiku run reported 59 «misses» and a wall of baseline «regressions» that
+  // were the harness asking a judge for a field it has no way to produce (2026-11-07).
+  if (JUDGE === "jev" && e.importance != null) checks.push({ kind: "importance", want: e.importance, got: got.after?.ai_importance ?? null });
+  if (JUDGE === "jev" && e.business != null) {
     const p = got.after?.ai_business;
     checks.push({ kind: "business", want: e.business, got: p == null ? null : p >= 0.5 ? 1 : 0 });
   }

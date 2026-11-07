@@ -260,11 +260,11 @@ export async function recurringOneoffSplit(
       // §LANG-ARCH: the category name is resolved HERE, not by whoever renders it. Three of the
       // four callers are AI context builders, which had no post-map at all — so the model was
       // handed «Продукти» while the screen beside it said "Groceries", the exact split that made
-      // the tool filters miss and the prose come back in the wrong language.
+      // the tool filters miss and the prose come back in the wrong language. `< 0`: no §REFUND rows.
       `SELECT t.merchant AS merchant, ${catNameSql(await resolveLocale(env), EFF_CAT_NAME)} AS category,
               CAST(ROUND((-${EFF_AMOUNT}) * ${mult}) AS INTEGER) AS amount, t.time AS time
        FROM transactions t ${STATS_JOINS}
-       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND NOT ${recur}
+       WHERE t.time >= ? AND t.time <= ? AND ${SPEND_WHERE} AND NOT ${recur} AND ${EFF_AMOUNT} < 0
        ORDER BY amount DESC LIMIT 6`,
     ).bind(from, to).all<OneoffItem>(),
   ]);

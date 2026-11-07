@@ -39,6 +39,7 @@ import { FeedbackCard } from "../components/settings/FeedbackCard.tsx";
 import { PushCard } from "../components/settings/PushCard.tsx";
 import { FeedbackInbox } from "../components/settings/FeedbackInbox.tsx";
 import { JevUsageCard } from "../components/settings/JevUsageCard.tsx";
+import { ModulesCard } from "../components/settings/ModulesCard.tsx";
 
 // Settings used to be one flat stack of ten cards — every screen's worth of configuration on one
 // page, so finding anything meant scrolling and recognising it by shape. Tabs group it the way
@@ -109,6 +110,8 @@ export function Setup() {
           {/* §BASE-CUR: beside the language switch in the shell header, this is the other half of
               "how the app talks to me" — and the half an English-reading visitor notices first. */}
           <CurrencyCard />
+          {/* §FOP-GATE: owner-only module, so its switches are too. */}
+          {isOwner && <ModulesCard />}
           <SessionsCard isDemo={isDemo} />
           {/* For everyone, the demo included: a first-time visitor is exactly who notices what is
               unclear, and a form behind sign-up only hears from people past the broken part. */}

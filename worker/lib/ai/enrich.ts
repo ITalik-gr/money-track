@@ -147,7 +147,7 @@ export async function proposeTransferCategory(
 import { MODEL_SMART, MODEL_FAST } from "./models.ts";
 import { getState } from "../finance/repo.ts";
 import { relatedSubsHint, matchActiveSubscription } from "../finance/subscriptions.ts";
-import { consensusCategory, merchantHistory } from "./enrich-history.ts";
+import { consensusCategory, merchantHistory, refundCategoryFor, REFUND_INCOME_CAT } from "./enrich-history.ts";
 
 // Seeded id категорії «Перекази і зняття» (0002). Її діти теж рахуємо через COALESCE(parent_id).
 // One definition (2026-09-25): this was a second `= 13` beside the canon's in `stats.ts`.
@@ -205,6 +205,11 @@ async function writeAiAlias(
   ).bind(rawDesc, displayName, categoryId, isTransfer, Math.floor(Date.now() / 1000)).run();
 }
 
+/** §REFUND-FILE: a card merchant's refund goes back to its charges' category (see `refundCategoryFor`). */
+async function fileRefund(env: Env, tx: TxRow, cat: number | null): Promise<number | null> {
+  return cat === REFUND_INCOME_CAT ? (await refundCategoryFor(env, tx)) ?? cat : cat;
+}
+
 async function applyEnrichment(
   env: Env,
   tx: TxRow,
@@ -221,6 +226,7 @@ async function applyEnrichment(
   if (opts.consensus !== false) {
     const hit = await consensusCategory(env, tx);
     if (hit) {
+      hit.category_id = (await fileRefund(env, tx, hit.category_id)) ?? hit.category_id;
       const rawDesc = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description?.trim() : null;
       const name = hit.merchant ?? tx.merchant;
       // §R7: якщо назву зафіксовано вручну (name_locked) — не перетираємо мерчант, лише категорію.
@@ -228,7 +234,7 @@ async function applyEnrichment(
         "UPDATE transactions SET merchant = CASE WHEN name_locked >= 1 THEN merchant ELSE ? END, category_id = ?, ai_note = ?, ai_enriched = 1 WHERE id = ?",
       ).bind(name, hit.category_id, `category resolved from history (${hit.n}× the same merchant)`, tx.id).run();
       // Навчаємо alias на точному сирому описі — наступний ідентичний піде миттєво (не чіпаючи ручні).
-      if (tx.source === "mono" && rawDesc) await writeAiAlias(env, rawDesc, name, hit.category_id, 0);
+      if (tx.source === "mono" && rawDesc && hit.category_id !== REFUND_INCOME_CAT) await writeAiAlias(env, rawDesc, name, hit.category_id, 0);
       return;
     }
   }
@@ -274,7 +280,7 @@ async function applyEnrichment(
   const aiIds = [result.category_id, ...(result.tag_ids ?? [])];
   const ok = await existingCategoryIds(env, aiIds);
   const aiCategory = result.category_id != null && ok.has(result.category_id) ? result.category_id : null;
-  const finalCategory = sub?.category_id ?? aiCategory ?? null;
+  const finalCategory = await fileRefund(env, tx, sub?.category_id ?? aiCategory ?? null);
 
   // §R7: name_locked → зберігаємо ручну назву (AI уточнює лише категорію/переказ/note).
   await env.DB.prepare(
@@ -294,8 +300,11 @@ async function applyEnrichment(
   // Навчання: сирий опис від моно → людська назва + категорія + прапорець переказу.
   // Idempotent + §Хвіст: writeAiAlias не перетирає ручний alias і позначає запис source='ai'.
   const rawDesc = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description?.trim() : null;
-  if (tx.source === "mono" && rawDesc) {
-    await writeAiAlias(env, rawDesc, cleanName, aiCategory, isTransfer); // §FK-GUARD: лише перевірений id
+  // §REFUND-FILE: a refund verdict is not the merchant's identity — an alias saying «Cloudflare →
+  // Повернення» would file the NEXT Cloudflare charge under an income category at ingest.
+  if (tx.source === "mono" && rawDesc && finalCategory !== REFUND_INCOME_CAT) {
+    const aliasCat = tx.amount > 0 ? finalCategory : aiCategory; // §FK-GUARD: both are checked ids
+    await writeAiAlias(env, rawDesc, cleanName, aliasCat, isTransfer);
   }
 }
 

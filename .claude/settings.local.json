@@ -94,7 +94,9 @@
       "Bash(graphify update *)",
       "mcp__claude_ai_Money_Tracker__find_transactions",
       "Bash(caffeinate *)",
-      "mcp__claude_ai_Money_Tracker__get_finance_snapshot"
+      "mcp__claude_ai_Money_Tracker__get_finance_snapshot",
+      "mcp__claude_ai_Money_Tracker__list_categories",
+      "mcp__claude_ai_Money_Tracker__query_spend"
     ],
     "defaultMode": "bypassPermissions"
   },

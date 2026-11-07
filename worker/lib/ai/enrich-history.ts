@@ -65,3 +65,39 @@ export async function merchantHistory(env: Env, tx: TxRow): Promise<string | nul
   ).bind(tx.merchant, tx.id).first<{ name: string; n: number }>();
   return row ? `"${tx.merchant}" was previously classified as "${row.name}" (${row.n}×)` : null;
 }
+
+/** Seeded «Повернення» (0002) — an INCOME category, which is exactly why a shop refund must not land in it. */
+export const REFUND_INCOME_CAT = 17;
+
+/**
+ * §REFUND-FILE — where a merchant's refund belongs: the expense category its own charges sit in.
+ *
+ * Found in the owner's data on 2026-11-07: seven Cloudflare card-check reversals (+46 ₴) and a
+ * Rozetka return (+999 ₴) were filed by enrichment under «Повернення». That category is
+ * `is_income = 1`, so §REFUND's first sign (a receipt in an EXPENSE category) never fired and
+ * the description carried no «Скасування» prefix for the second: the app counted 1 321 ₴ of
+ * refunds as INCOME while the charges stayed full spending of «Софт» and «Дім». The prompt telling
+ * the model «a refund → Refund (17)» is a request; this is the check.
+ *
+ * Only a CARD merchant qualifies (an MCC other than P2P 4829): money a person sends back
+ * («Від: Кирило») has no purchase to undo and stays where the person or the model put it.
+ * Returns the merchant's most frequent expense category among its charges, or null.
+ */
+export async function refundCategoryFor(
+  env: Env,
+  tx: Pick<TxRow, "id" | "merchant" | "mcc" | "amount" | "raw_json">,
+): Promise<number | null> {
+  if (tx.amount <= 0 || tx.mcc == null || tx.mcc === 4829) return null;
+  const rawDesc = tx.raw_json ? (JSON.parse(tx.raw_json) as { description?: string }).description ?? null : null;
+  if (!tx.merchant && !rawDesc) return null;
+  const row = await env.DB.prepare(
+    `SELECT t.category_id AS cat, COUNT(*) AS n
+     FROM transactions t JOIN categories c ON c.id = t.category_id
+     WHERE t.id != ? AND t.amount < 0 AND t.is_transfer = 0 AND c.is_income = 0
+       AND COALESCE(c.parent_id, t.category_id) != ${TRANSFER_CAT}
+       AND ((? IS NOT NULL AND t.merchant = ?)
+            OR (? IS NOT NULL AND json_extract(t.raw_json, '$.description') = ?))
+     GROUP BY t.category_id ORDER BY n DESC LIMIT 1`,
+  ).bind(tx.id, tx.merchant, tx.merchant, rawDesc, rawDesc).first<{ cat: number; n: number }>();
+  return row?.cat ?? null;
+}

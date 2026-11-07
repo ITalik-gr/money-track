@@ -195,6 +195,11 @@ Used by every `/analytics` endpoint AND the AI context → **UI numbers = AI num
   receipt, outside bucket 13, and (an existing non-income effective category OR a bank
   «Скасування…» description). Passes `SPEND_WHERE`, not `INCOME_WHERE`; not in `SPEND_COUNT`.
   `INCOME_WHERE` excludes bucket 13. `categoryMonthlyLevels` floors at 0.
+- **§REFUND-FILE — a card merchant's refund is filed under its charges' category.** «Повернення»
+  (17) is an INCOME category, so a shop refund filed there escapes `IS_REFUND` and inflates income.
+  Enrichment re-files a receipt it put in 17 to the merchant's most frequent expense category
+  (`refundCategoryFor`, card MCCs only — not P2P 4829) and never writes a «→ 17» alias; migration
+  0059 repaired stored rows.
 - **§VOID-PAIR — a purchase and its cancellation are ONE feed row** (presentation only):
   `listFeed` returns `voided_by` / `voids`. Pair = same account, exactly opposite amount,
   cancellation 0–30 days later, refund prefix (`refundDescOn`), text ending with the merchant
