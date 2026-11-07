@@ -11,7 +11,7 @@
 // unticked.
 import { ErrorNote } from "../ui/ErrorNote.tsx";
 import { useState } from "react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 import { useT } from "../../i18n/index.ts";
 import { dateFmt } from "../../i18n/locale.ts";
 import { Icon } from "../ui/Icon.tsx";

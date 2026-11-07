@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams } from "react-router-dom";
 import { takeSharedReceipt } from "../lib/push.ts";
 import { getLocale, localeTag } from "../i18n/locale.ts";
 import { useDispatch } from "react-redux";

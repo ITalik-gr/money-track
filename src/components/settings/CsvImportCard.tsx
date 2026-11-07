@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useSearchParams } from "react-router-dom";
 import { getLocale, localeTag } from "../../i18n/locale.ts";
 import { useT, type TranslationKey } from "../../i18n/index.ts";
 import { Icon } from "../ui/Icon.tsx";

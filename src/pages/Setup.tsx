@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
-import { useSearchParams } from "react-router";
+import { useSearchParams } from "react-router-dom";
 import { useT } from "../i18n/index.ts";
 import { toast } from "../lib/toast.ts";
 import { errText } from "../lib/errors.ts";

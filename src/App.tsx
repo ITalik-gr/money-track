@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { Layout } from "./components/layout/Layout.tsx";
+import { RouteError } from "./components/layout/RouteError.tsx";
 import { telegramInitData } from "./lib/telegram.ts";
 import { lazy, Suspense, useState, type ComponentType } from "react";
 import { useGetMeQuery } from "./store/api.ts";
@@ -67,43 +68,49 @@ const router = createBrowserRouter([
   {
     path: "/",
     element: <Layout />,
+    // A crash in the shell itself has nowhere else to land.
+    errorElement: <RouteError />,
     children: [
-      { index: true, element: <Dashboard /> },
-      { path: "tx", element: <Transactions /> },
-      { path: "tx/:id", element: <TxDetail /> },
-      { path: "accounts", element: <Accounts /> },
-      { path: "stats", element: <Stats /> },
-      { path: "merchant/:name", element: <Merchant /> },
-      { path: "reports", element: <Reports /> },
-      // The year in one screen — read-only, assembled from endpoints that already existed.
-      { path: "wrapped", element: <Wrapped /> },
-      { path: "reports/:id", element: <ReportDetail /> },
-      { path: "advisor", element: <Advisor /> },
-      { path: "chat", element: <Chat /> },
-      { path: "add", element: <Add /> },
-      { path: "plan", element: <Plan /> },
-      // §0.1 — the business is its own organism, so it is its own page, not a card on /plan.
-      // §FOP-GATE — and while the module is unfinished, only the owner has that page: a typed or
-      // bookmarked path lands on the dashboard rather than on a screen whose every request 404s.
-      { path: "business", element: <BusinessRoute /> },
-      // §BIZ-SPLIT — the page was `/fop` until 2026-09-21, when the business became the page and
-      // the tax became a feature inside it. Kept as a redirect rather than deleted: the owner's
-      // own setup notes link to it, and a dead bookmark on the one page he was asked to check is
-      // a bug report about the wrong thing.
-      { path: "fop", element: <Navigate to="/business" replace /> },
-      { path: "categories", element: <Categories /> },
-      // §CATEGORY-PAGE — the permalink. Below the list route, and a distinct path, so neither
-      // shadows the other however the router is reordered later.
-      { path: "categories/:id", element: <Category /> },
-      { path: "goals", element: <Goals /> },
-      { path: "subs", element: <Subscriptions /> },
-      // §SUB-PAGE — one subscription, the permalink. Same shape as `categories/:id`: below the
-      // list route and a distinct path, so neither can shadow the other.
-      { path: "subs/:id", element: <Subscription /> },
-      { path: "events", element: <Events /> },
-      { path: "events/:id", element: <EventDetail /> },
-      { path: "notifications", element: <Notifications /> },
-      { path: "setup", element: <Setup /> },
+      // Pathless: a page that throws is replaced by the error screen INSIDE the layout, so the
+      // navigation stays on screen and the way out is one click.
+      { errorElement: <RouteError />, children: [
+        { index: true, element: <Dashboard /> },
+        { path: "tx", element: <Transactions /> },
+        { path: "tx/:id", element: <TxDetail /> },
+        { path: "accounts", element: <Accounts /> },
+        { path: "stats", element: <Stats /> },
+        { path: "merchant/:name", element: <Merchant /> },
+        { path: "reports", element: <Reports /> },
+        // The year in one screen — read-only, assembled from endpoints that already existed.
+        { path: "wrapped", element: <Wrapped /> },
+        { path: "reports/:id", element: <ReportDetail /> },
+        { path: "advisor", element: <Advisor /> },
+        { path: "chat", element: <Chat /> },
+        { path: "add", element: <Add /> },
+        { path: "plan", element: <Plan /> },
+        // §0.1 — the business is its own organism, so it is its own page, not a card on /plan.
+        // §FOP-GATE — and while the module is unfinished, only the owner has that page: a typed or
+        // bookmarked path lands on the dashboard rather than on a screen whose every request 404s.
+        { path: "business", element: <BusinessRoute /> },
+        // §BIZ-SPLIT — the page was `/fop` until 2026-09-21, when the business became the page and
+        // the tax became a feature inside it. Kept as a redirect rather than deleted: the owner's
+        // own setup notes link to it, and a dead bookmark on the one page he was asked to check is
+        // a bug report about the wrong thing.
+        { path: "fop", element: <Navigate to="/business" replace /> },
+        { path: "categories", element: <Categories /> },
+        // §CATEGORY-PAGE — the permalink. Below the list route, and a distinct path, so neither
+        // shadows the other however the router is reordered later.
+        { path: "categories/:id", element: <Category /> },
+        { path: "goals", element: <Goals /> },
+        { path: "subs", element: <Subscriptions /> },
+        // §SUB-PAGE — one subscription, the permalink. Same shape as `categories/:id`: below the
+        // list route and a distinct path, so neither can shadow the other.
+        { path: "subs/:id", element: <Subscription /> },
+        { path: "events", element: <Events /> },
+        { path: "events/:id", element: <EventDetail /> },
+        { path: "notifications", element: <Notifications /> },
+        { path: "setup", element: <Setup /> },
+      ] },
     ],
   },
 ]);

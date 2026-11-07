@@ -5,7 +5,7 @@
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
 > In production (`https://money.italik.dev`). Migrations: `finance` to **0059**, `directory` to
-> **0012**. Lints **C1–C23**.
+> **0012**. Lints **C1–C24**.
 
 ## Documents
 
@@ -106,7 +106,7 @@ only — use `orLikeClause`/`likeVariants` from `lib/platform/text.ts`) · C17 a
 §TAG cited in code is defined in CLAUDE.md / docs / DESIGN.md (48 legacy ids, shrinking) · C19 no
 export that nothing uses (a short KEEP list with reasons) · C20 no CSS declaration always overridden
 by a later rule for the same selector · C21 a clickable div/span/li has a role (keyboard-reachable) · C22 row separators with a hover fill only from `.ilist` (§ROW-LIST) · C23 theme files in step, no
-colour literal / theme-scoped rule outside them, stored colours through `catColor()` (§THEME). Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
+colour literal / theme-scoped rule outside them, stored colours through `catColor()` (§THEME). C24 React Router only from `react-router-dom` (a bare `react-router` import can resolve to a second copy — a second router context). Plus: a query using canonical helpers must have `STATS_JOINS`; i18n parity;
 `gen-migrations --check` (regenerate the DO embed after touching `migrations/`). Re-record a golden
 (`UPDATE_GOLDEN=1`) only for a deliberate, explained change.
 
