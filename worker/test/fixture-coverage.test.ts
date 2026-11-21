@@ -33,6 +33,7 @@ const EMPTY_OK: Record<string, string> = {
   // Conversations: prose, no money fields at all.
   chats: "§CHAT-SYNC conversations; writes.test.ts covers them",
   chat_messages: "same",
+  agent_memory: "§MEMORY has its own lifecycle tests in memory.test.ts",
   // Bookkeeping the migration runner owns.
   migrations: "the migration ledger itself",
   _cf_KV: "Durable Object internals, not ours",

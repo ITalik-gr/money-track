@@ -5,7 +5,7 @@ import {
   baseMult, } from "../../lib/finance/stats.ts";
 import * as eventsRepo from "../../repo/events.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, idParam, normChatMessages } from "./_shared.ts";
+import { apiRoutes, idParam, normChatMessages, learnAfter } from "./_shared.ts";
 import type { EventWithAgg } from "../../../shared/api/platform.ts";
 
 export const events = apiRoutes();
@@ -141,7 +141,9 @@ events.post("/events/:id/chat", async (c) => {
   if (id == null) return c.json({ error: st(c.get("locale"), "errBadId") }, 400);
   const { chatAboutGroup } = await import("../../lib/ai/advisor.ts");
   try {
-    return c.json(await chatAboutGroup(c.env, id, msgs));
+    const out = await chatAboutGroup(c.env, id, msgs);
+    learnAfter(c, msgs, out.reply);
+    return c.json(out);
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }

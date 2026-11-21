@@ -288,7 +288,6 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     }))
     .sort((a, b) => b.monthly_uah - a.monthly_uah)
     .slice(0, 20);
-  // `levels` (канонічний місячний рівень) уже завантажено вище в Promise.all — джерело avg_month і burn.
   const catAvgMonth = (id: number, spent90: number) => Math.round((levels.get(id)?.level ?? spent90 / 3) / 100);
   // §2/§5: найбільші операції з id — щоб AI цитував конкретику токеном [tx:ID].
   const citable = await notableTransactions(env, 90, 12);
@@ -390,6 +389,7 @@ export async function collectFinanceSnapshot(env: Env, ratesIn?: Rates): Promise
     monthly_trend: (trend.results ?? []).map((t) => ({ month: t.m, spend_uah: Math.round(t.spend / 100), income_uah: Math.round(t.income / 100) })),
     budgets: budgets.filter((b) => b.limit_uah > 0 || b.spent_uah > 0), // a 0 envelope with nothing spent says nothing (7 of 17 rows, 2026-10-27)
     ...(await (await import("../finance/tax.ts")).taxContextFor(env, now)), // §TAX-RESERVE · §FOP-GATE
+    ...(await (await import("./context-extra.ts")).extraContext(env, now, rates)), // §CTX-EXTRA · §MEMORY
   };
   if (facts.length) {
     context.facts = facts;

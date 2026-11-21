@@ -8,6 +8,7 @@
     "rows": {
       "account_balance_history": 0,
       "accounts": 5,
+      "agent_memory": 0,
       "ai_changes": 0,
       "ai_jobs": 0,
       "ai_reports": 1,

@@ -1,30 +1,24 @@
 import type { ReactNode } from "react";
 import { numFmt } from "../i18n/locale.ts";
+import { splitAmounts } from "./amount-spans.ts";
 
-// AI пише суми "сирими" цифрами без розділювачів (18763₴) — перегруповуємо за тим самим
-// правилом, що й formatMinor, інакше цифри в репортах/пораднику виглядають інакше, ніж скрізь.
-function reformatNumber(raw: string): string {
-  const m = raw.trim().match(/^([\d\s]+)(?:[.,](\d{1,2}))?$/);
+// The model writes raw digits (18763₴); regroup them by the same rule as `formatMinor`, or figures
+// in reports look different from everywhere else. Fraction length is kept: 0.0345 BTC is not 0.03.
+function reformatNumber(input: string): string {
+  const grouped = /^[1-9]\d{0,2}(?:,\d{3})+\.\d+$|^[1-9]\d{0,2}(?:,\d{3}){2,}(?:\.\d+)?$/.test(input);
+  const raw = grouped ? input.replace(/,/g, "") : input;
+  const m = raw.trim().match(/^([\d\s]+)(?:[.,](\d{1,8}))?$/);
   if (!m) return raw;
   const intDigits = m[1].replace(/\s/g, "");
   const frac = m[2];
-  const n = Number(intDigits) + (frac ? Number(frac) / 10 ** frac.length : 0);
+  const n = Number(`${intDigits}.${frac ?? 0}`);
   if (!Number.isFinite(n)) return raw;
-  return numFmt({ minimumFractionDigits: frac ? 2 : 0, maximumFractionDigits: frac ? 2 : 0 }).format(n);
+  const digits = frac?.length ?? 0;
+  return numFmt({ minimumFractionDigits: digits, maximumFractionDigits: digits }).format(n);
 }
 
-// Виділяє суми та відсотки (123 ₴, 45%, $12) у тексті AI (DESIGN.md §7 F6).
+// Highlights sums, ranges and percentages in AI text (DESIGN.md §7 F6).
 export function highlightAmounts(text: string): ReactNode[] {
-  const re = /(\d[\d\s]*(?:[.,]\d{1,2})?)(\s?(?:₴|грн|%|\$|€|EUR|USD|UAH))/gi;
-  const out: ReactNode[] = [];
-  let last = 0;
-  let i = 0;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    if (m.index > last) out.push(text.slice(last, m.index));
-    out.push(<span className="hl-amt" key={i++}>{reformatNumber(m[1])}{m[2]}</span>);
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) out.push(text.slice(last));
-  return out;
+  return splitAmounts(text, reformatNumber).map((s, i) =>
+    s.amount ? <span className="hl-amt" key={i}>{s.text}</span> : s.text);
 }

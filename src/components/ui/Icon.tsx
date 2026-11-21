@@ -140,6 +140,13 @@ const paths: Record<string, React.ReactNode> = {
   arrowRight: (<path d="M5 12h14M13 6l6 6-6 6" />),
   check: (<path d="M5 12l5 5L20 6" />),
   plus: (<path d="M12 5v14M5 12h14" />),
+  image: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <circle cx="8.5" cy="10" r="1.5" />
+      <path d="M21 16l-5-5L6 19" />
+    </>
+  ),
   menu: (<path d="M4 6h16M4 12h16M4 18h16" />),
   copy: (
     <>

@@ -26,6 +26,7 @@ export * from "./ai.ts";
 export * from "./analytics.ts";
 export * from "./backups.ts";
 export * from "./chats.ts";
+export * from "./memory.ts";
 export * from "./feedback.ts";
 export * from "./insights.ts";
 export * from "./planning.ts";

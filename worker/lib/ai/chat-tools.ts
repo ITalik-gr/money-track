@@ -21,6 +21,7 @@ import { getRates } from "../finance/money.ts";
 import { resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { addFact } from "./facts.ts";
+import { CRYPTO_PRICES_TOOL, cryptoPrices } from "./market-tools.ts";
 import {
   STATS_JOINS, EFF_CAT_ID, EFF_CAT_NAME, SPEND_WHERE, INCOME_WHERE, valueMode, amountSum,
 } from "../finance/stats.ts";
@@ -132,6 +133,21 @@ export function financeChatTools(): ChatTool[] {
         required: ["text"],
       },
     },
+    {
+      name: "compare_spend",
+      description: "Compare spending or income between two periods, grouped by category or merchant, with the change per group. Use it for «why did I spend more», month-over-month and year-over-year questions, and as the data for a comparison chart.",
+      input_schema: {
+        type: "object",
+        properties: {
+          a_from: { ...dateProp, description: "Baseline period start" }, a_to: { ...dateProp, description: "Baseline period end" },
+          b_from: { ...dateProp, description: "Compared period start" }, b_to: { ...dateProp, description: "Compared period end" },
+          flow: { type: "string", enum: ["spend", "income"], description: "Defaults to spend." },
+          group_by: { type: "string", enum: ["category", "merchant"], description: "Defaults to category." },
+        },
+        required: ["a_from", "a_to", "b_from", "b_to"],
+      },
+    },
+    CRYPTO_PRICES_TOOL,
   ];
   return tools.map((t) => ({ ...t, input_schema: strict(t.input_schema) }));
 }
@@ -153,6 +169,20 @@ function parseToolDate(s: unknown, endOfDay = false): number | null {
 const isoDay = (unix: number) => localYmd(unix);
 
 export async function runFinanceTool(env: Env, name: string, input: Record<string, unknown>): Promise<unknown> {
+  if (name === "get_crypto_prices") return cryptoPrices(input);
+  if (name === "compare_spend") {
+    // Two runs of `query_spend`, so a comparison can never disagree with the totals it compares.
+    const group_by = input.group_by === "merchant" ? "merchant" : "category";
+    const run = (from_date: unknown, to_date: unknown) => runFinanceTool(env, "query_spend", { from_date, to_date, flow: input.flow, group_by }) as Promise<{ error?: string; currency?: string; groups?: { label: string; amount_uah: number }[] }>;
+    const [a, b] = await Promise.all([run(input.a_from, input.a_to), run(input.b_from, input.b_to)]);
+    if (a.error || b.error) return { error: a.error ?? b.error };
+    const before = new Map((a.groups ?? []).map((g) => [g.label, g.amount_uah]));
+    const after = new Map((b.groups ?? []).map((g) => [g.label, g.amount_uah]));
+    const groups = [...new Set([...before.keys(), ...after.keys()])]
+      .map((label) => ({ label, a_uah: before.get(label) ?? 0, b_uah: after.get(label) ?? 0, delta_uah: (after.get(label) ?? 0) - (before.get(label) ?? 0) }))
+      .sort((x, y) => Math.abs(y.delta_uah) - Math.abs(x.delta_uah));
+    return { currency: a.currency, note: "Each period lists its top 24 groups; a group outside them reads as 0.", groups };
+  }
   const rates = await getRates(env);
   // §BASE-CUR: `getRates` answers in the READER's base, so `valueMode(rates, null)` rolls up into
   // that base — not into hryvnia. The comment here used to say «завжди ₴», which was true before

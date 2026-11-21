@@ -231,6 +231,13 @@ const S = {
     uk: "TypeSafe не прийняв цей ключ — перевір, що скопійовано повністю.",
     en: "TypeSafe refused this key — check that it was copied in full.",
   },
+  errMemoryDemo: { uk: "У демо пам'ять недоступна.", en: "Memory is not available in the demo." },
+  errMemoryText: { uk: "Такий запис не можна зберегти. Потрібен короткий текст без номерів карток і паролів.", en: "This cannot be saved. Use a short text without card numbers or passwords." },
+  errMemoryTopic: { uk: "На цю тему вже є актуальний запис.", en: "There is already a current note on this topic." },
+  errChatImageDemo: { uk: "У демо не можна додавати зображення.", en: "Images are not available in the demo." },
+  errChatImageSize: { uk: "Зображення завелике: максимум 5 МБ.", en: "The image is too large: 5 MB at most." },
+  errChatImageType: { uk: "Підтримуються JPEG, PNG, WebP і GIF.", en: "JPEG, PNG, WebP and GIF are supported." },
+  errChatImageQuota: { uk: "Денний ліміт зображень вичерпано.", en: "The daily image limit is used up." },
   errAiKeyMissing: {
     uk: "Щоб працювали AI-функції, додай свій ключ Anthropic у Налаштуваннях → «AI».",
     en: "AI features need your own Anthropic key — add it in Settings → “AI”.",

@@ -11,7 +11,7 @@ import * as categoriesRepo from "../../repo/categories.ts";
 import * as txRepo from "../../repo/transactions.ts";
 import { st } from "../../lib/platform/i18n.ts";
 import { explainCategory, similarTo } from "../../services/tx-insight.ts";
-import { apiRoutes, normChatMessages } from "./_shared.ts";
+import { apiRoutes, normChatMessages, learnAfter } from "./_shared.ts";
 import type {
   TxRow, TxDetail, TxSplit, FrequentTx, Reimbursement, ReimbursementUsage,
 } from "../../../shared/api/transactions.ts";
@@ -353,6 +353,7 @@ transactions.post("/transactions/:id/chat", async (c) => {
   const id = c.req.param("id");
   try {
     const out = await chatAboutTx(c.env, id, msgs);
+    learnAfter(c, msgs, out.reply);
     /**
      * §TX-CHAT — the exchange is RECORDED, not just returned.
      *

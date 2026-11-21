@@ -9,7 +9,13 @@
 // it is what stops a 4 MB string, or one id per keystroke, from becoming a row.
 import { apiRoutes } from "./_shared.ts";
 import * as repo from "../../repo/chats.ts";
-import type { ChatDetail, ChatSummary } from "../../../shared/api/chats.ts";
+import type { ChatDetail, ChatImageUpload, ChatSummary } from "../../../shared/api/chats.ts";
+import {
+  CHAT_IMAGE_ID, MAX_CHAT_IMAGE_BYTES, deleteChatImages, readChatImage, sniffImageType, storeChatImage,
+} from "../../lib/ai/chat-images.ts";
+import { isDemoEnv } from "../../lib/platform/demo.ts";
+import { countReceiptUpload } from "../../lib/platform/quota.ts";
+import { st } from "../../lib/platform/i18n.ts";
 
 export const chats = apiRoutes();
 
@@ -62,6 +68,34 @@ chats.post("/chats/import", async (c) => {
   return c.json({ imported });
 });
 
+/**
+ * §CHAT-IMG. Literal paths, above `/chats/:id`. A demo sandbox has no upload: its AI budget is
+ * shared, and an anonymous visitor must not be able to put files into the bucket.
+ */
+chats.post("/chats/images", async (c) => {
+  if (isDemoEnv(c.env)) return c.json({ error: st(c.get("locale"), "errChatImageDemo") }, 403);
+  const bytes = new Uint8Array(await c.req.arrayBuffer());
+  if (!bytes.length || bytes.length > MAX_CHAT_IMAGE_BYTES) return c.json({ error: st(c.get("locale"), "errChatImageSize") }, 413);
+  const type = sniffImageType(bytes);
+  if (!type) return c.json({ error: st(c.get("locale"), "errChatImageType") }, 415);
+  if (!(await countReceiptUpload(c.env)).ok) return c.json({ error: st(c.get("locale"), "errChatImageQuota") }, 429);
+  return c.json({ id: await storeChatImage(c.env, bytes, type) } satisfies ChatImageUpload);
+});
+
+chats.get("/chats/images/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!CHAT_IMAGE_ID.test(id)) return c.json({ error: "bad id" }, 400);
+  const obj = await readChatImage(c.env, id);
+  if (!obj) return c.json({ error: "not found" }, 404);
+  return new Response(obj.body, {
+    headers: {
+      "content-type": obj.httpMetadata?.contentType ?? "image/jpeg",
+      "cache-control": "private, max-age=86400",
+      "x-content-type-options": "nosniff",
+    },
+  });
+});
+
 chats.get("/chats/:id", async (c) => {
   const id = c.req.param("id");
   if (!ID_RE.test(id)) return c.json({ error: "bad id" }, 400);
@@ -91,6 +125,8 @@ chats.patch("/chats/:id", async (c) => {
 chats.delete("/chats/:id", async (c) => {
   const id = c.req.param("id");
   if (!ID_RE.test(id)) return c.json({ error: "bad id" }, 400);
+  // Before the rows go: the markers in them are the only record of which pictures to erase.
+  await deleteChatImages(c.env, await repo.messages(c.env.DB, id));
   await repo.remove(c.env.DB, id);
   return c.json({ ok: true });
 });

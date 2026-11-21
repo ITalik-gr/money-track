@@ -19,6 +19,11 @@ export interface ChatSummary {
   message_count: number;
 }
 
+/** §CHAT-IMG — a stored picture; a turn refers to it as `[img:<id>]`. */
+export interface ChatImageUpload {
+  id: string;
+}
+
 /** One conversation, opened. */
 export interface ChatDetail extends ChatSummary {
   messages: ChatTurn[];

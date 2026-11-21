@@ -4,7 +4,8 @@
 // and the adviser must not build their own context, or they answer with different figures about
 // the same money. Confirmed facts adjust the canon inside `categoryMonthlyLevels`, never here.
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, idParam, normChatMessages } from "./_shared.ts";
+import { ADVISOR_CHAT_TURNS, apiRoutes, idParam, learnAfter, normChatMessages } from "./_shared.ts";
+import { isDemoEnv } from "../../lib/platform/demo.ts";
 import type { Insight, AdviceHistoryItem, Fact, Advice } from "../../../shared/api/ai.ts";
 
 export const advisor = apiRoutes();
@@ -116,12 +117,14 @@ advisor.post("/advisor/generate", async (c) => {
 advisor.post("/advisor/chat", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const body = await c.req.json<{ messages?: { role: string; content: string }[]; attachedTxIds?: string[] }>();
-  const msgs = normChatMessages(body.messages);
+  const msgs = normChatMessages(body.messages, isDemoEnv(c.env) ? undefined : ADVISOR_CHAT_TURNS);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
   const attached = Array.isArray(body.attachedTxIds) ? body.attachedTxIds.filter((x) => typeof x === "string").slice(0, 10) : [];
   const { chatReply } = await import("../../lib/ai/advisor.ts");
   try {
-    return c.json(await chatReply(c.env, msgs, attached));
+    const out = await chatReply(c.env, msgs, attached);
+    learnAfter(c, msgs, out.reply);
+    return c.json(out);
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }
@@ -145,7 +148,7 @@ advisor.post("/advisor/chat", async (c) => {
 advisor.post("/advisor/chat/stream", async (c) => {
   if (!c.env.ANTHROPIC_API_KEY) return c.json({ error: st(c.get("locale"), "errAiKeyMissing"), code: "no_ai_key" }, 400);
   const body = await c.req.json<{ messages?: { role: string; content: string }[]; attachedTxIds?: string[]; chat_id?: string }>();
-  const msgs = normChatMessages(body.messages);
+  const msgs = normChatMessages(body.messages, isDemoEnv(c.env) ? undefined : ADVISOR_CHAT_TURNS);
   if (!msgs.length) return c.json({ error: "messages required" }, 400);
   const attached = Array.isArray(body.attachedTxIds) ? body.attachedTxIds.filter((x) => typeof x === "string").slice(0, 10) : [];
   // Which conversation to file the answer under (§CHAT-SYNC). Optional: the Telegram bot and the
@@ -160,7 +163,8 @@ advisor.post("/advisor/chat/stream", async (c) => {
   c.executionCtx.waitUntil((async () => {
     try {
       const { chatReply } = await import("../../lib/ai/advisor.ts");
-      const { reply } = await chatReply(c.env, msgs, attached, (t) => { void send({ delta: t }); });
+      const { hydrateChatImages } = await import("../../lib/ai/chat-images.ts");
+      const { reply } = await chatReply(c.env, await hydrateChatImages(c.env, msgs), attached, (t) => { void send({ delta: t }); });
       /**
        * The answer is filed by the SERVER, before the client is told it is finished.
        *
@@ -179,6 +183,7 @@ advisor.post("/advisor/chat/stream", async (c) => {
       // dropped a chunk, must not be left holding a half-sentence it cannot tell from a finished
       // one. The client replaces what it accumulated with this.
       await send({ done: true, reply });
+      learnAfter(c, msgs, reply);
     } catch (e) {
       await send({ error: e instanceof Error ? e.message : String(e) });
     } finally {

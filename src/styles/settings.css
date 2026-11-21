@@ -640,3 +640,23 @@
 }
 .fb-note > svg { color: var(--muted); flex: none; margin-top: 2px; }
 .fb-note b { color: var(--ink); }
+
+/* §MEMORY: the assistant's notes in Settings. Row separators come from `.ilist`. */
+.mem-list { margin: 0 -6px; padding: 0; }
+.mem-row { display: flex; align-items: flex-start; gap: 10px; padding: 9px 8px; border-radius: var(--radius-sm); }
+.mem-main { flex: 1; min-width: 0; }
+.mem-text { font-size: 13.5px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+.mem-edit { width: 100%; }
+.mem-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 3px; font-size: 12px; color: var(--muted); }
+.mem-old { color: var(--warn); }
+.mem-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.mem-icon { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--muted); font-size: 16px; cursor: pointer; }
+.mem-icon:hover { background: var(--surface-2); color: var(--ink); }
+.mem-icon.on { background: var(--accent-soft); color: var(--accent); }
+.mem-empty { font-size: 13px; color: var(--muted); }
+.mem-add { display: grid; grid-template-columns: 1fr 150px auto; gap: 8px; margin-top: 10px; }
+.mem-toggle { align-self: flex-start; margin-top: 8px; }
+@media (max-width: 640px) {
+  .mem-row { flex-direction: column; }
+  .mem-add { grid-template-columns: 1fr; }
+}

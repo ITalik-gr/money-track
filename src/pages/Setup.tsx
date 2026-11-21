@@ -1,3 +1,4 @@
+import { MemoryCard } from "../components/setup/MemoryCard.tsx";
 import { useEffect, useState, type ReactNode } from "react";
 import { ErrorNote } from "../components/ui/ErrorNote.tsx";
 import { useSearchParams } from "react-router-dom";
@@ -107,6 +108,7 @@ export function Setup() {
       {tab === "account" && (
         <SetBlock>
           <ProfileCard />
+          <MemoryCard isDemo={isDemo} />
           {/* §BASE-CUR: beside the language switch in the shell header, this is the other half of
               "how the app talks to me" — and the half an English-reading visitor notices first. */}
           <CurrencyCard />

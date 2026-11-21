@@ -103,6 +103,10 @@ for one-shot calls only, agentic chat stays on Anthropic. The seam is `worker/li
 
 ### Other
 - Lazy-enrich (option B) — on agreement.
+- §CHAT-IMG: auto-pruned chats (`pruneChats`, the 200-message cap) leave their R2 images behind;
+  only an explicit chat delete erases them.
+- Crypto portfolio sync: CoinMarketCap showed no portfolio API; candidates are a public address via
+  Zerion or read-only exchange keys.
 
 ## 🎨 Design — future (`DESIGN.md §7`)
 - Statistics: redesign of Overview + Categories/Trends — needs a live screenshot.

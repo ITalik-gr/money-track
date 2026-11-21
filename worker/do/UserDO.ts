@@ -236,6 +236,10 @@ export class UserDO extends DurableObject<Env> {
       });
       // §A6 retention: a finished job row is a receipt, not history. Kept a week so a toast
       // missed over a weekend still has something to show.
+      await step("memory_sweep", async () => {
+        const { sweepMemory } = await import("../lib/ai/memory.ts");
+        await sweepMemory(env, now);
+      });
       await step("prune_jobs", async () => {
         const { pruneJobs } = await import("../lib/ai/jobs.ts");
         await pruneJobs(env);

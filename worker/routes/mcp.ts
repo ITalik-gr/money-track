@@ -154,7 +154,9 @@ async function snapshot(env: Env): Promise<unknown> {
   const snap = await collectFinanceSnapshot(env);
   const { currencyCode } = await import("../../shared/currency.ts");
   const { resolveBaseCurrency } = await import("../lib/finance/money.ts");
-  return { currency: currencyCode(await resolveBaseCurrency(env)), as_of: snap.now, ...snap.context };
+  // §MEMORY stays in the app: this credential sits in another tool's config and was granted the ledger.
+  const { memory: _memory, memory_note: _note, ...context } = snap.context;
+  return { currency: currencyCode(await resolveBaseCurrency(env)), as_of: snap.now, ...context };
 }
 
 interface RpcRequest { jsonrpc?: string; id?: unknown; method?: string; params?: Record<string, unknown> }

@@ -62,9 +62,10 @@ export interface AnthropicContentBlock {
 // Anthropic, що й знімок фінансів — не третій стороні.
 const WEB_SEARCH_DOMAINS = ["bank.gov.ua", "minfin.com.ua", "index.minfin.com.ua", "tax.gov.ua"];
 // Sonnet/Opus → динамічна фільтрація (_20260209); Haiku — лише базовий (_20250305).
-export function webSearchTool(model: string, maxUses = 4): Record<string, unknown> {
+export function webSearchTool(model: string, maxUses = 4, open = false): Record<string, unknown> {
   const type = model === MODEL_FAST ? "web_search_20250305" : "web_search_20260209";
-  return { type, name: "web_search", max_uses: maxUses, allowed_domains: WEB_SEARCH_DOMAINS };
+  // `open` (§CHAT-NEWS): the chat answers about news too, which no finance allowlist can cover.
+  return { type, name: "web_search", max_uses: maxUses, ...(open ? { user_location: { type: "approximate", city: "Kyiv", country: "UA", timezone: "Europe/Kyiv" } } : { allowed_domains: WEB_SEARCH_DOMAINS }) };
 }
 
 
@@ -228,7 +229,7 @@ export async function callHaiku(
 // Витягнути перший збалансований {...} або [...] блок, толеруючи прозу до/після
 // та рядки з екранованими лапками. Haiku інколи додає текст або обриває огорожу.
 // Багатоходовий діалог (чат-порадник): приймає повну історію повідомлень.
-export interface ChatMsg { role: "user" | "assistant"; content: string }
+export interface ChatMsg { role: "user" | "assistant"; content: string; blocks?: unknown[] } // blocks: §CHAT-IMG
 
 export async function callHaikuMessages(
   env: Env,
@@ -334,14 +335,15 @@ export async function runToolConversation(
   onText?: OnText,
 ): Promise<{ text: string; usage: AnthropicUsage }> {
   const reqTools = [...tools, ...serverTools];
-  const messages: RawMsg[] = initial.map((m) => ({ role: m.role, content: m.content }));
+  const messages: RawMsg[] = initial.map((m) => ({ role: m.role, content: m.blocks ?? m.content }));
   const total: AnthropicUsage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 };
   const add = (u: AnthropicUsage) => {
     total.input_tokens += u.input_tokens; total.output_tokens += u.output_tokens;
     total.cache_read_input_tokens = (total.cache_read_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
     total.cache_creation_input_tokens = (total.cache_creation_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
   };
-  const textOf = (content: RawBlock[]) => content.filter((b) => b.type === "text").map((b) => b.text).join("");
+  // Only what follows the last server-tool block: earlier text is progress narration, once saved glued to the answer.
+  const textOf = (content: RawBlock[]) => { const all = (c: RawBlock[]) => c.filter((b) => b.type === "text").map((b) => b.text).join(""); let i = content.length; while (i > 0 && (content[i - 1].type === "text" || content[i - 1].type === "thinking")) i--; return all(content.slice(i)) || all(content); };
   // Text already produced by turns that were cut off at `max_tokens` and asked to continue.
   // The reader has seen it (it streamed), so the final answer must carry it too — otherwise the
   // `{done, reply}` frame would replace a complete answer on screen with only its last third.

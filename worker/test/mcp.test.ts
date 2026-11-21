@@ -125,3 +125,11 @@ test("the snapshot answers in ONE unit, and names the currency as data", async (
     assert.ok(typeof snap.period_note === "string");
   } finally { restore(); }
 });
+
+test("§MEMORY stays in the app: the MCP snapshot does not carry it", async () => {
+  const { applyMemoryOps } = await import("../lib/ai/memory.ts");
+  const e = env();
+  await applyMemoryOps(e as never, [{ op: "add", topic: "private", text: "A private note for the app only", kind: "context", horizon: "lasting", importance: 3 }], Math.floor(Date.now() / 1000));
+  const { body } = await rpc(e, "tools/call", { name: "get_finance_snapshot", arguments: {} });
+  assert.ok(!JSON.stringify(body).includes("A private note"));
+});

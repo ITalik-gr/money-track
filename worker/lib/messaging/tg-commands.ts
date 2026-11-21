@@ -100,6 +100,7 @@ export async function handleAsk(env: Env, chatId: number, question: string): Pro
     await sendMessage(token, chatId, escapeHtml(reply));
     // Зберігаємо останні ~8 ходів діалогу на цей chat_id.
     await setState(env.DB, chatHistKey(chatId), JSON.stringify([...messages, { role: "assistant" as const, content: reply }].slice(-8)));
+    await (await import("../ai/memory-learn.ts")).learnFromTurn(env, question, reply); // §MEMORY: after the reply is sent
   } catch {
     await sendMessage(token, chatId, st(locale, "tgAnswerFailed"));
   }

@@ -4,7 +4,7 @@
 > in `ROADMAP.md`. Everything else is here, one or two sentences per rule. The story behind each
 > rule is in git history / `HISTORY.md` (gitignored, not read by default).
 >
-> In production (`https://money.italik.dev`). Migrations: `finance` to **0059**, `directory` to
+> In production (`https://money.italik.dev`). Migrations: `finance` to **0060**, `directory` to
 > **0012**. Lints **C1–C24**.
 
 ## Documents
@@ -127,6 +127,10 @@ colour literal / theme-scoped rule outside them, stored colours through `catColo
 - §AI-AUDIT: every AI field change is logged in `ai_changes` and revertible (refused if the field
   changed since).
 - §CHAT-SYNC / §TX-CHAT: conversations live on the server; the server writes the assistant turn.
+- §MEMORY: `agent_memory` is what the assistant carries across every feature (one active row per topic, lifetimes in `lib/ai/memory.ts`). Only the user's words are evidence (`memory-learn.ts`, Haiku, after the reply), a pinned row is never changed or aged automatically and ends only at its own stated date, a manual entry is pinned only when lasting, forgetting is deterministic, a memory never moves a number, and MCP does not receive it.
+- §CTX-EXTRA: stored data the model was missing (goals, credit terms, income sources, hand-typed balance age, repeating charges with no plan) lives in `lib/ai/context-extra.ts`.
+- §CHAT-IMG: a chat picture lives in R2 under the user's prefix, a turn stores only `[img:<uuid>]`; the newest 3 go to the model, and image figures never enter the ledger.
+- §CHAT-NEWS: the chat's `web_search` is open (news), and a query never carries the user's amounts, holdings or names. §MARKET: live crypto quotes send public tickers only.
 - §STREAM: streaming lives in the transport (NDJSON to the client). §PUSH: web push carries no data.
 - §AI-FEED / §NOVELTY / §ADVICE-LOOP: repetition is cured by an explicit list of what was already
   said; advice has identity (normalised title) and its outcome is measured, not claimed.

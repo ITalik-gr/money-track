@@ -11,6 +11,8 @@ import { errText } from "../lib/errors.ts";
 import { streamChat } from "../lib/aiStream.ts";
 import { useT, translate } from "../i18n/index.ts";
 import { getLocale } from "../i18n/locale.ts";
+import { MsgImages, stripImages } from "../components/chat/ChatImages.tsx";
+import { useChatImages } from "../components/chat/useChatImages.ts";
 
 type Msg = { role: "user" | "assistant"; content: string };
 type Attached = { id: string; label: string };
@@ -39,7 +41,7 @@ const newId = () => `c${Date.now().toString(36)}${Math.random().toString(36).sli
 
 // Заголовок розмови = перше питання користувача (обрізане), очищене від чипів-операцій.
 function titleFrom(text: string): string {
-  const clean = text.replace(/\[tx:[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
+  const clean = text.replace(/\[(?:tx|img):[^\]]+\]/g, "").replace(/\s+/g, " ").trim();
   return clean ? clean.slice(0, 40) : translate(getLocale(), "chat.newConvo");
 }
 
@@ -110,6 +112,9 @@ export function Chat() {
   const [input, setInput] = useState("");
   const [attached, setAttached] = useState<Attached[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const pics = useChatImages();
+  const [dropping, setDropping] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [pquery, setPquery] = useState("");
   const [railOpen, setRailOpen] = useState(false); // мобільна шухляда розмов
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
@@ -297,11 +302,13 @@ export function Chat() {
 
   async function send(text?: string) {
     const q = (text ?? input).trim();
-    if (!q || isLoading || sending.current) return;
+    const imgIds = text === undefined ? pics.readyIds : [];
+    if ((!q && !imgIds.length) || pics.busy || isLoading || sending.current) return;
     sending.current = true;
     const chatId = activeId || draftId;
     const ids = attached.map((a) => a.id);
-    const withRefs = attached.length ? `${q}\n${attached.map((a) => `[tx:${a.id}|${a.label}]`).join(" ")}` : q;
+    const refs = [...imgIds.map((id) => `[img:${id}]`), ...attached.map((a) => `[tx:${a.id}|${a.label}]`)].join(" ");
+    const withRefs = [q, refs].filter(Boolean).join("\n");
     const next: Msg[] = [...messages, { role: "user", content: withRefs }];
     pinTo.current = "user";
     putLive(chatId, () => next);
@@ -309,6 +316,7 @@ export function Chat() {
     if (chatId === draftId) setDraftId(newId()); // чернетка стала справжньою розмовою
     setInput("");
     setAttached([]);
+    if (text === undefined) pics.clear();
     try {
       // Хід користувача зберігається ДО виклику моделі: питання, після якого впала мережа, має
       // лишитись у розмові — саме на нього дивиться кнопка «надіслати ще раз».
@@ -349,12 +357,12 @@ export function Chat() {
   function newChat() {
     setActiveId(draftId);
     setLive(null);
-    setInput(""); setAttached([]); setRailOpen(false);
+    setInput(""); setAttached([]); pics.clear(); setRailOpen(false);
     setTimeout(() => taRef.current?.focus(), 0);
   }
 
   function openChat(id: string) {
-    setActiveId(id); setRailOpen(false); setInput(""); setAttached([]);
+    setActiveId(id); setRailOpen(false); setInput(""); setAttached([]); pics.clear();
     setLive(null);
     pinTo.current = "bottom";
   }
@@ -414,7 +422,10 @@ export function Chat() {
           </div>
         </div>
 
-        <div className="chat-shell">
+        <div className={`chat-shell${dropping ? " dropping" : ""}`}
+          onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setDropping(true); } }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDropping(false); }}
+          onDrop={(e) => { e.preventDefault(); setDropping(false); pics.add(e.dataTransfer.files); }}>
           <div className="chat-log2" ref={logRef}>
             {messages.length === 0 ? (
               <div className="chat-empty">
@@ -433,7 +444,7 @@ export function Chat() {
                 const liveMsg = streamStarted && i === messages.length - 1 && m.role === "assistant";
                 return (
                   <div key={i} className={`chat-msg-wrap ${m.role}`} ref={isLastUser ? lastUserRef : undefined}>
-                    <div className={`chat-msg ${m.role}${liveMsg ? " live" : ""}`}>{renderMarkdown(liveMsg ? trimIncompleteBlocks(m.content) : m.content)}</div>
+                    <div className={`chat-msg ${m.role}${liveMsg ? " live" : ""}`}>{m.role === "user" && <MsgImages content={m.content} />}{renderMarkdown(liveMsg ? trimIncompleteBlocks(m.content) : m.role === "user" ? stripImages(m.content) : m.content)}</div>
                     {m.role === "assistant" && m.content && (
                       <div className="chat-msg-actions">
                         <button onClick={() => copyMsg(m.content, i)} title={tr("tx.copy")}>
@@ -480,7 +491,21 @@ export function Chat() {
               )}
             </div>
           )}
+          {pics.items.length > 0 && (
+            <div className="chat-img-tray">
+              {pics.items.map((p) => (
+                <div key={p.key} className={`chat-img-thumb${p.id ? "" : " busy"}`}>
+                  <img src={p.url} alt={tr("chat.imageAlt")} />
+                  <button className="chat-img-x" onClick={() => pics.remove(p.key)} aria-label={tr("chat.removeImageAria")}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {pics.error && <div className="chat-img-err" role="alert">{pics.error}</div>}
           <div className="chat-input">
+            <input ref={fileRef} type="file" accept="image/*" multiple hidden
+              onChange={(e) => { pics.add(e.target.files); e.target.value = ""; }} />
+            <button className="chat-attach-btn" onClick={() => fileRef.current?.click()} aria-label={tr("chat.attachImageAria")} title={tr("chat.attachImageAria")}><Icon name="image" size={18} /></button>
             <button className="chat-attach-btn" onClick={() => setPickerOpen((o) => !o)} aria-label={tr("chat.attachTxAria")} title={tr("chat.attachTxAria")}>＋</button>
             <textarea
               ref={taRef}
@@ -489,9 +514,10 @@ export function Chat() {
               placeholder={tr("chat.inputPlaceholder")}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onPaste={(e) => { if (e.clipboardData.files.length) { e.preventDefault(); pics.add(e.clipboardData.files); } }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
             />
-            <button className="btn primary chat-send" onClick={() => send()} disabled={isLoading || !input.trim()} aria-label={tr("tx.chatSend")}>➤</button>
+            <button className="btn primary chat-send" onClick={() => send()} disabled={isLoading || pics.busy || (!input.trim() && !pics.readyIds.length)} aria-label={tr("tx.chatSend")}>➤</button>
           </div>
         </div>
       </div>

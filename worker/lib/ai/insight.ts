@@ -48,6 +48,7 @@ export async function generateInsight(
   return callHaikuJson<StructuredInsight>(env, system, [{ type: "text", text: JSON.stringify(payload) }], 700, await getTaskModel(env, "insight"));
 }
 import { getState, setState } from "../finance/repo.ts";
+import { situationForAi } from "./memory.ts";
 import { getRates, resolveBaseCurrency } from "../finance/money.ts";
 import { st, resolveLocale } from "../platform/i18n.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
@@ -130,7 +131,7 @@ export async function buildAndStoreInsight(env: Env, periodDays?: number): Promi
        WHERE t.time >= ? AND t.time < ? AND ${SPEND_WHERE} GROUP BY imp`,
     ).bind(from, now).all<{ imp: string; spent: number; n: number }>(),
     recurringOneoffSplit(env, from, now, mult),
-    getState(env.DB, "finance_profile"),
+    situationForAi(env),
   ]);
 
   const totalUAH = (totalRow?.total ?? 0) / 100;

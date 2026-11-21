@@ -7,7 +7,7 @@ import {
 import * as categoriesRepo from "../../repo/categories.ts";
 import * as budgetsRepo from "../../repo/budgets.ts";
 import { st } from "../../lib/platform/i18n.ts";
-import { apiRoutes, idParam, normChatMessages, numParam } from "./_shared.ts";
+import { apiRoutes, idParam, normChatMessages, learnAfter, numParam } from "./_shared.ts";
 import type { Budget } from "../../../shared/types.ts";
 import { budgetStatus, budgetHistory } from "../../lib/finance/budgets.ts";
 import type { AutoBudget, AutoBudgetItem, BudgetHistory, BudgetStatusList } from "../../../shared/api/planning.ts";
@@ -222,7 +222,10 @@ budgets.post("/budgets/chat", async (c) => {
   const { messages } = await c.req.json<{ messages: { role: "user" | "assistant"; content: string }[] }>();
   const { budgetChatReply } = await import("../../lib/ai/budget.ts");
   try {
-    return c.json(await budgetChatReply(c.env, normChatMessages(messages)));
+    const msgs = normChatMessages(messages);
+    const out = await budgetChatReply(c.env, msgs);
+    learnAfter(c, msgs, out.reply);
+    return c.json(out);
   } catch (e) {
     return c.json({ error: String(e) }, 502);
   }

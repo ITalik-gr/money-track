@@ -1,7 +1,11 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { highlightAmounts } from "./highlight.tsx";
 import { numFmt } from "../i18n/locale.ts";
+import { parseChart } from "./chart-block.ts";
+
+// Lazy: Recharts must not enter the bundle of every screen that renders AI text.
+const ChatChart = lazy(() => import("../components/chat/ChatChart.tsx"));
 
 // Легкий рендер markdown-відповідей AI (без зовнішніх бібліотек, CSP-safe):
 // **жирний**, списки (-, •, —, «1.»), заголовки (###), абзаци, чипи-транзакції
@@ -21,14 +25,16 @@ function boldAndAmounts(text: string, keyBase: string): ReactNode[] {
   return out;
 }
 
-// Інлайн: спершу виймаємо чипи-транзакції, решту віддаємо в boldAndAmounts.
+// Inline: transaction chips and https links first, the rest goes to boldAndAmounts. Only https is
+// linked: this text comes from a model that reads web pages, so a `javascript:` URL must stay text.
 function inline(text: string, keyBase: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /\[tx:([^|\]]+)\|([^\]]+)\]/g;
+  const re = /\[tx:([^|\]]+)\|([^\]]+)\]|\[([^\]]+)\]\((https:\/\/[^)\s]+)\)/g;
   let last = 0, i = 0, m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     if (m.index > last) out.push(...boldAndAmounts(text.slice(last, m.index), `${keyBase}-s${i}`));
-    out.push(<Link key={`${keyBase}-tx${i++}`} to={`/tx/${m[1]}`} className="tx-chip">{m[2].trim()}</Link>);
+    if (m[1]) out.push(<Link key={`${keyBase}-tx${i++}`} to={`/tx/${m[1]}`} className="tx-chip">{m[2].trim()}</Link>);
+    else out.push(<a key={`${keyBase}-a${i++}`} href={m[4]} target="_blank" rel="noopener noreferrer" className="md-link">{m[3]}</a>);
     last = m.index + m[0].length;
   }
   if (last < text.length) out.push(...boldAndAmounts(text.slice(last), `${keyBase}-e`));
@@ -43,14 +49,14 @@ const BULLET = /^\s*(?:[-•—*]|\d+[.)])\s+(.*)$/;
 // grouping to whatever locale was active at first import and never follow a language switch.
 const fmtNum = { format: (n: number) => numFmt({ maximumFractionDigits: 0 }).format(n) };
 function ChartBlock({ title, rows, keyBase }: { title: string | null; rows: { label: string; value: number }[]; keyBase: string }) {
-  const max = Math.max(...rows.map((r) => r.value), 1);
+  const max = Math.max(...rows.map((r) => Math.abs(r.value)), 1);
   return (
     <div className="md-chart" key={keyBase}>
       {title && <div className="md-chart-title">{title}</div>}
       {rows.map((r, i) => (
         <div className="md-chart-row" key={`${keyBase}-r${i}`}>
           <span className="md-chart-lbl">{r.label}</span>
-          <span className="md-chart-track"><span className="md-chart-fill" style={{ width: `${(r.value / max) * 100}%` }} /></span>
+          <span className="md-chart-track"><span className={`md-chart-fill${r.value < 0 ? " neg" : ""}`} style={{ width: `${(Math.abs(r.value) / max) * 100}%` }} /></span>
           <span className="md-chart-val">{fmtNum.format(r.value)}</span>
         </div>
       ))}
@@ -139,18 +145,12 @@ export function renderMarkdown(text: string): ReactNode {
     const chartStart = line.trim().match(/^\[chart(?::\s*(.+?))?\]$/i);
     if (chartStart) {
       flushList();
-      const title = chartStart[1]?.trim() || null;
-      const rows: { label: string; value: number }[] = [];
+      const body: string[] = [];
       idx++;
-      while (idx < lines.length && !/^\s*\[\/chart\]\s*$/i.test(lines[idx])) {
-        const parts = lines[idx].split("|");
-        if (parts.length >= 2) {
-          const value = Number(parts[1].replace(/[^\d.-]/g, ""));
-          if (parts[0].trim() && !Number.isNaN(value)) rows.push({ label: parts[0].trim(), value });
-        }
-        idx++;
-      }
-      if (rows.length) blocks.push(<ChartBlock key={`chart${key++}`} keyBase={`chart${key}`} title={title} rows={rows} />);
+      while (idx < lines.length && !/^\s*\[\/chart\]\s*$/i.test(lines[idx])) body.push(lines[idx++]);
+      const chart = parseChart(chartStart[1], body);
+      if (chart?.type === "bar") blocks.push(<ChartBlock key={`chart${key++}`} keyBase={`chart${key}`} title={chart.title} rows={chart.rows.map((r) => ({ label: r.label, value: r.values[0] ?? 0 }))} />);
+      else if (chart) blocks.push(<Suspense key={`chart${key++}`} fallback={<div className="md-plot md-plot-area" />}><ChatChart chart={chart} /></Suspense>);
       continue;
     }
     // Блок-таблиця: [table] або [table:Заголовок] … [/table]. Перший рядок — заголовки.

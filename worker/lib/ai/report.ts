@@ -16,7 +16,7 @@ import { savingsRatePct } from "../finance/finance.ts";
 import { plannedActuals } from "../finance/subscriptions.ts";
 import { burnShape } from "../finance/levels.ts";
 import { reportNews } from "./report-news.ts";
-import { getState } from "../finance/repo.ts";
+import { situationForAi } from "./memory.ts";
 // The prompt and the model call live in `report-prompt.ts` (split 2026-08-12 under C3): this file
 // assembles the canonical context and stores the result, that one instructs the model.
 import { generateFinancialReport, type FinancialReport } from "./report-prompt.ts";
@@ -148,7 +148,7 @@ export async function buildReportContext(
     plannedActuals(env.DB),
     importance(env, from, to, mult),
     recurringOneoffSplit(env, from, to, mult),
-    getState(env.DB, "finance_profile"),
+    situationForAi(env),
     // Канонічний місячний рівень категорії — щоб у тижневому звіті було з ЧИМ порівняти
     // місячний платіж, окрім сусіднього тижня (де його просто не було).
     categoryMonthlyLevels(env, mult, { now: to }),

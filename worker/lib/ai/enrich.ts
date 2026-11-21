@@ -145,7 +145,7 @@ export async function proposeTransferCategory(
   ], 1024, model);
 }
 import { MODEL_SMART, MODEL_FAST } from "./models.ts";
-import { getState } from "../finance/repo.ts";
+import { situationForAi } from "./memory.ts";
 import { relatedSubsHint, matchActiveSubscription } from "../finance/subscriptions.ts";
 import { consensusCategory, merchantHistory, refundCategoryFor, REFUND_INCOME_CAT } from "./enrich-history.ts";
 
@@ -313,7 +313,7 @@ async function applyEnrichment(
 export async function enrichOne(env: Env, id: string, opts: { force?: boolean } = {}): Promise<boolean> {
   const tx = await env.DB.prepare("SELECT * FROM transactions WHERE id = ?").bind(id).first<TxRow>();
   if (!tx) return false;
-  const profile = await getState(env.DB, "finance_profile");
+  const profile = await situationForAi(env, 8);
   await applyEnrichment(env, tx, profile, { consensus: !opts.force });
 
   // Якщо після збагачення операція опинилась у бакеті «Перекази і зняття» без реальної
@@ -344,7 +344,7 @@ export async function enrichPending(env: Env, limit = 8): Promise<{ enriched: nu
      ORDER BY time DESC LIMIT ?`,
   ).bind(limit).all<TxRow>();
 
-  const profile = await getState(env.DB, "finance_profile");
+  const profile = await situationForAi(env, 8);
   let enriched = 0;
   for (const tx of rows.results ?? []) {
     try { await applyEnrichment(env, tx, profile); enriched++; }

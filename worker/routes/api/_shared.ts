@@ -22,13 +22,36 @@ export const apiRoutes = () => new Hono<ApiEnv>();
 // because four copy-pasted parsers is how one of them ends up without the cap.
 const CHAT_MAX_TURNS = 12;
 const CHAT_MAX_CHARS = 8000;
+/**
+ * The adviser's own window. At 12 turns a long planning chat lost its premise: the turn stating
+ * the key change in the user's situation fell out, and the adviser argued from the old one.
+ * A total ceiling keeps the cost of that window bounded.
+ */
+export const ADVISOR_CHAT_TURNS = 40;
+const CHAT_MAX_TOTAL_CHARS = 80_000;
 export type ChatTurn = { role: "user" | "assistant"; content: string };
-export function normChatMessages(raw: unknown): ChatTurn[] {
-  return (Array.isArray(raw) ? raw : [])
+export function normChatMessages(raw: unknown, maxTurns = CHAT_MAX_TURNS): ChatTurn[] {
+  const turns = (Array.isArray(raw) ? raw : [])
     .filter((m): m is ChatTurn =>
       !!m && (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim() !== "")
-    .slice(-CHAT_MAX_TURNS)
+    .slice(-maxTurns)
     .map((m) => ({ role: m.role, content: m.content.slice(0, CHAT_MAX_CHARS) }));
+  let from = turns.length, total = 0;
+  while (from > 0 && total + turns[from - 1].content.length <= CHAT_MAX_TOTAL_CHARS) total += turns[--from].content.length;
+  // A cut can land on an answer; a window opening with one has lost the question it replies to.
+  while (from < turns.length - 1 && turns[from].role !== "user") from++;
+  return turns.slice(from);
+}
+
+/**
+ * §MEMORY: learn from a finished exchange without holding its response open. A context with no
+ * execution context (the test harness) still runs it, so the path is the same everywhere.
+ */
+export function learnAfter(c: { env: ApiEnv["Bindings"]; executionCtx: { waitUntil(p: Promise<unknown>): void } }, msgs: ChatTurn[], reply: unknown): void {
+  const last = msgs[msgs.length - 1];
+  if (last?.role !== "user" || typeof reply !== "string") return;
+  const job = import("../../lib/ai/memory-learn.ts").then((m) => m.learnFromTurn(c.env, last.content, reply));
+  try { c.executionCtx.waitUntil(job); } catch { void job; }
 }
 
 /**

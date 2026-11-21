@@ -26,7 +26,8 @@ import { monthlyPlannedUAH } from "../finance/subscriptions.ts";
 import * as planningRepo from "../../repo/planning.ts";
 import { catNameSql } from "../finance/categories-i18n.ts";
 import { resolveLocale } from "../platform/i18n.ts";
-import { ownFundsUAH, fundsBreakdown, getProfile } from "./advisor.ts";
+import { ownFundsUAH, fundsBreakdown } from "./advisor.ts";
+import { situationForAi } from "./memory.ts";
 import type { BudgetProposalRow, BudgetPlanResult } from "../../../shared/api/planning.ts";
 
 // AI-планувальник бюджету: середні витрати по категоріях + ситуація → пропозиції
@@ -99,7 +100,7 @@ export async function proposeBudgets(env: Env): Promise<BudgetPlanResult> {
     if (m > 0) committedFloor.set(pl.category_id, (committedFloor.get(pl.category_id) ?? 0) + m);
   }
   const payload = {
-    situation: (await getProfile(env)) || "(not specified)",
+    situation: (await situationForAi(env)) || "(not specified)",
     own_funds_uah: Math.round(funds.net / 100),
     monthly_burn_uah: Math.round(monthlyBurn / 100),
     monthly_burn_recurring_uah: Math.round(burnShape(levels).recurring / 100),
@@ -190,7 +191,7 @@ export async function budgetChatReply(env: Env, messages: ChatMsg[]): Promise<Bu
   const monthlyBurn = sumLevels(levels);
 
   const ctx = {
-    situation: (await getProfile(env)) || "(not specified)",
+    situation: (await situationForAi(env)) || "(not specified)",
     own_funds_uah: Math.round(ownFunds / 100),
     monthly_burn_uah: Math.round(monthlyBurn / 100),
     categories: cats.map((c) => ({

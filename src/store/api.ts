@@ -1,4 +1,5 @@
 import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
+import type { MemoryHorizon, MemoryList } from "../../shared/api/memory.ts";
 import type { Account, Budget, Category, EventGroup, AiUsageStats, PlannedActual } from "../../shared/types.ts";
 import { getLocale } from "../i18n/locale.ts";
 import { currencyHeader } from "../lib/currency.ts";
@@ -49,7 +50,7 @@ export const api = createApi({
       return headers;
     },
   }),
-  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule", "Mcp", "QuickAdd", "Tax", "RegWatch", "Search"],
+  tagTypes: ["Tx", "Account", "Summary", "Budget", "Planned", "Setup", "Me", "Insight", "Profile", "Advice", "Event", "Category", "Goal", "Report", "Fact", "Notification", "SavedFilter", "Knowledge", "Credentials", "AdminUsers", "Frequent", "Job", "Telegram", "Chat", "Feedback", "Backup", "Push", "Rule", "Mcp", "QuickAdd", "Tax", "RegWatch", "Search", "Memory"],
   endpoints: (b) => ({
     // `user` присутній лише коли `authenticated` — сесія тепер несе userId, і саме він
     // визначає, ЧИЯ база відкриється (PLATFORM.md §2).
@@ -820,6 +821,17 @@ export const api = createApi({
     }),
     // §A1: шар фактів. Підтвердження/видалення факту з коригуванням рухає burn/runway →
     // інвалідуємо Tx/Summary/Advice, щоб цифри всюди перерахувались.
+    // §MEMORY. Tagged «Chat» too: a finished conversation is what changes it.
+    getMemory: b.query<MemoryList, void>({ query: () => "/memory", providesTags: ["Memory", "Chat"] }),
+    addMemory: b.mutation<{ id: number }, { text: string; horizon: MemoryHorizon }>({
+      query: (body) => ({ url: "/memory", method: "POST", body }), invalidatesTags: ["Memory"],
+    }),
+    patchMemory: b.mutation<{ ok: boolean }, { id: number; text?: string; pinned?: boolean; status?: "active" | "archived" }>({
+      query: ({ id, ...body }) => ({ url: `/memory/${id}`, method: "PATCH", body }), invalidatesTags: ["Memory"],
+    }),
+    deleteMemory: b.mutation<{ ok: boolean }, number>({
+      query: (id) => ({ url: `/memory/${id}`, method: "DELETE" }), invalidatesTags: ["Memory"],
+    }),
     getFacts: b.query<Fact[], void>({ query: () => "/facts", providesTags: ["Fact"] }),
     // §CHAT-SYNC: розмови з порадником живуть на сервері, а не в localStorage — тому телефон і
     // ноутбук бачать одну й ту саму стрічку. Відповідь моделі сюди НЕ ходить: вона стрімиться
@@ -1296,7 +1308,7 @@ export const {
   useEvaluateGroupMutation,
   useChatGroupMutation,
   useChatTxMutation,
-  useGetFactsQuery,
+  useGetMemoryQuery, useAddMemoryMutation, usePatchMemoryMutation, useDeleteMemoryMutation, useGetFactsQuery,
   useGetPushStatusQuery,
   useSubscribePushMutation,
   useUnsubscribePushMutation,

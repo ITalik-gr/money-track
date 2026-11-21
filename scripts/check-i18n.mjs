@@ -84,6 +84,8 @@ for (const [name, dict] of [["en.json", en], ["uk.json", uk]]) {
 // like an ordinary key. The table is the exception list, and — per the rule that an exemption
 // cites a fact and a fact can expire — each entry carries a date and a reason.
 const DYNAMIC_KEYS = [
+  { prefix: "memory.horizon.", values: ["lasting", "months", "weeks", "days"], since: "2026-11-21", why: "§MEMORY — how long a note lives" },
+  { prefix: "memory.reason.", values: ["expired", "stale", "replaced", "resolved", "user", "cap"], since: "2026-11-21", why: "§MEMORY — why a note left the active list" },
   { prefix: "cat.range.", values: ["month", "quarter", "year", "all"], since: "2026-08-14", why: "the category page's window selector" },
   // NOT every `GoalStatus`: `done` and `no_deadline` are the ABSENCE of a pace and are filtered
   // out before the badge renders (`Goals.tsx`). Listing them would demand two strings nothing

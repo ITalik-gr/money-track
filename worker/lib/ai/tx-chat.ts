@@ -15,7 +15,7 @@ import { catNameSql } from "../finance/categories-i18n.ts";
 import { txChat } from "./tasks.ts";
 import type { ChatMsg } from "./ai.ts";
 import { logUsage } from "./cost.ts";
-import { getProfile } from "./advisor.ts";
+import { situationForAi } from "./memory.ts";
 
 /** What the conversation actually changed on the row, echoed back so the UI can say so. */
 interface TxChatApplied {
@@ -77,7 +77,7 @@ export async function chatAboutTx(
     is_transfer: !!tx.is_transfer,
     tags: (tags.results ?? []).map((t) => t.name),
     user_note: tx.user_note ?? null,
-    user_profile: (await getProfile(env)) || null,
+    user_profile: (await situationForAi(env, 12)) || null,
   };
 
   const { result, usage } = await txChat(env, ctx, messages);
