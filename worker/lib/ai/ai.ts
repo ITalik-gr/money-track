@@ -65,7 +65,8 @@ const WEB_SEARCH_DOMAINS = ["bank.gov.ua", "minfin.com.ua", "index.minfin.com.ua
 export function webSearchTool(model: string, maxUses = 4, open = false): Record<string, unknown> {
   const type = model === MODEL_FAST ? "web_search_20250305" : "web_search_20260209";
   // `open` (§CHAT-NEWS): the chat answers about news too, which no finance allowlist can cover.
-  return { type, name: "web_search", max_uses: maxUses, ...(open ? { user_location: { type: "approximate", city: "Kyiv", country: "UA", timezone: "Europe/Kyiv" } } : { allowed_domains: WEB_SEARCH_DOMAINS }) };
+  // Timezone only: the API 400s on `country: "UA"` ("not supported"), killing every chat turn.
+  return { type, name: "web_search", max_uses: maxUses, ...(open ? { user_location: { type: "approximate", timezone: "Europe/Kyiv" } } : { allowed_domains: WEB_SEARCH_DOMAINS }) };
 }
 
 
